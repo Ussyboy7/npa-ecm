@@ -23,7 +23,7 @@ import {
   Loader2,
   Save,
 } from 'lucide-react';
-import { type NotificationPreferences as NotificationPreferencesType } from '@/lib/notifications-storage';
+import { type NotificationPreferences as NotificationPreferencesType } from '@/lib/api/notifications';
 
 interface NotificationsSectionProps {
   notificationPrefs: NotificationPreferencesType | null;

@@ -13,9 +13,10 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Activity, Loader2, RefreshCw } from "lucide-react";
-import { getIntegrationLogs, type IntegrationLog } from "@/lib/integrations-storage";
+import { getIntegrationLogs, type IntegrationLog } from "@/lib/api/integrations";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
+import { formatDateTime } from "@/lib/datetime";
 
 export function IntegrationLogsViewer() {
   const [logs, setLogs] = useState<IntegrationLog[]>([]);
@@ -109,7 +110,7 @@ export function IntegrationLogsViewer() {
               {logs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="text-xs whitespace-nowrap">
-                    {new Date(log.created_at).toLocaleString()}
+                    {formatDateTime(log.created_at)}
                   </TableCell>
                   <TableCell className="capitalize text-xs">{log.log_type}</TableCell>
                   <TableCell>

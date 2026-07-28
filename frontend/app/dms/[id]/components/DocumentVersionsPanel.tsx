@@ -24,14 +24,14 @@ import {
 } from "lucide-react";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { formatFileSize } from "@/lib/file-utils";
-import type { DocumentRecord, DocumentVersion } from "@/lib/dms-storage";
+import type { DocumentRecord, DocumentVersion } from "@/lib/api/dms";
 import type { User } from "@/lib/npa-structure";
-import type { CaptureJob } from "@/lib/capture-storage";
+import type { CaptureJob } from "@/lib/api/capture";
 import { DocumentVersionDiffDialog } from "@/components/dms/DocumentVersionDiffDialog";
 import { fetchDocumentVersionDiff, type DocumentVersionDiff } from "@/lib/dms-version-diff";
 import { canDownloadDocument, downloadDocumentVersion } from "@/lib/dms-documents";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>;
 

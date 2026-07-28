@@ -18,8 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
-import { toast } from "@/hooks/use-toast";
-import { AVAILABLE_ROLE_PERMISSIONS, PERMISSION_PRESETS, getPermissionsByCategory } from "@/lib/role-permissions";
+import { toast } from "@/components/ui/sonner";
+import { getPermissionsByCategory } from "@/lib/role-permissions";
 import { usePermissionCatalog } from "@/hooks/use-permission-catalog";
 import { CheckCircle2, XCircle, Users } from "lucide-react";
 
@@ -37,8 +37,7 @@ export const RoleFormModal = ({
   onSuccess,
 }: RoleFormModalProps) => {
   const { users, roles, refreshOrganizationData, addRole, updateRole } = useOrganization();
-  const { permissions: catalogPermissions } = usePermissionCatalog();
-  const rolePermissionsCatalog = catalogPermissions.length > 0 ? catalogPermissions : AVAILABLE_ROLE_PERMISSIONS;
+  const { permissions: rolePermissionsCatalog, presets } = usePermissionCatalog();
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
@@ -178,8 +177,7 @@ export const RoleFormModal = ({
           description: description.trim() || undefined,
           permissions: permissions,
         });
-        toast({
-          title: "Role updated",
+        toast.success("Role updated", {
           description: `Role "${roleName.trim()}" has been updated successfully.`,
         });
       } else {
@@ -190,8 +188,7 @@ export const RoleFormModal = ({
           isActive: true,
           permissions: permissions,
         });
-        toast({
-          title: "Role created",
+        toast.success("Role created", {
           description: `Role "${roleName.trim()}" is now available. Assign it to users in User Management.`,
         });
       }
@@ -201,10 +198,8 @@ export const RoleFormModal = ({
       onSuccess();
     } catch (error: unknown) {
       const description = error instanceof Error ? error.message : "Unable to save role";
-      toast({
-        title: existingRole ? "Update failed" : "Creation failed",
+      toast.error(existingRole ? "Update failed" : "Creation failed", {
         description,
-        variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
@@ -290,7 +285,7 @@ export const RoleFormModal = ({
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
-              {PERMISSION_PRESETS.map((preset) => (
+              {presets.map((preset) => (
                 <Button
                   key={preset.name}
                   type="button"

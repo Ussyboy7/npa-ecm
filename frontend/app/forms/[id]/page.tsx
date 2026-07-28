@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
 import { FormDocumentEditor } from "@/components/dms/FormDocumentEditor";
 import { Button } from "@/components/ui/button";
-import { fetchDocumentById } from "@/lib/dms-storage";
+import { fetchDocumentById } from "@/lib/api/dms";
 import { apiFetch } from "@/lib/api-client";
 import { logError } from "@/lib/client-logger";
 import { appType } from "@/lib/app-type";

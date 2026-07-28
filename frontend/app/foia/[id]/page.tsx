@@ -41,9 +41,10 @@ import {
   StatusStripSep,
 } from "@/components/shared/DetailStatusStrip";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { apiFetch } from "@/lib/api-client";
 import { appType } from "@/lib/app-type";
+import { formatDate, formatDateTime } from "@/lib/datetime";
 import { getFoiaStatusBadge } from "@/lib/status-badge";
 import { cn } from "@/lib/utils";
 
@@ -101,15 +102,11 @@ interface FOIADocument {
 
 function formatShortDate(value: string | null | undefined): string {
   if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
+  return formatDate(value, 'en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 export default function FOIADetailPage() {
@@ -490,7 +487,7 @@ export default function FOIADetailPage() {
                           {note.is_internal ? "Internal" : "Public"}
                         </Badge>
                         <span className={appType.caption}>
-                          {new Date(note.created_at).toLocaleString()}
+                          {formatDateTime(note.created_at)}
                         </span>
                       </div>
                       <p className={cn(appType.body, "whitespace-pre-wrap")}>{note.content}</p>

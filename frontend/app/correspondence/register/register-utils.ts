@@ -4,7 +4,7 @@
 
 import { generateUUID } from '@/lib/utils';
 import { REGISTER_CONSTANTS } from './register-constants';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 
 export type FormData = {
   subject: string;

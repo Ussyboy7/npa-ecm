@@ -2,6 +2,7 @@
 
 import { useMemo, useCallback, useState, useEffect } from "react";
 import { logError } from "@/lib/client-logger";
+import { hasRolePermission } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -21,7 +22,7 @@ import { formatDateShort, canDispatchCorrespondence, canArchiveCorrespondence, i
 import { cn } from "@/lib/utils";
 import { DispatchModal, AcknowledgeButton } from "@/components/correspondence/DispatchModal";
 import { apiFetch } from "@/lib/api-client";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { returnCorrespondenceToPrincipal } from "@/lib/api/acting-appointments";
 import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
 import { corrType } from "../correspondence-type";
@@ -122,8 +123,8 @@ export function ActionsPanel({
       activeUser &&
       (
         activeUser.isSuperuser ||
-        activeUser.rolePermissions?.can_manage_org_structure ||
-        activeUser.rolePermissions?.can_manage_users ||
+        hasRolePermission(activeUser, "can_manage_org_structure") ||
+        hasRolePermission(activeUser, "can_manage_users") ||
         String(activeUser.id) === String(correspondence.currentApproverId) ||
         String(activeUser.id) === String(correspondence.actingOriginalApproverId)
       )
@@ -406,7 +407,7 @@ export function ActionsPanel({
             {organizationUsers.find((u) => String(u.id) === String(activeDelegation.assistantId))?.name ||
               "Assistant"}
             {activeDelegation.delegatedAt && (
-              <> on {new Date(activeDelegation.delegatedAt as string).toLocaleDateString()}</>
+              <> on {formatDateShort(activeDelegation.delegatedAt as string)}</>
             )}
           </>
         ) : (

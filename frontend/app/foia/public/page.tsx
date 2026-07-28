@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { apiFetch } from "@/lib/api-client";
+import { formatDate } from "@/lib/datetime";
 
 interface FormData {
   requester_name: string;
@@ -96,7 +97,7 @@ export default function PublicFOIAPage() {
 
     try {
       const response = await apiFetch<SuccessResponse>(
-        "/api/correspondence/foia-requests/",
+        "/correspondence/foia-requests/",
         {
           method: "POST",
           body: JSON.stringify(form),
@@ -171,7 +172,7 @@ export default function PublicFOIAPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Date Submitted</span>
                   <span className="text-white">
-                    {new Date(submitted.received_date).toLocaleDateString()}
+                    {formatDate(submitted.received_date)}
                   </span>
                 </div>
               </div>

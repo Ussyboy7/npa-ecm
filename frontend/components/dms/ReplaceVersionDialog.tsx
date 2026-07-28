@@ -15,14 +15,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { replaceDocumentVersion, type DocumentVersion } from '@/lib/dms-storage';
+import { replaceDocumentVersion, type DocumentVersion } from '@/lib/api/dms';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
 import { FileUploadZone } from './FileUploadZone';
 import { RichTextEditor } from './RichTextEditor';
 import { Loader2, AlertTriangle, PenTool, Upload as UploadIcon } from 'lucide-react';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import type { DocumentRecord } from '@/lib/api/dms';
 
 interface ReplaceVersionDialogProps {
   open: boolean;

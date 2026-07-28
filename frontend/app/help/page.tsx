@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api-client";
 import { NPA_ECM_CONTACT_EMAIL, NPA_ECM_SUPPORT_EMAIL, NPA_ECM_FEEDBACK_EMAIL } from "@/lib/branding";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 const quickStartSteps = [
   {

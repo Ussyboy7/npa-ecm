@@ -23,11 +23,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 import { corrType } from '../correspondence-type';
 import { cn } from '@/lib/utils';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import type { DocumentRecord } from '@/lib/api/dms';
 import { getPrimaryLinkedDocument } from '@/lib/correspondence-preview-target';
 import { ShareWithDepartmentButton } from '@/components/correspondence/ShareWithDepartmentButton';
 import { useCurrentUser } from '@/hooks/use-current-user';

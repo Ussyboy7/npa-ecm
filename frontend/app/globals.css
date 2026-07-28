@@ -2,9 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body {
-  overflow: hidden;
-  height: 100%;
+/* Dashboard scroll is contained in DashboardLayout; public routes (landing, login) scroll on body. */
+html,
+body {
+  min-height: 100%;
 }
 
 /* Apple Design: font-optical-sizing for responsive type rendering */

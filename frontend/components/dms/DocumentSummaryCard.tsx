@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { generateDocumentSummary } from "@/lib/dms-operations";
-import type { DocumentRecord } from "@/lib/dms-storage";
+import type { DocumentRecord } from "@/lib/api/dms";
 
 interface DocumentSummaryCardProps {
   document: DocumentRecord;

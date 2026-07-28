@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { getCaseTemplates, createCaseFromTemplate, type CaseTemplate } from "@/lib/api/cases";
 import { PRIORITY_OPTIONS } from "@/lib/constants";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import {
   Plus,
   Loader2,

@@ -4,7 +4,7 @@ import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
@@ -20,7 +20,7 @@ import {
   type DocumentRecord,
   type DocumentVersion,
   type DocumentAccessLog,
-} from '@/lib/dms-storage';
+} from '@/lib/api/dms';
 import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { DocumentMobileTabBar, DocumentWorkspace } from '@/app/dms/[id]/components/DocumentWorkspace';
 import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';

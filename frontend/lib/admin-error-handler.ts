@@ -4,7 +4,8 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
  * Provides consistent error handling and user feedback across all admin interfaces
  */
 
-import { toast } from '@/hooks/use-toast';
+import { toast } from "@/components/ui/sonner";
+import { getApiErrorMessage, isApiForbidden, isApiNotFound, isApiUnauthorized, isNetworkError } from '@/lib/api-error';
 import { logError } from './client-logger';
 
 export interface ApiError {
@@ -38,35 +39,33 @@ export function handleApiError(error: unknown, context?: string): void {
   if (error instanceof AdminError) {
     title = error.code.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
     description = (error instanceof Error ? error.message : ERROR_UNKNOWN);
-  } else if (error instanceof Error) {
-    if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('fetch')) {
+  } else {
+    if (isNetworkError(error)) {
       title = 'Network Error';
       description = 'Unable to connect to the server. Please check your internet connection.';
-    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('401') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Unauthorized')) {
+    } else if (isApiUnauthorized(error)) {
       title = 'Authentication Error';
       description = 'Your session has expired. Please log in again.';
       // Optionally redirect to login
       setTimeout(() => {
         window.location.href = '/login';
       }, 2000);
-    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('403') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Forbidden')) {
+    } else if (isApiForbidden(error)) {
       title = 'Permission Denied';
       description = 'You do not have permission to perform this action.';
-    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('404')) {
+    } else if (isApiNotFound(error)) {
       title = 'Not Found';
       description = 'The requested resource was not found.';
-    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('500')) {
+    } else if (getApiErrorMessage(error, '').includes('500')) {
       title = 'Server Error';
       description = 'A server error occurred. Please try again later or contact support.';
     } else {
-      description = (error instanceof Error ? error.message : ERROR_UNKNOWN);
+      description = getApiErrorMessage(error, ERROR_UNKNOWN);
     }
   }
 
-  toast({
-    title,
+  toast.error(title, {
     description,
-    variant: 'destructive',
   });
 }
 
@@ -78,10 +77,8 @@ export function handleValidationErrors(errors: Record<string, string[]>): void {
     .map(([field, messages]) => `${field}: ${messages.join(', ')}`)
     .join('\n');
 
-  toast({
-    title: 'Validation Error',
+  toast.error('Validation Error', {
     description: errorMessages,
-    variant: 'destructive',
   });
 }
 
@@ -89,8 +86,7 @@ export function handleValidationErrors(errors: Record<string, string[]>): void {
  * Show success message
  */
 export function showSuccess(message: string, title: string = 'Success'): void {
-  toast({
-    title,
+  toast.success(title, {
     description: message,
   });
 }
@@ -99,10 +95,8 @@ export function showSuccess(message: string, title: string = 'Success'): void {
  * Show warning message
  */
 export function showWarning(message: string, title: string = 'Warning'): void {
-  toast({
-    title,
+  toast.message(title, {
     description: message,
-    variant: 'default',
   });
 }
 

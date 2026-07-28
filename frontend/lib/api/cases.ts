@@ -2,6 +2,12 @@
 
 import { apiFetch } from '@/lib/api-client';
 import type { Case, CaseDetail, CaseCorrespondenceLink, CaseDocumentLink, CaseFormLink } from '@/lib/npa-structure';
+import {
+  mapApiCase as mapApiCaseCanonical,
+  mapApiCaseCorrespondenceLink as mapApiCaseCorrespondenceLinkCanonical,
+  mapApiCaseDocumentLink as mapApiCaseDocumentLinkCanonical,
+  mapApiCaseFormLink as mapApiCaseFormLinkCanonical,
+} from '@/lib/api/cases-mappers';
 
 const BASE_PATH = '/correspondence/cases';
 
@@ -154,7 +160,7 @@ export async function getCases(params: CaseQueryParams = {}): Promise<CaseListRe
   });
   
   return {
-    results: response.results.map(transformApiCase),
+    results: response.results.map(mapApiCaseCanonical),
     count: response.count as number,
     next: response.next,
     previous: response.previous,
@@ -267,13 +273,13 @@ export async function getCaseById(caseId: string, signal?: AbortSignal): Promise
     signal,
   });
   
-  const baseCase = transformApiCase(apiCase);
+  const baseCase = mapApiCaseCanonical(apiCase);
   
   return {
     ...baseCase,
-    correspondence: (apiCase.correspondence || []).map(transformApiCorrespondenceLink),
-    documents: (apiCase.documents || []).map(transformApiDocumentLink),
-    forms: (apiCase.forms || []).map(transformApiFormLink),
+    correspondence: (apiCase.correspondence || []).map(mapApiCaseCorrespondenceLinkCanonical),
+    documents: (apiCase.documents || []).map(mapApiCaseDocumentLinkCanonical),
+    forms: (apiCase.forms || []).map(mapApiCaseFormLinkCanonical),
     // Backend may return mixed activity shapes; keep empty until we implement a mapper.
     activities: [],
   };

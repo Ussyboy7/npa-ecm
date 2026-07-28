@@ -40,7 +40,7 @@ import { UserEditDialog } from "@/components/admin/UserEditDialog";
 import { UserTableSkeleton, UserTableSkeletonRows } from "@/components/admin/UserTableSkeleton";
 import { getGradeLevelByCode, type User } from "@/lib/npa-structure";
 import { exportToCSV } from "@/lib/admin-export";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { getRecentSearches, addRecentSearch, getSearchSuggestions, clearRecentSearches } from "@/lib/admin-search-autocomplete";
 import { 
   fetchUsers, 

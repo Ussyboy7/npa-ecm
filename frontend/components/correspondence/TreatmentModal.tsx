@@ -31,7 +31,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
+import { formatDateShort } from "@/lib/datetime";
 import {
   FileText,
   Send,
@@ -70,11 +71,11 @@ import {
   saveTemplate,
   deleteTemplate,
   type DocumentTemplate,
-} from '@/lib/template-storage';
+} from '@/lib/api/document-templates';
 import {
   DocumentRecord,
   queryDocuments,
-} from '@/lib/dms-storage';
+} from '@/lib/api/dms';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatDate } from '@/lib/correspondence-helpers';
@@ -516,7 +517,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       content = content.replace(/\{correspondent\}/g, correspondence.senderName || '');
       content = content.replace(/\{subject\}/g, correspondence.subject || '');
       content = content.replace(/\{reference\}/g, correspondence.referenceNumber || '');
-      content = content.replace(/\{date\}/g, new Date().toLocaleDateString());
+      content = content.replace(/\{date\}/g, formatDateShort(new Date().toISOString()));
       
       setMemoContent(content);
       const div = document.createElement('div');

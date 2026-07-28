@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Mail, Inbox, Plus, Edit, Trash2, Loader2 } from "lucide-react";
 import {
   createEmailConnector,
@@ -32,7 +32,7 @@ import {
   pollEmailInbox,
   updateEmailConnector,
   type EmailConnector,
-} from "@/lib/integrations-storage";
+} from "@/lib/api/integrations";
 import { logError } from "@/lib/client-logger";
 
 const defaultForm = {

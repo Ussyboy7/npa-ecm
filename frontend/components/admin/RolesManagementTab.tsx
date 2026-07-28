@@ -21,7 +21,7 @@ import {
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
 import { RoleFormModal } from "@/components/admin/RoleFormModal";
 import { RoleTableSkeleton } from "@/components/admin/RoleTableSkeleton";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { apiFetch } from "@/lib/api-client";
 import {
   AlertDialog,

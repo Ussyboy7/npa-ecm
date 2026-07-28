@@ -12,7 +12,7 @@ import {
   type StoredSignature,
   type SignatureTemplate,
   type UserSignaturePreferences,
-} from '@/lib/signature-storage';
+} from '@/lib/api/signatures';
 
 interface UseSignatureOptions {
   userId?: string;

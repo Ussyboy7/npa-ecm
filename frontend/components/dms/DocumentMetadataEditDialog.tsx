@@ -21,10 +21,10 @@ import {
 } from '@/components/ui/select';
 import { FileText, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
 import { SENSITIVITY_DETAILS, SENSITIVITY_VALUES } from '@/lib/constants';
-import { updateDocumentMetadata, queryDocuments, type DocumentRecord, type DocumentType } from '@/lib/dms-storage';
+import { updateDocumentMetadata, queryDocuments, type DocumentRecord, type DocumentType } from '@/lib/api/dms';
 import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
 import type { Division, Department } from '@/lib/npa-structure';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';

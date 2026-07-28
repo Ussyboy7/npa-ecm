@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import type { Minute } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';

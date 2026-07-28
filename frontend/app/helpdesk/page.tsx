@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { LifeBuoy } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { createSupportTicket } from "@/lib/support-api";
 
 export default function HelpdeskPage() {

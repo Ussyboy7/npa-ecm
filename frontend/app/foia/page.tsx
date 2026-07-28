@@ -25,6 +25,7 @@ import { unwrapResults } from "@/lib/type-utils";
 import { getFoiaStatusBadge } from "@/lib/status-badge";
 import { appType } from "@/lib/app-type";
 import { cn } from "@/lib/utils";
+import { formatDateShort } from '@/lib/datetime';
 
 interface FOIARequestRow {
   id: string;
@@ -311,11 +312,11 @@ export default function FOIAListPage() {
                     ) : null}
                   </div>
                   <div className={cn("hidden md:block", appType.meta)}>
-                    <p>Received: {req.received_date ? new Date(req.received_date).toLocaleDateString() : "—"}</p>
+                    <p>Received: {req.received_date ? formatDateShort(req.received_date) : "—"}</p>
                     <p>
                       Deadline:{" "}
                       {req.deadline_date
-                        ? new Date(req.deadline_date).toLocaleDateString()
+                        ? formatDateShort(req.deadline_date)
                         : "—"}
                     </p>
                   </div>

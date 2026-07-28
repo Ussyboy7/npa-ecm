@@ -10,10 +10,10 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { Upload, X, FileText, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
-import { processBatch, getBatchUpload, type BatchUpload } from '@/lib/capture-storage';
-import { createDocument } from '@/lib/dms-storage';
+import { processBatch, getBatchUpload, type BatchUpload } from '@/lib/api/capture';
+import { createDocument } from '@/lib/api/dms';
 import { logError } from '@/lib/client-logger';
 import {
   MIME_TYPE_PDF,

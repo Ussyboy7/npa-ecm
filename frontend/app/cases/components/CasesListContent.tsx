@@ -14,7 +14,7 @@ import { getCases, type CaseQueryParams } from "@/lib/api/cases";
 import { PRIORITY_OPTIONS } from "@/lib/constants";
 import type { Case } from "@/lib/npa-structure";
 import { formatDateShort } from "@/lib/correspondence-helpers";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { logError, logWarn } from "@/lib/client-logger";
 import { exportToCSV } from "@/lib/admin-export";
 import { apiFetch } from "@/lib/api-client";

@@ -8,11 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { apiFetch } from "@/lib/dms-storage";
+import { apiFetch } from "@/lib/api/dms";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Send, Loader2 } from "lucide-react";
-import type { DocumentRecord } from "@/lib/dms-storage";
+import type { DocumentRecord } from "@/lib/api/dms";
 import { RoutingSection } from "@/components/correspondence/RoutingSection";
 import { getDivisionById } from "@/lib/npa-structure";
 

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { Loader2, Info, Plus } from 'lucide-react';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';

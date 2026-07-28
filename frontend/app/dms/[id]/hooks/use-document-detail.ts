@@ -14,7 +14,7 @@ import {
   type DocumentComment,
   type DocumentAccessLog,
   type DocumentRelatedCorrespondenceItem,
-} from '@/lib/dms-storage';
+} from '@/lib/api/dms';
 
 import { isAccessDeniedError } from '@/lib/api-errors';
 

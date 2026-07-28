@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { reorderWorkflowSteps, createWorkflowStep, updateWorkflowStep, deleteWorkflowStep } from "@/lib/api/workflow";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import type { WorkflowStep, WorkflowStepFormData } from "@/lib/types/workflow";
 
 interface WorkflowStepsBuilderProps {

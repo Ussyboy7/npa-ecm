@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Link2, Copy } from "lucide-react";
-import { fetchRelatedItems, type RelatedSearchItem } from "@/lib/search-storage";
+import { fetchRelatedItems, type RelatedSearchItem } from "@/lib/api/search";
 
 interface RelatedItemsPanelProps {
   type: "document" | "correspondence" | "case";

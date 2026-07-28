@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { GRADE_LEVELS, type User } from "@/lib/npa-structure";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Plus, Trash2 } from "lucide-react";
 

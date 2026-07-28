@@ -42,7 +42,7 @@ import {
   Scale,
   Download,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
 import { downloadBlob } from "@/lib/admin-api";
 import {

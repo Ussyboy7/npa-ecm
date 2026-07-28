@@ -29,17 +29,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/dms-storage";
+import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/api/dms";
 import type { User } from "@/lib/npa-structure";
-import { shareDocument, apiFetch, hasTokens } from "@/lib/dms-storage";
-import { toast } from "sonner";
+import { shareDocument, apiFetch, hasTokens } from "@/lib/api/dms";
+import { toast } from "@/components/ui/sonner";
+import { formatDateShort, formatDateTime } from "@/lib/datetime";
 import { Input } from "@/components/ui/input";
 import { Search, Users, Building2, Users2, AlertTriangle, Loader2, X, FileText, Trash2, History, CheckCircle2, ArrowLeft, Shield, Mail, Send } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
-import { getActivityLogsForObject, type ActivityLog } from "@/lib/audit-storage";
+import { getActivityLogsForObject, type ActivityLog } from "@/lib/api/audit";
 import { filterUsersBySearch } from "@/lib/routing-utils";
 import { CorrespondenceRoutingView } from "./CorrespondenceRoutingView";
 
@@ -1249,7 +1250,7 @@ const ShareDocumentDialogContent = ({
                                           </Badge>
                                           {perm.createdAt && (
                                             <span className="text-xs text-muted-foreground">
-                                              Created {new Date(perm.createdAt).toLocaleDateString()}
+                                              Created {formatDateShort(perm.createdAt)}
                                             </span>
                                           )}
                                         </div>
@@ -1362,7 +1363,7 @@ const ShareDocumentDialogContent = ({
                                     </Badge>
                                   </div>
                                   <p className="text-xs text-muted-foreground">
-                                    {log.userName || log.userEmail || 'System'} • {new Date(log.timestamp).toLocaleString()}
+                                    {log.userName || log.userEmail || 'System'} • {formatDateTime(log.timestamp)}
                                   </p>
                                 </CardContent>
                               </Card>

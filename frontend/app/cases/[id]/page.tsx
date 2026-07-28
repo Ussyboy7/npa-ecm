@@ -34,9 +34,9 @@ import {
   fetchDocumentById,
   type DocumentRecord,
   type DocumentVersion,
-} from "@/lib/dms-storage";
+} from "@/lib/api/dms";
 import { apiFetch } from "@/lib/api-client";
-import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
+import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import type { ApiCorrespondence } from "@/lib/api/correspondence";
 import { isCorrespondenceClosed } from "@/lib/correspondence-helpers";
 import {
@@ -47,7 +47,7 @@ import { logError, logWarn } from "@/lib/client-logger";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 import {
   AlertDialog,

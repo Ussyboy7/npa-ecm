@@ -45,14 +45,14 @@ import {
   AlertTriangle,
   Download,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { SignatureSettingsCard } from '@/components/settings/SignatureSettingsCard';
 import {
   getNotificationPreferences,
   type NotificationPreferences as NotificationPreferencesType,
-} from '@/lib/notifications-storage';
+} from '@/lib/api/notifications';
 import {
   MAX_PHOTO_SIZE_MB,
   fileToBase64,

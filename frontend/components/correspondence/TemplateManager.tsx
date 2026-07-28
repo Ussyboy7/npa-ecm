@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { FileText, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
-import type { DocumentTemplate } from '@/lib/template-storage';
+import type { DocumentTemplate } from '@/lib/api/document-templates';
 
 interface TemplateManagerProps {
   templates: DocumentTemplate[];

@@ -188,7 +188,7 @@ export function generateDocumentHTML(content: DocumentContent): string {
             </div>
           </div>
           <div class="minute-meta">
-            ${new Date(minute.timestamp).toLocaleString()}
+            ${minute.timestamp ? new Date(minute.timestamp).toISOString() : ''}
           </div>
         </div>
         <div style="margin-bottom: 8px;">
@@ -363,7 +363,7 @@ export function generateDocumentHTML(content: DocumentContent): string {
         </div>
         <div class="meta-item">
           <div class="meta-label">Date Received</div>
-          <div>${new Date(correspondence.receivedDate).toLocaleDateString()}</div>
+          <div>${correspondence.receivedDate || ''}</div>
         </div>
         <div class="meta-item">
           <div class="meta-label">From</div>
@@ -393,7 +393,7 @@ export function generateDocumentHTML(content: DocumentContent): string {
       ` : ''}
 
       <div class="footer">
-        <div>Generated on ${new Date().toLocaleString()}</div>
+        <div>Generated on ${new Date().toISOString()}</div>
         <div>Nigerian Ports Authority - Electronic Content Management System</div>
       </div>
     </body>

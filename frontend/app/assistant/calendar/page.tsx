@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, MapPin, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { formatDateTime } from "@/lib/correspondence-helpers";

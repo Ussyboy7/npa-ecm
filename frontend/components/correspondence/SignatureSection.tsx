@@ -19,8 +19,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertCircle, ImageIcon, Shield, Upload } from 'lucide-react';
 import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
-import type { StoredSignature, SignatureTemplate } from '@/lib/signature-storage';
+import type { StoredSignature, SignatureTemplate } from '@/lib/api/signatures';
 import type { User } from '@/lib/npa-structure';
+import { formatDateShort, formatDateTime } from '@/lib/datetime';
 
 interface SignatureSectionProps {
   signature: StoredSignature | null;
@@ -94,7 +95,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <ImageIcon className="h-3 w-3" />
                   <span>
-                    Signature on file • Uploaded {new Date(signature.uploadedAt).toLocaleDateString()}
+                    Signature on file • Uploaded {formatDateShort(signature.uploadedAt)}
                   </span>
                 </div>
               </div>
@@ -137,7 +138,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
                 <div className="flex-1 space-y-1 text-sm">
                   <p className="font-medium text-foreground">Signature on File</p>
                   <p className="text-xs text-muted-foreground">
-                    Uploaded {new Date(signature.uploadedAt).toLocaleString()}{' '}
+                    Uploaded {formatDateTime(signature.uploadedAt)}{' '}
                     {signature.fileName ? `• ${signature.fileName}` : ''}
                   </p>
                 </div>

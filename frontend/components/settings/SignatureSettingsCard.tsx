@@ -3,7 +3,7 @@ import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 
 import { ALLOWED_SIGNATURE_MIME_TYPES, ACCEPT_IMAGE_SIGNATURE } from '@/lib/file-types';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { 
   AlertCircle, 
   ImageIcon, 
@@ -64,9 +64,10 @@ import {
   deleteUserSignatureFromBackend,
   updateSignatureSettings,
   type StoredSignature,
-} from '@/lib/signature-storage';
+} from '@/lib/api/signatures';
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import { logError } from '@/lib/client-logger';
+import { formatDateShort } from '@/lib/datetime';
 
 const MAX_SIGNATURE_SIZE_MB = 2;
 const MAX_OFFICE_NAME_LENGTH = 100;
@@ -599,7 +600,7 @@ export const SignatureSettingsCard = () => {
                           />
                         </div>
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Uploaded: {new Date(signature.uploadedAt).toLocaleDateString()}</span>
+                          <span>Uploaded: {formatDateShort(signature.uploadedAt)}</span>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -942,7 +943,7 @@ export const SignatureSettingsCard = () => {
                 <div className="text-center p-4 bg-muted/50 rounded-lg border">
                   <p className="text-sm font-semibold">
                     {signature.lastUsedAt 
-                      ? new Date(signature.lastUsedAt).toLocaleDateString() 
+                      ? formatDateShort(signature.lastUsedAt) 
                       : 'Never'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">Last Used</p>
@@ -966,7 +967,7 @@ export const SignatureSettingsCard = () => {
                 <div className="text-center p-4 bg-muted/50 rounded-lg border">
                   <p className="text-sm font-semibold">
                     {signature.uploadedAt 
-                      ? new Date(signature.uploadedAt).toLocaleDateString() 
+                      ? formatDateShort(signature.uploadedAt) 
                       : 'N/A'}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">Uploaded</p>

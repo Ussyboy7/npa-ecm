@@ -21,11 +21,11 @@ import {
   resolveDocumentComment,
   type DocumentComment,
   type DocumentVersion,
-} from '@/lib/dms-storage';
+} from '@/lib/api/dms';
 import { type User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateTime } from '@/lib/correspondence-helpers';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { CheckCircle2, MessageCircle, Undo2, XCircle, Reply } from 'lucide-react';
 
 interface DocumentCommentsDialogProps {

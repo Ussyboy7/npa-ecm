@@ -3,6 +3,7 @@
 import { Check, Circle, Timer, Archive, Send, FileCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatDate } from '@/lib/datetime';
 
 interface LifecycleStage {
   key: string;
@@ -29,12 +30,7 @@ const stageIcons: Record<string, React.ReactNode> = {
 
 function formatTimestamp(ts: string | null | undefined): string | null {
   if (!ts) return null;
-  try {
-    const d = new Date(ts);
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  } catch {
-    return null;
-  }
+  return formatDate(ts, 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function LifecycleProgressBar({ stages, currentStage, className }: LifecycleProgressBarProps) {

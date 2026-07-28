@@ -14,7 +14,7 @@ import {
   createWorkflowTemplate,
   updateWorkflowTemplate,
 } from "@/lib/api/workflow";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import type { WorkflowTemplate, WorkflowTemplateFormData } from "@/lib/types/workflow";
 import { logError } from "@/lib/client-logger";
 

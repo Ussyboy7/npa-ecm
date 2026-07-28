@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { sanitizeThemedHtml } from "@/lib/sanitize-html";
-import type { DocumentRecord } from "@/lib/dms-storage";
+import type { DocumentRecord } from "@/lib/api/dms";
 
 interface DocumentMetadataCardProps {
   document: DocumentRecord;

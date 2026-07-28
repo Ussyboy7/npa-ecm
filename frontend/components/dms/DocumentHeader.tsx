@@ -16,7 +16,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import Link from "next/link";
-import type { DocumentRecord } from "@/lib/dms-storage";
+import type { DocumentRecord } from "@/lib/api/dms";
 import type { User } from "@/lib/npa-structure";
 import { DocumentMetadataEditDialog } from "./DocumentMetadataEditDialog";
 import {

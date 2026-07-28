@@ -27,7 +27,7 @@ import { unwrapResults } from '@/lib/type-utils';
 import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -40,6 +40,7 @@ import {
   correspondenceQueueListStackClass,
 } from '@/components/shared/registry-queue-styles';
 import { cn } from '@/lib/utils';
+import { formatDateShort, formatDateTime } from '@/lib/datetime';
 
 interface Location {
   id: string;
@@ -447,7 +448,7 @@ function PhysicalDocumentsForm() {
                     <div className="flex gap-2 shrink-0">
                       {doc.checked_out_at && (
                         <span className="text-[11px] tabular-nums text-muted-foreground">
-                          {new Date(doc.checked_out_at).toLocaleDateString()}
+                          {formatDateShort(doc.checked_out_at)}
                         </span>
                       )}
                     </div>
@@ -480,7 +481,7 @@ function PhysicalDocumentsForm() {
                     )}
                     {doc.expected_return_at && (
                       <span className="inline-flex items-center gap-1 text-amber-600">
-                        Due {new Date(doc.expected_return_at).toLocaleDateString()}
+                        Due {formatDateShort(doc.expected_return_at)}
                       </span>
                     )}
                   </div>
@@ -615,7 +616,7 @@ function PhysicalDocumentsForm() {
                         event.action === 'checked_out' ? "bg-destructive" : "bg-success"
                       )} />
                       <div className="text-xs text-muted-foreground">
-                        {new Date(event.created_at).toLocaleString()}
+                        {formatDateTime(event.created_at)}
                       </div>
                       <div className="text-sm font-medium mt-0.5">
                         {event.action === 'checked_out' ? 'Checked Out' : 'Returned'}

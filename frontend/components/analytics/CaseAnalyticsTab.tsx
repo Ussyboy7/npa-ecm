@@ -12,7 +12,8 @@ import { appType } from '@/lib/app-type';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api-client';
 import { logError } from '@/lib/client-logger';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
+import { formatDate } from '@/lib/datetime';
 
 interface CaseStatistics {
   summary: {
@@ -317,7 +318,7 @@ export const CaseAnalyticsTab = () => {
                     {stats.trends.cases_over_time.slice(-7).map((item, index) => (
                       <div key={index} className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">
-                          {item.date ? new Date(item.date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }) : 'N/A'}
+                          {item.date ? formatDate(item.date, 'en-GB', { month: 'short', day: 'numeric' }) : 'N/A'}
                         </span>
                         <Badge variant="outline">{item.count}</Badge>
                       </div>

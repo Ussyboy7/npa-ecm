@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle, FileText, Calendar, User, Clock, Download, Printer } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { Correspondence, Minute } from "@/lib/npa-structure";
 import { ModalErrorBoundary } from "@/components/shared/ModalErrorBoundary";

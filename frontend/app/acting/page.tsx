@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logError } from "@/lib/client-logger";
@@ -44,16 +44,11 @@ import {
   type ActingCandidate,
   type ActingRequest,
 } from "@/lib/api/acting-appointments";
+import { formatDateLong } from '@/lib/datetime';
 
 function formatDate(value: string | null): string {
   if (!value) return "Open-ended";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDateLong(value);
 }
 
 export default function ActingSelfServicePage() {

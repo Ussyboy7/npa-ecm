@@ -61,7 +61,7 @@ import {
   saveTemplate,
   createTemplate,
   deleteTemplate,
-} from "@/lib/template-storage";
+} from "@/lib/api/document-templates";
 import { getWorkflowTemplates, deleteWorkflowTemplate, updateWorkflowTemplate } from "@/lib/api/workflow";
 import { getFormTemplates, deleteFormTemplate, cloneFormTemplate, createFormTemplate } from "@/lib/api/forms";
 import type { WorkflowTemplate } from "@/lib/types/workflow";
@@ -82,8 +82,8 @@ import {
   MessageSquare,
   LayoutTemplate,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { toast as sonnerToast } from "sonner";
+import { useToast } from "@/components/ui/sonner";
+import { toast as sonnerToast } from "@/components/ui/sonner";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";

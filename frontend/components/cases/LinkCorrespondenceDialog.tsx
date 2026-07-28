@@ -20,7 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { linkCorrespondenceToCase } from "@/lib/api/cases";
 import { apiFetch } from "@/lib/api-client";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Search, Loader2, Mail } from "lucide-react";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { usePagination } from "@/hooks/use-pagination";

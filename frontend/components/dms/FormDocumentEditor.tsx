@@ -23,13 +23,14 @@ import {
   getSignatureWorkflow,
 } from "@/lib/api/forms";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
+import { formatDateShort } from "@/lib/datetime";
 import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, AlertCircle, Paperclip, Upload, Download, Send, Eye } from "lucide-react";
 import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
 import { getWorkflowCollectedFieldNames, isSignatureFileField } from "@/lib/forms/field-classification";
-import { createDocumentVersion, type DocumentVersion } from "@/lib/dms-storage";
+import { createDocumentVersion, type DocumentVersion } from "@/lib/api/dms";
 import { Input } from "@/components/ui/input";
 import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPreviewModal";
 
@@ -1015,7 +1016,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                           <p><span className="font-medium">Designation:</span> {signature.signer_designation}</p>
                                         )}
                                         {isSigned && signature.signed_date && (
-                                          <p><span className="font-medium">Date:</span> {new Date(signature.signed_date).toLocaleDateString()}</p>
+                                          <p><span className="font-medium">Date:</span> {formatDateShort(signature.signed_date)}</p>
                                         )}
                                         {isSigned && signature.signed_at && (
                                           <p><span className="font-medium">Time:</span> {formatDateTime(signature.signed_at)}</p>

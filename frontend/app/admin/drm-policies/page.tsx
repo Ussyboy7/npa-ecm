@@ -35,7 +35,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Shield, Plus, Pencil, Eye, Trash2, CheckCircle2, XCircle, Search } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import {
   createDrmPolicy,
   updateDrmPolicy,

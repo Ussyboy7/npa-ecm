@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { FormData } from '../register-utils';
 import { validateFile } from '../register-utils';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 
 interface DocumentsStepProps {
   formData: FormData;

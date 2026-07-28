@@ -14,7 +14,7 @@ import { usePermissionCatalog } from "@/hooks/use-permission-catalog";
 import { getPermissionsByCategory } from "@/lib/role-permissions";
 import { getPermissionProfile } from "@/lib/permissions";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { Grid3X3, Loader2, Search } from "lucide-react";
 
 const MATRIX_CATEGORIES = [
@@ -65,15 +65,12 @@ export function PermissionMatrixTab() {
       };
       await updateRole(roleId, { permissions: nextPermissions });
       await refreshOrganizationData();
-      toast({
-        title: "Permission updated",
+      toast.success("Permission updated", {
         description: `${role.name}: ${enabled ? "granted" : "revoked"} ${permissionId.replace(/_/g, " ")}`,
       });
     } catch (error) {
-      toast({
-        title: "Update failed",
+      toast.error("Update failed", {
         description: error instanceof Error ? error.message : "Could not update role permission",
-        variant: "destructive",
       });
     } finally {
       setSavingCell(null);

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { apiFetch } from "@/lib/api-client";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Loader2, Shield } from "lucide-react";
 import Image from "next/image";
 

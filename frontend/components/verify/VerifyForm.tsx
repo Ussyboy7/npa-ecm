@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Search, Shield, AlertCircle } from "lucide-react";
 import { validateSerialNumber } from "@/lib/api/seal-verification";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 interface VerifyFormProps {
   onVerify?: (serial: string) => void;

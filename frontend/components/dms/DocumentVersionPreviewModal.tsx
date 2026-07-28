@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download, FileText, Edit2, Save, X } from "lucide-react";
-import type { DocumentVersion, DocumentRecord } from "@/lib/dms-storage";
-import { createDocumentVersion } from "@/lib/dms-storage";
+import type { DocumentVersion, DocumentRecord } from "@/lib/api/dms";
+import { createDocumentVersion } from "@/lib/api/dms";
 import { downloadDocumentVersion, fetchDocumentVersionContent } from "@/lib/dms-documents";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import mammoth from "mammoth";
@@ -20,7 +20,7 @@ import { sanitizeRichText } from "@/lib/sanitize-html";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 interface DocumentVersionPreviewModalProps {
   version: DocumentVersion;

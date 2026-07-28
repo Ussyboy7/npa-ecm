@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import type { CaseDetail } from "@/lib/npa-structure";
 import { appType } from "@/lib/app-type";
 import { cn } from "@/lib/utils";

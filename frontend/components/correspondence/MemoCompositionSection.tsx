@@ -8,7 +8,7 @@ import { AlertCircle, CheckCircle } from 'lucide-react';
 import { TemplateManager } from './TemplateManager';
 import { RichTextEditor } from '@/components/dms/RichTextEditor';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
-import type { DocumentTemplate } from '@/lib/template-storage';
+import type { DocumentTemplate } from '@/lib/api/document-templates';
 
 interface MemoCompositionSectionProps {
   // Subject

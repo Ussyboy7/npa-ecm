@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   DocumentRecord,
   queryDocuments,
-} from '@/lib/dms-storage';
+} from '@/lib/api/dms';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { FileText, Hash, Layers, Filter, Calendar } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';

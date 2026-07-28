@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DocumentVersion } from "@/lib/dms-storage";
+import type { DocumentVersion } from "@/lib/api/dms";
 
 interface DocumentVersionStripProps {
   versions: DocumentVersion[];

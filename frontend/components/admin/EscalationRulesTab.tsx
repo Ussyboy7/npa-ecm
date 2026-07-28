@@ -68,6 +68,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { formatDateTime } from '@/lib/datetime';
 import {
   type EscalationRule,
   type EscalationRuleInput,
@@ -613,7 +614,7 @@ export const EscalationRulesTab = forwardRef<
                     <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
                       <span className={correspondenceQueueMetaItemClass}>
                         <Clock className={correspondenceQueueMetaIconClass} />
-                        {new Date(esc.triggeredAt).toLocaleString()}
+                        {formatDateTime(esc.triggeredAt)}
                       </span>
                     </div>
                   </ListRowCard>

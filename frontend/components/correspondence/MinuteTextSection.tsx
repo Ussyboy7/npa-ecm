@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle, MessageSquare, Shield } from 'lucide-react';
 import { TemplateManager } from './TemplateManager';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
-import type { DocumentTemplate } from '@/lib/template-storage';
+import type { DocumentTemplate } from '@/lib/api/document-templates';
 
 interface MinuteTextSectionProps {
   minuteText: string;

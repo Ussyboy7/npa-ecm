@@ -11,11 +11,11 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsArchived,
   type Notification,
-} from '@/lib/notifications-storage';
+} from '@/lib/api/notifications';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { Check, CheckCheck, Archive, ExternalLink, Settings, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import Link from 'next/link';
 import { useNotificationWebSocket } from '@/hooks/use-notification-websocket';
 

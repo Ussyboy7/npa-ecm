@@ -60,7 +60,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import {
   Tooltip,
   TooltipContent,

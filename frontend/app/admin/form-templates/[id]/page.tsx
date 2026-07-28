@@ -17,7 +17,7 @@ import {
   createFormTemplate,
   updateFormTemplate,
 } from "@/lib/api/forms";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import type { FormTemplate, FormField } from "@/lib/types/forms";
 import { FormBuilder } from "@/components/forms/FormBuilder";
 import { logError } from "@/lib/client-logger";

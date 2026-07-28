@@ -55,7 +55,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { registryQueueEmptyIconClass } from "@/components/shared/registry-queue-styles";
 
 type ViewMode = "executives" | "all";

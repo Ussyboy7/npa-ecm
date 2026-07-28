@@ -2,7 +2,7 @@
 
 import { AdvancedSearch } from '@/components/search/AdvancedSearch';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { useEffect, useState, Suspense } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Mail, Briefcase } from 'lucide-react';

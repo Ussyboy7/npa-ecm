@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
+import { formatDateShort } from "@/lib/datetime";
 import { 
   Loader2, 
   UserCheck, 
@@ -296,7 +297,7 @@ export const DelegateModal = ({
   const getDurationDisplayText = () => {
     const option = DURATION_OPTIONS.find(d => d.value === delegationDuration);
     if (delegationDuration === 'custom' && customExpiryDate) {
-      return `Expires: ${new Date(customExpiryDate).toLocaleDateString()}`;
+      return `Expires: ${formatDateShort(customExpiryDate)}`;
     }
     return option?.label || 'Until Completed';
   };

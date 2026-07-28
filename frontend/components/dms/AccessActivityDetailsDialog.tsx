@@ -5,7 +5,7 @@ import { Activity, User as UserIcon, Clock, Eye, Download as DownloadIcon, Shiel
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDateTime } from '@/lib/correspondence-helpers';
-import type { DocumentAccessLog } from '@/lib/dms-storage';
+import type { DocumentAccessLog } from '@/lib/api/dms';
 import type { User } from '@/lib/npa-structure';
 
 interface AccessActivityDetailsDialogProps {

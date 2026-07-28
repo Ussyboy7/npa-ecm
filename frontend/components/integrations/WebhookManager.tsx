@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { Webhook, Plus, Edit, Trash2, TestTube } from 'lucide-react';
 import {
   getWebhooks,
@@ -18,7 +18,7 @@ import {
   deleteWebhook,
   testWebhook,
   type Webhook as WebhookType,
-} from '@/lib/integrations-storage';
+} from '@/lib/api/integrations';
 import { logError } from '@/lib/client-logger';
 
 export const WebhookManager = () => {

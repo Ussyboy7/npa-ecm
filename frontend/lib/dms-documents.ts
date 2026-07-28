@@ -6,7 +6,7 @@ import { unwrapResults } from '@/lib/type-utils';
 import type { User } from './npa-structure';
 import type { Correspondence, Minute } from './npa-structure';
 import type { ApiCorrespondence, ApiMinute } from '@/lib/api/correspondence';
-import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
 import { isRecord } from '@/lib/type-utils';
 import type {
   DocumentQueryParams,

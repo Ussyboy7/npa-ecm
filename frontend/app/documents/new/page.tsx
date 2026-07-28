@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { appType } from '@/lib/app-type';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import type { DocumentRecord } from '@/lib/api/dms';
 
 export default function CreateDocumentPage() {
   const router = useRouter();

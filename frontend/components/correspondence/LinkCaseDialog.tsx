@@ -25,9 +25,9 @@ import {
 import { getCases, linkCorrespondenceToCase, linkDocumentToCase, linkFormToCase, createCase } from "@/lib/api/cases";
 import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/pagination-constants";
 import type { Case } from "@/lib/npa-structure";
-import type { DocumentRecord } from "@/lib/dms-storage";
+import type { DocumentRecord } from "@/lib/api/dms";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Search, Plus, FolderTree, Loader2, Info, ChevronRight, Calendar } from "lucide-react";
 import { useMemo, useCallback } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";

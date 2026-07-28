@@ -8,10 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { Scan, Upload, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { createDocument } from '@/lib/dms-storage';
-import { processOCR } from '@/lib/capture-storage';
+import { createDocument } from '@/lib/api/dms';
+import { processOCR } from '@/lib/api/capture';
 import { logError } from '@/lib/client-logger';
 import { useRouter } from 'next/navigation';
 import {

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isCorrespondenceClosed } from "@/lib/correspondence-helpers";
+import { formatDate as formatDateValue } from '@/lib/datetime';
 import {
   DetailStatusStrip,
   StatusStripSep,
@@ -50,12 +51,7 @@ const directionConfig: Record<string, { icon: typeof ArrowDown; label: string }>
 
 function formatDate(dateStr: string | undefined): string | null {
   if (!dateStr) return null;
-  try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  } catch {
-    return null;
-  }
+  return formatDateValue(dateStr, "en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function cleanOfficeName(name: string | undefined): string | null {
