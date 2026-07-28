@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useCurrentUser } from './use-current-user';
 import type { User } from '@/lib/npa-structure';
 import { getStoredAccessToken } from '@/lib/api-client';
-import { type Notification } from '@/lib/notifications-storage';
+import { type Notification } from '@/lib/api/notifications';
 import {
   NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS,
   NOTIFICATION_WS_PING_INTERVAL_MS,

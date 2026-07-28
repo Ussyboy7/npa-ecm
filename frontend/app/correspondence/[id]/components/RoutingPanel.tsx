@@ -14,6 +14,7 @@ import { SealTrackingPanel } from '@/components/seals/SealTrackingPanel';
 import { ParallelRoutingStatusPanel } from '@/components/correspondence/ParallelRoutingStatusPanel';
 import { corrType } from '../correspondence-type';
 import { cn } from '@/lib/utils';
+import { formatDate as formatDateValue } from '@/lib/datetime';
 
 interface RoutingPanelProps {
   correspondence: Correspondence;
@@ -261,15 +262,11 @@ const GRADE_NAMES: Record<string, string> = {
 };
 
 const formatDate = (dateStr: string) => {
-  try {
-    return new Date(dateStr).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
+  return formatDateValue(dateStr, 'en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 };
 
 function RoutingHistoryCard({

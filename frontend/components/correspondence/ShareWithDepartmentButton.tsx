@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Users, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { apiFetch } from '@/lib/api-client';
 import { logError } from '@/lib/client-logger';
 import type { DistributionRecipient } from '@/lib/npa-structure';

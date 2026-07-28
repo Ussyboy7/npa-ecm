@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiFetch } from "@/lib/api-client";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 interface TwoFactorVerificationModalProps {
   open: boolean;

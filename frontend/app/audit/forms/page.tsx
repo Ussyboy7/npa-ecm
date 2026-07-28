@@ -12,7 +12,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Separator } from "@/components/ui/separator";
 import { FileText, ClipboardCheck, Plus, ArrowRight } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { logError } from "@/lib/client-logger";
 import type { FormTemplate, FormSubmission } from "@/lib/types/forms";

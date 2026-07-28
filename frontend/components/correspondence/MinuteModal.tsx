@@ -30,7 +30,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
+import { formatDateShort, formatDateTime } from "@/lib/datetime";
 import { ensureSealImageCached } from "@/lib/seal-cache";
 import {
   MessageSquare,
@@ -60,13 +61,13 @@ import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
 import { DistributionSelector } from './DistributionSelector';
 import { RoutingSection } from './RoutingSection';
-import { type SignatureTemplate } from '@/lib/signature-storage';
+import { type SignatureTemplate } from '@/lib/api/signatures';
 import { useSignature } from '@/hooks/use-signature';
 import {
   getTemplatesForUser,
   createTemplate as createDocumentTemplate,
   type DocumentTemplate,
-} from '@/lib/template-storage';
+} from '@/lib/api/document-templates';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
@@ -1322,8 +1323,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       division: divisionEntity?.name ?? '',
       department: departmentEntity?.name ?? '',
       initials,
-      date: now.toLocaleDateString('en-US'),
-      dateTime: now.toLocaleString('en-US'),
+      date: formatDateShort(now.toISOString()),
+      dateTime: formatDateTime(now.toISOString(), 'en-US'),
       referenceNumber: correspondence.referenceNumber ?? '',
     };
   };
@@ -1423,7 +1424,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                         </div>
                         <p className="text-sm text-foreground mb-2">{previousMinute.minuteText}</p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(previousMinute.timestamp).toLocaleString()}
+                          {formatDateTime(previousMinute.timestamp)}
                         </p>
                       </div>
                     </div>

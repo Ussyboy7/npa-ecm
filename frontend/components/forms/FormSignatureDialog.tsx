@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ImageIcon, AlertCircle, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
+import { formatDateTime } from "@/lib/datetime";
 import { signForm } from "@/lib/api/forms";
-import { fetchUserSignature, type StoredSignature } from "@/lib/signature-storage";
+import { fetchUserSignature, type StoredSignature } from "@/lib/api/signatures";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
@@ -141,7 +142,7 @@ export function FormSignatureDialog({
                       <div className="flex-1 space-y-1 text-sm">
                         <p className="font-medium text-foreground">Signature on File</p>
                         <p className="text-xs text-muted-foreground">
-                          Uploaded {new Date(userSignature.uploadedAt).toLocaleString()}{" "}
+                          Uploaded {formatDateTime(userSignature.uploadedAt)}{" "}
                           {userSignature.fileName ? `• ${userSignature.fileName}` : ""}
                         </p>
                       </div>

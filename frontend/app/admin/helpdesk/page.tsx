@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { LifeBuoy, Search } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { fetchSupportTickets, resolveSupportTicket, type SupportTicket } from "@/lib/support-api";
 
 export default function AdminHelpdeskPage() {

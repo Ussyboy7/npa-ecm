@@ -32,6 +32,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { StatStrip } from '@/components/shared/StatStrip';
 import { downloadAnalyticsExport, fetchExecutiveAnalytics, type ExecutiveAnalytics } from '@/lib/analytics-client';
+import { formatDateShort } from '@/lib/datetime';
 import {
   fetchEnhancedSLAAnalytics,
   fetchEnhancedDivisionPerformance,
@@ -470,7 +471,7 @@ export const ExecutiveDashboardTab = () => {
                             </div>
                             <p className="text-sm line-clamp-1">{esc.correspondenceSubject}</p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              {esc.ruleName} • {new Date(esc.triggeredAt).toLocaleDateString()}
+                              {esc.ruleName} • {formatDateShort(esc.triggeredAt)}
                             </p>
                           </Link>
                         ))}

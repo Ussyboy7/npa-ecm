@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { logError, logWarn } from '@/lib/client-logger';
-import { runOCROnVersion, type DocumentRecord } from '@/lib/dms-storage';
-import { processOCR, getCaptureJob, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
-import { toast } from 'sonner';
+import { runOCROnVersion, type DocumentRecord } from '@/lib/api/dms';
+import { processOCR, getCaptureJob, cancelCaptureJob, type CaptureJob } from '@/lib/api/capture';
+import { toast } from "@/components/ui/sonner";
 
 export type OCRState = Record<
   string,

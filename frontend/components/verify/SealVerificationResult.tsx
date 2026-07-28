@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatSealDate, formatSealDateLong } from "@/lib/date-formatters";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import type { SealVerification } from "@/lib/api/seal-verification";
 
 interface SealVerificationResultProps {

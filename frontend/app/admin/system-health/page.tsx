@@ -21,6 +21,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { fetchSystemStatus, type SystemStatus } from "@/lib/system-status-api";
 import { logError } from "@/lib/client-logger";
+import { formatDateTime } from "@/lib/datetime";
 import { StatStrip } from "@/components/shared/StatStrip";
 import {
   Activity,
@@ -116,7 +117,7 @@ export default function SystemHealthPage() {
               </Badge>
               <span className="text-sm text-muted-foreground flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" />
-                Uptime {Math.floor(status.uptime_seconds / 3600)}h · Updated {new Date(status.generated_at).toLocaleString()}
+                Uptime {Math.floor(status.uptime_seconds / 3600)}h · Updated {formatDateTime(status.generated_at)}
               </span>
             </div>
 
@@ -199,7 +200,7 @@ export default function SystemHealthPage() {
                     {status.recent_activity.map((entry) => (
                       <TableRow key={entry.id}>
                         <TableCell className="text-xs whitespace-nowrap">
-                          {new Date(entry.timestamp).toLocaleString()}
+                          {formatDateTime(entry.timestamp)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {entry.user?.username ?? "System"}

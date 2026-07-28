@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { MessageSquare } from "lucide-react";
-import type { DocumentComment } from "@/lib/dms-storage";
+import type { DocumentComment } from "@/lib/api/dms";
 
 interface DocumentCommentsCardProps {
   comments: DocumentComment[];

@@ -9,7 +9,7 @@ import Link from "next/link";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { apiFetch } from "@/lib/api-client";
 import { fetchAllPaginated } from "@/lib/pagination-utils";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { isRecord } from "@/lib/type-utils";
 
 interface DocumentThreadCardProps {

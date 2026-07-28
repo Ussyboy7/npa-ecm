@@ -5,6 +5,7 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
  */
 
 import { isRecord } from '@/lib/type-utils';
+import { getApiErrorMessage, isApiForbidden, isApiUnauthorized, isNetworkError as isApiNetworkError } from '@/lib/api-error';
 
 export interface ModalError {
   field?: string;
@@ -13,8 +14,6 @@ export interface ModalError {
 }
 
 const getString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
-
-const getNumber = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
 
 const getNested = (root: unknown, keys: string[]): unknown => {
   let cur: unknown = root;
@@ -80,16 +79,16 @@ export class ModalErrorHandler {
   static getUserFriendlyMessage(error: ModalError): string {
     switch (error.type) {
       case 'validation':
-        return (error instanceof Error ? error.message : ERROR_UNKNOWN);
+        return error.message || ERROR_UNKNOWN;
       case 'api':
-        return `Server error: ${(error instanceof Error ? error.message : ERROR_UNKNOWN)}`;
+        return `Server error: ${error.message || ERROR_UNKNOWN}`;
       case 'network':
         return 'Network error. Please check your connection and try again.';
       case 'permission':
         return 'You do not have permission to perform this action.';
       case 'unknown':
       default:
-        return (error instanceof Error ? error.message : ERROR_UNKNOWN) || 'An unexpected error occurred. Please try again.';
+        return error.message || 'An unexpected error occurred. Please try again.';
     }
   }
 
@@ -97,35 +96,14 @@ export class ModalErrorHandler {
    * Check if error is a network error
    */
   static isNetworkError(error: unknown): boolean {
-    const code = isRecord(error) ? getString(error.code) : undefined;
-    const message =
-      error instanceof Error ? error.message : isRecord(error) ? getString(error.message) : undefined;
-    const msgLower = message?.toLowerCase();
-
-    return (
-      code === 'NETWORK_ERROR' ||
-      Boolean(msgLower?.includes('network')) ||
-      Boolean(msgLower?.includes('fetch')) ||
-      !navigator.onLine
-    );
+    return isApiNetworkError(error) || !navigator.onLine;
   }
 
   /**
    * Check if error is a permission error
    */
   static isPermissionError(error: unknown): boolean {
-    const status = getNumber(getNested(error, ['response', 'status']));
-    const message =
-      error instanceof Error ? error.message : isRecord(error) ? getString(error.message) : undefined;
-    const msgLower = message?.toLowerCase();
-
-    return (
-      status === 403 ||
-      status === 401 ||
-      Boolean(msgLower?.includes('permission')) ||
-      Boolean(msgLower?.includes('unauthorized')) ||
-      Boolean(msgLower?.includes('forbidden'))
-    );
+    return isApiForbidden(error) || isApiUnauthorized(error);
   }
 
   /**
@@ -147,7 +125,7 @@ export class ModalErrorHandler {
     }
 
     return {
-      message: this.extractApiError(error),
+      message: getApiErrorMessage(error, this.extractApiError(error)),
       type: 'api',
     };
   }

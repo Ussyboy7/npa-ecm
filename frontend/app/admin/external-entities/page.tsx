@@ -46,7 +46,7 @@ import {
 } from "@/lib/external-entities-api";
 import { logError } from "@/lib/client-logger";
 import { Building2, Plus, RefreshCw, Search, Building, Users, UserCheck } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import {
   registryQueueStatCardContentClass,

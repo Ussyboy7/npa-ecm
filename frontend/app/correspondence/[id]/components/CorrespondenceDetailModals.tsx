@@ -15,10 +15,10 @@ import { PrintPreviewModal } from '@/components/correspondence/PrintPreviewModal
 import { DocumentPreviewModal } from '@/components/correspondence/DocumentPreviewModal';
 import { LinkDocumentDialog } from '@/components/correspondence/LinkDocumentDialog';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import { getPrimaryLinkedDocument } from '@/lib/correspondence-preview-target';
 import type { Correspondence, Minute, User } from '@/lib/npa-structure';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import type { DocumentRecord } from '@/lib/api/dms';
 import type { ModalType } from '@/hooks/use-modal-state';
 
 interface CorrespondenceDetailModalsProps {

@@ -1,24 +1,8 @@
 /** API client for seal verification. */
 
 import { logError, logInfo } from '@/lib/client-logger';
-
-const getApiBaseUrl = (): string => {
-  // Get API base URL - works across local/stag/prod environments
-  let apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api';
-  
-  // Normalize: remove trailing slashes
-  apiBase = apiBase.replace(/\/+$/, '');
-  
-  // Ensure we have /api/v1 in the URL
-  if (apiBase.endsWith('/api/v1')) {
-    return apiBase;
-  } else if (apiBase.endsWith('/api')) {
-    return `${apiBase}/v1`;
-  } else {
-    // Just the host (e.g., http://localhost:8002), add /api/v1
-    return `${apiBase}/api/v1`;
-  }
-};
+import { apiFetch, isAbortError } from '@/lib/api-client';
+import { getApiErrorMessage } from '@/lib/api-error';
 
 export interface SealVerification {
   valid: boolean;
@@ -39,72 +23,20 @@ export interface SealVerification {
 }
 
 export async function verifySeal(serialNumber: string, signal?: AbortSignal): Promise<SealVerification> {
-  const baseUrl = getApiBaseUrl();
-  const verifyUrl = `${baseUrl}/accounts/seal/verify/${encodeURIComponent(serialNumber)}/`;
+  const verifyPath = `/accounts/seal/verify/${encodeURIComponent(serialNumber)}/`;
   
   try {
-    const response = await fetch(verifyUrl, {
+    const data = await apiFetch<SealVerification>(verifyPath, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      mode: 'cors',
-      credentials: 'include',
       signal,
+      skipAuth: true,
     });
-    
-    // Debug logging
+
     logInfo('[Seal Verification] Response received:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      url: verifyUrl,
+      ok: true,
+      path: verifyPath,
     });
-    
-    // Check if response is ok (status 200-299)
-    if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-      
-      // Try JSON, fall back to text
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
-        logInfo('[Seal Verification] Error response:', errorData);
-      } catch {
-        const errorText = await response.text().catch(() => '');
-        if (errorText) {
-          errorMessage = errorText;
-          logInfo('[Seal Verification] Error text:', errorText);
-        }
-      }
-      
-      logInfo('[Seal Verification] Returning error response:', errorMessage);
-      
-      // Return error response
-      return {
-        valid: false,
-        serial_number: serialNumber,
-        error: errorMessage,
-      } as SealVerification;
-    }
-    
-    // Parse successful response
-    const responseText = await response.text();
-    let data: SealVerification;
-    
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      // If JSON parsing fails, create error response
-      logError('Failed to parse verification response:', parseError, responseText);
-      return {
-        valid: false,
-        serial_number: serialNumber,
-        error: 'Invalid response from server. Please try again.',
-      } as SealVerification;
-    }
-    
+
     // Ensure we have the serial number even if API didn't return it
     if (!data.serial_number) {
       data.serial_number = serialNumber;
@@ -122,15 +54,18 @@ export async function verifySeal(serialNumber: string, signal?: AbortSignal): Pr
     });
     
     return data;
-  } catch (networkError) {
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+
     // Network error (CORS, connection failed, etc.) - throw so hook can retry
-    logError('Network error during seal verification:', networkError);
-    const errorMessage = networkError instanceof Error 
-      ? networkError.message 
-      : 'Network error. Please check your connection and try again.';
-    
-    // Throw error so the hook can retry
-    throw new Error(errorMessage);
+    logError('Network error during seal verification:', error);
+    return {
+      valid: false,
+      serial_number: serialNumber,
+      error: getApiErrorMessage(error, 'Network error. Please check your connection and try again.'),
+    } as SealVerification;
   }
 }
 

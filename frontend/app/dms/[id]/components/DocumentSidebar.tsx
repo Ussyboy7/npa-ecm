@@ -12,7 +12,7 @@ import type {
   DocumentComment,
   DocumentAccessLog,
   DocumentVersion,
-} from "@/lib/dms-storage";
+} from "@/lib/api/dms";
 import type { Correspondence, Minute, User } from "@/lib/npa-structure";
 import { DocumentMetadataCard } from "./DocumentMetadataCard";
 import { DocumentSummaryCard } from "@/components/dms/DocumentSummaryCard";

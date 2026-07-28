@@ -86,6 +86,10 @@ function buildArchiveLevels(user: User | null | undefined): ArchiveLevel[] {
   return levels;
 }
 
+export function hasRolePermission(user: User | null | undefined, key: string): boolean {
+  return perm(user, key);
+}
+
 export const getPermissionProfile = (user?: User | null): PermissionProfile => {
   if (!user) {
     return { ...defaultProfile };

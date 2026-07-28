@@ -61,7 +61,7 @@ import {
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { getActivityLogs, downloadComplianceExport, type ActivityLog } from '@/lib/audit-storage';
+import { getActivityLogs, downloadComplianceExport, type ActivityLog } from '@/lib/api/audit';
 import { PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { usePagination } from '@/hooks/use-pagination';
@@ -69,7 +69,7 @@ import { PaginationControls } from '@/components/shared/PaginationControls';
 import { logError, logWarn } from '@/lib/client-logger';
 import { exportToCSV } from '@/lib/admin-export';
 import { downloadBlob } from '@/lib/admin-api';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 
 const ACTION_TYPES = [
   { value: 'user_login', label: 'User Login' },

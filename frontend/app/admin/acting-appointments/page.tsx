@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logError } from "@/lib/client-logger";
@@ -42,16 +42,12 @@ import {
   type ActingRequest,
 } from "@/lib/api/acting-appointments";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatDateLong } from "@/lib/datetime";
+import { hasRolePermission } from "@/lib/permissions";
 
 function formatDate(value: string | null): string {
   if (!value) return "Open-ended";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDateLong(value);
 }
 
 export default function ActingAppointmentsPage() {
@@ -248,8 +244,8 @@ export default function ActingAppointmentsPage() {
 
   const canManage =
     Boolean(currentUser?.isSuperuser) ||
-    Boolean(currentUser?.rolePermissions?.can_manage_org_structure) ||
-    Boolean(currentUser?.rolePermissions?.can_manage_users) ||
+    hasRolePermission(currentUser, "can_manage_org_structure") ||
+    hasRolePermission(currentUser, "can_manage_users") ||
     isOfficePrincipal;
 
   return (

@@ -47,7 +47,7 @@ import { logError } from "@/lib/client-logger";
 import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { exportToCSV } from "@/lib/admin-export";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 
 interface ExecutiveApproval {

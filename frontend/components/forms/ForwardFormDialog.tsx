@@ -11,10 +11,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Send, User, Building2, Briefcase } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
 import { updateFormDocument } from '@/lib/api/dms-forms';
-import { createNotification } from '@/lib/notifications-storage';
+import { createNotification } from '@/lib/api/notifications';
 import type { FormDocument } from '@/lib/api/dms-forms';
 
 interface ForwardFormDialogProps {

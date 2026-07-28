@@ -22,7 +22,7 @@ import {
   correspondenceQueueSubjectClass,
 } from '@/components/shared/registry-queue-styles';
 import { useRouter } from 'next/navigation';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import type { DocumentRecord } from '@/lib/api/dms';
 
 interface InboxDocumentCardProps {
   doc: DocumentRecord;

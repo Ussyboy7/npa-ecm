@@ -19,8 +19,8 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
   type NotificationPreferences,
-} from '@/lib/notifications-storage';
-import { toast } from 'sonner';
+} from '@/lib/api/notifications';
+import { toast } from "@/components/ui/sonner";
 
 interface NotificationPreferencesDialogProps {
   open: boolean;

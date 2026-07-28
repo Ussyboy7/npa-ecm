@@ -47,7 +47,7 @@ import {
 } from "@/components/shared/registry-queue-styles";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { Correspondence } from "@/lib/npa-structure";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 
 function getPriorityBadgeVariant(priority: string): "destructive" | "default" | "secondary" | "outline" {
   switch (priority) {

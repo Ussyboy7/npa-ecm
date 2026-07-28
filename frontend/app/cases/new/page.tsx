@@ -14,7 +14,7 @@ import { createCase } from "@/lib/api/cases";
 import { PRIORITY_OPTIONS } from "@/lib/constants";
 import type { Case } from "@/lib/npa-structure";
 import { logError } from "@/lib/client-logger";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { ArrowLeft, Save, Loader2, FileText, MoreHorizontal } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";

@@ -16,7 +16,7 @@ import {
   type CaseComment,
 } from "@/lib/api/cases";
 import { formatDateTime } from "@/lib/correspondence-helpers";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
 import {
   MessageSquare,

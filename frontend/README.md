@@ -85,7 +85,7 @@ The application will be available at `http://localhost:3002`
 ### Environment Variables (.env.local)
 
 ```env
-# API Configuration
+# API Configuration — must include the /api/v1 suffix (no trailing slash after v1)
 NEXT_PUBLIC_API_URL=http://localhost:8002/api/v1
 
 # WebSocket Configuration
@@ -128,7 +128,7 @@ npm run analyze
 
 The frontend communicates with the Django REST API backend:
 
-- **Base URL**: Configurable via `NEXT_PUBLIC_API_URL`
+- **Base URL**: Configurable via `NEXT_PUBLIC_API_URL` (must end with `/api/v1`)
 - **Authentication**: JWT tokens with automatic refresh
 - **WebSocket**: Real-time notifications via `/ws/notifications/`
 - **File Upload**: Direct to backend with progress tracking

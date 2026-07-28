@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { SimplifiedRoleSwitcher } from "./SimplifiedRoleSwitcher";
+import { formatDate } from '@/lib/datetime';
 
 export const TopBar = () => {
   const router = useRouter();
@@ -110,14 +111,7 @@ export const TopBar = () => {
     });
   };
 
-  // Format date as "Day, Month Date"
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long',
-      month: 'long', 
-      day: 'numeric'
-    });
-  };
+
 
   // Check if impersonating - only after mount to avoid hydration mismatch
   const isCurrentlyImpersonating = mounted && (isImpersonating || hasOriginalTokens());

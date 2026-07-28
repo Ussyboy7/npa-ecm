@@ -20,14 +20,14 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import {
   listBatchUploads,
   listCaptureJobs,
   retryCaptureJob,
   type BatchUpload,
   type CaptureJob,
-} from "@/lib/capture-storage";
+} from "@/lib/api/capture";
 import { logError } from "@/lib/client-logger";
 import { ListRowCard } from "@/components/shared/ListRowCard";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
@@ -38,6 +38,7 @@ import {
   correspondenceQueueListStackClass,
 } from "@/components/shared/registry-queue-styles";
 import { cn } from "@/lib/utils";
+import { formatDateShort } from "@/lib/datetime";
 
 function jobStatusBadge(status: CaptureJob["status"]) {
   const styles: Record<CaptureJob["status"], string> = {
@@ -211,7 +212,7 @@ function CaptureHubContent() {
                       </div>
                     </div>
                     <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                      {new Date(job.created_at).toLocaleDateString()}
+                      {formatDateShort(job.created_at)}
                     </span>
                   </div>
                   {(job.status === "processing" || job.status === "pending") && (
@@ -268,7 +269,7 @@ function CaptureHubContent() {
                       )}
                     </div>
                     <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                      {new Date(batch.created_at).toLocaleDateString()}
+                      {formatDateShort(batch.created_at)}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">

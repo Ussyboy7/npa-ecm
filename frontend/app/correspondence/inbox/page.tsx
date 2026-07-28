@@ -31,8 +31,10 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
-import { CorrespondenceProvider, mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
+import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { usePagination } from '@/hooks/use-pagination';
+import { useCorrespondenceQueueFilters } from '@/hooks/use-correspondence-queue-filters';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -61,23 +63,32 @@ const CorrespondenceInboxContent = () => {
   const { offices, officeMemberships } = useOrganization();
   const { dataVersion } = useCorrespondence();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
   
-  // Use pagination hook
   const [count, setCount] = useState(0);
   const pagination = usePagination({
     totalCount: count,
   });
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [selectedPriority, setSelectedPriority] = useState<string>('all');
+  const {
+    searchQuery,
+    setSearchQuery,
+    debouncedSearch,
+    selectedStatus,
+    setSelectedStatus,
+    selectedPriority,
+    setSelectedPriority,
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    sortBy,
+    sortOrder,
+    clearFilters: clearQueueFilters,
+    handleSortChange,
+    appendQueueParams,
+  } = useCorrespondenceQueueFilters({ defaultStatus: 'all', defaultPriority: 'all' });
   const [assignedOnly, setAssignedOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<string>('priority');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
 
   const [inboxItems, setInboxItems] = useState<Correspondence[]>([]);
   const [summary, setSummary] = useState<InboxSummary>(DEFAULT_SUMMARY);
@@ -142,12 +153,8 @@ const CorrespondenceInboxContent = () => {
   }, [selectedStatus, selectedPriority, assignedOnly, dateFrom, dateTo, selectedOfficeId]);
 
   const clearFilters = () => {
-    setSelectedStatus('');
-    setSelectedPriority('');
+    clearQueueFilters();
     setAssignedOnly(false);
-    setDateFrom('');
-    setDateTo('');
-    setSearchQuery('');
     setSelectedOfficeId('all');
   };
 
@@ -185,11 +192,6 @@ const CorrespondenceInboxContent = () => {
   }, [selectedOfficeId]);
 
   useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
-    return () => clearTimeout(handle);
-  }, [searchQuery]);
-
-  useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOfficeId, debouncedSearch, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
@@ -208,7 +210,7 @@ const CorrespondenceInboxContent = () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams();
+        const params = appendQueueParams(new URLSearchParams(), { assigned_only: assignedOnly });
         let appendedOffice = false;
         if (selectedOfficeId && selectedOfficeId !== 'all') {
           params.append('office', selectedOfficeId);
@@ -221,18 +223,6 @@ const CorrespondenceInboxContent = () => {
         if (!appendedOffice && isSuperuser) {
           params.append('include_all_offices', 'true');
         }
-        if (debouncedSearch) params.append('search', debouncedSearch);
-        if (selectedStatus !== 'all') {
-          params.append('status', selectedStatus);
-        }
-        if (selectedPriority !== 'all') {
-          params.append('priority', selectedPriority);
-        }
-        if (assignedOnly) params.append('assigned_only', 'true');
-        if (dateFrom) params.append('date_from', dateFrom);
-        if (dateTo) params.append('date_to', dateTo);
-        params.append('sort_by', sortBy);
-        params.append('sort_order', sortOrder);
         params.append('page', String(pagination.page));
         params.append('page_size', String(pagination.pageSize));
 
@@ -355,7 +345,7 @@ const CorrespondenceInboxContent = () => {
             </Select>
             <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
             <Button variant={assignedOnly?'default':'outline'} size="sm" onClick={()=>setAssignedOnly(!assignedOnly)} className="h-8 text-xs"><UserIcon className="h-3.5 w-3.5 mr-1" /> Assigned</Button>
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
               <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Sort by"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>

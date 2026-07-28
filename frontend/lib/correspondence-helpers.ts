@@ -90,54 +90,12 @@ export const getStatusVariant = (status: string): 'default' | 'secondary' | 'out
   }
 };
 
-// Format date - Always uses 'en-US' locale for consistent server/client rendering
-export const formatDate = (dateString: string): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-};
-
-// Format date with time - Always uses 'en-US' locale
-export const formatDateTime = (dateString: string): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  return date.toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
-
-// Short date format (MM/DD/YYYY) for consistent rendering
-export const formatDateShort = (dateString: string): string => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-};
-
-// Format date as YYYY-MM-DD for API requests
-export const formatDateForAPI = (date: Date | string): string => {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (isNaN(d.getTime())) {
-    // If invalid, return today's date
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  }
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+export {
+  formatDateLong as formatDate,
+  formatDateTime,
+  formatDateShort,
+  formatDateForAPI,
+} from "@/lib/datetime";
 
 // Check if correspondence is overdue
 export const isOverdue = (correspondence: Correspondence): boolean => {

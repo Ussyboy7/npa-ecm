@@ -40,7 +40,7 @@ from accounts.oidc import (
 )
 from accounts.views import set_auth_token_cookies
 from organization.permission_utils import explain_access_context, explain_permission_denial
-from organization.permissions_catalog import get_permission_catalog
+from organization.permissions_catalog import get_permission_catalog, get_permission_presets
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,12 @@ class PermissionCatalogView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response({"permissions": get_permission_catalog()})
+        return Response(
+            {
+                "permissions": get_permission_catalog(),
+                "presets": get_permission_presets(),
+            }
+        )
 
 
 class LoginMFAStatusView(APIView):

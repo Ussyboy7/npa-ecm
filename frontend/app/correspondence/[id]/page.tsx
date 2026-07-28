@@ -4,11 +4,11 @@ import { useEffect, useMemo, useCallback, useReducer, useRef, useState, Suspense
 import { logError, logWarn } from '@/lib/client-logger';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
 import type { Minute, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
+import { logDocumentAccess, type DocumentRecord } from '@/lib/api/dms';
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -194,7 +194,7 @@ const CorrespondenceDetailContent = () => {
         body: JSON.stringify(payload),
       });
 
-      // Backend handles delegation storage - no need for localStorage
+      // Backend persists delegations, so no client cache is needed here.
       await refreshOrganizationData();
       await syncFromApi();
       bumpSidebarCounts();

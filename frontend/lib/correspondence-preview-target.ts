@@ -1,6 +1,6 @@
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import type { Correspondence } from '@/lib/npa-structure';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import type { DocumentRecord } from '@/lib/api/dms';
 
 export type PreviewAttachmentSource = 'attachment' | 'completion-package';
 

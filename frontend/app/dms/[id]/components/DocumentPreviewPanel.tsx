@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FormDocumentEditor } from "@/components/dms/FormDocumentEditor";
 import { formatFileSize } from "@/lib/file-utils";
-import type { DocumentRecord, DocumentVersion } from "@/lib/dms-storage";
+import type { DocumentRecord, DocumentVersion } from "@/lib/api/dms";
 import { DmsVersionPreviewContent } from "./DmsVersionPreviewContent";
 import { DocumentVersionStrip } from "./DocumentVersionStrip";
 import { DocumentVersionsPanel } from "./DocumentVersionsPanel";

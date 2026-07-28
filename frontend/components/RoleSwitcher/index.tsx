@@ -20,7 +20,7 @@ import {
   storeTokens,
   hasOriginalTokens,
 } from "@/lib/api-client";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
 import {
   getRecentUsers,

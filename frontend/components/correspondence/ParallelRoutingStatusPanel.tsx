@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { AlertTriangle, Bell, CheckCircle2, GitBranch, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
   remindParallelBranch,
 } from "@/lib/correspondence-parallel";
 import type { ParallelBranch } from "@/lib/npa-structure";
+import { formatDateTime } from '@/lib/datetime';
 
 const STATUS_LABELS: Record<ParallelBranch["status"], string> = {
   pending: "Pending",
@@ -162,7 +163,7 @@ export function ParallelRoutingStatusPanel({
                         {STATUS_LABELS[branch.status]}
                       </Badge>
                       <span>{branch.targetKind === "office" ? "Office branch" : "User branch"}</span>
-                      {branch.deadline && <span>Due {new Date(branch.deadline).toLocaleString()}</span>}
+                      {branch.deadline && <span>Due {formatDateTime(branch.deadline)}</span>}
                     </div>
                   </div>
 

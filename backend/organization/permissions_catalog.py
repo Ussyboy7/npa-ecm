@@ -394,7 +394,36 @@ def merge_superuser_permissions(perms: dict[str, bool]) -> dict[str, bool]:
 
 
 def get_permission_catalog() -> list[dict[str, str]]:
+    def category_for(permission_key: str) -> str:
+        if permission_key.startswith("sidebar_show_"):
+            return "sidebar"
+        if permission_key.startswith("can_access_analytics") or permission_key.startswith("can_access_reports") or permission_key.startswith("can_access_executive_dashboard"):
+            return "analytics"
+        if permission_key.startswith("can_access_document_management") or permission_key.startswith("can_create_documents") or permission_key.startswith("can_edit_documents") or permission_key.startswith("can_delete_documents") or permission_key.startswith("can_share_documents"):
+            return "documents"
+        if permission_key.startswith("can_access_approvals") or permission_key.startswith("can_approve") or permission_key.startswith("can_reject"):
+            return "workflow"
+        if permission_key.startswith("can_register_correspondence") or permission_key.startswith("can_minute_correspondence") or permission_key.startswith("can_treat_correspondence") or permission_key.startswith("can_distribute") or permission_key.startswith("can_archive") or permission_key.startswith("can_view_"):
+            return "correspondence"
+        return "administration"
+
     return [
-        {"id": key, "label": PERMISSION_LABELS.get(key, key.replace("_", " ").title())}
+        {
+            "id": key,
+            "label": PERMISSION_LABELS.get(key, key.replace("_", " ").title()),
+            "description": PERMISSION_LABELS.get(key, key.replace("_", " ").title()),
+            "category": category_for(key),
+        }
         for key in PERMISSION_KEYS
+    ]
+
+
+def get_permission_presets() -> list[dict[str, object]]:
+    return [
+        {
+            "name": role_name,
+            "description": f"Canonical preset for {role_name}",
+            "permissions": normalize_permissions(raw_permissions),
+        }
+        for role_name, raw_permissions in ROLE_PERMISSION_PRESETS.items()
     ]

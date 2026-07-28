@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { queryDocumentsExtended, type DocumentRecord } from '@/lib/dms-storage';
+import { queryDocumentsExtended, type DocumentRecord } from '@/lib/api/dms';
 import { listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
 import { getSignatures } from '@/lib/api/forms';
 import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';

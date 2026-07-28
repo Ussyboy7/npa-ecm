@@ -1,0 +1,281 @@
+import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
+import { logError, logInfo, logWarn } from '@/lib/client-logger';
+/**
+ * Frontend API client for notifications.
+ */
+
+import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
+import { apiFetch, hasTokens } from '@/lib/api-client';
+import {
+  mapApiNotification,
+  type ApiNotification,
+  type Notification,
+} from '@/lib/api/notifications-mappers';
+
+// API response interface for paginated notifications
+interface ApiNotificationListResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: ApiNotification[];
+}
+
+export type { Notification };
+
+export interface NotificationPreferences {
+  id: string;
+  user: string;
+  inAppEnabled: boolean;
+  inAppUrgentOnly: boolean;
+  emailEnabled: boolean;
+  emailUrgentOnly: boolean;
+  emailDigest: boolean;
+  emailDigestTime?: string;
+  moduleDms: boolean;
+  moduleCorrespondence: boolean;
+  moduleWorkflow: boolean;
+  moduleSystem: boolean;
+  priorityLow: boolean;
+  priorityNormal: boolean;
+  priorityHigh: boolean;
+  soundEnabled?: boolean;
+  priorityUrgent: boolean;
+  typeWorkflow: boolean;
+  typeDocument: boolean;
+  typeCorrespondence: boolean;
+  typeSystem: boolean;
+  typeAlert: boolean;
+  typeReminder: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+  autoArchiveDays: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateNotificationPayload {
+  recipient: string;
+  title: string;
+  message: string;
+  notificationType?: Notification['notificationType'];
+  priority?: Notification['priority'];
+  sender?: string;
+  module?: string;
+  relatedObjectType?: string;
+  relatedObjectId?: string;
+  actionUrl?: string;
+  actionRequired?: boolean;
+  expiresInHours?: number;
+}
+
+/**
+ * Get all notifications for the current user.
+ */
+export const getNotifications = async (params?: {
+  status?: string;
+  notificationType?: string;
+  priority?: string;
+  module?: string;
+  search?: string;
+}): Promise<Notification[]> => {
+  if (!hasTokens()) return [];
+
+  const queryParams = new URLSearchParams();
+  queryParams.set('page_size', String(DEFAULT_LIST_PAGE_SIZE));
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.notificationType) queryParams.append('notification_type', params.notificationType);
+  if (params?.priority) queryParams.append('priority', params.priority);
+  if (params?.module) queryParams.append('module', params.module);
+  if (params?.search) queryParams.append('search', params.search);
+
+  const query = queryParams.toString();
+  // The router registers 'notifications' under api/notifications/, and the viewset is also 'notifications'
+  // So the full path is /api/notifications/notifications/
+  // apiFetch adds /api/v1/ prefix, so we need /notifications/notifications/
+  const url = `/notifications/notifications/${query ? `?${query}` : ''}`;
+  logInfo('[notifications-api] Fetching notifications from:', url);
+  const response = await apiFetch<ApiNotificationListResponse | ApiNotification[]>(url);
+  
+  // Handle paginated response (DRF returns {count, next, previous, results: [...]})
+  let apiNotifications: ApiNotification[] = [];
+  if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
+    apiNotifications = (response as ApiNotificationListResponse).results;
+    logInfo('[notifications-api] Received paginated response:', { count: apiNotifications.length });
+  } else if (Array.isArray(response)) {
+    apiNotifications = response;
+    logInfo('[notifications-api] Received array response:', { count: apiNotifications.length });
+  }
+  
+  // Map snake_case API response to camelCase frontend model
+  return apiNotifications.map(mapApiNotification);
+};
+
+// Singleton state for unread count - only one fetch should happen regardless of how many components call it
+const globalUnreadCountState: {
+  count: number;
+  timestamp: number;
+  loading: boolean;
+} = {
+  count: 0,
+  timestamp: 0,
+  loading: false,
+};
+
+let globalUnreadCountPromise: Promise<number> | null = null;
+const UNREAD_COUNT_CACHE_TTL_MS = 30 * 1000; // 30 seconds
+
+const setGlobalUnreadCount = (count: number): void => {
+  const safeCount = Math.max(0, count);
+  globalUnreadCountState.count = safeCount;
+  globalUnreadCountState.timestamp = Date.now();
+  globalUnreadCountState.loading = false;
+};
+
+/**
+ * Get the unread notification count for the current user.
+ * Uses singleton pattern to ensure only one fetch happens at a time.
+ */
+export const getUnreadCount = async (force = false): Promise<number> => {
+  if (!hasTokens()) return 0;
+
+  // If there's already a fetch in progress, wait for it
+  if (globalUnreadCountPromise && !force) {
+    try {
+      return await globalUnreadCountPromise;
+    } catch {
+      // If the promise failed, continue with new fetch
+    }
+  }
+
+  // Check cache unless forced
+  const now = Date.now();
+  if (!force && globalUnreadCountState.timestamp > 0 && (now - globalUnreadCountState.timestamp) < UNREAD_COUNT_CACHE_TTL_MS) {
+    return globalUnreadCountState.count;
+  }
+
+  // Start new fetch
+  globalUnreadCountState.loading = true;
+  globalUnreadCountPromise = (async () => {
+    try {
+      // The router registers 'notifications' under api/notifications/, and the viewset is also 'notifications'
+      // So the full path is /api/notifications/notifications/unread_count/
+      // apiFetch adds /api/v1/ prefix, so we need /notifications/notifications/unread_count/
+      const url = '/notifications/notifications/unread_count/';
+      logInfo('[notifications-api] Fetching unread count from:', url);
+      const response = await apiFetch<{ count: number }>(url);
+      logInfo('[notifications-api] Unread count response:', response);
+      
+      const count = response.count as number || 0;
+      
+      // Update cache and notify subscribers
+      setGlobalUnreadCount(count);
+      
+      return count;
+    } catch (error: unknown) {
+      // Silently handle authentication errors - they're expected when user is not logged in
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Handle network errors (Failed to fetch, etc.)
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError') || errorMessage.includes('Network request failed')) {
+        logWarn('[notifications-api] Network error fetching unread count (backend may be unavailable):', errorMessage);
+        setGlobalUnreadCount(0);
+        return 0;
+      }
+      
+      if ((error as {status?: number})?.status === 401 || errorMessage === ERROR_AUTHENTICATION_REQUIRED || errorMessage === 'Authentication expired') {
+        setGlobalUnreadCount(0);
+        return 0;
+      }
+      logError('[notifications-api] Error fetching unread count:', error);
+      setGlobalUnreadCount(0);
+      return 0;
+    } finally {
+      globalUnreadCountPromise = null;
+    }
+  })();
+
+  return await globalUnreadCountPromise;
+};
+
+/**
+ * Mark a notification as read.
+ */
+export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+
+  await apiFetch(`/notifications/notifications/${notificationId}/mark_read/`, {
+    method: 'POST',
+  });
+  await getUnreadCount(true);
+};
+
+/**
+ * Mark a notification as archived.
+ */
+export const markNotificationAsArchived = async (notificationId: string): Promise<void> => {
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+
+  await apiFetch(`/notifications/notifications/${notificationId}/mark_archived/`, {
+    method: 'POST',
+  });
+  await getUnreadCount(true);
+};
+
+/**
+ * Mark all notifications as read.
+ */
+export const markAllNotificationsAsRead = async (): Promise<number> => {
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+
+  const response = await apiFetch<{ count: number }>('/notifications/notifications/mark_all_read/', {
+    method: 'POST',
+  });
+  setGlobalUnreadCount(0);
+  return response.count as number || 0;
+};
+
+/**
+ * Get notification preferences for the current user.
+ */
+export const getNotificationPreferences = async (): Promise<NotificationPreferences | null> => {
+  if (!hasTokens()) return null;
+
+  try {
+    const response = await apiFetch<NotificationPreferences>('/notifications/preferences/');
+    return response;
+  } catch (_error: unknown) {
+    // Preferences might not exist yet, return null
+    return null;
+  }
+};
+
+/**
+ * Update notification preferences.
+ */
+export const updateNotificationPreferences = async (
+  preferences: Partial<NotificationPreferences>
+): Promise<NotificationPreferences> => {
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+
+  const response = await apiFetch<NotificationPreferences>('/notifications/preferences/', {
+    method: 'PUT',
+    body: JSON.stringify(preferences),
+  });
+  return response;
+};
+
+/**
+ * Create a notification (admin/superuser only typically).
+ */
+export const createNotification = async (
+  payload: CreateNotificationPayload
+): Promise<Notification> => {
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+
+  const response = await apiFetch<Notification>('/notifications/notifications/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return response;
+};

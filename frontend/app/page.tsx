@@ -1,6 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, FileStack, ShieldCheck, Workflow, BarChart3, Building2, Calendar, CheckCircle2, Shield } from "lucide-react";
+import {
+  ArrowRight,
+  FileStack,
+  ShieldCheck,
+  Workflow,
+  BarChart3,
+  Building2,
+  Calendar,
+  CheckCircle2,
+  Shield,
+  Lock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
@@ -31,59 +42,113 @@ const features = [
     icon: Workflow,
   },
   {
+    title: "Document Rights (DRM)",
+    description:
+      "ICT-managed policies for view-only access, download and print controls, expiry, and watermark text stamped on PDFs when served from ECM—enforced at the platform boundary.",
+    icon: Lock,
+  },
+  {
     title: "Enterprise-Grade Security",
     description:
-      "File validation, optional ClamAV scanning, role-based access, JWT authentication, executive seal TOTP, tamper-evident audit exports, and DRM download policies.",
+      "File validation, optional ClamAV scanning, role-based access, JWT authentication, executive seal TOTP, and tamper-evident audit exports.",
     icon: ShieldCheck,
   },
 ];
 
 const stats = [
-  { value: "8", label: "Directorates unified on a single platform" },
-  { value: "23+", label: "Divisions with office-based routing enabled" },
-  { value: "100%", label: "Institutional memory preserved through audit trails" },
+  { value: "One", label: "Platform for HQ and port registry operations" },
+  { value: "Office", label: "Queues owned by MD, ED, GM, and AGM offices—not individuals" },
+  { value: "Audit", label: "Trails, archives, and compliance exports built in" },
 ];
 
-const modules = [
+const moduleBands = [
   {
-    title: "Correspondence Management",
-    description:
-      "Register, route, and track all inbound and outbound memos with office-based inboxes, distribution controls, and complete audit trails for MD, ED, GM, and AGM offices.",
+    title: "Work",
+    description: "Day-to-day correspondence, documents, cases, and leadership visibility.",
+    modules: [
+      {
+        title: "Correspondence",
+        description:
+          "Register and route inward and outward memos with office inboxes, My Sent / Office Sent, distribution controls, and full audit trails.",
+      },
+      {
+        title: "Document Management",
+        description:
+          "Versioned DMS library with preview workspaces, linked records, sensitivity labels, and server-enforced DRM policies on download.",
+      },
+      {
+        title: "Case Management",
+        description:
+          "Case file workspace linking correspondence, documents, and forms—with comments, activity, and a unified links rail.",
+      },
+      {
+        title: "Workflow & Approvals",
+        description:
+          "Minutes, forwarding, parallel routing, office reassignment, and executive approval queues.",
+      },
+      {
+        title: "Analytics & Reports",
+        description:
+          "Executive, division, performance, and case dashboards with turnaround and bottleneck visibility.",
+      },
+      {
+        title: "Digital Signatures",
+        description:
+          "Organization templates, user preferences, executive seals, and public seal verification.",
+      },
+    ],
   },
   {
-    title: "Document Management",
-    description:
-      "Upload, version, and compare documents in the DMS library. Link records to correspondence, apply sensitivity labels, and enforce DRM download policies.",
+    title: "Registry & compliance",
+    description: "Legal requests, physical tracking, governance, and discovery.",
+    modules: [
+      {
+        title: "FOIA",
+        description:
+          "Freedom of Information request intake, legal timelines, acknowledge/respond workflows, and public submission portal.",
+      },
+      {
+        title: "Physical Records",
+        description:
+          "Check-in and check-out tracking for registry desks—linked to correspondence where applicable.",
+      },
+      {
+        title: "Audit & Compliance",
+        description:
+          "Activity logs, tamper-evident compliance exports, retention schedules, legal holds, and eDiscovery bundles.",
+      },
+      {
+        title: "Search & Discovery",
+        description:
+          "Cross-module full-text search with permission-aware results. Optional semantic re-ranking—no separate AI server required.",
+      },
+    ],
   },
   {
-    title: "Workflow & Approvals",
-    description:
-      "Configurable approval paths, minutes, forwarding, and office reassignment ensure accountability and seamless handovers across directorates.",
-  },
-  {
-    title: "Digital Signatures",
-    description:
-      "Apply secure signatures with organization templates, user preferences, and automatic verification trails for all approval actions.",
-  },
-  {
-    title: "Analytics & Reports",
-    description:
-      "Real-time dashboards, turnaround trends, and performance metrics give MD, EDs, and GMs direct visibility into bottlenecks and efficiency.",
-  },
-  {
-    title: "Audit & Compliance",
-    description:
-      "Activity logs, tamper-evident compliance exports, retention schedules, legal holds, and eDiscovery bundles support governance and records teams.",
-  },
-  {
-    title: "Search & Discovery",
-    description:
-      "Cross-module full-text search with permission-aware results. Optional semantic re-ranking improves relevance without requiring a separate AI server.",
-  },
-  {
-    title: "Helpdesk & Support",
-    description:
-      "In-app support tickets for all staff and an ICT support queue—aligned with national rollout and hypercare operations.",
+    title: "Operations",
+    description: "Capture, support, forms, and integration administration.",
+    modules: [
+      {
+        title: "Content Capture",
+        description:
+          "Scan, batch upload, and OCR processing hub. Production scanner integration is part of the national rollout.",
+      },
+      {
+        title: "Helpdesk & Support",
+        description:
+          "In-app support tickets for all staff and an ICT support queue—aligned with national rollout and hypercare.",
+      },
+      {
+        title: "Forms & Templates",
+        description:
+          "Form documents, template hub, and signature workflows for structured registry processes.",
+      },
+      {
+        title: "Integration Hub",
+        description:
+          "Webhooks and connector administration in ECM. Email and ERP sync connectors are rolling out in Phase 5+.",
+      },
+    ],
   },
 ];
 
@@ -117,7 +182,7 @@ const deliveryPhases = [
     title: "Governance & Quality",
     date: "JUN 2026",
     description:
-      "Audit compliance exports, document version diff, records governance (retention, legal hold, eDiscovery), DRM policies, helpdesk, WCAG accessibility prep, and legacy import tooling.",
+      "Substantially delivered: audit compliance exports, document version diff, DRM policy admin with download enforcement and PDF watermark on serve, helpdesk, WCAG 2.1 AA high and medium remediations, and legacy import tooling. Retention enforcement hardening and formal accessibility sign-off continue.",
     status: "completed",
   },
   {
@@ -125,15 +190,15 @@ const deliveryPhases = [
     title: "Enterprise Hardening",
     date: "2026–2027",
     description:
-      "SSO/Active Directory, login MFA rollout, integration connectors (email, ERP, HRMS), capture hub production scanners, E2E/load testing, and national port deployment.",
+      "Rolling out SSO/Active Directory, login MFA, integration connectors (email, ERP, HRMS), capture hub production scanners, E2E/load testing, and national port deployment.",
     status: "in-flight",
   },
 ];
 
 export default function LandingPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background">
-      <div className="pointer-events-none absolute inset-0 -z-10">
+    <main className="relative min-h-screen bg-background">
+      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-sky-100 via-white to-white dark:from-slate-900 dark:via-slate-950 dark:to-slate-950" />
         <div className="absolute -top-40 right-[-10%] h-[480px] w-[480px] rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute bottom-[-20%] left-[-10%] h-[420px] w-[420px] rounded-full bg-emerald-200/20 blur-3xl dark:bg-emerald-500/10" />
@@ -144,12 +209,12 @@ export default function LandingPage() {
           <Link href="/" className="flex items-center gap-3">
             <div className="relative h-12 w-12 overflow-hidden rounded-xl shadow-soft ring-1 ring-primary/20 bg-white">
               <Image
-              src={NPA_LOGO_URL}
-              alt={`${NPA_BRAND_NAME} crest`}
-              fill
-              unoptimized
-              sizes="48px"
-              className="object-contain"
+                src={NPA_LOGO_URL}
+                alt={`${NPA_BRAND_NAME} crest`}
+                fill
+                unoptimized
+                sizes="48px"
+                className="object-contain"
                 priority
               />
             </div>
@@ -160,9 +225,12 @@ export default function LandingPage() {
               <span className="text-sm text-muted-foreground">Enterprise Content Management Platform</span>
             </div>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <Link href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground">
               Features
+            </Link>
+            <Link href="#modules" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Modules
             </Link>
             <Link href="#phases" className="text-sm font-medium text-muted-foreground hover:text-foreground">
               Phases
@@ -185,14 +253,15 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="mx-auto mt-16 flex w-full max-w-6xl flex-col items-center gap-10 px-6 text-center sm:mt-24">
-        <span className="rounded-full bg-primary/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-          Digital Transformation
+        <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          Secure Workflow Hub
         </span>
         <h1 className="max-w-4xl text-balance text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-          Streamline NPA correspondence, decisions, and records on a single modern platform.
+          Accountability for leadership. Clarity for officers. Institutional memory for the Authority.
         </h1>
         <p className="max-w-3xl text-balance text-base text-muted-foreground sm:text-lg">
-          NPA ECM unifies routing, approvals, document management, and analytics to give every directorate, division and department clarity, accountability, and immediate access to institutional memory.
+          Office-owned correspondence, decisions, forms, and executive approvals, with immediate access to institutional memory across NPA&apos;s structure.
         </p>
         <div className="flex flex-col gap-4 sm:flex-row">
           <Button asChild size="lg" className="gap-2">
@@ -230,10 +299,10 @@ export default function LandingPage() {
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Built for enterprise governance</h2>
           <p className="mt-4 text-base text-muted-foreground sm:text-lg">
-            Unique capabilities designed for NPA&apos;s office-based structure, ensuring seamless handovers, institutional memory, and real-time collaboration across all directorates.
+            Capabilities designed for NPA&apos;s office-based structure—seamless handovers, institutional memory, and live routing notifications across directorates.
           </p>
         </div>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => (
             <Card key={feature.title} className="border-border/60 bg-background/60 shadow-sm backdrop-blur transition hover:border-primary/40 hover:shadow-md">
               <CardContent className="flex flex-col gap-4 p-6">
@@ -295,36 +364,45 @@ export default function LandingPage() {
       </section>
 
       {/* Modules */}
-      <section id="modules" className="mx-auto mt-24 w-full max-w-6xl px-6">
+      <section id="modules" className="mx-auto mt-24 w-full max-w-6xl px-6 pb-24">
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">ECM Modules</h2>
           <p className="mt-4 max-w-3xl mx-auto text-base text-muted-foreground sm:text-lg">
-            Eight integrated areas span correspondence, documents, workflows, signatures, analytics, compliance, search, and helpdesk—built for NPA&apos;s office-based structure.
+            Work, registry, and operations capabilities—organized the way staff navigate the platform after sign-in.
           </p>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {modules.map((module) => (
-            <Card key={module.title} className="group border-border/60 bg-background/70 shadow-sm transition hover:border-primary/40 hover:shadow-lg">
-              <CardContent className="flex flex-col gap-3 p-6">
-                <h3 className="text-xl font-semibold text-foreground group-hover:text-primary">
-                  {module.title}
-                </h3>
-                <p className="text-sm text-muted-foreground">{module.description}</p>
-              </CardContent>
-            </Card>
+        <div className="space-y-14">
+          {moduleBands.map((band) => (
+            <div key={band.title}>
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold text-foreground">{band.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{band.description}</p>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {band.modules.map((module) => (
+                  <Card key={module.title} className="group border-border/60 bg-background/70 shadow-sm transition hover:border-primary/40 hover:shadow-lg">
+                    <CardContent className="flex flex-col gap-3 p-6">
+                      <h4 className="text-lg font-semibold text-foreground group-hover:text-primary">
+                        {module.title}
+                      </h4>
+                      <p className="text-sm text-muted-foreground">{module.description}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </section>
 
       {/* CTA */}
-      <section className="mx-auto mt-24 w-full max-w-5xl px-6">
+      <section className="mx-auto w-full max-w-5xl px-6">
         <div className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-10 text-center shadow-lg backdrop-blur">
           <h2 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             Ready to transform your ECM workflow?
           </h2>
           <p className="mt-4 text-base text-muted-foreground sm:text-lg">
-            Sign in to experience office-based inboxes, linked DMS records, and analytics tailored for MD, ED, GM, and AGM
-            leadership flows.
+            Sign in for office-based inboxes, DMS and case workspaces, DRM-protected documents, and analytics tailored for MD, ED, GM, and AGM leadership flows.
           </p>
           <div className="mt-6 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Button asChild size="lg" className="gap-2">
@@ -332,6 +410,9 @@ export default function LandingPage() {
                 Proceed to Login
                 <ArrowRight className="h-5 w-5" />
               </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/foia/public">Public FOIA Portal</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}`}>Contact Programme Office</Link>
@@ -343,7 +424,7 @@ export default function LandingPage() {
       <footer className="mt-24 border-t border-border/50 bg-background/80">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-8 text-center text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <p>© {new Date().getFullYear()} Nigerian Ports Authority. All rights reserved.</p>
-          <div className="flex items-center justify-center gap-4 sm:justify-end">
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:justify-end">
             <Link href="#features" className="hover:text-foreground">
               Features
             </Link>
@@ -352,6 +433,9 @@ export default function LandingPage() {
             </Link>
             <Link href="#phases" className="hover:text-foreground">
               Delivery Phases
+            </Link>
+            <Link href="/foia/public" className="hover:text-foreground">
+              FOIA Portal
             </Link>
             <Link href="/verify" className="hover:text-foreground flex items-center gap-1">
               <Shield className="h-3.5 w-3.5" />
@@ -366,4 +450,3 @@ export default function LandingPage() {
     </main>
   );
 }
-

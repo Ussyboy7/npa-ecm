@@ -1,6 +1,6 @@
 "use client";
 
-import { type NotificationPreferences as NotificationPreferencesType } from '@/lib/notifications-storage';
+import { type NotificationPreferences as NotificationPreferencesType } from '@/lib/api/notifications';
 
 const MAX_SIGNATURE_SIZE_MB = 2;
 const MAX_PHOTO_SIZE_MB = 5;

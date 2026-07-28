@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Database, Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
 import {
   createERPConnector,
@@ -32,7 +32,7 @@ import {
   syncFromERP,
   updateERPConnector,
   type ERPConnector,
-} from "@/lib/integrations-storage";
+} from "@/lib/api/integrations";
 import { logError } from "@/lib/client-logger";
 
 const defaultForm = {

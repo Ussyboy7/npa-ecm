@@ -14,8 +14,8 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useRoleChecks } from "@/hooks/use-role-checks";
 import { apiFetch } from "@/lib/api-client";
-import { MAX_LIST_PAGE_SIZE } from "@/lib/pagination-constants";
-import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
+import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/pagination-constants";
+import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import type { Correspondence } from "@/lib/npa-structure";
 import { InboxItemCard } from "@/app/inbox/components/InboxItemCard";
 import { InboxApprovalCard } from "@/app/inbox/components/InboxApprovalCard";
@@ -103,7 +103,7 @@ const Dashboard = () => {
       try {
         const params = new URLSearchParams({
           page: "1",
-          page_size: String(MAX_LIST_PAGE_SIZE),
+          page_size: String(DEFAULT_LIST_PAGE_SIZE),
           sort_by: "priority",
           sort_order: "desc",
         });

@@ -10,7 +10,7 @@ import {
   fetchDocumentVersionContent,
 } from "@/lib/dms-documents";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
-import type { DocumentVersion } from "@/lib/dms-storage";
+import type { DocumentVersion } from "@/lib/api/dms";
 
 interface DmsVersionPreviewContentProps {
   version: DocumentVersion;

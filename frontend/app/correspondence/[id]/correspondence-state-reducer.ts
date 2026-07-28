@@ -3,7 +3,7 @@
  */
 
 import type { Correspondence, Minute } from '@/lib/npa-structure';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import type { DocumentRecord } from '@/lib/api/dms';
 
 export interface CorrespondenceDetailState {
   minutes: Minute[];

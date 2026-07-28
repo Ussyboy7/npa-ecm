@@ -43,7 +43,7 @@ import { logError } from '@/lib/client-logger';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { getCases } from '@/lib/api/cases';
 import { getFormDocuments } from '@/lib/api/dms-forms';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import type { Correspondence } from '@/lib/npa-structure';
 
 interface Executive {

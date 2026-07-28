@@ -13,8 +13,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical, ExternalLink } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { formatDistanceToNow } from 'date-fns';
-import { toast } from 'sonner';
-import type { DocumentAccessLog } from '@/lib/dms-storage';
+import { toast } from "@/components/ui/sonner";
+import type { DocumentAccessLog } from '@/lib/api/dms';
 import type { User } from '@/lib/npa-structure';
 
 interface AccessActivityCardProps {

@@ -29,7 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import {
   createDocument,
   createDocumentVersion,
@@ -37,7 +37,7 @@ import {
   type DocumentType,
   type DocumentStatus,
   type DocumentSensitivity,
-} from '@/lib/dms-storage';
+} from '@/lib/api/dms';
 import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
 import type { User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -50,12 +50,13 @@ import {
   getDefaultTemplateForUser,
   createTemplate as createTemplateRecord,
   type DocumentTemplate,
-} from '@/lib/template-storage';
+} from '@/lib/api/document-templates';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
 import { Loader2, Save, Upload as UploadIcon, FilePlus, FileText, Scan, ChevronDown, PenTool } from 'lucide-react';
 import { sanitizeRichText } from '@/lib/sanitize-html';
-import { processOCR } from '@/lib/capture-storage';
-import { uploadUserSignature } from '@/lib/signature-storage';
+import { processOCR } from '@/lib/api/capture';
+import { uploadUserSignature } from '@/lib/api/signatures';
+import { formatDate } from '@/lib/datetime';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
 const DRAFT_STORAGE_KEY = 'dms_upload_draft';
@@ -212,7 +213,7 @@ export const DocumentUploadDialog = ({
       : undefined;
     
     const today = new Date();
-    const formattedDate = today.toLocaleDateString('en-NG', {
+    const formattedDate = formatDate(today, 'en-NG', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',

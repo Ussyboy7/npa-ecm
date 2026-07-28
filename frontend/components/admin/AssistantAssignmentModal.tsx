@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useOrganization, AssistantAssignment } from '@/contexts/OrganizationContext';
-import { toast } from '@/hooks/use-toast';
+import { toast } from "@/components/ui/sonner";
 
 interface AssistantAssignmentModalProps {
   open: boolean;

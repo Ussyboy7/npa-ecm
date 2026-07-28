@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { Users, Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
 import {
   createHRMSConnector,
@@ -25,8 +25,9 @@ import {
   syncFromHRMS,
   updateHRMSConnector,
   type HRMSConnector,
-} from "@/lib/integrations-storage";
+} from "@/lib/api/integrations";
 import { logError } from "@/lib/client-logger";
+import { formatDateTime } from "@/lib/datetime";
 
 const defaultForm = {
   name: "",
@@ -190,7 +191,7 @@ export function HRMSConnectorManager() {
                   <TableCell className="max-w-[200px] truncate text-xs">{c.base_url}</TableCell>
                   <TableCell>{c.sync_enabled ? `Every ${c.sync_interval_minutes}m` : "Manual"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {c.last_synced_at ? new Date(c.last_synced_at).toLocaleString() : "Never"}
+                    {c.last_synced_at ? formatDateTime(c.last_synced_at) : "Never"}
                   </TableCell>
                   <TableCell>
                     <Badge variant={c.is_active ? "default" : "secondary"}>

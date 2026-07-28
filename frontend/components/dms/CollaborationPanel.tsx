@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, Share2, Circle } from "lucide-react";
-import type { DocumentRecord, DocumentPermission } from "@/lib/dms-storage";
+import type { DocumentRecord, DocumentPermission } from "@/lib/api/dms";
 import type { User } from "@/lib/npa-structure";
 
 interface CollaborationPanelProps {

@@ -20,11 +20,12 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
-import { CorrespondenceProvider, mapApiCorrespondence, mapApiMinute, useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
+import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import type { Minute } from '@/lib/npa-structure';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { DocumentCard } from './components/DocumentCard';
 import { SentCorrespondenceCard } from './components/SentCorrespondenceCard';
 import { correspondenceQueueListStackClass } from '@/components/shared/registry-queue-styles';
@@ -41,7 +42,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { logError } from '@/lib/client-logger';
-import { getDocumentsSharedByUser, type DocumentRecord } from '@/lib/dms-storage';
+import { getDocumentsSharedByUser, type DocumentRecord } from '@/lib/api/dms';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';

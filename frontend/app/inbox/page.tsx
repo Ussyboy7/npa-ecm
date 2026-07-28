@@ -24,11 +24,12 @@ import { useSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
-import { MAX_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
-import { getSharedDocuments } from '@/lib/dms-storage';
+import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
+import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
+import { getSharedDocuments } from '@/lib/api/dms';
 import { calculateSLAStatus, slaSortPriority } from '@/lib/inbox-sla';
 import { usePagination } from '@/hooks/use-pagination';
+import { useCorrespondenceQueueFilters } from '@/hooks/use-correspondence-queue-filters';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -40,6 +41,8 @@ import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { InboxItemCard } from './components/InboxItemCard';
 import { InboxApprovalCard } from './components/InboxApprovalCard';
 import { getMyActingAppointments, type ActingAppointment } from '@/lib/api/acting-appointments';
+import { hasRolePermission } from '@/lib/permissions';
+import { formatDateShort } from '@/lib/datetime';
 
 const calculateDaysPending = (item: Correspondence): number => {
   if (!item.receivedDate) return 0;
@@ -74,14 +77,25 @@ interface PendingApproval {
 
 const ExecutiveInbox = () => {
   const { currentUser } = useCurrentUser();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
-  const [selectedPriority, setSelectedPriority] = useState<string>('');
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('priority');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const {
+    searchQuery,
+    setSearchQuery,
+    debouncedSearch,
+    selectedStatus,
+    setSelectedStatus,
+    selectedPriority,
+    setSelectedPriority,
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    sortBy,
+    sortOrder,
+    hasActiveFilters,
+    clearFilters,
+    handleSortChange,
+    appendQueueParams,
+  } = useCorrespondenceQueueFilters();
 
   const [count, setCount] = useState(0);
   const [_sharedDocumentsCount, setSharedDocumentsCount] = useState(0);
@@ -119,9 +133,10 @@ const ExecutiveInbox = () => {
     [officeMemberships, currentUser?.id]
   );
 
-  const hasActiveFilters = useMemo(() => {
-    return !!(selectedStatus || selectedPriority || dateFrom || dateTo);
-  }, [selectedStatus, selectedPriority, dateFrom, dateTo]);
+  const canManageActingAppointments =
+    Boolean(currentUser?.isSuperuser) ||
+    hasRolePermission(currentUser, 'can_manage_org_structure') ||
+    hasRolePermission(currentUser, 'can_manage_users');
 
   useEffect(() => {
     if (!currentUser?.id) {
@@ -143,25 +158,6 @@ const ExecutiveInbox = () => {
       ignore = true;
     };
   }, [currentUser?.id]);
-
-  const clearFilters = () => {
-    setSelectedStatus('');
-    setSelectedPriority('');
-    setDateFrom('');
-    setDateTo('');
-    setSearchQuery('');
-  };
-
-  const handleSortChange = (value: string) => {
-    const [by, order] = value.split('-');
-    setSortBy(by);
-    setSortOrder(order as 'asc' | 'desc');
-  };
-
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
-    return () => clearTimeout(handle);
-  }, [searchQuery]);
 
   useEffect(() => {
     pagination.goToFirstPage();
@@ -190,14 +186,7 @@ const ExecutiveInbox = () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams();
-        if (debouncedSearch) params.append('search', debouncedSearch);
-        if (selectedStatus) params.append('status', selectedStatus);
-        if (selectedPriority) params.append('priority', selectedPriority);
-        if (dateFrom) params.append('date_from', dateFrom);
-        if (dateTo) params.append('date_to', dateTo);
-        params.append('sort_by', sortBy);
-        params.append('sort_order', sortOrder);
+        const params = appendQueueParams(new URLSearchParams());
         params.append('page', String(pagination.page));
         params.append('page_size', String(pagination.pageSize));
 
@@ -208,7 +197,7 @@ const ExecutiveInbox = () => {
             page: 1,
             pageSize: 1,
           }),
-          apiFetch<Record<string, unknown>>(`/correspondence/minutes/pending-approvals/?page_size=${MAX_LIST_PAGE_SIZE}`).catch(() => ({ results: [] })),
+          apiFetch<Record<string, unknown>>(`/correspondence/minutes/pending-approvals/?page_size=${pagination.pageSize || DEFAULT_LIST_PAGE_SIZE}`).catch(() => ({ results: [] })),
         ]);
 
         const corrResults = Array.isArray(corrResponse.results) ? corrResponse.results : [];
@@ -299,7 +288,7 @@ const ExecutiveInbox = () => {
             You are acting as <span className="font-semibold">{appt.principalName}</span>
             {appt.officeName ? ` (${appt.officeName})` : ''}
             {appt.endsAt
-              ? ` until ${new Date(appt.endsAt).toLocaleDateString()}`
+              ? ` until ${formatDateShort(appt.endsAt)}`
               : ' until further notice'}
             . Seat items appear in this inbox with an Acting badge.
           </span>
@@ -321,9 +310,7 @@ const ExecutiveInbox = () => {
         </a>
       )}
 
-      {(currentUser?.isSuperuser ||
-        currentUser?.rolePermissions?.can_manage_org_structure ||
-        currentUser?.rolePermissions?.can_manage_users) && (
+      {(canManageActingAppointments) && (
         <a
           href="/admin/acting-appointments"
           className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"

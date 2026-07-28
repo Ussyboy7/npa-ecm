@@ -12,13 +12,13 @@ import {
   markNotificationAsArchived,
   markAllNotificationsAsRead,
   type Notification,
-} from '@/lib/notifications-storage';
+} from '@/lib/api/notifications';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { Check, CheckCheck, Archive, ExternalLink, Settings, Bell, Inbox, BellRing, MailQuestion, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { NotificationPreferencesDialog } from '@/components/notifications/NotificationPreferencesDialog';
 import { useNotificationWebSocket } from '@/hooks/use-notification-websocket';
 import { cn } from '@/lib/utils';

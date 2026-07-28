@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/sonner";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
 import { login, clearTokens, isMfaChallenge, verifyLoginMFA, requestLoginMFAEmail, getOidcLoginUrl, fetchOidcStatus } from "@/lib/api-client";
 import { getStoredRedirectPath } from "@/lib/auth-errors";
@@ -220,8 +220,8 @@ function LoginForm() {
   };
 
   return (
-    <div className="grid min-h-screen grid-cols-1 bg-background lg:grid-cols-[1.2fr,1fr]">
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary/15 via-primary/10 to-emerald-100/30 p-12 text-foreground dark:from-primary/20 dark:via-slate-900 dark:to-slate-950 dark:text-primary-foreground lg:flex lg:flex-col lg:justify-between">
+    <div className="grid min-h-dvh grid-cols-1 bg-background lg:min-h-screen lg:grid-cols-[1.2fr,1fr]">
+      <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary/15 via-primary/10 to-emerald-100/30 p-12 text-foreground dark:from-primary/20 dark:via-slate-900 dark:to-slate-950 dark:text-primary-foreground lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:justify-between">
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-primary/30 to-transparent" />
         <div className="flex items-center gap-3">
           <div className="relative h-14 w-14" aria-label={`${NPA_BRAND_NAME} logo`}>
@@ -252,10 +252,10 @@ function LoginForm() {
           </div>
           <div className="space-y-4">
             <h2 className="text-4xl font-semibold leading-tight text-foreground dark:text-white">
-              Streamline NPA correspondence, decisions, and records on a single modern platform.
+              Accountability for leadership. Clarity for officers. Institutional memory for the Authority.
             </h2>
             <p className="text-base text-muted-foreground dark:text-white/80">
-              NPA ECM unifies routing, approvals, document management, and analytics to give every directorate, division and department clarity, accountability, and immediate access to institutional memory.
+              Office-owned correspondence, decisions, forms, and executive approvals, with immediate access to institutional memory across NPA&apos;s structure.
             </p>
           </div>
         </div>
@@ -271,7 +271,7 @@ function LoginForm() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center px-6 py-12 sm:px-8">
+      <div className="flex min-h-dvh items-start justify-center px-6 py-8 sm:px-8 sm:py-12 lg:min-h-0 lg:items-center">
         <div className="w-full max-w-md space-y-6">
           <div className="flex items-center justify-between">
             <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground">

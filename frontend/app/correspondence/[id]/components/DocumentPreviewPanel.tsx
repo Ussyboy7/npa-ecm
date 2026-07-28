@@ -27,11 +27,11 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import type { Correspondence } from '@/lib/npa-structure';
-import { logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
+import { logDocumentAccess, type DocumentRecord } from '@/lib/api/dms';
 import { buildDownloadUrl, forceDownloadMedia } from '@/lib/correspondence-url-utils';
 import { getCorrespondencePreviewContext, getPrimaryLinkedDocument, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
 import { useDocumentPreview } from '@/hooks/use-document-preview';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { logError, logWarn } from '@/lib/client-logger';
 import { apiFetch, getStoredAccessToken } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';

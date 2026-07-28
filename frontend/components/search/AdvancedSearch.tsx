@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
+import { toast } from "@/components/ui/sonner";
 import { Search, Save, History, FileText, Mail, Loader2, Calendar, User, Shield, FolderTree } from 'lucide-react';
 import {
   search,
@@ -24,7 +24,7 @@ import {
   type UnifiedSearchResult,
   type SavedSearch,
   type SearchHistory,
-} from '@/lib/search-storage';
+} from '@/lib/api/search';
 import { logError } from '@/lib/client-logger';
 import { SENSITIVITY_OPTIONS } from '@/lib/constants';
 import { useDebounce } from '@/hooks/use-debounce';

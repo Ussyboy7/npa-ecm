@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrganization, type Directorate } from "@/contexts/OrganizationContext";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 
 interface DirectorateLeadershipDialogProps {

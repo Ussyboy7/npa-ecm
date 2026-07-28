@@ -11,8 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { NotificationList } from './NotificationList';
 import { useNotificationWebSocket } from '@/hooks/use-notification-websocket';
-import { getUnreadCount } from '@/lib/notifications-storage';
-import { toast } from 'sonner';
+import { getUnreadCount } from '@/lib/api/notifications';
+import { toast } from "@/components/ui/sonner";
 import { useRouter } from 'next/navigation';
 
 export const NotificationBell = () => {

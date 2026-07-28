@@ -3,12 +3,13 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Clock, FileText, Link2, Lock, User } from "lucide-react";
-import type { DocumentRecord } from "@/lib/dms-storage";
+import type { DocumentRecord } from "@/lib/api/dms";
 import {
   DetailStatusStrip,
   StatusStripSep,
 } from "@/components/shared/DetailStatusStrip";
 import { getDocumentStatusBadge } from "@/lib/status-badge";
+import { formatDate } from "@/lib/datetime";
 
 interface DocumentStatusStripProps {
   document: DocumentRecord;
@@ -21,15 +22,11 @@ interface DocumentStatusStripProps {
 }
 
 function formatUpdated(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
+  return formatDate(dateStr, "en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 const DocumentStatusStripContent = ({

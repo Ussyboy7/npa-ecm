@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, FileText, Clock, CheckCircle2 } from "lucide-react";
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
+import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";

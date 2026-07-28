@@ -4,6 +4,7 @@ import { Shield, Fingerprint, CheckCircle2, XCircle, Clock, User } from "lucide-
 import { Badge } from "@/components/ui/badge";
 import { SealBadge, type SealData } from "./SealBadge";
 import type { Minute } from "@/lib/npa-structure";
+import { formatDateTime as formatDateTimeShared } from '@/lib/datetime';
 
 interface SealTrackingPanelProps {
   minutes: Minute[];
@@ -11,17 +12,13 @@ interface SealTrackingPanelProps {
 
 function formatDateTime(dateString: string | undefined | null): string {
   if (!dateString) return "N/A";
-  try {
-    return new Date(dateString).toLocaleString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "N/A";
-  }
+  return formatDateTimeShared(dateString, 'en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function SealTrackingPanel({ minutes }: SealTrackingPanelProps) {

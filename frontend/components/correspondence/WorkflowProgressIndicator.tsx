@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
+import { formatDateShort } from '@/lib/datetime';
 
 interface WorkflowStep {
   id: string;
@@ -343,7 +344,7 @@ export function WorkflowProgressIndicator({
                       )}
                       {step.completedAt && (
                         <p className="text-xs text-muted-foreground">
-                          {new Date(step.completedAt).toLocaleDateString()}
+                          {formatDateShort(step.completedAt)}
                         </p>
                       )}
                     </TooltipContent>
@@ -389,11 +390,7 @@ export function WorkflowProgressIndicator({
                     
                     {step.status === 'completed' && step.completedAt && (
                       <p className="text-xs text-muted-foreground">
-                        {new Date(step.completedAt).toLocaleDateString('en-GB', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatDateShort(step.completedAt)}
                       </p>
                     )}
                   </div>

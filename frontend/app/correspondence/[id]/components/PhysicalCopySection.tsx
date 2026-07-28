@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { FileText, MapPin, User, Calendar } from 'lucide-react';
+import { formatDateShort } from '@/lib/datetime';
 
 interface PhysicalDocument {
   id: string;
@@ -59,7 +60,7 @@ export function PhysicalCopySection({ documents }: PhysicalCopySectionProps) {
             )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Calendar className="h-3 w-3" />
-              Registered {new Date(doc.created_at).toLocaleDateString()}
+              Registered {formatDateShort(doc.created_at)}
             </div>
           </div>
         ))}

@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { uploadSealImage } from "@/lib/api/seal-images";
 import { logWarn } from "@/lib/client-logger";
+import { formatDateTime } from '@/lib/datetime';
 
 export interface SealData {
   id: string;
@@ -98,19 +99,14 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
 
   const verificationUrl = getVerificationUrl();
 
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleString("en-NG", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return dateString;
-    }
-  };
+  const formatDate = (dateString: string) =>
+    formatDateTime(dateString, 'en-NG', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
   const sizeClasses = {
     sm: "text-[10px] h-5 px-1.5",
