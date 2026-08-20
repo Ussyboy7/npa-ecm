@@ -53,6 +53,96 @@ export const getPageDimensions = (settings: PageSettings) => {
   };
 };
 
+/**
+ * Build a print-ready HTML document for compose preview (modal iframe or popup).
+ */
+export function buildComposePrintHtml(
+  html: string,
+  settings: PageSettings,
+  title = "Document",
+): string {
+  const dims = getPageDimensions(settings);
+  const paperLabel = settings.paperSize.toUpperCase();
+  const safeTitle = title.replace(/[<>&"]/g, "");
+  const bodyHtml = html.trim()
+    ? html
+    : '<p style="color:#6b7280;margin:0;">No content to preview. Add text in the editor first.</p>';
+
+  const pageCss = `
+    @page {
+      size: ${paperLabel} ${settings.orientation};
+      margin: ${settings.marginTop}mm ${settings.marginRight}mm ${settings.marginBottom}mm ${settings.marginLeft}mm;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #e5e7eb;
+      color: #111827;
+      font-family: Verdana, Geneva, sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .sheet {
+      box-sizing: border-box;
+      width: ${dims.widthMm}mm;
+      min-height: ${dims.heightMm}mm;
+      margin: 16px auto;
+      padding: ${settings.marginTop}mm ${settings.marginRight}mm ${settings.marginBottom}mm ${settings.marginLeft}mm;
+      background: #fff;
+      color: #111827;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+    .sheet img { max-width: 100%; }
+    .sheet table { width: 100%; border-collapse: collapse; }
+    .sheet td, .sheet th { border: 1px solid #d1d5db; padding: 8px; }
+    .sheet ul { list-style: disc; padding-left: 1.5rem; }
+    .sheet ol { list-style: decimal; padding-left: 1.5rem; }
+    @media print {
+      html, body { background: #fff; }
+      .sheet {
+        margin: 0;
+        box-shadow: none;
+        width: auto;
+        min-height: auto;
+        padding: 0;
+      }
+    }
+  `;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>${pageCss}</style>
+</head>
+<body>
+  <div class="sheet">${bodyHtml}</div>
+</body>
+</html>`;
+}
+
+/**
+ * Open compose print preview in a new tab (fallback). Prefer the in-app modal.
+ */
+export function openComposePrintPreview(
+  html: string,
+  settings: PageSettings,
+  title = "Document",
+): void {
+  const fullHtml = buildComposePrintHtml(html, settings, title);
+  const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const previewWindow = window.open(url, "_blank");
+  if (!previewWindow) {
+    URL.revokeObjectURL(url);
+    throw new Error("Allow pop-ups to open print preview");
+  }
+  previewWindow.focus();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 interface PageSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

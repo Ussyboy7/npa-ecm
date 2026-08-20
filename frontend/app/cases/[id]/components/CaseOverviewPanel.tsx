@@ -23,6 +23,9 @@ import {
   correspondenceQueueLeadingIconClass,
   registryQueueEmptyIconClass,
 } from "@/components/shared/registry-queue-styles";
+import { downloadCaseCompletionPackage } from "@/lib/api/cases";
+import { toast } from "@/components/ui/sonner";
+import { logError } from "@/lib/client-logger";
 
 interface CaseOverviewPanelProps {
   caseData: CaseDetail;
@@ -134,17 +137,20 @@ export function CaseOverviewPanel({
                   </p>
                 </div>
               </div>
-              {caseData.completionPackage.fileUrl ? (
-                <Button size="compact" asChild>
-                  <a
-                    href={caseData.completionPackage.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Download
-                  </a>
+              <Button
+                  size="compact"
+                  onClick={() => {
+                    void downloadCaseCompletionPackage(
+                      caseData.id,
+                      `${caseData.completionPackage?.title || 'completion-package'}.pdf`,
+                    ).catch((err: unknown) => {
+                      logError('Case completion package download failed', err);
+                      toast.error(err instanceof Error ? err.message : 'Download failed');
+                    });
+                  }}
+                >
+                  Download
                 </Button>
-              ) : null}
             </section>
           ) : null}
 

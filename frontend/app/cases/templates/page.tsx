@@ -161,7 +161,7 @@ export default function CaseTemplatesPage() {
       case "high": return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-800";
       case "medium": return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800";
       case "low": return "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700";
-      default: return "bg-slate-100 text-slate-700 border-slate-200";
+      default: return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
     }
   };
 
@@ -186,9 +186,9 @@ export default function CaseTemplatesPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Total Templates", value: templates.length, icon: FileText, bgClass: "bg-primary/10", iconClass: "text-primary" },
-            { label: "Complaint", value: templates.filter((t) => t.case_type === "complaint").length, icon: AlertTriangle, bgClass: "bg-red-500/10", iconClass: "text-red-600" },
-            { label: "Request", value: templates.filter((t) => t.case_type === "request").length, icon: FileSearch, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
-            { label: "Project", value: templates.filter((t) => t.case_type === "project").length, icon: Briefcase, bgClass: "bg-violet-500/10", iconClass: "text-violet-600" },
+            { label: "Complaint", value: templates.filter((t) => t.case_type === "complaint").length, icon: AlertTriangle, bgClass: "bg-red-500/10", iconClass: "text-red-600 dark:text-red-400" },
+            { label: "Request", value: templates.filter((t) => t.case_type === "request").length, icon: FileSearch, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
+            { label: "Project", value: templates.filter((t) => t.case_type === "project").length, icon: Briefcase, bgClass: "bg-violet-500/10", iconClass: "text-violet-600 dark:text-violet-400" },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
               <CardContent className={registryQueueStatCardContentClass}>

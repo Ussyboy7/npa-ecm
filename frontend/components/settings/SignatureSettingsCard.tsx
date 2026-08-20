@@ -587,7 +587,7 @@ export const SignatureSettingsCard = () => {
                     <Label className="text-base font-medium">Current Signature</Label>
                     {signature ? (
                       <div className="space-y-3">
-                        <div className="p-4 border rounded-lg bg-white dark:bg-background flex items-center justify-center min-h-[100px]">
+                        <div className="p-4 border rounded-lg doc-paper flex items-center justify-center min-h-[100px]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={

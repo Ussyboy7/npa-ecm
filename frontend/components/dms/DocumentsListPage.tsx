@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,11 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput } from 'lucide-react';
+import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput, CheckCircle2 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { queryDocumentsExtended, type DocumentRecord } from '@/lib/api/dms';
 import { listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
-import { getSignatures } from '@/lib/api/forms';
 import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
@@ -57,7 +56,16 @@ import { cn } from '@/lib/utils';
 function MyDocumentsForm() {
   const { currentUser } = useCurrentUser();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('my-documents');
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const initialTab =
+    tabFromUrl === 'pending-signatures' ||
+    tabFromUrl === 'signed-by-me' ||
+    tabFromUrl === 'shared' ||
+    tabFromUrl === 'my-documents'
+      ? tabFromUrl
+      : 'my-documents';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,7 +89,37 @@ function MyDocumentsForm() {
   const [pendingLoading, setPendingLoading] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const pendingRequestRef = useRef(0);
+  // Signed by me state
+  const [signedForms, setSignedForms] = useState<FormDocument[]>([]);
+  const [signedLoading, setSignedLoading] = useState(false);
+  const [signedCount, setSignedCount] = useState(0);
+  const signedRequestRef = useRef(0);
   const [createFormOpen, setCreateFormOpen] = useState(false);
+
+  // Keep tab in sync with ?tab= for deep links (e.g. pending signatures)
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (
+      tab === 'pending-signatures' ||
+      tab === 'signed-by-me' ||
+      tab === 'shared' ||
+      tab === 'my-documents'
+    ) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'my-documents') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tab);
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/dms?${qs}` : '/dms', { scroll: false });
+  };
 
   // Re-fetch when page gains focus (user navigates back)
   useEffect(() => {
@@ -198,6 +236,31 @@ function MyDocumentsForm() {
     loadStats();
   }, [currentUser?.id, activeTab, debouncedSearch, refreshKey]);
 
+  // Prefetch badge counts for signature tabs
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let cancelled = false;
+    const loadCounts = async () => {
+      try {
+        const [pending, signed] = await Promise.all([
+          listFormDocuments({ page: 1, pageSize: 1, pendingMySignature: true }),
+          listFormDocuments({ page: 1, pageSize: 1, signedByMe: true }),
+        ]);
+        if (cancelled) return;
+        setPendingCount(pending.count);
+        setSignedCount(signed.count);
+      } catch (err: unknown) {
+        if (!cancelled) {
+          logError('Failed to load signature tab counts', err);
+        }
+      }
+    };
+    void loadCounts();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, refreshKey]);
+
   // Load pending signatures
   useEffect(() => {
     if (activeTab !== 'pending-signatures' || !currentUser?.id) return;
@@ -206,27 +269,13 @@ function MyDocumentsForm() {
     const loadPending = async () => {
       setPendingLoading(true);
       try {
-        const sigs = await getSignatures({ status: 'pending' });
-        const workflowIds = [...new Set(sigs.map(s => s.workflow).filter(Boolean))];
-
-        if (requestId !== pendingRequestRef.current) return;
-
-        if (workflowIds.length === 0) {
-          setPendingForms([]);
-          setPendingCount(0);
-          return;
-        }
-
-        const all = await fetchAllPaginatedResults<FormDocument>(
-          (page, ps) => listFormDocuments({ page, pageSize: ps, status: 'awaiting_signatures' }),
+        // Single backend filter: forms where this user still has a pending signature.
+        const matched = await fetchAllPaginatedResults<FormDocument>(
+          (page, ps) => listFormDocuments({ page, pageSize: ps, pendingMySignature: true }),
         );
 
         if (requestId !== pendingRequestRef.current) return;
 
-        const matched = all.filter(f => {
-          const wid = f.signature_workflow?.id;
-          return wid && workflowIds.includes(wid);
-        });
         setPendingForms(matched);
         setPendingCount(matched.length);
       } catch (err: unknown) {
@@ -240,6 +289,35 @@ function MyDocumentsForm() {
       }
     };
     loadPending();
+  }, [activeTab, currentUser?.id, refreshKey]);
+
+  // Load forms the current user has already signed
+  useEffect(() => {
+    if (activeTab !== 'signed-by-me' || !currentUser?.id) return;
+
+    const requestId = ++signedRequestRef.current;
+    const loadSigned = async () => {
+      setSignedLoading(true);
+      try {
+        const matched = await fetchAllPaginatedResults<FormDocument>(
+          (page, ps) => listFormDocuments({ page, pageSize: ps, signedByMe: true }),
+        );
+
+        if (requestId !== signedRequestRef.current) return;
+
+        setSignedForms(matched);
+        setSignedCount(matched.length);
+      } catch (err: unknown) {
+        if (requestId === signedRequestRef.current) {
+          logError('Failed to load signed forms', err);
+          setSignedForms([]);
+          setSignedCount(0);
+        }
+      } finally {
+        if (requestId === signedRequestRef.current) setSignedLoading(false);
+      }
+    };
+    loadSigned();
   }, [activeTab, currentUser?.id, refreshKey]);
 
   const pendingPagination = usePagination({ initialPage: 1, totalCount: pendingCount });
@@ -279,7 +357,7 @@ function MyDocumentsForm() {
               <ContextualHelp
                 title="Managing your documents"
                 description="Switch scope, then narrow the list with search and filters."
-                steps={['Use tabs to switch between My Documents and Shared with Me.', 'Search by title, reference, description, file text, or tags.', 'Use Status/Type filters to find items faster.']}
+                steps={['Use tabs to switch between My Documents, Shared, Pending Signatures, and Signed by Me.', 'Search by title, reference, description, file text, or tags.', 'Use Status/Type filters to find items faster.']}
               />
             </>
           )}
@@ -353,7 +431,7 @@ function MyDocumentsForm() {
         </Card>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="my-documents" className="text-xs px-2.5 py-1">My Documents</TabsTrigger>
             <TabsTrigger value="shared" className="text-xs px-2.5 py-1">Shared with Me</TabsTrigger>
@@ -362,6 +440,14 @@ function MyDocumentsForm() {
               {pendingCount > 0 && (
                 <Badge variant="destructive" className="ml-1.5 h-4 min-w-[1rem] px-1 text-[10px]">
                   {pendingCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="signed-by-me" className="text-xs px-2.5 py-1 relative">
+              Signed by Me
+              {signedCount > 0 && (
+                <Badge variant="secondary" className="ml-1.5 h-4 min-w-[1rem] px-1 text-[10px]">
+                  {signedCount}
                 </Badge>
               )}
             </TabsTrigger>
@@ -374,6 +460,9 @@ function MyDocumentsForm() {
           </TabsContent>
           <TabsContent value="pending-signatures" className="mt-6">
             <PendingSignaturesList forms={pendingForms} loading={pendingLoading} />
+          </TabsContent>
+          <TabsContent value="signed-by-me" className="mt-6">
+            <SignedByMeList forms={signedForms} loading={signedLoading} />
           </TabsContent>
         </Tabs>
 
@@ -572,11 +661,12 @@ function DocumentCard({ doc, showRoleBadge }: { doc: DocumentRecord; showRoleBad
   };
 
   const docType = doc.documentType || 'other';
+  const openHref = docType === 'form' ? `/forms/${doc.id}` : `/dms/${doc.id}`;
 
   return (
     <ListRowCard
       density="compact"
-      href={`/dms/${doc.id}`}
+      href={openHref}
       leading={(
         <div className={cn(correspondenceQueueLeadingBoxClass, getTypeColor(docType))}>
           <FileText className={correspondenceQueueLeadingIconClass} />
@@ -594,7 +684,7 @@ function DocumentCard({ doc, showRoleBadge }: { doc: DocumentRecord; showRoleBad
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                router.push(`/dms/${doc.id}`);
+                router.push(openHref);
               }}
             >
               <ChevronRight className="h-4 w-4" />
@@ -655,8 +745,6 @@ function DocumentCard({ doc, showRoleBadge }: { doc: DocumentRecord; showRoleBad
 }
 
 function PendingSignaturesList({ forms, loading }: { forms: FormDocument[]; loading: boolean }) {
-  const router = useRouter();
-
   if (loading) {
     return <LoadingState message="Loading pending signatures…" />;
   }
@@ -675,40 +763,106 @@ function PendingSignaturesList({ forms, loading }: { forms: FormDocument[]; load
   return (
     <div className={correspondenceQueueListStackClass}>
       {forms.map((form) => (
-        <ListRowCard
+        <FormSignatureRow
           key={form.id}
-          density="compact"
-          href={`/forms/${form.document.id}`}
-          leading={(
-            <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-amber-500/10')}>
-              <FileCheck className={cn(correspondenceQueueLeadingIconClass, 'text-amber-600 dark:text-amber-400')} />
-            </div>
-          )}
-        >
-          <h4 className={correspondenceQueueSubjectClass}>{form.document.title}</h4>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">
-            {form.template?.name || 'Form'}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-            <Badge variant="default" className={cn(correspondenceQueueBadgeClass, 'bg-amber-500')}>
-              Action required
-            </Badge>
-            <span className={correspondenceQueueDateClass}>
-              Updated {formatDateTime(form.updated_at)}
-            </span>
-          </div>
-          <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
-            <span className={correspondenceQueueMetaItemClass}>
-              <FileText className={correspondenceQueueMetaIconClass} />
-              <span className="truncate">Form ID: {form.id.slice(0, 8).toUpperCase()}</span>
-            </span>
-            <span className={correspondenceQueueMetaItemClass}>
-              <Users className={correspondenceQueueMetaIconClass} />
-              <span>Awaiting your signature</span>
-            </span>
-          </div>
-        </ListRowCard>
+          form={form}
+          tone="pending"
+          badge="Action required"
+          meta="Awaiting your signature"
+        />
       ))}
     </div>
+  );
+}
+
+function SignedByMeList({ forms, loading }: { forms: FormDocument[]; loading: boolean }) {
+  if (loading) {
+    return <LoadingState message="Loading forms you signed…" />;
+  }
+
+  if (forms.length === 0) {
+    return (
+      <EmptyState
+        icon={<CheckCircle2 className={registryQueueEmptyIconClass} />}
+        title="No signed forms yet"
+        message="Forms you sign will appear here after you complete your signature step."
+        variant="dashed"
+      />
+    );
+  }
+
+  return (
+    <div className={correspondenceQueueListStackClass}>
+      {forms.map((form) => (
+        <FormSignatureRow
+          key={form.id}
+          form={form}
+          tone="signed"
+          badge={form.status === 'completed' ? 'Completed' : 'Signed by you'}
+          meta={form.status === 'completed' ? 'Workflow complete' : 'Your signature recorded'}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FormSignatureRow({
+  form,
+  tone,
+  badge,
+  meta,
+}: {
+  form: FormDocument;
+  tone: 'pending' | 'signed';
+  badge: string;
+  meta: string;
+}) {
+  const leadingClass =
+    tone === 'pending'
+      ? 'bg-amber-500/10'
+      : 'bg-emerald-500/10';
+  const iconClass =
+    tone === 'pending'
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-emerald-600 dark:text-emerald-400';
+  const badgeClass =
+    tone === 'pending'
+      ? 'bg-amber-500'
+      : 'bg-emerald-600';
+  const Icon = tone === 'pending' ? FileCheck : CheckCircle2;
+
+  return (
+    <ListRowCard
+      density="compact"
+      href={`/forms/${form.document.id}`}
+      leading={(
+        <div className={cn(correspondenceQueueLeadingBoxClass, leadingClass)}>
+          <Icon className={cn(correspondenceQueueLeadingIconClass, iconClass)} />
+        </div>
+      )}
+    >
+      <h4 className={correspondenceQueueSubjectClass}>{form.document.title}</h4>
+      <p className="text-xs text-muted-foreground truncate mt-0.5">
+        {form.template?.name || 'Form'}
+      </p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <Badge variant="default" className={cn(correspondenceQueueBadgeClass, badgeClass)}>
+          {badge}
+        </Badge>
+        <span className={correspondenceQueueDateClass}>
+          Updated {formatDateTime(form.updated_at)}
+        </span>
+      </div>
+      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+        <span className={correspondenceQueueMetaItemClass}>
+          <FileText className={correspondenceQueueMetaIconClass} />
+          <span className="truncate">Form ID: {form.id.slice(0, 8).toUpperCase()}</span>
+        </span>
+        <span className={correspondenceQueueMetaItemClass}>
+          <Users className={correspondenceQueueMetaIconClass} />
+          <span>{meta}</span>
+        </span>
+      </div>
+    </ListRowCard>
   );
 }

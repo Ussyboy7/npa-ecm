@@ -1,4 +1,4 @@
-"""DRM download enforcement and PDF watermark tests."""
+"""DRM download enforcement, share blocking, and PDF watermark tests."""
 
 from io import BytesIO
 
@@ -106,6 +106,79 @@ class DrmDownloadTests(APITestCase):
             ).exists()
         )
 
+    def test_version_serializer_redacts_file_url_under_policy(self):
+        pdf_bytes = _minimal_pdf_bytes()
+        stored = default_storage.save("demo/drm-redact.pdf", ContentFile(pdf_bytes))
+        version = DocumentVersion.objects.create(
+            document=self.document,
+            version_number=2,
+            file_name="secret.pdf",
+            file_type="application/pdf",
+            file_size=len(pdf_bytes),
+            file_url=f"/media/{stored}",
+            uploaded_by=self.author,
+        )
+        self.client.force_authenticate(user=self.viewer)
+        url = reverse("api_v1:document-version-detail", kwargs={"pk": version.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data.get("file_url") or "", "")
+        self.assertTrue(response.data.get("has_file"))
+        self.assertEqual(response.data.get("drm_delivery"), "api")
+
+    def test_share_blocked_when_external_share_disabled(self):
+        self.author.is_superuser = True
+        self.author.save(update_fields=["is_superuser"])
+        self.client.force_authenticate(user=self.author)
+        url = reverse("api_v1:document-permission-list")
+        response = self.client.post(
+            url,
+            {
+                "document": str(self.document.id),
+                "access": "read",
+                "user_ids": [str(self.viewer.id)],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("Sharing blocked", str(response.data))
+
+
+    def test_print_blocked_logs_attempted_print(self):
+        self.client.force_authenticate(user=self.viewer)
+        url = reverse("api_v1:document-version-print", kwargs={"pk": self.version.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(
+            DocumentAccessLog.objects.filter(
+                document=self.document,
+                user=self.viewer,
+                action=DocumentAccessLog.AccessAction.ATTEMPTED_PRINT,
+            ).exists()
+        )
+
+    def test_print_allowed_logs_print(self):
+        self.document.drm_policy = None
+        self.document.save(update_fields=["drm_policy"])
+        self.client.force_authenticate(user=self.viewer)
+        url = reverse("api_v1:document-version-print", kwargs={"pk": self.version.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            DocumentAccessLog.objects.filter(
+                document=self.document,
+                user=self.viewer,
+                action=DocumentAccessLog.AccessAction.PRINT,
+            ).exists()
+        )
+        self.assertFalse(
+            DocumentAccessLog.objects.filter(
+                document=self.document,
+                user=self.viewer,
+                action=DocumentAccessLog.AccessAction.VIEW,
+            ).exists()
+        )
+
 
 class DrmPdfWatermarkTests(APITestCase):
     def setUp(self):
@@ -157,7 +230,25 @@ class DrmPdfWatermarkTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(is_pdf_bytes(response.content))
         self.assertIn(b"INTERNAL USE ONLY", response.content)
+        self.assertIn(b"wm\\137viewer", response.content)
         self.assertEqual(response["Content-Disposition"].split(";")[0].strip(), "attachment")
+
+    def test_print_returns_forensic_watermarked_pdf(self):
+        self.client.force_authenticate(user=self.viewer)
+        url = reverse("api_v1:document-version-print", kwargs={"pk": self.version.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(is_pdf_bytes(response.content))
+        self.assertIn(b"INTERNAL USE ONLY", response.content)
+        self.assertIn(b"wm\\137viewer", response.content)
+        self.assertEqual(response["Content-Disposition"].split(";")[0].strip(), "inline")
+        self.assertTrue(
+            DocumentAccessLog.objects.filter(
+                document=self.document,
+                user=self.viewer,
+                action=DocumentAccessLog.AccessAction.PRINT,
+            ).exists()
+        )
 
     def test_content_returns_watermarked_pdf_inline(self):
         self.client.force_authenticate(user=self.viewer)
@@ -165,4 +256,26 @@ class DrmPdfWatermarkTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn(b"INTERNAL USE ONLY", response.content)
+        # Preview/content does not stamp the user forensic label.
+        self.assertNotIn(b"wm\\137viewer", response.content)
         self.assertEqual(response["Content-Disposition"].split(";")[0].strip(), "inline")
+
+    def test_file_url_redacted_when_watermark_policy(self):
+        self.client.force_authenticate(user=self.viewer)
+        url = reverse("api_v1:document-version-detail", kwargs={"pk": self.version.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data.get("file_url") or "", "")
+        self.assertEqual(response.data.get("drm_delivery"), "api")
+
+    def test_view_only_pdf_is_permission_restricted(self):
+        from dms.watermark import apply_pdf_access_restrictions
+
+        original = _minimal_pdf_bytes()
+        restricted = apply_pdf_access_restrictions(
+            original, allow_print=False, allow_extract=False
+        )
+        self.assertTrue(is_pdf_bytes(restricted))
+        self.assertNotEqual(original, restricted)
+        # Encrypted PDFs typically include Encrypt dictionary
+        self.assertIn(b"/Encrypt", restricted)

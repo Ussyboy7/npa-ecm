@@ -2,6 +2,13 @@
 
 Guidance for agents and humans working on NPA-ECM frontend. Brand colors stay NPA navy/teal/amber — “Apple” here means hierarchy, quiet chrome, and restraint.
 
+## Theme
+
+- **Light** and **Dark** are first-class app modes (`next-themes`, class on `<html>`). Default is Light.
+- Toggle: TopBar sun/moon control; Settings → Appearance; Login and Landing page toggles.
+- Preference persists as `npa-ecm-theme`.
+- **Document paper** (compose editor, memo/PDF previews) uses `.doc-paper` — always white, both themes — so print-like content stays readable.
+
 ## Source of truth
 
 | Pattern | Use |

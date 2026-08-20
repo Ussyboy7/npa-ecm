@@ -14,7 +14,13 @@ PROJECT_MONITORING_SCHEMA = {
         {"id": "project", "name": "project", "label": "Project", "type": "text", "required": True},
         {"id": "date", "name": "date", "label": "Date", "type": "date", "required": True},
         {"id": "our_ref", "name": "our_ref", "label": "Our Ref", "type": "text", "required": True},
-        {"id": "chq_no", "name": "chq_no", "label": "CHQ No", "type": "text"},
+        {
+            "id": "chq_no",
+            "name": "chq_no",
+            "label": "CHQ No",
+            "type": "text",
+            "placeholder": "Auto-issued on PDF generate if left blank",
+        },
         {"id": "location", "name": "location", "label": "Location", "type": "text", "required": True},
         {"id": "contractor_name", "name": "contractor_name", "label": "Contractor's Name", "type": "text", "required": True},
         {"id": "contractor_address", "name": "contractor_address", "label": "Address", "type": "text"},
@@ -50,6 +56,13 @@ PROJECT_MONITORING_SCHEMA = {
 
 WITNESSING_DELIVERIES_SCHEMA = {
     "fields": [
+        {
+            "id": "form_no",
+            "name": "form_no",
+            "label": "Form / Serial No",
+            "type": "text",
+            "placeholder": "Auto-issued on PDF generate if left blank",
+        },
         {"id": "date", "name": "date", "label": "Date", "type": "date", "required": True},
         {"id": "location", "name": "location", "label": "Location", "type": "text", "required": True},
         {"id": "contractor_name", "name": "contractor_name", "label": "Contractor's Name", "type": "text", "required": True},
@@ -71,7 +84,11 @@ WITNESSING_DELIVERIES_SCHEMA = {
         {"id": "supplier_date", "name": "supplier_date", "label": "Supplier Date", "type": "date"},
     ],
     "sections": [
-        {"id": "header", "title": "Header", "fields": ["date", "location", "contractor_name", "contractor_address", "award_ref", "vehicle_reg"]},
+        {
+            "id": "header",
+            "title": "Header",
+            "fields": ["form_no", "date", "location", "contractor_name", "contractor_address", "award_ref", "vehicle_reg"],
+        },
         {"id": "items_supplied", "title": "Items Supplied", "fields": ["items"]},
         {"id": "totals", "title": "Totals", "fields": ["sub_total", "vat", "grand_total"]},
         {"id": "supplier_certification", "title": "Supplier Certification", "fields": ["supplier_name", "supplier_signature", "supplier_date"]},
@@ -89,6 +106,13 @@ WITNESSING_DELIVERIES_SCHEMA = {
 
 AUDIT_QUERY_SCHEMA = {
     "fields": [
+        {
+            "id": "hq_serial",
+            "name": "hq_serial",
+            "label": "HQ Serial No",
+            "type": "text",
+            "placeholder": "Auto-issued on PDF generate if left blank",
+        },
         {"id": "to", "name": "to", "label": "TO", "type": "text", "required": True},
         {"id": "from", "name": "from", "label": "FROM: GENERAL MANAGER AUDIT, HQ.", "type": "text"},
         {"id": "date", "name": "date", "label": "Date", "type": "date", "required": True},
@@ -103,7 +127,7 @@ AUDIT_QUERY_SCHEMA = {
         {"id": "response_deadline", "name": "response_deadline", "label": "Response deadline (hours)", "type": "number", "default": 48},
     ],
     "sections": [
-        {"id": "header", "title": "Header", "fields": ["to", "from", "date", "ref", "subject"]},
+        {"id": "header", "title": "Header", "fields": ["hq_serial", "to", "from", "date", "ref", "subject"]},
         {"id": "payment_details", "title": "Payment Details", "fields": ["payee", "pv_no", "pv_date", "amount_naira", "amount_kobo"]},
         {"id": "query_reasons", "title": "Query Reasons", "fields": ["reasons", "response_deadline"]},
     ],

@@ -337,17 +337,20 @@ const RecordsArchiveForm = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination.setPage is stable, only react to URL changes
   }, [searchParams]);
 
-  // Fetch records
+  // Fetch records — org filters must be sent to list (M3), not just export.
   const getFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.append('search', debouncedSearch);
     if (selectedPriority) params.append('priority', selectedPriority);
     if (dateFrom) params.append('from_date', dateFrom);
     if (dateTo) params.append('to_date', dateTo);
+    if (selectedDirectorate !== 'all') params.append('directorate', selectedDirectorate);
+    if (selectedDivision !== 'all') params.append('division', selectedDivision);
+    if (selectedDepartment !== 'all') params.append('department', selectedDepartment);
     params.append('status', 'completed');
     params.append('status', 'archived');
     return params;
-  }, [debouncedSearch, selectedPriority, dateFrom, dateTo]);
+  }, [debouncedSearch, selectedPriority, dateFrom, dateTo, selectedDirectorate, selectedDivision, selectedDepartment]);
 
   const fetchRecords = useCallback(async () => {
     if (!currentUser?.id) return;

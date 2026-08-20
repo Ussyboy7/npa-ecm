@@ -36,6 +36,7 @@ interface CaseHeaderProps {
   updatingStatus: boolean;
   onStatusUpdate: (status: CaseDetail["status"]) => void;
   onGenerateCompletionPackage: () => void;
+  onDownloadCompletionPackage?: () => void;
   onEdit?: () => void;
   onImport: () => void;
 }
@@ -45,10 +46,18 @@ export const CaseHeader = ({
   updatingStatus,
   onStatusUpdate,
   onGenerateCompletionPackage,
+  onDownloadCompletionPackage,
   onEdit,
   onImport,
 }: CaseHeaderProps) => {
   const router = useRouter();
+  const handlePackageDownload = () => {
+    if (onDownloadCompletionPackage) {
+      onDownloadCompletionPackage();
+      return;
+    }
+    toast.error('Package download is unavailable');
+  };
 
   const moreMenu = (
     <DropdownMenu>
@@ -89,16 +98,9 @@ export const CaseHeader = ({
         {caseData.completionPackage && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <a
-                href={caseData.completionPackage.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center"
-              >
-                <Download className="h-4 w-4 mr-2 opacity-70" />
-                Download package
-              </a>
+            <DropdownMenuItem onClick={handlePackageDownload}>
+              <Download className="h-4 w-4 mr-2 opacity-70" />
+              Download package
             </DropdownMenuItem>
           </>
         )}
@@ -172,15 +174,9 @@ export const CaseHeader = ({
               Package
             </Button>
           ) : caseData.completionPackage ? (
-            <Button size="sm" asChild>
-              <a
-                href={caseData.completionPackage.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Package
-              </a>
+            <Button size="sm" onClick={handlePackageDownload}>
+              <Download className="h-4 w-4 mr-2" />
+              Package
             </Button>
           ) : null}
           {moreMenu}

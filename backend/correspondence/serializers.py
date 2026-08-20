@@ -42,6 +42,8 @@ class CorrespondenceDocumentLinkSerializer(serializers.ModelSerializer):
 
 
 class CorrespondenceAttachmentSerializer(serializers.ModelSerializer):
+    has_file = serializers.SerializerMethodField()
+
     class Meta:
         model = CorrespondenceAttachment
         fields = [
@@ -51,52 +53,20 @@ class CorrespondenceAttachmentSerializer(serializers.ModelSerializer):
             "file_type",
             "file_size",
             "file_url",
+            "has_file",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
-    
+        read_only_fields = ["id", "has_file", "created_at", "updated_at"]
+
+    def get_has_file(self, obj) -> bool:
+        return bool((getattr(obj, "file_url", None) or "").strip())
+
     def to_representation(self, instance):
-        """Convert relative file URLs to absolute URLs when serializing."""
+        """Never expose raw /media URLs — clients must use attachment download/content APIs."""
         data = super().to_representation(instance)
-        if data.get('file_url') and not data['file_url'].startswith(('http://', 'https://', 'data:')):
-            # If it's a relative path, convert to absolute URL
-            from django.conf import settings
-            request = self.context.get('request')
-            file_url = data['file_url']
-            
-            # Ensure the path starts with /media/ (it should already, but handle edge cases)
-            if not file_url.startswith('/media/'):
-                # If it doesn't start with /media/, prepend MEDIA_URL
-                media_path = file_url.lstrip('/')
-                if not media_path.startswith('media/'):
-                    media_path = f"media/{media_path}"
-                file_url = f"{settings.MEDIA_URL.rstrip('/')}/{media_path}"
-            
-            # Priority 1: Use MEDIA_BASE_URL if set (for staging/production)
-            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
-                # Ensure file_url starts with /media/ (not /api/media/)
-                if file_url.startswith('/api/media/'):
-                    file_url = file_url.replace('/api/media/', '/media/')
-                data['file_url'] = f"{settings.MEDIA_BASE_URL.rstrip('/')}{file_url}"
-            elif request:
-                try:
-                    # Build absolute URL manually to avoid request path prefix issues
-                    # request.build_absolute_uri might include /api/ prefix if request came through API
-                    scheme = getattr(request, 'scheme', 'http')
-                    host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8002'
-                    # Ensure file_url starts with /media/ (not /api/media/)
-                    if file_url.startswith('/api/media/'):
-                        file_url = file_url.replace('/api/media/', '/media/')
-                    # Build URL directly without using build_absolute_uri to avoid path prefix issues
-                    data['file_url'] = f"{scheme}://{host}{file_url}"
-                except Exception:
-                    # Fallback: use the request host directly
-                    scheme = getattr(request, 'scheme', 'http')
-                    host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8002'
-                    if file_url.startswith('/api/media/'):
-                        file_url = file_url.replace('/api/media/', '/media/')
-                    data['file_url'] = f"{scheme}://{host}{file_url}"
+        data["has_file"] = bool((getattr(instance, "file_url", None) or "").strip())
+        data["file_url"] = ""
         return data
 
 
@@ -748,12 +718,12 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
                 version = prefetched_versions[0]
         # Last resort: query database (should be rare if prefetch is working)
         if version is None:
-            version = document.versions.only("id", "file_url", "uploaded_at").order_by("-version_number").first()
-        file_url = version.file_url if version else ""
+            version = document.versions.only("id", "file_name", "uploaded_at").order_by("-version_number").first()
         return {
             "document_id": str(document.id),
+            "version_id": str(version.id) if version else None,
             "title": document.title,
-            "file_url": file_url,
+            "file_url": "",
             "generated_at": (
                 getattr(obj, "completion_summary_generated_at", None)
                 or (version.uploaded_at if version else None)
@@ -1266,10 +1236,13 @@ class CaseSerializer(serializers.ModelSerializer):
         """Return completion package document info if exists."""
         if not obj.completion_package:
             return None
+        version = obj.completion_package.versions.order_by("-version_number").only("id").first()
         return {
             "id": str(obj.completion_package.id),
+            "document_id": str(obj.completion_package.id),
+            "version_id": str(version.id) if version else None,
             "title": obj.completion_package.title,
-            "file_url": obj.completion_package.versions.first().file_url if obj.completion_package.versions.exists() else None,
+            "file_url": "",
         }
     
     def get_correspondence_count(self, obj):

@@ -284,6 +284,8 @@ class DocumentAccessLog(UUIDModel):
         VIEW = "view", "View"
         DOWNLOAD = "download", "Download"
         ATTEMPTED_DOWNLOAD = "attempted-download", "Attempted Download"
+        PRINT = "print", "Print"
+        ATTEMPTED_PRINT = "attempted-print", "Attempted Print"
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="access_logs")
     user = models.ForeignKey(

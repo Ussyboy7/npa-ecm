@@ -19,12 +19,13 @@ export interface SidebarCounts {
   executiveApprovals: number;
   myDocuments: number;
   drafts: number;
+  pendingSignatures: number;
 }
 
 const INITIAL_COUNTS: SidebarCounts = {
   officeInbox: 0, unreadInboxCount: 0, myInbox: 0, myWork: 0, mySent: 0, officeSent: 0,
   delegated: 0, secretaryInbox: 0, myCases: 0, officeCases: 0,
-  allCases: 0, executiveApprovals: 0, myDocuments: 0, drafts: 0,
+  allCases: 0, executiveApprovals: 0, myDocuments: 0, drafts: 0, pendingSignatures: 0,
 };
 
 const SIDEBAR_COUNTS_TTL_MS = 60 * 1000;
@@ -52,6 +53,7 @@ const normalizeCounts = (raw: Partial<SidebarCounts> | Record<string, number>): 
   executiveApprovals: Number(raw.executiveApprovals ?? 0),
   myDocuments: Number(raw.myDocuments ?? 0),
   drafts: Number(raw.drafts ?? 0),
+  pendingSignatures: Number(raw.pendingSignatures ?? 0),
 });
 
 export const seedSidebarCounts = (

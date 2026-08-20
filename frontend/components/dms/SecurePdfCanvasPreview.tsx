@@ -10,8 +10,9 @@ interface SecurePdfCanvasPreviewProps {
 }
 
 /**
- * Renders a PDF to canvas pages (no blob iframe).
- * Used for view-only DRM so the browser PDF chrome cannot download the file.
+ * Renders a PDF to canvas pages (no blob iframe / browser PDF chrome).
+ * Used for all in-app PDF previews so Download / Print / Drive toolbar
+ * cannot bypass audited app actions.
  * Re-renders on container resize (e.g. entering fullscreen) so pages fill width.
  */
 export function SecurePdfCanvasPreview({
@@ -86,7 +87,7 @@ export function SecurePdfCanvasPreview({
           canvas.height = Math.floor(viewport.height);
           canvas.style.width = `${cssWidth}px`;
           canvas.style.height = `${cssHeight}px`;
-          canvas.className = "mx-auto mb-3 block bg-white shadow-sm";
+          canvas.className = "mx-auto mb-3 block doc-paper shadow-sm";
           canvas.setAttribute("aria-label", `Page ${pageNum} of ${pdf.numPages}`);
           const ctx = canvas.getContext("2d");
           if (!ctx) throw new Error("Canvas not available");

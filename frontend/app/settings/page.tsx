@@ -608,7 +608,7 @@ export default function SettingsPage() {
               {twoFactorMethod === 'totp' ? (
                 <>
                   {/* TOTP Setup - QR Code */}
-                  <div className="flex justify-center p-4 bg-white rounded-lg">
+                  <div className="flex justify-center p-4 doc-paper rounded-lg">
                     {twoFactorQRCode ? (
                       <Image 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=192x192&data=${encodeURIComponent(twoFactorQRCode)}`}

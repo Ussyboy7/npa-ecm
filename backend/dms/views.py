@@ -56,8 +56,14 @@ from .serializers import (
 )
 from .services import FileUploadService, OCRService, DocumentSummaryService
 from .version_diff import build_version_diff
-from .drm import assert_download_allowed, assert_view_allowed, resolve_document_rights
-from .watermark import apply_text_watermark, is_pdf_bytes
+from .drm import (
+    assert_download_allowed,
+    assert_print_allowed,
+    assert_share_allowed,
+    assert_view_allowed,
+    resolve_document_rights,
+)
+from .watermark import apply_pdf_access_restrictions, apply_text_watermark, is_pdf_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -683,9 +689,13 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                 remote_type = remote.headers.get("Content-Type") or content_type
                 return remote.content, file_name, remote_type
             if not os.path.isfile(file_path):
-                raise ValidationError({"detail": "Stored file is missing on the server."})
-            with open(file_path, "rb") as handle:
-                return handle.read(), file_name, content_type
+                # File on disk is gone — fall through to saved HTML if available,
+                # otherwise surface a clear 400 for the frontend to show a toast.
+                if not (version.content_html and version.content_html.strip()):
+                    raise ValidationError({"detail": "Stored file is missing on the server."})
+            else:
+                with open(file_path, "rb") as handle:
+                    return handle.read(), file_name, content_type
 
         if version.content_html and version.content_html.strip():
             return (
@@ -696,15 +706,43 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
 
         raise ValidationError({"detail": "No downloadable content for this version."})
 
-    def _maybe_watermark(self, document, user, payload: bytes, content_type: str) -> tuple[bytes, str]:
+    def _compose_watermark_text(self, document, user, *, forensic: bool) -> str:
         rights = resolve_document_rights(document, user)
-        watermark = (rights.get("watermark_text") or "").strip()
+        parts: list[str] = []
+        policy_wm = (rights.get("watermark_text") or "").strip()
+        if policy_wm:
+            parts.append(policy_wm)
+        if forensic and user is not None:
+            label = (user.get_full_name() or "").strip() or getattr(user, "username", "") or ""
+            if label:
+                parts.append(f"{label} · {timezone.now().strftime('%Y-%m-%d %H:%M UTC')}")
+        return " · ".join(parts)
+
+    def _maybe_watermark(
+        self, document, user, payload: bytes, content_type: str, *, forensic: bool = False
+    ) -> tuple[bytes, str]:
+        watermark = self._compose_watermark_text(document, user, forensic=forensic)
         if not watermark:
             return payload, content_type
         if not (is_pdf_bytes(payload) or "pdf" in (content_type or "").lower()):
             return payload, content_type
         stamped = apply_text_watermark(payload, watermark)
         return stamped, "application/pdf"
+
+    def _maybe_restrict_pdf(self, document, user, payload: bytes, content_type: str) -> tuple[bytes, str]:
+        rights = resolve_document_rights(document, user)
+        if not (is_pdf_bytes(payload) or "pdf" in (content_type or "").lower()):
+            return payload, content_type
+        allow_print = bool(rights.get("allow_print", True))
+        allow_extract = bool(rights.get("allow_download", True)) and not bool(rights.get("view_only"))
+        if allow_print and allow_extract:
+            return payload, content_type
+        restricted = apply_pdf_access_restrictions(
+            payload,
+            allow_print=allow_print,
+            allow_extract=allow_extract,
+        )
+        return restricted, "application/pdf"
 
     def _file_response(
         self, payload: bytes, *, file_name: str, content_type: str, as_attachment: bool
@@ -715,20 +753,26 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         response["Content-Length"] = str(len(payload))
         return response
 
-    def _serve_version(self, request, version, *, as_attachment: bool):
+    def _serve_version(self, request, version, *, as_attachment: bool, purpose: str = "view"):
         document = version.document
+        forensic = purpose in ("download", "print")
         rights = resolve_document_rights(document, request.user)
-        needs_watermark = bool((rights.get("watermark_text") or "").strip())
+        needs_watermark = bool(
+            self._compose_watermark_text(document, request.user, forensic=forensic)
+        )
+        needs_restrict = (not rights.get("allow_print", True)) or (
+            not rights.get("allow_download", True)
+        ) or bool(rights.get("view_only"))
 
-        # Stream unmarked local files without buffering.
+        # Stream unmarked unrestricted local files without buffering.
         if (
             not needs_watermark
+            and not needs_restrict
             and version.file_url
             and not resolve_media_path(version.file_url).startswith(("http://", "https://"))
+            and os.path.isfile(resolve_media_path(version.file_url))
         ):
             file_path = resolve_media_path(version.file_url)
-            if not os.path.isfile(file_path):
-                raise ValidationError({"detail": "Stored file is missing on the server."})
             file_name = version.file_name or f"document-v{version.version_number}"
             content_type = version.file_type or "application/octet-stream"
             return FileResponse(
@@ -739,7 +783,10 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
             )
 
         payload, file_name, content_type = self._load_version_payload(version)
-        payload, content_type = self._maybe_watermark(document, request.user, payload, content_type)
+        payload, content_type = self._maybe_watermark(
+            document, request.user, payload, content_type, forensic=forensic
+        )
+        payload, content_type = self._maybe_restrict_pdf(document, request.user, payload, content_type)
         return self._file_response(
             payload, file_name=file_name, content_type=content_type, as_attachment=as_attachment
         )
@@ -767,7 +814,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
             action=DocumentAccessLog.AccessAction.DOWNLOAD,
             sensitivity=document.sensitivity,
         )
-        return self._serve_version(request, version, as_attachment=True)
+        return self._serve_version(request, version, as_attachment=True, purpose="download")
 
     @action(detail=True, methods=["get"], url_path="content")
     def content(self, request, pk=None):
@@ -782,7 +829,32 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
             action=DocumentAccessLog.AccessAction.VIEW,
             sensitivity=document.sensitivity,
         )
-        return self._serve_version(request, version, as_attachment=False)
+        return self._serve_version(request, version, as_attachment=False, purpose="view")
+
+    @action(detail=True, methods=["get"], url_path="print", url_name="print")
+    def print_version(self, request, pk=None):
+        """Inline stream for printing; blocked when DRM disallows print."""
+        version = self.get_object()
+        document = version.document
+
+        try:
+            assert_print_allowed(document, request.user)
+        except PermissionDenied:
+            DocumentAccessLog.objects.create(
+                document=document,
+                user=request.user,
+                action=DocumentAccessLog.AccessAction.ATTEMPTED_PRINT,
+                sensitivity=document.sensitivity,
+            )
+            raise
+
+        DocumentAccessLog.objects.create(
+            document=document,
+            user=request.user,
+            action=DocumentAccessLog.AccessAction.PRINT,
+            sensitivity=document.sensitivity,
+        )
+        return self._serve_version(request, version, as_attachment=False, purpose="print")
 
     def create(self, request, *args, **kwargs):
         # Create a mutable copy of request data
@@ -1007,6 +1079,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         
         # Get document
         document = serializer.validated_data.get("document")
+        assert_share_allowed(document, request.user)
         access = serializer.validated_data.get("access", "read")
         note = serializer.validated_data.get("note", "")
         user_ids = serializer.validated_data.get("user_ids", [])
@@ -1103,9 +1176,11 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
             raise ValidationError({"document": "Document ID is required"})
         
         try:
-            document = Document.objects.get(id=document_id)
+            document = Document.objects.select_related("drm_policy").get(id=document_id)
         except Document.DoesNotExist:
             raise ValidationError({"document": "Document not found"})
+
+        assert_share_allowed(document, request.user)
         
         # Get all active users
         from accounts.models import User
@@ -1274,7 +1349,7 @@ class DocumentDiscussionMessageViewSet(viewsets.ModelViewSet):
 
 
 class DocumentAccessLogViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
-    """ViewSet for document access logs - audit trail of document views/downloads."""
+    """ViewSet for document access logs — audit trail of views, downloads, and prints."""
     queryset = DocumentAccessLog.objects.select_related("document", "user")
     serializer_class = DocumentAccessLogSerializer
     permission_classes = [IsAuthenticated]

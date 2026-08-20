@@ -39,7 +39,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { Shield, Search, FileText, QrCode, ExternalLink, RefreshCw, Download, AlertCircle, MoreVertical } from "lucide-react";
+import { Shield, Search, FileText, QrCode, ExternalLink, RefreshCw, Download, AlertCircle, MoreVertical, Printer, Loader2 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
 import { ensureSealImageCached } from "@/lib/seal-cache";
@@ -47,8 +47,16 @@ import { logError } from "@/lib/client-logger";
 import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { exportToCSV } from "@/lib/admin-export";
+import { downloadPdfBlob, printPdfBlob } from "@/lib/canonical-document";
 import { toast } from "@/components/ui/sonner";
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 
 interface ExecutiveApproval {
   id: string;
@@ -94,6 +102,14 @@ function ApprovalsForm() {
   const [dateTo, setDateTo] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('sealedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [pdfPreview, setPdfPreview] = useState<{
+    title: string;
+    fileName: string;
+    bytes: ArrayBuffer;
+    correspondenceId: string;
+  } | null>(null);
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+  const [pdfActionBusy, setPdfActionBusy] = useState(false);
 
   // Restore filters from localStorage after mount
   useEffect(() => {
@@ -408,6 +424,7 @@ function ApprovalsForm() {
         e.stopPropagation();
       }
       try {
+        setPdfLoadingId(approval.id);
         if (approval.sealData) {
           await ensureSealImageCached({
             serialNumber: approval.sealData.serialNumber,
@@ -419,14 +436,22 @@ function ApprovalsForm() {
             existingSealImageUrl: approval.sealData.sealImageUrl,
           });
         }
-        const pdfBlob = await apiFetch<Blob>(`/correspondence/minutes/${approval.id}/approval-pdf/`, { responseType: 'blob' });
-        const blobUrl = URL.createObjectURL(pdfBlob);
-        window.open(blobUrl, '_blank');
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        const pdfBlob = await apiFetch<Blob>(`/correspondence/minutes/${approval.id}/approval-pdf/`, {
+          responseType: 'blob',
+        });
+        const fileName = `approval-${approval.correspondenceReference || approval.correspondenceId}-${approval.id}.pdf`;
+        setPdfPreview({
+          title: approval.correspondenceSubject || 'Approval PDF',
+          fileName,
+          bytes: await pdfBlob.arrayBuffer(),
+          correspondenceId: approval.correspondenceId,
+        });
       } catch (error: unknown) {
         logError('Failed to load PDF:', error);
         toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : String(error)}`);
         router.push(`/correspondence/${approval.correspondenceId}`);
+      } finally {
+        setPdfLoadingId(null);
       }
     };
 
@@ -464,9 +489,14 @@ function ApprovalsForm() {
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-foreground"
                     aria-label="Open approval PDF"
+                    disabled={pdfLoadingId === approval.id}
                     onClick={(e) => void openApprovalPdf(e)}
                   >
-                    <FileText className="h-4 w-4" />
+                    {pdfLoadingId === approval.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="left">Open approval PDF</TooltipContent>
@@ -659,6 +689,59 @@ function ApprovalsForm() {
           />
         )}
       </QueuePageShell>
+
+      <Dialog open={Boolean(pdfPreview)} onOpenChange={(open) => !open && setPdfPreview(null)}>
+        <DialogContent size="2xl" height="fill">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">{pdfPreview?.title || 'Approval PDF'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto border border-border rounded-lg bg-muted/20">
+            {pdfPreview ? (
+              <SecurePdfCanvasPreview data={pdfPreview.bytes} minHeightClassName="min-h-[560px]" />
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
+            <p className="text-xs text-muted-foreground">
+              Canvas preview — use Download / Print (no browser PDF toolbar).
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPdfPreview(null)}>
+                Close
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!pdfPreview || pdfActionBusy}
+                onClick={() => {
+                  if (!pdfPreview) return;
+                  downloadPdfBlob(
+                    new Blob([pdfPreview.bytes], { type: 'application/pdf' }),
+                    pdfPreview.fileName,
+                  );
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+              <Button
+                disabled={!pdfPreview || pdfActionBusy}
+                onClick={() => {
+                  if (!pdfPreview) return;
+                  setPdfActionBusy(true);
+                  void printPdfBlob(new Blob([pdfPreview.bytes], { type: 'application/pdf' }))
+                    .catch((err) => {
+                      logError('Approval PDF print failed', err);
+                      toast.error(err instanceof Error ? err.message : 'Print failed');
+                    })
+                    .finally(() => setPdfActionBusy(false));
+                }}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

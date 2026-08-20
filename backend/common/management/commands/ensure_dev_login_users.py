@@ -27,11 +27,16 @@ ORG_UNITS = {
     # Departments
     "ICT_DEPT_SYSTEMS": "ea614ca6-6751-4046-9bd6-ef9f82a254a7",
     "ICT_DEPT_APPS": "63add8a9-2d36-4036-a489-ec26afa881d7",
+    "ICT_DEPT_SOFTWARE": "a0c840df-3898-4881-908c-4b9f8be3cb3d",
     "ENG_DEPT_CIVIL": "01c5bbe3-f374-4962-af86-49bae9c91b9a",
     "FINANCE_DEPT_TARIFF": "90319915-a013-4848-88f3-46e582615b39",
     "ADMIN_DEPT": "9a4e9154-07ba-4eb2-ba04-b455813b449d",
+    "ADMIN_FACILITY_DEPT": "02300955-ed7a-4146-9b48-d20c2622aa7d",
     "ENG_DEPT_PORTS": "23755e41-3e76-41aa-b4d4-89c6ca1dae8d",
+    "VESSEL_DEPT": "f1cba731-3924-408a-baba-c9daa79c40ab",
+    "HR_MGT_DEPT": "2cb7500f-a828-47cd-81e8-a75afaaa8408",
     "HR_DEPT_LD": "c0abeb56-c6d6-4641-839b-3be367172c04",
+    "AUDIT_SYSTEMS_DEPT": "9d3564b8-ce41-42fc-a9d5-c06fead052b2",
 }
 
 DEV_USERS = (
@@ -90,7 +95,7 @@ DEV_USERS = (
         "grade_level": "MSS2",
         "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
         "division_id": ORG_UNITS["ICT_DIVISION"],
-        "department_id": ORG_UNITS["ICT_DEPT_SYSTEMS"],
+        "department_id": None,
     },
     {
         "username": "pamd",
@@ -135,7 +140,7 @@ DEV_USERS = (
         "grade_level": "JSS1",
         "directorate_id": ORG_UNITS["ED_ENG_DIRECTORATE"],
         "division_id": ORG_UNITS["ENG_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["ENG_DEPT_CIVIL"],
     },
     {
         "username": "staff2",
@@ -146,7 +151,7 @@ DEV_USERS = (
         "grade_level": "JSS2",
         "directorate_id": ORG_UNITS["ED_MARINE_DIRECTORATE"],
         "division_id": ORG_UNITS["MARINE_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["VESSEL_DEPT"],
     },
     {
         "username": "staff3",
@@ -157,7 +162,7 @@ DEV_USERS = (
         "grade_level": "JSS3",
         "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
         "division_id": ORG_UNITS["ADMIN_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["ADMIN_DEPT"],
     },
     # Additional Officer I/II for the previously empty roles
     {
@@ -169,7 +174,7 @@ DEV_USERS = (
         "grade_level": "SSS3",
         "directorate_id": ORG_UNITS["ED_ENG_DIRECTORATE"],
         "division_id": ORG_UNITS["ENG_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["ENG_DEPT_PORTS"],
     },
     {
         "username": "officer_ii",
@@ -180,7 +185,7 @@ DEV_USERS = (
         "grade_level": "SSS4",
         "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
         "division_id": ORG_UNITS["HR_DEPT"],
-        "department_id": None,
+        "department_id": ORG_UNITS["HR_DEPT_LD"],
     },
     # Additional Staff I/II/III
     {
@@ -192,7 +197,7 @@ DEV_USERS = (
         "grade_level": "JSS1",
         "directorate_id": ORG_UNITS["ED_MARINE_DIRECTORATE"],
         "division_id": ORG_UNITS["MARINE_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["VESSEL_DEPT"],
     },
     {
         "username": "staff_ii",
@@ -203,7 +208,7 @@ DEV_USERS = (
         "grade_level": "JSS2",
         "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
         "division_id": ORG_UNITS["AUDIT_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["AUDIT_SYSTEMS_DEPT"],
     },
     {
         "username": "staff_iii",
@@ -214,7 +219,7 @@ DEV_USERS = (
         "grade_level": "JSS3",
         "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
         "division_id": ORG_UNITS["ADMIN_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["ADMIN_FACILITY_DEPT"],
     },
     # Assistant Manager (single user role)
     {
@@ -226,7 +231,7 @@ DEV_USERS = (
         "grade_level": "SSS1",
         "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
         "division_id": ORG_UNITS["HR_DEPT"],
-        "department_id": None,
+        "department_id": ORG_UNITS["HR_MGT_DEPT"],
     },
     # Manager (single user role)
     {
@@ -274,7 +279,7 @@ DEV_USERS = (
         "grade_level": "SSS2",
         "directorate_id": ORG_UNITS["ED_ENG_DIRECTORATE"],
         "division_id": ORG_UNITS["ENG_DIVISION"],
-        "department_id": None,
+        "department_id": ORG_UNITS["ENG_DEPT_CIVIL"],
     },
     # Secretary (2 users already, add one for MD)
     {
@@ -297,10 +302,15 @@ DEV_USERS = (
         "role_name": "Assistant",
         "grade_level": "JSS3",
         "directorate_id": ORG_UNITS["ED_MARINE_DIRECTORATE"],
-        "division_id": None,
-        "department_id": None,
+        "division_id": ORG_UNITS["MARINE_DIVISION"],
+        "department_id": ORG_UNITS["VESSEL_DEPT"],
     },
 )
+
+# Usernames that also exist in organization_data.json MOCK_USERS.
+# For these, ensure_dev_login_users owns only credentials (password + is_active),
+# not profile (names/emails/roles/org) — to avoid boot-order drift.
+OVERLAP_USERNAMES = frozenset({"superadmin", "md", "edfa", "gmict"})
 
 DEFAULT_PASSWORD = "ChangeMe123!"
 
@@ -325,13 +335,17 @@ class Command(BaseCommand):
         force_password = options["force_password"]
         created = updated = 0
 
-        for spec in DEV_USERS:
+        for raw_spec in DEV_USERS:
+            # Work on a shallow copy so the DEV_USERS tuple stays immutable across
+            # repeated calls (management command may be invoked twice per boot).
+            spec = dict(raw_spec)
             role_name = spec.pop("role_name")
             role = Role.objects.filter(name=role_name).first()
             if not role:
                 self.stderr.write(f"Role '{role_name}' not found, skipping {spec['username']}")
                 continue
 
+            username = spec["username"]
             directorate_id = spec.pop("directorate_id", None)
             division_id = spec.pop("division_id", None)
             department_id = spec.pop("department_id", None)
@@ -350,10 +364,17 @@ class Command(BaseCommand):
                 "is_superuser": spec.get("is_superuser", False),
             }
 
-            user, was_created = User.objects.update_or_create(
-                username=spec["username"],
-                defaults=defaults,
-            )
+            # For users that also live in organization_data.json, never clobber
+            # profile/org fields if the row was already seeded — own only creds.
+            if username in OVERLAP_USERNAMES and User.objects.filter(username=username).exists():
+                user = User.objects.get(username=username)
+                was_created = False
+                # No profile overwrite; credentials only.
+            else:
+                user, was_created = User.objects.update_or_create(
+                    username=username,
+                    defaults=defaults,
+                )
 
             if force_password or was_created or not user.has_usable_password():
                 user.set_password(password)

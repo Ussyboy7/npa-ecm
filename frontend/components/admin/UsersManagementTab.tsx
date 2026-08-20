@@ -65,7 +65,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type FilterCategory = "role" | "grade" | "directorate" | "division" | "department" | "status";
+type FilterCategory = "role" | "grade" | "division" | "department" | "status";
 
 type ActiveFilter = {
   key: FilterCategory;
@@ -986,8 +986,8 @@ export const UsersManagementTab = forwardRef<
         ) : null}
 
       <Card>
-        <CardHeader>
-          <CardTitle>User Directory</CardTitle>
+        <CardHeader className="py-2">
+          <CardTitle className="text-sm">User Directory</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading && mappedUsers.length === 0 ? (
@@ -995,8 +995,8 @@ export const UsersManagementTab = forwardRef<
           ) : (
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">
+              <TableRow className="h-8">
+                <TableHead className="w-8">
                   <input
                     type="checkbox"
                     checked={selectedUserIds.size === mappedUsers.length && mappedUsers.length > 0}
@@ -1008,13 +1008,13 @@ export const UsersManagementTab = forwardRef<
                       }
                     }}
                     aria-label="Select all users"
-                    className="h-4 w-4 rounded border-gray-300"
+                    className="h-3.5 w-3.5 rounded border-gray-300"
                   />
                 </TableHead>
                 <TableHead className="w-[200px]">
                   <button
                     type="button"
-                    className="flex items-center gap-1 text-left"
+                    className="flex items-center gap-1 text-left text-xs"
                     onClick={() => toggleSort("name")}
                     aria-label="Sort by name"
                   >
@@ -1022,10 +1022,10 @@ export const UsersManagementTab = forwardRef<
                     {renderSortIcon("name")}
                   </button>
                 </TableHead>
-                <TableHead className="w-[120px]">
+                <TableHead className="w-[150px]">
                   <button
                     type="button"
-                    className="flex items-center gap-1 text-left"
+                    className="flex items-center gap-1 text-left text-xs"
                     onClick={() => toggleSort("role")}
                     aria-label="Sort by role"
                   >
@@ -1033,21 +1033,10 @@ export const UsersManagementTab = forwardRef<
                     {renderSortIcon("role")}
                   </button>
                 </TableHead>
-                <TableHead className="w-[100px]">
+                <TableHead className="w-[130px]">
                   <button
                     type="button"
-                    className="flex items-center gap-1 text-left"
-                    onClick={() => toggleSort("grade")}
-                    aria-label="Sort by grade"
-                  >
-                    Grade
-                    {renderSortIcon("grade")}
-                  </button>
-                </TableHead>
-                <TableHead className="w-[150px]">
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 text-left"
+                    className="flex items-center gap-1 text-left text-xs"
                     onClick={() => toggleSort("division")}
                     aria-label="Sort by division"
                   >
@@ -1055,10 +1044,21 @@ export const UsersManagementTab = forwardRef<
                     {renderSortIcon("division")}
                   </button>
                 </TableHead>
+                <TableHead className="w-[130px]">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left text-xs"
+                    onClick={() => toggleSort("department")}
+                    aria-label="Sort by department"
+                  >
+                    Department
+                    {renderSortIcon("department")}
+                  </button>
+                </TableHead>
                 <TableHead className="w-[100px]">
                   <button
                     type="button"
-                    className="flex items-center gap-1 text-left"
+                    className="flex items-center gap-1 text-left text-xs"
                     onClick={() => toggleSort("status")}
                     aria-label="Sort by status"
                   >
@@ -1066,7 +1066,7 @@ export const UsersManagementTab = forwardRef<
                     {renderSortIcon("status")}
                   </button>
                 </TableHead>
-                <TableHead className="w-[80px] text-right" aria-label="Actions">Actions</TableHead>
+                <TableHead className="w-[60px] text-right text-xs" aria-label="Actions">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1080,14 +1080,16 @@ export const UsersManagementTab = forwardRef<
                 </TableRow>
               ) : (
                 mappedUsers.map((user) => {
-                const grade = getGradeLabel(user.gradeLevel);
                 const division = user.division
                   ? divisions.find((div) => div.id === user.division)
                   : undefined;
+                const department = user.department
+                  ? departments.find((dept) => dept.id === user.department)
+                  : undefined;
                 const isSelected = selectedUserIds.has(user.id);
                 return (
-                  <TableRow key={user.id} className={`${isSelected ? "bg-muted/50" : ""} hover:bg-muted/50`}>
-                    <TableCell>
+                  <TableRow key={user.id} className={`${isSelected ? "bg-muted/50" : ""} hover:bg-muted/50 h-10`}>
+                    <TableCell className="py-1.5">
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -1101,21 +1103,22 @@ export const UsersManagementTab = forwardRef<
                           setSelectedUserIds(newSelection);
                         }}
                         aria-label={`Select ${user.name}`}
-                        className="h-4 w-4 rounded border-gray-300"
+                        className="h-3.5 w-3.5 rounded border-gray-300"
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-1.5">
                       <div className="flex flex-col min-w-0">
-                        <span className="font-medium text-sm truncate">{user.name}</span>
+                        <span className="font-medium text-xs truncate">{user.name}</span>
                         {user.employeeId && (
-                          <span className="text-xs text-muted-foreground truncate">ID: {user.employeeId}</span>
+                          <span className="text-[10px] text-muted-foreground truncate">ID: {user.employeeId}</span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-1.5 max-w-[150px]">
                       <Badge
                         variant="secondary"
-                        className="cursor-pointer"
+                        className="cursor-pointer text-[10px] h-5 px-1.5 max-w-full truncate block text-left"
+                        title={user.systemRole || "—"}
                         onClick={() => {
                           const roleId = resolveRoleId(user.systemRole);
                           if (!roleId) return;
@@ -1125,19 +1128,7 @@ export const UsersManagementTab = forwardRef<
                         {user.systemRole || "—"}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="cursor-pointer"
-                        onClick={() =>
-                          addFilter({ key: "grade", value: user.gradeLevel, display: `Grade: ${user.gradeLevel}` })
-                        }
-                      >
-                        {user.gradeLevel}
-                        {grade ? ` • ${grade}` : ""}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
+                    <TableCell className="py-1.5">
                       {division ? (
                         <button
                           type="button"
@@ -1146,19 +1137,37 @@ export const UsersManagementTab = forwardRef<
                             addFilter({ key: "division", value: division.id, display: `Division: ${division.name}` })
                           }
                         >
-                          <span className="text-sm break-words">{division.name}</span>
+                          <span className="text-xs break-words leading-none">{division.name}</span>
                           {division.code && (
-                            <span className="text-xs text-muted-foreground break-words">{division.code}</span>
+                            <span className="text-[10px] text-muted-foreground break-words leading-none">{division.code}</span>
                           )}
                         </button>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-1.5">
+                      {department ? (
+                        <button
+                          type="button"
+                          className="flex flex-col text-left hover:text-primary min-w-0 w-full"
+                          onClick={() =>
+                            addFilter({ key: "department", value: department.id, display: `Department: ${department.name}` })
+                          }
+                        >
+                          <span className="text-xs break-words leading-none">{department.name}</span>
+                          {department.code && (
+                            <span className="text-[10px] text-muted-foreground break-words leading-none">{department.code}</span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-1.5">
                       <Badge
                         variant={user.active ? "default" : "secondary"}
-                        className="cursor-pointer"
+                        className="cursor-pointer text-[10px] h-5 px-1.5"
                         onClick={() =>
                           addFilter({
                             key: "status",
@@ -1170,12 +1179,12 @@ export const UsersManagementTab = forwardRef<
                         {user.active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right py-1.5">
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8"
+                          className="h-6 w-6"
                           onClick={() => {
                             setSelectedUser(user);
                             setEditOpen(true);
@@ -1183,7 +1192,7 @@ export const UsersManagementTab = forwardRef<
                           aria-label={`Edit user ${user.name}`}
                           title="Edit User"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="h-3 w-3" />
                         </Button>
                       </div>
                     </TableCell>

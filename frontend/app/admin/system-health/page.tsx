@@ -34,7 +34,7 @@ import {
 function serviceBadge(status: string) {
   if (status === "healthy") {
     return (
-      <Badge className="bg-green-100 text-green-800">
+      <Badge className="bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300">
         <CheckCircle2 className="h-3 w-3 mr-1" /> Healthy
       </Badge>
     );
@@ -168,7 +168,7 @@ export default function SystemHealthPage() {
                       <div key={type} className="rounded-lg border p-3">
                         <p className="font-medium capitalize">{type}</p>
                         <div className="mt-2 flex gap-2 text-xs">
-                          <Badge variant="outline" className="text-green-700">{counts.success} ok</Badge>
+                          <Badge variant="outline" className="text-green-700 dark:text-green-400">{counts.success} ok</Badge>
                           <Badge variant="outline" className="text-destructive">{counts.failed} failed</Badge>
                           {counts.pending > 0 && <Badge variant="secondary">{counts.pending} pending</Badge>}
                         </div>

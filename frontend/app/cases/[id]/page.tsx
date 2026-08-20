@@ -21,6 +21,7 @@ import {
   getCaseById,
   updateCaseStatus,
   generateCaseCompletionPackage,
+  downloadCaseCompletionPackage,
   unlinkCorrespondenceFromCase,
   unlinkDocumentFromCase,
   unlinkFormFromCase,
@@ -100,9 +101,10 @@ const CaseDetailPage = () => {
   const [corrPreview, setCorrPreview] = useState<{
     correspondence: Correspondence;
     documentContentHtml?: string;
-    attachmentUrl?: string;
     attachmentFileName?: string;
     attachmentSource: "attachment" | "completion-package";
+    documentVersionId?: string;
+    attachmentId?: string;
   } | null>(null);
   const [formPreviewId, setFormPreviewId] = useState<string | null>(null);
   const [formPreviewTitle, setFormPreviewTitle] = useState<string | null>(null);
@@ -322,7 +324,7 @@ const CaseDetailPage = () => {
       const documentContentHtml =
         primaryDoc?.versions?.[primaryDoc.versions.length - 1]?.contentHtml;
 
-      if (!preview.previewUrl && !documentContentHtml?.trim() && !correspondence.treatmentResponse?.trim()) {
+      if (!preview.documentVersionId && !preview.attachmentId && !documentContentHtml?.trim() && !correspondence.treatmentResponse?.trim()) {
         toast.error("No file available to preview for this correspondence", { id: toastId });
         return;
       }
@@ -330,9 +332,10 @@ const CaseDetailPage = () => {
       setCorrPreview({
         correspondence,
         documentContentHtml,
-        attachmentUrl: preview.previewUrl,
         attachmentFileName: preview.previewFileName,
         attachmentSource: preview.source,
+        documentVersionId: preview.documentVersionId,
+        attachmentId: preview.attachmentId,
       });
       toast.dismiss(toastId);
     } catch (err) {
@@ -392,6 +395,15 @@ const CaseDetailPage = () => {
             updatingStatus={updatingStatus}
             onStatusUpdate={handleStatusUpdate}
             onGenerateCompletionPackage={handleGenerateCompletionPackage}
+            onDownloadCompletionPackage={() => {
+              void downloadCaseCompletionPackage(
+                caseData.id,
+                `${caseData.completionPackage?.title || 'completion-package'}.pdf`,
+              ).catch((err) => {
+                logError('Package download failed', err);
+                toast.error(err instanceof Error ? err.message : 'Download failed');
+              });
+            }}
             onImport={() => setShowImportDialog(true)}
           />
           <CaseStatusStrip
@@ -451,7 +463,16 @@ const CaseDetailPage = () => {
 
         <CaseMobileStickyBar
           canPackage={caseData.status === "closed" && !caseData.completionPackage}
-          packageHref={caseData.completionPackage?.fileUrl}
+          canDownloadPackage={Boolean(caseData.completionPackage)}
+          onDownloadPackage={() => {
+            void downloadCaseCompletionPackage(
+              caseData.id,
+              `${caseData.completionPackage?.title || 'completion-package'}.pdf`,
+            ).catch((err: unknown) => {
+              logError('Case completion package download failed', err);
+              toast.error(err instanceof Error ? err.message : 'Download failed');
+            });
+          }}
           onPackage={handleGenerateCompletionPackage}
           onLink={() => setShowLinkCorrespondenceDialog(true)}
           onComments={() => setCommentsDialogOpen(true)}
@@ -484,9 +505,10 @@ const CaseDetailPage = () => {
           isOpen
           onClose={closeCorrespondencePreview}
           documentContentHtml={corrPreview.documentContentHtml}
-          attachmentUrl={corrPreview.attachmentUrl}
           attachmentFileName={corrPreview.attachmentFileName}
           attachmentSource={corrPreview.attachmentSource}
+          documentVersionId={corrPreview.documentVersionId}
+          attachmentId={corrPreview.attachmentId}
         />
       ) : null}
 

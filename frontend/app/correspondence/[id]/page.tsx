@@ -8,11 +8,11 @@ import { toast } from "@/components/ui/sonner";
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
 import type { Minute, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { logDocumentAccess, type DocumentRecord } from '@/lib/api/dms';
+import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { getCorrespondencePreviewContext, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
+import { getCorrespondencePreviewContext, getPrimaryLinkedDocument, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
 import { useModalState } from '@/hooks/use-modal-state';
 import { useApiRetry } from '@/hooks/use-api-retry';
 import { correspondenceDetailReducer, initialState } from './correspondence-state-reducer';
@@ -281,7 +281,7 @@ const CorrespondenceDetailContent = () => {
     [correspondence, linkedDocuments, selectedAttachmentIndex, isCompleted],
   );
 
-  const logCorrespondenceDmsAccess = useCallback(async (action: 'view' | 'download' | 'attempted-download') => {
+  const logCorrespondenceDmsAccess = useCallback(async (action: DocumentAccessLog['action']) => {
     if (!activeUser?.id) return;
     const target = resolveCorrespondenceDmsAccessTarget(correspondence, linkedDocuments, previewContext.source);
     if (!target) return;
@@ -299,29 +299,29 @@ const CorrespondenceDetailContent = () => {
   }, [activeUser?.id, correspondence, linkedDocuments, previewContext.source]);
 
   const handleCompletionPackageDownload = useCallback(
-    async (_url: string, filename: string) => {
+    async (filename: string) => {
       if (!correspondence?.id) return;
       await logCorrespondenceDmsAccess('download');
       try {
-        const blob = await apiFetch<Blob>(
-          `/correspondence/items/${correspondence.id}/completion-pdf/`,
-          { responseType: 'blob' }
-        );
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
+        const versionId = correspondence.completionPackage?.versionId;
+        if (versionId) {
+          const { downloadCanonicalDocument } = await import('@/lib/canonical-document');
+          await downloadCanonicalDocument({
+            kind: 'dms-version',
+            versionId,
+            fileName: filename,
+          });
+        } else {
+          toast.error('Completion package is not available for download');
+          return;
+        }
         toast.success('Completion summary downloaded');
       } catch (error) {
         logError('Failed to download completion PDF', error);
         toast.error('Unable to download completion summary');
       }
     },
-    [correspondence?.id, logCorrespondenceDmsAccess]
+    [correspondence?.id, correspondence?.completionPackage?.versionId, logCorrespondenceDmsAccess]
   );
 
   useEffect(() => {
@@ -363,14 +363,25 @@ const CorrespondenceDetailContent = () => {
   const turnRestrictedDisabled = isCCRecipient
     ? false
     : (actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted));
-  const completionPackageUrl = previewContext.completionPackageUrl;
+  const hasCompletionPackage = previewContext.hasCompletionPackage;
   const completionGeneratedAt =
     correspondence?.completionPackage?.generatedAt ??
     correspondence?.completionSummaryGeneratedAt ??
     correspondence?.completedAt;
-  const defaultPreviewAttachmentUrl = previewContext.previewUrl;
   const defaultPreviewAttachmentFileName = previewContext.previewFileName;
   const defaultPreviewAttachmentSource = previewContext.source;
+  const previewAttachmentId = previewContext.attachmentId;
+  const previewDocumentVersionId = useMemo(() => {
+    if (previewContext.selectedAttachment) return undefined;
+    return previewContext.documentVersionId;
+  }, [previewContext.selectedAttachment, previewContext.documentVersionId]);
+  const printDocumentVersionId = useMemo(() => {
+    // Prefer DRM print stream for linked DMS docs (not raw attachment selection).
+    if (previewContext.selectedAttachment) return undefined;
+    const primary = getPrimaryLinkedDocument(linkedDocuments);
+    const version = primary?.versions?.[primary.versions.length - 1];
+    return version?.id ?? previewContext.completionVersionId;
+  }, [linkedDocuments, previewContext.selectedAttachment, previewContext.completionVersionId]);
 
   const lookupUser = (userId?: string) => {
     if (!userId) return undefined;
@@ -469,7 +480,7 @@ const CorrespondenceDetailContent = () => {
     distributionPurpose,
     distributionEntryId,
     turnRestrictedDisabled,
-    completionPackageUrl,
+    hasCompletionPackage,
     completionGeneratedAt,
     activeDelegation,
     organizationUsers,
@@ -620,9 +631,14 @@ const CorrespondenceDetailContent = () => {
         refreshMinutes={refreshMinutes}
         syncFromApi={syncFromApi}
         lookupUser={lookupUser}
-        defaultPreviewAttachmentUrl={defaultPreviewAttachmentUrl}
         defaultPreviewAttachmentFileName={defaultPreviewAttachmentFileName}
         defaultPreviewAttachmentSource={defaultPreviewAttachmentSource}
+        previewDocumentVersionId={previewDocumentVersionId}
+        previewAttachmentId={previewAttachmentId}
+        printDocumentVersionId={printDocumentVersionId}
+        onPrintLogged={() => {
+          void logCorrespondenceDmsAccess('print');
+        }}
       />
 
       {!isCompleted && (isCurrentUserTurn || isCCRecipient) && (

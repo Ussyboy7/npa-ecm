@@ -7,6 +7,7 @@ import { getSearchHistory, addSearchHistory } from "@/lib/role-switcher-storage"
 import { fetchUsers } from "@/lib/admin-api";
 import { logError } from "@/lib/client-logger";
 import type { User, Division, Department } from "@/lib/npa-structure";
+import { isSeedLikeUser } from "@/lib/organization-data";
 
 const BACKEND_SEARCH_THRESHOLD = 500;
 const DEBOUNCE_DELAY = 300;
@@ -33,12 +34,6 @@ export function useRoleSwitcherSearch(
     initialPage: 1,
     initialPageSize: DEFAULT_LIST_PAGE_SIZE,
     totalCount: backendSearchTotal,
-  });
-
-  const frontendPagination = usePagination({
-    initialPage: 1,
-    initialPageSize: DEFAULT_LIST_PAGE_SIZE,
-    totalCount: 0,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -142,16 +137,12 @@ export function useRoleSwitcherSearch(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendPagination.page, backendPagination.pageSize, debouncedSearchQuery, isSearchingBackend, shouldUseBackendSearch]);
 
-  const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
+  const activeUsers = useMemo(
+    () => users.filter((user) => user.active && !isSeedLikeUser(user)),
+    [users],
+  );
 
   const isUsingBackendSearch = shouldUseBackendSearch && Boolean(debouncedSearchQuery.trim());
-
-  useEffect(() => {
-    if (!isUsingBackendSearch && debouncedSearchQuery.trim()) {
-      frontendPagination.goToFirstPage();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchQuery, isUsingBackendSearch]);
 
   const { divisionMap, departmentMap, getDirectorateNameForUser } = orgHelpers;
 
@@ -159,7 +150,7 @@ export function useRoleSwitcherSearch(
     let result: User[];
 
     if (shouldUseBackendSearch && debouncedSearchQuery.trim() && backendSearchResults.length > 0) {
-      result = backendSearchResults;
+      result = backendSearchResults.filter((user) => !isSeedLikeUser(user));
     } else {
       let pool = activeUsers;
 
@@ -204,6 +195,39 @@ export function useRoleSwitcherSearch(
     getDirectorateNameForUser,
     shouldUseBackendSearch,
   ]);
+
+  const [frontendPage, setFrontendPage] = useState(1);
+  const [frontendPageSize, setFrontendPageSize] = useState(DEFAULT_LIST_PAGE_SIZE);
+  const frontendPagination = useMemo(() => {
+    const total = filteredUsers.length ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / frontendPageSize));
+    const page = Math.max(1, Math.min(frontendPage, totalPages));
+    const startIndex = total === 0 ? 0 : (page - 1) * frontendPageSize + 1;
+    const endIndex = Math.min(page * frontendPageSize, total);
+    return {
+      page,
+      pageSize: frontendPageSize,
+      totalPages,
+      setPage: setFrontendPage,
+      setPageSize: (s: number) => { setFrontendPageSize(s); setFrontendPage(1); },
+      goToPage: setFrontendPage,
+      goToFirstPage: () => setFrontendPage(1),
+      goToLastPage: () => setFrontendPage(totalPages),
+      goToNextPage: () => setFrontendPage((p) => Math.min(p + 1, totalPages)),
+      goToPreviousPage: () => setFrontendPage((p) => Math.max(p - 1, 1)),
+      canGoNext: page < totalPages,
+      canGoPrevious: page > 1,
+      startIndex,
+      endIndex,
+      paginationInfo: { showing: total === 0 ? '0' : `${startIndex}-${endIndex}`, total },
+    };
+  }, [filteredUsers.length, frontendPage, frontendPageSize]);
+
+  useEffect(() => {
+    if (!isUsingBackendSearch && debouncedSearchQuery.trim()) {
+      setFrontendPage(1);
+    }
+  }, [debouncedSearchQuery, isUsingBackendSearch]);
 
   useEffect(() => {
     if (!isUsingBackendSearch && filteredUsers.length > 0) {

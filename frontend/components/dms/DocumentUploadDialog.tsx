@@ -1,5 +1,5 @@
 "use client";
-import { SENSITIVITY_OPTIONS } from '@/lib/constants';
+import { SENSITIVITY_DETAILS, SENSITIVITY_OPTIONS } from '@/lib/constants';
 
 import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
@@ -52,11 +52,12 @@ import {
   type DocumentTemplate,
 } from '@/lib/api/document-templates';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
-import { Loader2, Save, Upload as UploadIcon, FilePlus, FileText, Scan, ChevronDown, PenTool } from 'lucide-react';
+import { Loader2, Save, Upload as UploadIcon, FilePlus, Scan, ChevronDown, PenTool, Settings2 } from 'lucide-react';
 import { sanitizeRichText } from '@/lib/sanitize-html';
 import { processOCR } from '@/lib/api/capture';
 import { uploadUserSignature } from '@/lib/api/signatures';
 import { formatDate } from '@/lib/datetime';
+import { cn } from '@/lib/utils';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
 const DRAFT_STORAGE_KEY = 'dms_upload_draft';
@@ -128,6 +129,8 @@ export const DocumentUploadDialog = ({
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [scanMode, setScanMode] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [versionNotesOpen, setVersionNotesOpen] = useState(mode === 'version');
+  const [recipientName, setRecipientName] = useState('');
   const { signature: userSignature, refreshSignature } = useSignature({
     userId: currentUser?.id,
     autoLoad: open && composeMode,
@@ -135,6 +138,7 @@ export const DocumentUploadDialog = ({
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const signatureInputRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
+  const lastResolvedTokensRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -199,39 +203,92 @@ export const DocumentUploadDialog = ({
     }
   }, [divisionId, departmentId, activeDepartments]);
 
-  // Replace tokens in template HTML
-  const replaceTemplateTokens = useCallback((html: string): string => {
-    const division = divisionId
-      ? activeDivisions.find((div) => div.id === divisionId)
-      : currentUser.division
-      ? activeDivisions.find((div) => div.id === currentUser.division)
-      : undefined;
-    const department = departmentId
-      ? activeDepartments.find((dept) => dept.id === departmentId)
-      : currentUser.department
-      ? activeDepartments.find((dept) => dept.id === currentUser.department)
-      : undefined;
-    
+  // Resolve org units for tokens (prefer form selection, fall back to user profile).
+  const resolvedDivision = useMemo(() => {
+    const id = divisionId || currentUser.division;
+    return id ? activeDivisions.find((div) => div.id === id) : undefined;
+  }, [divisionId, currentUser.division, activeDivisions]);
+
+  const resolvedDepartment = useMemo(() => {
+    const id = departmentId || currentUser.department;
+    return id ? activeDepartments.find((dept) => dept.id === id) : undefined;
+  }, [departmentId, currentUser.department, activeDepartments]);
+
+  const buildTokenValues = useCallback((): Record<string, string> => {
     const today = new Date();
     const formattedDate = formatDate(today, 'en-NG', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     });
-    
-    return html
-      .replace(/\{\{document\.title\}\}/g, title || 'Document Title')
-      .replace(/\{\{document\.reference\}\}/g, referenceNumber || 'N/A')
-      .replace(/\{\{preparedBy\.name\}\}/g, currentUser.name || 'Unknown')
-      .replace(/\{\{preparedBy\.role\}\}/g, currentUser.systemRole || 'User')
-      .replace(/\{\{sender\.name\}\}/g, currentUser.name || 'Unknown')
-      .replace(/\{\{sender\.title\}\}/g, currentUser.systemRole || 'User')
-      .replace(/\{\{recipient\.name\}\}/g, '[Recipient Name]')
-      .replace(/\{\{recipient\.department\}\}/g, department?.name || '[Department]')
-      .replace(/\{\{division\.name\}\}/g, division?.name || '')
-      .replace(/\{\{department\.name\}\}/g, department?.name || '')
-      .replace(/\{\{date\.today\}\}/g, formattedDate);
-  }, [currentUser, divisionId, departmentId, title, referenceNumber, activeDivisions, activeDepartments]);
+    return {
+      'document.title': title.trim() || 'Document Title',
+      'document.reference': referenceNumber.trim() || 'N/A',
+      'preparedBy.name': currentUser.name || 'Unknown',
+      'preparedBy.role': currentUser.systemRole || 'User',
+      'sender.name': currentUser.name || 'Unknown',
+      'sender.title': currentUser.systemRole || 'User',
+      'recipient.name': recipientName.trim() || '[Recipient Name]',
+      'recipient.department': resolvedDepartment?.name || '[Department Name]',
+      'division.name': resolvedDivision?.name || '[Division Name]',
+      'department.name': resolvedDepartment?.name || '[Department Name]',
+      'date.today': formattedDate,
+    };
+  }, [
+    title,
+    referenceNumber,
+    currentUser.name,
+    currentUser.systemRole,
+    recipientName,
+    resolvedDivision?.name,
+    resolvedDepartment?.name,
+  ]);
+
+  const replaceTemplateTokens = useCallback(
+    (html: string): string => {
+      const values = buildTokenValues();
+      let next = html;
+      for (const [key, value] of Object.entries(values)) {
+        next = next.replaceAll(`{{${key}}}`, value);
+      }
+      lastResolvedTokensRef.current = values;
+      return next;
+    },
+    [buildTokenValues],
+  );
+
+  /** Update previously resolved token text in the live editor without wiping user edits. */
+  const refreshResolvedTokensInHtml = useCallback(
+    (html: string): string => {
+      const nextValues = buildTokenValues();
+      const prevValues = lastResolvedTokensRef.current;
+      let result = html;
+      const replacements = Object.keys(nextValues)
+        .map((key) => ({
+          from: prevValues[key],
+          to: nextValues[key],
+        }))
+        .filter((item) => item.from && item.from !== item.to)
+        .sort((a, b) => (b.from?.length ?? 0) - (a.from?.length ?? 0));
+
+      for (const { from, to } of replacements) {
+        if (!from) continue;
+        result = result.split(from).join(to);
+      }
+      lastResolvedTokensRef.current = nextValues;
+      return result;
+    },
+    [buildTokenValues],
+  );
+
+  const applyTemplateContent = useCallback(
+    (template: DocumentTemplate) => {
+      templateHtmlRef.current = template.contentHtml;
+      setEditorHtml(replaceTemplateTokens(template.contentHtml));
+      setTemplateApplied(true);
+    },
+    [replaceTemplateTokens],
+  );
 
   // Auto-save draft to localStorage (debounced) - only when dialog is open
   const saveDraftRef = useRef<NodeJS.Timeout | null>(null);
@@ -264,6 +321,7 @@ export const DocumentUploadDialog = ({
         divisionId,
         departmentId,
         referenceNumber,
+        recipientName,
         tagsInput,
         notes,
         sensitivity,
@@ -286,7 +344,7 @@ export const DocumentUploadDialog = ({
         saveDraftRef.current = null;
       }
     };
-  }, [open, mode, title, description, documentType, status, divisionId, departmentId, referenceNumber, tagsInput, notes, sensitivity, composeMode, editorHtml, selectedTemplateId]);
+  }, [open, mode, title, description, documentType, status, divisionId, departmentId, referenceNumber, recipientName, tagsInput, notes, sensitivity, composeMode, editorHtml, selectedTemplateId]);
 
   // Load draft from localStorage when dialog opens (create mode only)
   useEffect(() => {
@@ -304,18 +362,24 @@ export const DocumentUploadDialog = ({
           setDivisionId(draft.divisionId);
           setDepartmentId(draft.departmentId);
           setReferenceNumber(draft.referenceNumber || '');
+          setRecipientName(draft.recipientName || '');
           setTagsInput(draft.tagsInput || '');
           setNotes(draft.notes || '');
           setSensitivity(draft.sensitivity || 'internal');
           setComposeMode(draft.composeMode ?? true);
           setEditorHtml(draft.editorHtml || '');
           setSelectedTemplateId(draft.selectedTemplateId || null);
+          if (draft.editorHtml) {
+            setTemplateApplied(true);
+            lastResolvedTokensRef.current = buildTokenValues();
+          }
           toast.info('Draft restored from previous session', { duration: 3000 });
         }
       }
     } catch (_err) {
       // Ignore parse errors
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once when dialog opens
   }, [open, mode]);
 
   // Templates are now loaded from backend - no initialization needed
@@ -351,24 +415,34 @@ export const DocumentUploadDialog = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per open/compose session
   }, [open, composeMode, currentUser?.id]);
 
+  // Auto-apply selected template when the editor is still empty.
   useEffect(() => {
     if (!composeMode || templateApplied) return;
     if (mode === 'create' && selectedTemplateId && editorHtml.trim().length === 0) {
-      const template = templates.find((item) => item.id as string === selectedTemplateId);
+      const template = templates.find((item) => item.id === selectedTemplateId);
       if (template) {
-        templateHtmlRef.current = template.contentHtml;
-        setEditorHtml(replaceTemplateTokens(template.contentHtml));
-        setTemplateApplied(true);
+        applyTemplateContent(template);
       }
     }
-  }, [composeMode, templateApplied, mode, selectedTemplateId, templates, editorHtml, title, referenceNumber, currentUser, replaceTemplateTokens]);
+  }, [composeMode, templateApplied, mode, selectedTemplateId, templates, editorHtml, applyTemplateContent]);
 
-  // Re-apply template tokens when division or department changes
+  // Refresh previously resolved token text when metadata changes — do not re-apply pristine template.
   useEffect(() => {
-    if (!templateApplied || !templateHtmlRef.current) return;
-    const updated = replaceTemplateTokens(templateHtmlRef.current);
-    setEditorHtml(updated);
-  }, [divisionId, departmentId, templateApplied, replaceTemplateTokens]);
+    if (!templateApplied) return;
+    setEditorHtml((prev) => {
+      if (!prev.trim()) return prev;
+      const next = refreshResolvedTokensInHtml(prev);
+      return next === prev ? prev : next;
+    });
+  }, [
+    title,
+    referenceNumber,
+    recipientName,
+    divisionId,
+    departmentId,
+    templateApplied,
+    refreshResolvedTokensInHtml,
+  ]);
 
   // Validation functions
   const validateForm = useCallback((): boolean => {
@@ -670,20 +744,33 @@ export const DocumentUploadDialog = ({
     parts.push(status.charAt(0).toUpperCase() + status.slice(1));
     const sensLabel = SENSITIVITY_OPTIONS.find((o) => o.value === sensitivity)?.label ?? sensitivity;
     parts.push(sensLabel);
-    if (divisionId) {
-      const div = activeDivisions.find((d) => d.id === divisionId);
-      if (div) parts.push(`Div: ${div.name}`);
-    }
-    if (departmentId) {
-      const dept = activeDepartments.find((d) => d.id === departmentId);
-      if (dept) parts.push(`Dept: ${dept.name}`);
-    }
+    if (resolvedDivision) parts.push(resolvedDivision.name);
+    if (resolvedDepartment) parts.push(resolvedDepartment.name);
+    if (recipientName.trim()) parts.push(`To: ${recipientName.trim()}`);
     if (referenceNumber) parts.push(referenceNumber);
     return parts.join(' · ');
-  }, [documentType, status, sensitivity, divisionId, departmentId, referenceNumber, activeDivisions, activeDepartments]);
+  }, [documentType, status, sensitivity, resolvedDivision, resolvedDepartment, recipientName, referenceNumber]);
+
+  const handleTemplateSelect = useCallback(
+    (templateId: string) => {
+      setSelectedTemplateId(templateId || null);
+      if (!templateId) return;
+      const template = templates.find((item) => item.id === templateId);
+      if (!template) return;
+      if (!editorHtml.trim() || !templateApplied) {
+        applyTemplateContent(template);
+        return;
+      }
+      setPendingTemplateAction('apply');
+      setShowTemplateConfirm(true);
+    },
+    [templates, editorHtml, templateApplied, applyTemplateContent],
+  );
+
+  const metadataNeedsOrg = mode === 'create' && (!resolvedDivision || !resolvedDepartment);
 
   const formContent = (
-    <div className="space-y-6">
+    <div className={cn('space-y-6', asPage && 'pb-20')}>
       <Input
         id="doc-title"
         value={title}
@@ -707,26 +794,38 @@ export const DocumentUploadDialog = ({
         </p>
       )}
 
-      {/* Metadata - Inline collapsible */}
-      <div className="border rounded-lg">
-        <button
-          type="button"
-          onClick={() => setMetadataOpen(!metadataOpen)}
-          className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors"
-        >
-          <span className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            Metadata &amp; Classification
-            {mode === 'create' && metadataSummary && !metadataOpen && (
-              <span className="text-xs text-muted-foreground ml-2 truncate max-w-[300px]">
-                {metadataSummary}
-              </span>
-            )}
-          </span>
-          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${metadataOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {metadataOpen && (
-          <div className="px-3 pb-3 space-y-3 border-t pt-3">
+      <button
+        type="button"
+        onClick={() => setMetadataOpen(true)}
+        className="flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+        aria-label="Edit metadata and classification"
+      >
+        <Settings2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Metadata &amp; Classification</span>
+            <span className="text-xs text-muted-foreground">Edit</span>
+          </div>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {metadataSummary || 'Set type, sensitivity, organisation, and recipient'}
+          </p>
+          {metadataNeedsOrg ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Set division and department to complete the memo header.
+            </p>
+          ) : null}
+        </div>
+      </button>
+
+      <Dialog open={metadataOpen} onOpenChange={setMetadataOpen}>
+        <DialogContent size="lg" height="scroll">
+          <DialogHeader>
+            <DialogTitle>Metadata &amp; Classification</DialogTitle>
+            <DialogDescription>
+              These details classify the document and fill memo header fields while you compose.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label className="text-xs">Type</Label>
@@ -751,7 +850,8 @@ export const DocumentUploadDialog = ({
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Sensitivity</Label>
+                <Label className="text-xs">Document Classification</Label>
+                <p className="text-[10px] text-muted-foreground -mt-1">Who may access — business classification</p>
                 <Select value={sensitivity} onValueChange={(value) => setSensitivity(value as DocumentSensitivity)}>
                   <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -762,92 +862,144 @@ export const DocumentUploadDialog = ({
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">DRM Policy</Label>
+                <Label className="text-xs">Document Protection (DRM)</Label>
+                <p className="text-[10px] text-muted-foreground -mt-1">What users can do — leave as default to inherit from classification</p>
                 <Select
-                  value={drmPolicyId ?? 'none'}
-                  onValueChange={(v) => setDrmPolicyId(v === 'none' ? null : v)}
+                  value={drmPolicyId ?? 'inherit'}
+                  onValueChange={(v) => setDrmPolicyId(v === 'inherit' ? null : v)}
                 >
-                  <SelectTrigger className="h-8"><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="inherit">Inherit from {SENSITIVITY_DETAILS[sensitivity as keyof typeof SENSITIVITY_DETAILS]?.label ?? sensitivity} (Default)</SelectItem>
                     {drmPolicies.map((policy) => (
                       <SelectItem key={policy.id} value={policy.id}>{policy.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {drmPolicyId === null && (
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {sensitivity === 'public' && 'Default: Download and share.'}
+                    {sensitivity === 'internal' && 'Default: Authenticated internal access.'}
+                    {sensitivity === 'confidential' && 'Default: Restricted + watermark.'}
+                    {sensitivity === 'restricted' && 'Default: Strict view-only.'}
+                  </p>
+                )}
               </div>
+            </div>
+
+            <div className="space-y-3 border-t pt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Memo header</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label className="text-xs">Division</Label>
+                  <Select value={divisionId ?? 'none'} onValueChange={(v) => setDivisionId(v === 'none' ? undefined : v)}>
+                    <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {activeDivisions.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Department</Label>
+                  <Select value={departmentId ?? 'none'} onValueChange={(v) => setDepartmentId(v === 'none' ? undefined : v)} disabled={!divisionId}>
+                    <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {filteredDepartments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="sm:col-span-2">
+                  <Label className="text-xs">Recipient</Label>
+                  <Input
+                    value={recipientName}
+                    onChange={(e) => setRecipientName(e.target.value)}
+                    placeholder="Recipient name"
+                    className="h-8"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label className="text-xs">Reference</Label>
+                  <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} placeholder="NPA/MOPS/2024/045" className="h-8" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t pt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">More details</p>
               <div>
-                <Label className="text-xs">Division</Label>
-                <Select value={divisionId ?? 'none'} onValueChange={(v) => setDivisionId(v === 'none' ? undefined : v)}>
-                  <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {activeDivisions.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Department</Label>
-                <Select value={departmentId ?? 'none'} onValueChange={(v) => setDepartmentId(v === 'none' ? undefined : v)} disabled={!divisionId}>
-                  <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {filteredDepartments.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Reference</Label>
-                <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} placeholder="NPA/MOPS/2024/045" className="h-8" />
-              </div>
-              <div className="sm:col-span-2">
                 <Label className="text-xs">Description</Label>
                 <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Brief description" />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <Label className="text-xs">Tags</Label>
                 <Input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="operations, berth-allocation" className="h-8" />
                 {validationErrors.tags && <p className="text-xs text-destructive mt-1">{validationErrors.tags}</p>}
               </div>
             </div>
           </div>
-        )}
-      </div>
+          <DialogFooter>
+            <Button type="button" size="sm" onClick={() => setMetadataOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 text-sm">
           <Switch checked={composeMode} onCheckedChange={setComposeMode} disabled={mode === 'version' && !document} />
-          <span className="text-muted-foreground">{composeMode ? 'Compose' : 'Upload'}</span>
+          <span className="font-medium">{composeMode ? 'Compose' : 'Upload'}</span>
         </div>
         {composeMode && (
           <>
             <div className="h-4 w-px bg-border" />
-            <Select value={selectedTemplateId ?? ''} onValueChange={(v) => setSelectedTemplateId(v || null)}>
-              <SelectTrigger className="h-8 w-44"><SelectValue placeholder="Template" /></SelectTrigger>
+            <Select value={selectedTemplateId ?? ''} onValueChange={handleTemplateSelect}>
+              <SelectTrigger className="h-8 min-w-[14rem] max-w-[20rem]"><SelectValue placeholder="Template" /></SelectTrigger>
               <SelectContent>
                 {templates.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" className="h-8" onClick={() => {
-              if (!selectedTemplateId) { toast.error('Select a template'); return; }
-              const t = templates.find((x) => x.id === selectedTemplateId);
-              if (!t) return;
-              if (editorHtml.trim() && !templateApplied) { setPendingTemplateAction('apply'); setShowTemplateConfirm(true); return; }
-              templateHtmlRef.current = t.contentHtml; setEditorHtml(replaceTemplateTokens(t.contentHtml)); setTemplateApplied(true);
-            }} disabled={isLoadingTemplates}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => {
+                if (!selectedTemplateId) { toast.error('Select a template'); return; }
+                const t = templates.find((x) => x.id === selectedTemplateId);
+                if (!t) return;
+                if (editorHtml.trim() && templateApplied) {
+                  setPendingTemplateAction('apply');
+                  setShowTemplateConfirm(true);
+                  return;
+                }
+                applyTemplateContent(t);
+              }}
+              disabled={isLoadingTemplates}
+            >
               {isLoadingTemplates ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
             </Button>
-            <Button variant="ghost" size="sm" className="h-8" onClick={() => {
-              if (!currentUser || !editorHtml?.trim()) { toast.error(!currentUser ? 'No user context' : 'Add content first'); return; }
-              setTemplateName(`${currentUser.name.split(' ')[0]}'s Template`); setShowSaveTemplateDialog(true);
-            }}>
-              <Save className="h-3 w-3 mr-1" /> Save Template
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => {
+                if (!currentUser || !editorHtml?.trim()) {
+                  toast.error(!currentUser ? 'No user context' : 'Add content first');
+                  return;
+                }
+                setTemplateName(`${currentUser.name.split(' ')[0]}'s Template`);
+                setShowSaveTemplateDialog(true);
+              }}
+            >
+              <Save className="h-3 w-3 mr-1" /> Save as template
             </Button>
           </>
         )}
@@ -865,8 +1017,25 @@ export const DocumentUploadDialog = ({
       )}
 
       {composeMode ? (
-        <div className="min-h-[400px] border rounded-lg overflow-hidden">
-          <RichTextEditor value={editorHtml} onChange={setEditorHtml} placeholder="Start writing..." showCharacterCount signatureImageUrl={userSignature?.imageData} />
+        <div className="min-h-[400px]">
+          <RichTextEditor
+            value={editorHtml}
+            onChange={setEditorHtml}
+            placeholder="Start writing..."
+            showCharacterCount
+            showHeader={false}
+            signatureImageUrl={userSignature?.imageData}
+            tokens={[
+              { label: "Title", value: "{{document.title}}" },
+              { label: "Reference", value: "{{document.reference}}" },
+              { label: "Prepared by", value: "{{preparedBy.name}}" },
+              { label: "Sender", value: "{{sender.name}}" },
+              { label: "Recipient", value: "{{recipient.name}}" },
+              { label: "Division", value: "{{division.name}}" },
+              { label: "Department", value: "{{department.name}}" },
+              { label: "Today", value: "{{date.today}}" },
+            ]}
+          />
         </div>
       ) : (
         <div className="space-y-3">
@@ -884,13 +1053,36 @@ export const DocumentUploadDialog = ({
         </div>
       )}
 
-      <Textarea id="notes" placeholder="Version notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+      {mode === 'create' ? (
+        <div className="border rounded-lg">
+          <button
+            type="button"
+            onClick={() => setVersionNotesOpen((open) => !open)}
+            className="flex w-full items-center justify-between px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50"
+          >
+            <span>Version notes (optional)</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${versionNotesOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {versionNotesOpen ? (
+            <div className="border-t px-3 pb-3 pt-2">
+              <Textarea id="notes" placeholder="Optional notes for this first version" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <Textarea id="notes" placeholder="Version notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+      )}
 
       {uploadProgress > 0 && uploadProgress < 100 && (
         <Progress value={uploadProgress} className="h-1.5" />
       )}
 
-      <div className="flex justify-end gap-2 pt-2 border-t">
+      <div
+        className={cn(
+          'flex justify-end gap-2 border-t bg-background pt-3',
+          asPage && 'sticky bottom-0 z-20 -mx-4 border-border/80 px-4 pb-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] md:-mx-6 md:px-6',
+        )}
+      >
         <Button variant="ghost" size="sm" onClick={() => handleClose(false)} disabled={isSubmitting}>
           Cancel
         </Button>
@@ -962,17 +1154,16 @@ export const DocumentUploadDialog = ({
           <Button
             onClick={() => {
               if (!templatePreviewId) return;
-              const template = templates.find((item) => item.id as string === templatePreviewId);
+              const template = templates.find((item) => item.id === templatePreviewId);
               if (!template) return;
-              if (editorHtml.trim().length > 0) {
+              if (editorHtml.trim().length > 0 && templateApplied) {
                 setPendingTemplateAction('apply');
+                setSelectedTemplateId(templatePreviewId);
                 setShowTemplateConfirm(true);
                 setTemplatePreviewId(null);
                 return;
               }
-              templateHtmlRef.current = template.contentHtml;
-              setEditorHtml(replaceTemplateTokens(template.contentHtml));
-              setTemplateApplied(true);
+              applyTemplateContent(template);
               setTemplatePreviewId(null);
               toast.success('Template applied to editor');
             }}
@@ -1003,18 +1194,16 @@ export const DocumentUploadDialog = ({
           <AlertDialogAction
             onClick={() => {
               if (!selectedTemplateId || !pendingTemplateAction) return;
-              const template = templates.find((item) => item.id as string === selectedTemplateId);
+              const template = templates.find((item) => item.id === selectedTemplateId);
               if (!template) return;
-              
+
               if (pendingTemplateAction === 'apply') {
-                templateHtmlRef.current = template.contentHtml;
-                setEditorHtml(replaceTemplateTokens(template.contentHtml));
-                setTemplateApplied(true);
+                applyTemplateContent(template);
                 toast.success('Template applied to editor');
               } else if (pendingTemplateAction === 'preview') {
                 setTemplatePreviewId(selectedTemplateId);
               }
-              
+
               setPendingTemplateAction(null);
               setShowTemplateConfirm(false);
             }}
@@ -1096,11 +1285,11 @@ export const DocumentUploadDialog = ({
             }}
             disabled={!templateName.trim()}
           >
-            Save Template
+            Save as template
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </>
-);
+    </>
+  );
 };

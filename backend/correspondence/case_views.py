@@ -553,6 +553,24 @@ class CaseViewSet(viewsets.ModelViewSet):
             logger.error(f"Error generating case completion package for case {case.id}: {e}", exc_info=True)
             raise ValidationError({"detail": "Failed to generate completion package."})
 
+    @action(detail=True, methods=["get"], url_path="completion-package/download")
+    def download_completion_package(self, request, pk=None):
+        """Stream the case completion package via DRM-aware DMS version delivery."""
+        from dms.drm import assert_download_allowed
+        from dms.views import DocumentVersionViewSet
+
+        case = self.get_object()
+        document = case.completion_package
+        if not document:
+            raise ValidationError({"detail": "No completion package available for this case."})
+        version = document.versions.order_by("-version_number").first()
+        if not version:
+            raise ValidationError({"detail": "Completion package has no downloadable version."})
+
+        assert_download_allowed(document, request.user)
+        helper = DocumentVersionViewSet()
+        return helper._serve_version(request, version, as_attachment=True, purpose="download")
+
     @action(detail=True, methods=["delete"], url_path="unlink_correspondence")
     def unlink_correspondence(self, request, pk=None):
         case = self.get_object()

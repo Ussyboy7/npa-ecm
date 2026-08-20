@@ -802,15 +802,16 @@ class SearchService:
             related_qs = doc_qs.exclude(id=document.id)
             if tag_list:
                 related_qs = related_qs.filter(tags__overlap=tag_list)
-            elif document.author_id:
-                related_qs = related_qs.filter(author_id=document.author_id)
             else:
                 words = [w for w in (document.title or "").split() if len(w) > 3][:3]
-                if words:
+                if len(words) >= 2:
                     q = Q()
                     for word in words:
                         q |= Q(title__icontains=word)
                     related_qs = related_qs.filter(q)
+                else:
+                    # No tags and weak title signal — don't fall back to same-author (too broad)
+                    return {"related": [], "duplicates": [], "total_count": 0}
 
             for item in related_qs.order_by("-updated_at")[:limit]:
                 related.append(
@@ -819,7 +820,7 @@ class SearchService:
                         "id": str(item.id),
                         "title": item.title,
                         "reference": item.reference_number,
-                        "reason": "shared tags" if tag_list else "same author or title",
+                        "reason": "shared tags" if tag_list else "similar title",
                     }
                 )
 
@@ -849,15 +850,15 @@ class SearchService:
                 related_qs = related_qs.filter(
                     sender_organization__iexact=correspondence.sender_organization
                 )
-            elif correspondence.division_id:
-                related_qs = related_qs.filter(division_id=correspondence.division_id)
             else:
                 words = [w for w in (correspondence.subject or "").split() if len(w) > 3][:3]
-                if words:
+                if len(words) >= 2:
                     q = Q()
                     for word in words:
                         q |= Q(subject__icontains=word)
                     related_qs = related_qs.filter(q)
+                else:
+                    return {"related": [], "duplicates": [], "total_count": 0}
 
             for item in related_qs.order_by("-updated_at")[:limit]:
                 related.append(
@@ -869,7 +870,7 @@ class SearchService:
                         "reason": (
                             "same sender organization"
                             if correspondence.sender_organization
-                            else "same division or subject"
+                            else "similar subject"
                         ),
                     }
                 )

@@ -484,9 +484,10 @@ class DocumentAnalyticsService:
         comments = document.comments.all()
         access_logs = document.access_logs.all()
         
-        # Calculate total views and downloads
+        # Calculate total views, downloads, and prints
         view_count = access_logs.filter(action='view').count()
         download_count = access_logs.filter(action='download').count()
+        print_count = access_logs.filter(action='print').count()
         
         # Get unique viewers
         unique_viewers = access_logs.values('user').distinct().count()
@@ -505,6 +506,7 @@ class DocumentAnalyticsService:
             "unresolved_comment_count": comments.filter(resolved=False).count(),
             "view_count": view_count,
             "download_count": download_count,
+            "print_count": print_count,
             "unique_viewers": unique_viewers,
             "word_count": word_count,
             "has_ocr_text": bool(latest_version and latest_version.ocr_text),

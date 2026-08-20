@@ -42,22 +42,22 @@ import { formatDateShort } from "@/lib/datetime";
 
 function jobStatusBadge(status: CaptureJob["status"]) {
   const styles: Record<CaptureJob["status"], string> = {
-    pending: "bg-amber-100 text-amber-800",
-    processing: "bg-blue-100 text-blue-800",
-    completed: "bg-green-100 text-green-800",
-    failed: "bg-red-100 text-red-800",
-    cancelled: "bg-gray-100 text-gray-800",
+    pending: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+    processing: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+    completed: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+    failed: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+    cancelled: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
   };
   return <Badge className={styles[status]}>{status}</Badge>;
 }
 
 function batchStatusBadge(status: BatchUpload["status"]) {
   const styles: Record<BatchUpload["status"], string> = {
-    uploading: "bg-amber-100 text-amber-800",
-    processing: "bg-blue-100 text-blue-800",
-    completed: "bg-green-100 text-green-800",
-    failed: "bg-red-100 text-red-800",
-    partial: "bg-orange-100 text-orange-800",
+    uploading: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+    processing: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+    completed: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+    failed: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+    partial: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
   };
   return <Badge className={styles[status]}>{status}</Badge>;
 }

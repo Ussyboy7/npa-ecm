@@ -167,13 +167,26 @@ function RecordCardContent({ corr }: RecordCardProps) {
                 <Copy className="mr-2 h-4 w-4" />
                 Copy Link
               </DropdownMenuItem>
-              {corr.completionPackage?.fileUrl ? (
+              {corr.completionPackage?.versionId || corr.completionPackage?.documentId ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.preventDefault();
-                      window.open(corr.completionPackage?.fileUrl, "_blank");
+                      const versionId = corr.completionPackage?.versionId;
+                      if (!versionId) {
+                        toast.error("Completion package is not available for download");
+                        return;
+                      }
+                      void import("@/lib/canonical-document").then(({ downloadCanonicalDocument }) =>
+                        downloadCanonicalDocument({
+                          kind: "dms-version",
+                          versionId,
+                          fileName: `${corr.referenceNumber || "completion-package"}.pdf`,
+                        }),
+                      ).catch(() => {
+                        toast.error("Unable to download completion package");
+                      });
                     }}
                   >
                     <Download className="mr-2 h-4 w-4" />

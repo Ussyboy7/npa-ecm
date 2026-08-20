@@ -108,29 +108,28 @@ export const CorrespondenceHeader = ({
     const latestVersion = primaryDoc?.versions?.[primaryDoc.versions.length - 1];
     return {
       documentContentHtml: latestVersion?.contentHtml,
-      attachmentUrl: firstAttachment?.fileUrl,
-      attachmentFileName: firstAttachment?.fileName,
+      attachmentFileName: firstAttachment?.fileName || latestVersion?.fileName,
+      attachmentId: firstAttachment?.id,
+      documentVersionId: !firstAttachment ? latestVersion?.id : undefined,
     };
   };
 
   const handleDownloadPDF = () => {
     const ctx = getExportContext();
-    downloadAsPDF({
+    void downloadAsPDF({
       correspondence,
       minutes,
       ...ctx,
-    });
-    toast.success('Downloading as PDF...');
+    }).then(() => toast.success('Download started')).catch(() => toast.error('Download failed'));
   };
 
   const handleDownloadWord = () => {
     const ctx = getExportContext();
-    downloadAsWord({
+    void downloadAsWord({
       correspondence,
       minutes,
       ...ctx,
-    });
-    toast.success('Downloading as Word document...');
+    }).then(() => toast.success('Download started')).catch(() => toast.error('Download failed'));
   };
 
   const moreMenu = (

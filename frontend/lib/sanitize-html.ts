@@ -56,16 +56,6 @@ export const sanitizeRichText = (html: string): string => {
 };
 
 /**
- * Sanitizes plain text (removes all HTML)
- */
-export const sanitizeText = (text: string): string => {
-  if (typeof window === 'undefined') {
-    return text;
-  }
-  return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
-};
-
-/**
  * Strip authoring colors/backgrounds so rich HTML can inherit theme text
  * (Legacy memo HTML often ships black text that is invisible on dark surfaces).
  */
@@ -82,4 +72,112 @@ export const sanitizeThemedHtml = (html: string): string => {
   return sanitizeRichText(stripInlineColorStyles(html));
 };
 
+const OFFICE_PASTE_RE =
+  /class\s*=\s*["']?Mso|mso-|xmlns:o\s*=|Microsoft\s+Word|urn:schemas-microsoft-com|w:WordDocument/i;
 
+/** Style properties kept after Office paste cleanup (institutional memos, not Word chrome). */
+const PASTE_STYLE_ALLOW = new Set([
+  'text-align',
+  'font-weight',
+  'font-style',
+  'text-decoration',
+  'font-size',
+]);
+
+export const looksLikeOfficePaste = (html: string): boolean => OFFICE_PASTE_RE.test(html);
+
+function cleanStyleAttribute(style: string): string {
+  return style
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => {
+      const prop = part.split(':')[0]?.trim().toLowerCase();
+      return Boolean(prop && PASTE_STYLE_ALLOW.has(prop));
+    })
+    .join('; ');
+}
+
+function unwrapElement(el: Element): void {
+  const parent = el.parentNode;
+  if (!parent) return;
+  while (el.firstChild) parent.insertBefore(el.firstChild, el);
+  parent.removeChild(el);
+}
+
+/**
+ * Strip Microsoft Word / Office junk before rich-text sanitize.
+ * Safe to run on non-Office HTML (light structural cleanup only when Office markers are absent).
+ */
+export const cleanOfficeHtml = (html: string): string => {
+  if (!html.trim() || typeof window === 'undefined') return html;
+
+  let cleaned = html
+    .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\/?(?:o|w|m|v|x):\w+[^>]*>/gi, '')
+    .replace(/<xml[\s\S]*?<\/xml>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '');
+
+  const doc = new DOMParser().parseFromString(cleaned, 'text/html');
+  doc.querySelectorAll('style, script, meta, link, title, xml').forEach((el) => el.remove());
+
+  const aggressive = looksLikeOfficePaste(html);
+  const elements = Array.from(doc.body.querySelectorAll('*'));
+
+  for (const el of elements) {
+    if (aggressive) {
+      el.removeAttribute('class');
+      el.removeAttribute('id');
+      el.removeAttribute('lang');
+      el.removeAttribute('face');
+      el.removeAttribute('size');
+      el.removeAttribute('color');
+    } else {
+      const className = el.getAttribute('class') || '';
+      if (/\bMso/i.test(className)) {
+        el.removeAttribute('class');
+      }
+    }
+
+    const style = el.getAttribute('style');
+    if (style) {
+      if (aggressive || /mso-/i.test(style)) {
+        const kept = cleanStyleAttribute(style);
+        if (kept) el.setAttribute('style', kept);
+        else el.removeAttribute('style');
+      }
+    }
+
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'b') {
+      const strong = doc.createElement('strong');
+      while (el.firstChild) strong.appendChild(el.firstChild);
+      el.replaceWith(strong);
+    } else if (tag === 'i') {
+      const em = doc.createElement('em');
+      while (el.firstChild) em.appendChild(el.firstChild);
+      el.replaceWith(em);
+    }
+  }
+
+  // Unwrap empty spans left by Word after style stripping.
+  doc.body.querySelectorAll('span').forEach((span) => {
+    if (!span.attributes.length) unwrapElement(span);
+  });
+
+  // Drop empty paragraphs Word inserts between blocks.
+  doc.body.querySelectorAll('p').forEach((p) => {
+    const text = (p.textContent || '').replace(/\u00a0/g, ' ').trim();
+    if (!text && !p.querySelector('img, table, br')) p.remove();
+  });
+
+  return doc.body.innerHTML;
+};
+
+/**
+ * Paste pipeline for the compose editor: Office cleanup when needed, then DOMPurify.
+ */
+export const sanitizePastedRichText = (html: string): string => {
+  return sanitizeRichText(cleanOfficeHtml(html));
+};

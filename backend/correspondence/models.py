@@ -1632,6 +1632,20 @@ class CorrespondenceTemplate(UUIDModel, TimeStampedModel):
             models.Index(fields=["scope", "scope_id", "template_type"]),
             models.Index(fields=["is_active", "is_default"]),
         ]
+        constraints = [
+            # NULL scope_id (organization) needs a separate constraint — Postgres
+            # treats NULLs as distinct in ordinary unique indexes.
+            models.UniqueConstraint(
+                fields=["title", "scope", "template_type"],
+                condition=models.Q(scope_id__isnull=True),
+                name="uniq_corr_template_null_scope",
+            ),
+            models.UniqueConstraint(
+                fields=["title", "scope", "scope_id", "template_type"],
+                condition=models.Q(scope_id__isnull=False),
+                name="uniq_corr_template_scoped",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.title} ({self.get_scope_display()})"

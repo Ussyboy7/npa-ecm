@@ -38,6 +38,7 @@ from dms.models import (
 )
 from organization.models import Department, Directorate, Division, Office
 from workflow.models import ApprovalTask, TaskAction, WorkflowTemplate
+from common.user_identity import canonical_username
 
 User = get_user_model()
 
@@ -203,29 +204,11 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     def _ensure_users(self):
         self.stdout.write("Resolving users…")
-        alias = {
-            "user-md": "md",
-            "user-ed-fa": "edfa",
-            "user-ed-mo": "edmo",
-            "user-ed-ets": "edets",
-            "user-gm-ict": "gmict",
-            "user-pa-md": "pamd",
-            "user-agm-software": "agmsoftware",
-            "user-agm-infra": "agminfra",
-            "user-agm-networks": "agmnetworks",
-            "user-gm-procurement": "gmprocurement",
-            "user-gm-finance": "gmfinance",
-            "user-gm-legal": "gmlegal",
-            "user-gm-audit": "gmaudit",
-            "user-sm-hr": "smhr",
-            "user-sm-finance": "smfinance",
-            "user-agm-ports-eng": "agmportseng",
-        }
         for entry in self.structure.get("MOCK_USERS", []):
             src_key = entry.get("id") or entry.get("username")
             if not src_key:
                 continue
-            username = alias.get(src_key, src_key)
+            username = canonical_username(src_key)
             user = User.objects.filter(username=username).first()
             if not user:
                 user = User.objects.create_user(

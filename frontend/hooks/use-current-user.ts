@@ -5,7 +5,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { isRecord } from "@/lib/type-utils";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
-import { apiFetch, clearTokens, hasOriginalTokens, hasTokens } from "@/lib/api-client";
+import { apiFetch, clearTokens, hasOriginalTokens, hasTokens, isImpersonatingUser, getOriginalUserId } from "@/lib/api-client";
 
 const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
 
@@ -250,6 +250,6 @@ export const useCurrentUser = () => {
     currentUser: resolvedUser,
     hydrated,
     refresh,
-    isImpersonating: hasOriginalTokens(),
+    isImpersonating: isImpersonatingUser(resolvedUser?.id ?? null),
   }), [resolvedUser, hydrated, refresh]);
 };

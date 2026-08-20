@@ -17,6 +17,7 @@ from forms.signature_serializers import (
 )
 from organization.models import Office, Department, Division
 from notifications.services import NotificationService
+from notifications.models import Notification
 
 
 class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
@@ -134,23 +135,21 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
                     status=FormSignature.Status.PENDING,
                 )
                 
-                # Send notification to assigned user/office
-                if routing_mode == "parallel" or order == 1:
+                # Send notification to assigned user
+                if user and (routing_mode == "parallel" or order == 1):
                     NotificationService.create_notification(
-                        user=user if user else None,
-                        office=office,
-                        department=department,
-                        division=division,
-                        notification_type="form_signature_required",
+                        recipient=user,
                         title=f"Signature Required: {submission.template.name}",
-                        message=f"You have been assigned to sign the '{field_label}' field for {submission.template.name}.",
+                        message=(
+                            f"You have been assigned to sign the '{field_label}' "
+                            f"field for {submission.template.name}."
+                        ),
+                        notification_type=Notification.NotificationType.WORKFLOW,
+                        priority=Notification.Priority.HIGH,
                         module="forms",
-                        priority="high",
-                        metadata={
-                            "submission_id": str(submission.id),
-                            "signature_id": str(signature.id),
-                            "workflow_id": str(workflow.id),
-                        },
+                        related_object_type="form_signature",
+                        related_object_id=str(signature.id),
+                        action_required=True,
                     )
             
             # Update workflow status
@@ -199,22 +198,50 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
         # Get user's information from their profile
         user = request.user
         signer_name = sign_serializer.validated_data.get("signer_name") or user.get_full_name() or user.username
-        signer_pn = sign_serializer.validated_data.get("signer_pn") or getattr(user, "personnel_number", "") or ""
-        
-        # Get user's designation from their office membership or profile
-        signer_designation = sign_serializer.validated_data.get("signer_designation") or ""
+        signer_pn = (
+            sign_serializer.validated_data.get("signer_pn")
+            or getattr(user, "personnel_number", "")
+            or getattr(user, "employee_id", "")
+            or ""
+        )
+        # Designation should be a human job title, not OfficeMembership.assignment_role
+        # (values like "principal" / "acting" are office headship codes, not titles).
+        signer_designation = (sign_serializer.validated_data.get("signer_designation") or "").strip()
         if not signer_designation:
-            from organization.models import OfficeMembership
-            user_membership = OfficeMembership.objects.filter(
-                user=user, is_active=True, is_primary=True
-            ).select_related("office").first()
-            if user_membership:
-                signer_designation = user_membership.assignment_role or ""
-        
+            job_title = (getattr(user, "job_title", None) or "").strip()
+            role_name = ""
+            if getattr(user, "system_role", None) is not None:
+                role_name = (user.system_role.name or "").strip()
+            signer_designation = job_title or role_name or (user.grade_level or "").strip()
+
+        # Prefer an explicitly uploaded file; otherwise use the user's Settings signature.
+        signature_file = sign_serializer.validated_data.get("signature_file")
+        if not signature_file:
+            from accounts.models import ExecutiveSignature
+            from django.core.files.base import ContentFile
+
+            try:
+                profile_signature = user.executive_signature
+            except ExecutiveSignature.DoesNotExist:
+                profile_signature = None
+
+            if not profile_signature or not profile_signature.signature_image:
+                return Response(
+                    {
+                        "error": "Please upload your digital signature in Settings → Signature first"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with profile_signature.signature_image.open("rb") as handle:
+                file_bytes = handle.read()
+            filename = profile_signature.original_filename or "signature.png"
+            signature_file = ContentFile(file_bytes, name=filename)
+
         # Sign the form
         signature.sign(
             user=user,
-            signature_file=sign_serializer.validated_data.get("signature_file"),
+            signature_file=signature_file,
             signer_name=signer_name,
             signer_pn=signer_pn,
             signer_designation=signer_designation,
@@ -222,14 +249,29 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
         )
         
         # Update submission data with signature info and related fields
+        from forms.pdf_signature_merge import infer_signature_role, resolve_signature_roles
+
         submission = workflow.submission
         submission_data = submission.data.copy()
         
-        # Get the base field name (e.g., "pm_signature" -> "pm")
-        base_field_prefix = signature.field_name.replace("_signature", "")
+        # Prefer role-aware prefix (pm/procurement/audit) over raw approval_signature
+        role = infer_signature_role(signature)
+        if not role or role == "approval":
+            role_map = {
+                sig: mapped
+                for sig, mapped in resolve_signature_roles(
+                    workflow.signatures.filter(status__in=["signed", "pending"]).select_related(
+                        "assigned_to_user",
+                        "assigned_to_user__division",
+                        "assigned_to_user__department",
+                    )
+                )
+            }
+            role = role_map.get(signature) or signature.field_name.replace("_signature", "")
+        base_field_prefix = role
         
         # Update signature field
-        submission_data[signature.field_name] = {
+        submission_data[f"{base_field_prefix}_signature"] = {
             "signer_name": signature.signer_name,
             "signer_pn": signature.signer_pn,
             "signer_designation": signature.signer_designation,
@@ -237,14 +279,11 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
             "signature_file": signature.signature_file.url if signature.signature_file else None,
         }
         
-        # Update related fields (name, pn, designation, date) if they exist in the form
-        if f"{base_field_prefix}_name" in submission_data:
-            submission_data[f"{base_field_prefix}_name"] = signature.signer_name
-        if f"{base_field_prefix}_pn" in submission_data:
-            submission_data[f"{base_field_prefix}_pn"] = signature.signer_pn
-        if f"{base_field_prefix}_designation" in submission_data:
-            submission_data[f"{base_field_prefix}_designation"] = signature.signer_designation
-        if f"{base_field_prefix}_date" in submission_data and signature.signed_date:
+        # Update related fields (name, pn, designation, date)
+        submission_data[f"{base_field_prefix}_name"] = signature.signer_name
+        submission_data[f"{base_field_prefix}_pn"] = signature.signer_pn
+        submission_data[f"{base_field_prefix}_designation"] = signature.signer_designation
+        if signature.signed_date:
             submission_data[f"{base_field_prefix}_date"] = str(signature.signed_date)
         
         # Also get user's department/division from their office membership
@@ -285,15 +324,16 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
                             from django.db.models import Max
                             
                             # Merge form data with signature data
-                            pdf_data = form_doc.form_data.copy()
-                            
-                            # Get signature data from workflow
-                            for signature in workflow.signatures.filter(status="signed"):
-                                field_prefix = signature.field_name.replace("_signature", "")
-                                pdf_data[f"{field_prefix}_name"] = signature.signer_name
-                                pdf_data[f"{field_prefix}_pn"] = signature.signer_pn
-                                pdf_data[f"{field_prefix}_designation"] = signature.signer_designation
-                                pdf_data[f"{field_prefix}_date"] = signature.signed_date.isoformat() if signature.signed_date else ""
+                            from forms.pdf_signature_merge import merge_signatures_into_pdf_data
+
+                            pdf_data = merge_signatures_into_pdf_data(
+                                form_doc.form_data.copy(),
+                                workflow.signatures.filter(status="signed").select_related(
+                                    "assigned_to_user",
+                                    "assigned_to_user__division",
+                                    "assigned_to_user__department",
+                                ),
+                            )
                             
                             pdf_bytes = generate_project_monitoring_report_pdf(pdf_data)
                             
@@ -326,19 +366,27 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
                             logger = logging.getLogger(__name__)
                             logger.error(f"Failed to auto-generate PDF for form document {form_doc.id}: {str(e)}")
             
-            # Notify initiator
-            NotificationService.create_notification(
-                user=workflow.initiated_by,
-                notification_type="form_signature_complete",
-                title=f"All Signatures Complete: {submission.template.name}",
-                message=f"All signatures have been completed for {submission.template.name}. PDF has been generated.",
-                module="forms",
-                priority="normal",
-                metadata={
-                    "submission_id": str(submission.id),
-                    "workflow_id": str(workflow.id),
-                },
-            )
+            # Notify initiator (never fail the sign response on notification errors)
+            if workflow.initiated_by_id:
+                try:
+                    NotificationService.create_notification(
+                        recipient=workflow.initiated_by,
+                        title=f"All Signatures Complete: {submission.template.name}",
+                        message=(
+                            f"All signatures have been completed for {submission.template.name}. "
+                            f"PDF has been generated."
+                        ),
+                        notification_type=Notification.NotificationType.WORKFLOW,
+                        priority=Notification.Priority.NORMAL,
+                        module="forms",
+                        related_object_type="form_signature_workflow",
+                        related_object_id=str(workflow.id),
+                    )
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Failed to notify initiator for workflow %s: %s", workflow.id, e
+                    )
         elif workflow.routing_mode == "sequential":
             # Move to next signature
             next_signature = workflow.get_next_pending_signature()
@@ -346,23 +394,30 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
                 workflow.current_step += 1
                 workflow.save()
                 
-                # Notify next signer
-                NotificationService.create_notification(
-                    user=next_signature.assigned_to_user,
-                    office=next_signature.assigned_to_office,
-                    department=next_signature.assigned_to_department,
-                    division=next_signature.assigned_to_division,
-                    notification_type="form_signature_required",
-                    title=f"Signature Required: {submission.template.name}",
-                    message=f"You have been assigned to sign the '{next_signature.field_label}' field for {submission.template.name}.",
-                    module="forms",
-                    priority="high",
-                    metadata={
-                        "submission_id": str(submission.id),
-                        "signature_id": str(next_signature.id),
-                        "workflow_id": str(workflow.id),
-                    },
-                )
+                # Notify next signer (never fail the sign response on notification errors)
+                if next_signature.assigned_to_user_id:
+                    try:
+                        NotificationService.create_notification(
+                            recipient=next_signature.assigned_to_user,
+                            title=f"Signature Required: {submission.template.name}",
+                            message=(
+                                f"You have been assigned to sign the "
+                                f"'{next_signature.field_label}' field for {submission.template.name}."
+                            ),
+                            notification_type=Notification.NotificationType.WORKFLOW,
+                            priority=Notification.Priority.HIGH,
+                            module="forms",
+                            related_object_type="form_signature",
+                            related_object_id=str(next_signature.id),
+                            action_required=True,
+                        )
+                    except Exception as e:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "Failed to notify next signer for signature %s: %s",
+                            next_signature.id,
+                            e,
+                        )
         
         serializer = FormSignatureSerializer(signature, context={"request": request})
         return Response(serializer.data)

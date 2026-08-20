@@ -164,9 +164,9 @@ export default function NotificationsPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Total", value: notifications.length, icon: BellRing, bgClass: "bg-primary/10", iconClass: "text-primary" },
-            { label: "Unread", value: notifications.filter((n) => n.status === "unread").length, icon: MailQuestion, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
-            { label: "Read", value: notifications.filter((n) => n.status === "read").length, icon: Bell, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
-            { label: "Archived", value: notifications.filter((n) => n.status === "archived").length, icon: Archive, bgClass: "bg-slate-500/10", iconClass: "text-slate-600" },
+            { label: "Unread", value: notifications.filter((n) => n.status === "unread").length, icon: MailQuestion, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
+            { label: "Read", value: notifications.filter((n) => n.status === "read").length, icon: Bell, bgClass: "bg-green-500/10", iconClass: "text-green-600 dark:text-green-400" },
+            { label: "Archived", value: notifications.filter((n) => n.status === "archived").length, icon: Archive, bgClass: "bg-slate-500/10", iconClass: "text-slate-600 dark:text-slate-400" },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
               <CardContent className={registryQueueStatCardContentClass}>

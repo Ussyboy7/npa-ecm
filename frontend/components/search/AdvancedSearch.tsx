@@ -321,7 +321,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       { key: 'title', label: 'Title' },
       { key: 'reference_number', label: 'Reference Number' },
       { key: 'status', label: 'Status' },
-      { key: 'sensitivity', label: 'Sensitivity' },
+      { key: 'sensitivity', label: 'Classification' },
       { key: 'priority', label: 'Priority' },
       { key: 'author', label: 'Author' },
       { key: 'created_at', label: 'Created At' },
@@ -455,7 +455,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                 }
               >
                 <SelectTrigger className="h-8 w-[130px] text-xs">
-                  <SelectValue placeholder="Sensitivity" />
+                  <SelectValue placeholder="Classification" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All levels</SelectItem>

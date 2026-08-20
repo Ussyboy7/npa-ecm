@@ -142,6 +142,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   const [selectedType, setSelectedType] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
+  const [hasSetDefaultDivision, setHasSetDefaultDivision] = useState(false);
   const [executiveFilter, setExecutiveFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
@@ -202,6 +203,14 @@ export function CasesListContent({ scope, title, description }: CasesListContent
       abortController.abort();
     };
   }, [currentUser?.id, isSecretary, isSuperAdmin]);
+
+  // Default division to holder's office division for office-scoped views (e.g. ICT for gmict)
+  useEffect(() => {
+    if (scope === "office" && !hasSetDefaultDivision && divisionFilter === "all" && currentUser?.division) {
+      setDivisionFilter(currentUser.division);
+      setHasSetDefaultDivision(true);
+    }
+  }, [scope, currentUser?.division, divisionFilter, hasSetDefaultDivision]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -419,9 +428,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         <StatStrip
           items={[
             { key: 'total', label: 'Total cases', value: count },
-            { key: 'open', label: 'Open', value: cases.filter((c) => c.status === "open").length },
-            { key: 'inProgress', label: 'In progress', value: cases.filter((c) => c.status === "in_progress").length },
-            { key: 'resolved', label: 'Resolved', value: cases.filter((c) => c.status === "resolved" || c.status === "closed").length },
           ]}
         />
       )}

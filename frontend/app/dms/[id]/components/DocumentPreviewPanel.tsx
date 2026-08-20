@@ -21,6 +21,9 @@ import { DocumentVersionStrip } from "./DocumentVersionStrip";
 import { DocumentVersionsPanel } from "./DocumentVersionsPanel";
 import { detailType } from "@/lib/detail-type";
 import { cn } from "@/lib/utils";
+import { downloadDocumentVersion } from "@/lib/dms-documents";
+import { toast } from "@/components/ui/sonner";
+import { logError } from "@/lib/client-logger";
 
 type VersionsManageProps = Omit<
   ComponentProps<typeof DocumentVersionsPanel>,
@@ -76,13 +79,16 @@ export function DocumentPreviewPanel({
       onDownload(selectedVersion);
       return;
     }
-    if (!selectedVersion.fileUrl?.trim()) return;
-    const link = window.document.createElement("a");
-    link.href = selectedVersion.fileUrl;
-    link.download = selectedVersion.fileName || "document";
-    window.document.body.appendChild(link);
-    link.click();
-    window.document.body.removeChild(link);
+    if (!selectedVersion.id) {
+      toast.error("No downloadable version");
+      return;
+    }
+    void downloadDocumentVersion(selectedVersion.id, selectedVersion.fileName || "document").catch(
+      (err: unknown) => {
+        logError("Download failed", err);
+        toast.error(err instanceof Error ? err.message : "Download failed");
+      },
+    );
   };
 
   return (
@@ -209,7 +215,9 @@ export function DocumentPreviewPanel({
                       </div>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      {selectedVersion.fileUrl?.trim() || selectedVersion.contentHtml?.trim() ? (
+                      {selectedVersion.hasFile ||
+                      Boolean(selectedVersion.id) ||
+                      selectedVersion.contentHtml?.trim() ? (
                         <Button
                           variant="ghost"
                           size="icon"

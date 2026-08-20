@@ -134,6 +134,8 @@ class OfficeSentEndpointTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("officeSent", response.data)
         self.assertIn("myWork", response.data)
+        self.assertIn("pendingSignatures", response.data)
+        self.assertIn("executiveApprovals", response.data)
 
     def test_my_sent_count_includes_minuted_items(self):
         other = Correspondence.objects.create(

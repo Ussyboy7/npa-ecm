@@ -31,7 +31,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/api/dms";
 import type { User } from "@/lib/npa-structure";
-import { shareDocument, apiFetch, hasTokens } from "@/lib/api/dms";
+import { shareDocument, apiFetch, hasTokens, canShareDocument } from "@/lib/api/dms";
 import { toast } from "@/components/ui/sonner";
 import { formatDateShort, formatDateTime } from "@/lib/datetime";
 import { Input } from "@/components/ui/input";
@@ -594,6 +594,11 @@ const ShareDocumentDialogContent = ({
 
   const handleConfirmShareToAll = async () => {
     if (!document) return;
+    if (!canShareDocument(document)) {
+      toast.error(document.drmRights?.message || "Sharing blocked by DRM policy");
+      setShowShareAllConfirm(false);
+      return;
+    }
     setShowShareAllConfirm(false);
     setShareToAll(true);
     setIsSubmitting(true);
@@ -708,6 +713,10 @@ const ShareDocumentDialogContent = ({
     departmentIds: string[]
   ) => {
     if (!document) return;
+    if (!canShareDocument(document)) {
+      toast.error(document.drmRights?.message || "Sharing blocked by DRM policy");
+      return;
+    }
 
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -983,6 +992,15 @@ const ShareDocumentDialogContent = ({
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto">
+        {document && !canShareDocument(document) ? (
+          <Alert className="mx-4 sm:mx-6 mt-4 border-amber-500/40 bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Sharing is blocked by DRM policy
+              {document.drmRights?.policy_name ? ` (${document.drmRights.policy_name})` : ""}.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         {document && (
           <div className="space-y-6 px-4 sm:px-6 py-4">
             {/* Document Summary - Like Minute Modal */}
@@ -1657,7 +1675,8 @@ const ShareDocumentDialogContent = ({
                 form="share-form"
                 disabled={
                   isSubmitting ||
-                  totalSelected === 0
+                  totalSelected === 0 ||
+                  !canShareDocument(document)
                 }
                 className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
               >

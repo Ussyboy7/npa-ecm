@@ -106,7 +106,7 @@ function CompletionSummaryModalContent({
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Status</label>
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800">
                     Completed
                   </Badge>
                 </div>

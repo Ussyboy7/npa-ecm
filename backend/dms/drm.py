@@ -59,6 +59,25 @@ def resolve_document_rights(document, user=None) -> dict:
     }
 
 
+def should_withhold_direct_media(rights: dict) -> bool:
+    """
+    True when clients must not receive a raw /media file_url.
+
+    Any active policy forces API delivery so watermark, download blocks,
+    and access logs cannot be bypassed via public nginx /media/.
+    """
+    if not rights:
+        return False
+    if rights.get("expired") or rights.get("view_only"):
+        return True
+    if not rights.get("allow_download", True):
+        return True
+    if (rights.get("watermark_text") or "").strip():
+        return True
+    # Active policy → always gate through /content/ and /download/
+    return bool(rights.get("policy_id"))
+
+
 def assert_view_allowed(document, user=None) -> None:
     rights = resolve_document_rights(document, user)
     if rights["expired"]:
@@ -73,3 +92,44 @@ def assert_download_allowed(document, user=None) -> None:
         raise PermissionDenied(
             f"Download blocked by DRM policy: {rights['policy_name'] or 'restricted'}"
         )
+
+
+def assert_print_allowed(document, user=None) -> None:
+    rights = resolve_document_rights(document, user)
+    if rights["expired"]:
+        raise PermissionDenied(rights["message"] or "Document access expired.")
+    if not rights["allow_print"]:
+        raise PermissionDenied(
+            f"Print blocked by DRM policy: {rights['policy_name'] or 'restricted'}"
+        )
+
+
+def assert_share_allowed(document, user=None) -> None:
+    rights = resolve_document_rights(document, user)
+    if rights["expired"]:
+        raise PermissionDenied(rights["message"] or "Document access expired.")
+    if not rights["allow_external_share"]:
+        raise PermissionDenied(
+            f"Sharing blocked by DRM policy: {rights['policy_name'] or 'restricted'}"
+        )
+
+
+def apply_version_drm_redaction(data: dict, document, user=None) -> dict:
+    """Mutate serialized version payload for DRM-safe API delivery."""
+    rights = resolve_document_rights(document, user)
+    raw_url = (data.get("file_url") or "").strip()
+    has_html = bool((data.get("content_html") or "").strip())
+    data["has_file"] = bool(raw_url) or has_html
+
+    withhold = should_withhold_direct_media(rights) or bool(rights.get("expired"))
+    if withhold:
+        data["file_url"] = ""
+
+    if rights.get("expired"):
+        data["content_html"] = ""
+        data["content_text"] = ""
+        data["content_json"] = None
+        data["ocr_text"] = ""
+
+    data["drm_delivery"] = "api" if withhold else "media"
+    return data

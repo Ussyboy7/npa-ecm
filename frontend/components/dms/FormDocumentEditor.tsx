@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,6 @@ import {
   type FormDocument as FormDocumentType,
 } from "@/lib/api/dms-forms";
 import {
-  getSignatures,
   getSignatureWorkflow,
 } from "@/lib/api/forms";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
@@ -30,16 +29,26 @@ import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
 import { getWorkflowCollectedFieldNames, isSignatureFileField } from "@/lib/forms/field-classification";
-import { createDocumentVersion, type DocumentVersion } from "@/lib/api/dms";
+import { createDocumentVersion, downloadCanonicalDocument, canDownloadDocument, fetchDocumentById, type DocumentVersion, type DocumentRecord } from "@/lib/api/dms";
+import { mapDocumentVersion } from "@/lib/dms-types";
 import { Input } from "@/components/ui/input";
 import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPreviewModal";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 interface FormDocumentEditorProps {
   documentId: string;
   formDocumentId: string;
 }
 
+const getAssigneeLabel = (signature: FormSignature): string =>
+  signature.assigned_to_user_name ||
+  signature.assigned_to_office_name ||
+  signature.assigned_to_department_name ||
+  signature.assigned_to_division_name ||
+  "Unassigned";
+
 export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentEditorProps) {
+  const { currentUser } = useCurrentUser();
   const MAX_SUPPORTING_DOC_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
   const ALLOWED_SUPPORTING_DOC_TYPES = [
     "application/pdf",
@@ -54,12 +63,12 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     "text/csv",
   ];
   const [formDoc, setFormDoc] = useState<FormDocumentType | null>(null);
+  const [parentDocument, setParentDocument] = useState<DocumentRecord | null>(null);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSignatureWorkflow, setShowSignatureWorkflow] = useState(false);
-  const [pendingSignatures, setPendingSignatures] = useState<FormSignature[]>([]);
   const [workflow, setWorkflow] = useState<FormSignatureWorkflow | null>(null);
   const [selectedSignature, setSelectedSignature] = useState<{
     signature: FormSignature;
@@ -73,6 +82,87 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("form");
   const supportingFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const currentUserId = currentUser?.id ?? null;
+  const allowDownload = canDownloadDocument(parentDocument);
+  const handleVersionDownload = async (version: DocumentVersion) => {
+    if (!allowDownload) {
+      toast.error(parentDocument?.drmRights?.message || "Download blocked by DRM policy");
+      return;
+    }
+    if (!version.id) {
+      toast.error("No downloadable version");
+      return;
+    }
+    try {
+      await downloadCanonicalDocument({
+        kind: "dms-version",
+        versionId: version.id,
+        fileName: version.fileName || "document",
+      });
+    } catch (err) {
+      logError("Form document download failed", err);
+      toast.error(err instanceof Error ? err.message : "Download failed");
+    }
+  };
+  const pendingSignatures = useMemo(
+    () =>
+      allSignatures.filter((sig) => {
+        if (sig.status !== "pending") return false;
+        if (!currentUserId || !sig.assigned_to_user) return false;
+        return String(sig.assigned_to_user) === String(currentUserId);
+      }),
+    [allSignatures, currentUserId],
+  );
+  const workflowPendingCount = useMemo(
+    () =>
+      typeof workflow?.pending_signatures_count === "number"
+        ? workflow.pending_signatures_count
+        : allSignatures.filter((sig) => sig.status === "pending").length,
+    [workflow?.pending_signatures_count, allSignatures],
+  );
+
+  const canCurrentUserSign = (signature: FormSignature): boolean => {
+    if (signature.status !== "pending") return false;
+    if (!currentUserId || !signature.assigned_to_user) return false;
+    return String(signature.assigned_to_user) === String(currentUserId);
+  };
+
+  const mySignedSignatures = useMemo(
+    () =>
+      allSignatures.filter(
+        (sig) =>
+          sig.status === "signed" &&
+          currentUserId &&
+          (String(sig.assigned_to_user) === String(currentUserId) ||
+            String(sig.signed_by || "") === String(currentUserId)),
+      ),
+    [allSignatures, currentUserId],
+  );
+
+  const outstandingAssignees = useMemo(() => {
+    const names = allSignatures
+      .filter((sig) => sig.status === "pending")
+      .map((sig) => getAssigneeLabel(sig));
+    return [...new Set(names)];
+  }, [allSignatures]);
+
+  const timelineSignatures = useMemo(() => {
+    const statusRank = (status: FormSignature["status"]) => {
+      if (status === "signed") return 0;
+      if (status === "rejected") return 1;
+      if (status === "skipped") return 2;
+      return 3; // pending last
+    };
+    return [...allSignatures].sort((a, b) => {
+      const byStatus = statusRank(a.status) - statusRank(b.status);
+      if (byStatus !== 0) return byStatus;
+      if (a.status === "signed" && b.status === "signed") {
+        return new Date(a.signed_at || a.updated_at).getTime() - new Date(b.signed_at || b.updated_at).getTime();
+      }
+      return a.order - b.order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+  }, [allSignatures]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -92,6 +182,13 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       logInfo('[FormDocumentEditor] Received form document:', { id: doc.id, template: doc.template });
       setFormDoc(doc);
       setFormData(doc.form_data || {});
+      try {
+        const parent = await fetchDocumentById(documentId);
+        setParentDocument(parent);
+      } catch (parentErr) {
+        logWarn('[FormDocumentEditor] Could not load parent document DRM rights', parentErr);
+        setParentDocument(null);
+      }
 
       if (doc.template?.id) {
         logInfo('[FormDocumentEditor] Loading template:', doc.template.id);
@@ -104,7 +201,6 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
       // Load signature workflow if exists
       let finalWorkflow: FormSignatureWorkflow | null = null;
-      let finalPendingSigs: FormSignature[] = [];
       let finalAllSigs: FormSignature[] = [];
       
       if (doc.signature_workflow?.id) {
@@ -114,45 +210,45 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
           finalWorkflow = workflowData;
           setWorkflow(workflowData);
 
-          // Load all signatures (pending and completed)
-          const allSigs = await getSignatures({ workflow: workflowData.id });
+          // Prefer nested workflow signatures (full set). The /signatures list is
+          // scoped to the current user and must not drive "all complete" checks.
+          const allSigs = Array.isArray(workflowData.signatures) ? workflowData.signatures : [];
           finalAllSigs = allSigs;
-          const pendingSigs = allSigs.filter(sig => sig.status === "pending");
-          finalPendingSigs = pendingSigs;
-          logInfo('[FormDocumentEditor] Pending signatures:', pendingSigs.length);
-          logInfo('[FormDocumentEditor] Total signatures:', allSigs.length);
-          setPendingSignatures(pendingSigs);
+          logInfo('[FormDocumentEditor] Total workflow signatures:', allSigs.length);
+          logInfo('[FormDocumentEditor] Workflow pending count:', workflowData.pending_signatures_count);
           setAllSignatures(allSigs);
         } catch (error: unknown) {
           logError('[FormDocumentEditor] Error loading workflow:', error);
           setWorkflow(null);
-          setPendingSignatures([]);
           setAllSignatures([]);
         }
       } else {
         logInfo('[FormDocumentEditor] No signature workflow found');
         setWorkflow(null);
-        setPendingSignatures([]);
         setAllSignatures([]);
       }
 
-      // Auto-generate PDF if all signatures are complete and no PDF exists yet
-      if (finalPendingSigs.length === 0 && finalAllSigs.length > 0) {
+      // Auto-generate PDF only when the whole workflow is complete
+      const workflowFullyComplete =
+        !!finalWorkflow &&
+        (finalWorkflow.status === "completed" ||
+          (typeof finalWorkflow.pending_signatures_count === "number"
+            ? finalWorkflow.pending_signatures_count === 0
+            : finalAllSigs.length > 0 && finalAllSigs.every((sig) => sig.status !== "pending")));
+
+      if (workflowFullyComplete && finalAllSigs.length > 0) {
         const hasPdfVersion = doc.document?.versions?.some((v: Record<string, unknown>) => {
           const fileType = typeof v.file_type === 'string' ? v.file_type : '';
           const notes = typeof v.notes === 'string' ? v.notes : '';
           return fileType === 'application/pdf' && (notes.includes('Generated PDF') || notes.includes('Auto-generated'));
         });
-        if (!hasPdfVersion && doc.status === "awaiting_signatures") {
-          // Auto-generate PDF
+        if (!hasPdfVersion && (doc.status === "awaiting_signatures" || doc.status === "completed")) {
           try {
             await generateFormDocumentPdf(formDocumentId);
             logInfo('[FormDocumentEditor] Auto-generated PDF after all signatures completed');
-            // Reload to get updated document
             await loadFormDocument();
           } catch (error: unknown) {
             logError('[FormDocumentEditor] Failed to auto-generate PDF:', error);
-            // Don't show error toast - user can generate manually
           }
         }
       }
@@ -182,24 +278,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
         // Map versions to DocumentVersion format
         const mappedVersions = versions.map((v: Record<string, unknown>) => {
           logInfo('[FormDocumentEditor] Mapping version:', { id: v.id, file_name: v.file_name, file_type: v.file_type, notes: v.notes });
-          return {
-            id: String(v.id ?? ''),
-            documentId: documentId,
-            versionNumber: typeof v.version_number === 'number' ? v.version_number : 1,
-            fileName: typeof v.file_name === 'string' ? v.file_name : 'file',
-            fileType: typeof v.file_type === 'string' ? v.file_type : 'application/octet-stream',
-            fileSize: typeof v.file_size === 'number' ? v.file_size : 0,
-            fileUrl: typeof v.file_url === 'string' ? v.file_url : undefined,
-            uploadedBy:
-              typeof v.uploaded_by === 'object' && v.uploaded_by !== null && 'id' in (v.uploaded_by as Record<string, unknown>)
-                ? String((v.uploaded_by as Record<string, unknown>).id ?? '')
-                : v.uploaded_by
-                  ? String(v.uploaded_by)
-                  : '',
-            uploadedAt: typeof v.uploaded_at === 'string' ? v.uploaded_at : new Date().toISOString(),
-            notes: typeof v.notes === 'string' ? v.notes : undefined,
-          };
-        }) as DocumentVersion[];
+          return mapDocumentVersion({ ...v, document: documentId });
+        });
         
         logInfo('[FormDocumentEditor] Mapped versions:', mappedVersions.map(v => ({ 
           id: v.id, 
@@ -208,25 +288,33 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
           notes: v.notes 
         })));
         
-        // Find generated PDF (PDF with notes about being generated)
-        finalPdfVersion = mappedVersions.find(v => 
-          v.fileType === 'application/pdf' && 
-          (v.notes?.toLowerCase().includes('generated') || 
-           v.notes?.toLowerCase().includes('auto-generated') ||
-           v.notes?.toLowerCase().includes('generated pdf'))
-        ) || null;
+        // Generated form PDFs (active or superseded stubs) — never show as supporting uploads.
+        const hasGeneratedFormPdfNotes = (v: DocumentVersion) =>
+          v.fileType === 'application/pdf' &&
+          !!v.notes &&
+          /generated|regenerated|auto-generated/i.test(v.notes);
+
+        // Active final-form candidate only (exclude superseded incomplete renders).
+        const isActiveGeneratedPdf = (v: DocumentVersion) =>
+          hasGeneratedFormPdfNotes(v) && !/superseded/i.test(v.notes || '');
+
+        const COMPLETE_PDF_MIN_BYTES = 50_000;
+        const generatedCandidates = mappedVersions
+          .filter(isActiveGeneratedPdf)
+          .sort((a, b) => {
+            const aComplete = (a.fileSize || 0) >= COMPLETE_PDF_MIN_BYTES ? 1 : 0;
+            const bComplete = (b.fileSize || 0) >= COMPLETE_PDF_MIN_BYTES ? 1 : 0;
+            if (bComplete !== aComplete) return bComplete - aComplete;
+            // Among complete (or among stubs), prefer newest version.
+            if (b.versionNumber !== a.versionNumber) return b.versionNumber - a.versionNumber;
+            return (b.fileSize || 0) - (a.fileSize || 0);
+          });
+        finalPdfVersion = generatedCandidates[0] || null;
         setGeneratedPdf(finalPdfVersion);
-        logInfo('[FormDocumentEditor] Generated PDF:', finalPdfVersion ? { id: finalPdfVersion.id, fileName: finalPdfVersion.fileName, notes: finalPdfVersion.notes } : 'none');
+        logInfo('[FormDocumentEditor] Generated PDF:', finalPdfVersion ? { id: finalPdfVersion.id, fileName: finalPdfVersion.fileName, notes: finalPdfVersion.notes, fileSize: finalPdfVersion.fileSize } : 'none');
         
-        // Supporting documents are all versions except the generated PDF
-        // If there's a generated PDF, exclude it. Otherwise, show all versions as potential supporting docs
-        finalSupportingDocs = mappedVersions.filter(v => {
-          // Always exclude the generated PDF if it exists
-          if (finalPdfVersion && v.id === finalPdfVersion.id) return false;
-          
-          // Include everything else (non-PDFs and PDFs that aren't the generated one)
-          return true;
-        });
+        // Supporting docs = user uploads only (notes == "Supporting document: ..."); hide version history + generated PDFs.
+        finalSupportingDocs = mappedVersions.filter(v => (v.notes || '').startsWith('Supporting document:'));
         setSupportingDocuments(finalSupportingDocs);
         logInfo('[FormDocumentEditor] Supporting documents:', finalSupportingDocs.length, finalSupportingDocs.map(a => ({ id: a.id, fileName: a.fileName, fileType: a.fileType, notes: a.notes })));
       } else {
@@ -244,7 +332,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
         hasFormDoc: !!doc,
         hasTemplate: !!template,
         hasWorkflow: !!finalWorkflow,
-        pendingSignaturesCount: finalPendingSigs.length,
+        pendingSignaturesCount: finalAllSigs.filter((sig) => sig.status === "pending").length,
         allSignaturesCount: finalAllSigs.length,
         supportingDocumentsCount: finalSupportingDocs.length,
         hasGeneratedPdf: !!finalPdfVersion,
@@ -274,9 +362,16 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
     try {
       setSaving(true);
+      // Never downgrade awaiting_signatures / completed back to in_progress on save.
+      const nextStatus =
+        formDoc.status === "draft"
+          ? "in_progress"
+          : formDoc.status === "awaiting_signatures" || formDoc.status === "completed"
+            ? formDoc.status
+            : "in_progress";
       await updateFormDocument(formDocumentId, {
         form_data: formData,
-        status: "in_progress",
+        status: nextStatus,
       });
       toast.success("Form saved successfully");
       await loadFormDocument();
@@ -349,6 +444,10 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
   const handleSign = (signature: FormSignature) => {
     if (!workflow) {
       toast.error("Workflow not found");
+      return;
+    }
+    if (!canCurrentUserSign(signature)) {
+      toast.error("This signature is assigned to someone else");
       return;
     }
     setSelectedSignature({ signature, workflow });
@@ -605,28 +704,23 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               {pendingSignatures.length > 0 ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Pending Signatures</h3>
+                    <h3 className="text-sm font-semibold">Your Pending Signatures</h3>
                     <Badge variant="outline">{pendingSignatures.length} pending</Badge>
                   </div>
                   {pendingSignatures.map((signature) => (
                     <Card key={signature.id} className="border-l-4 border-l-yellow-500">
                       <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium text-sm">{signature.field_label}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Assigned to: {signature.assigned_to_office_name ||
-                                signature.assigned_to_department_name ||
-                                signature.assigned_to_division_name ||
-                                "Unassigned"}
-                            </p>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{signature.field_label}</p>
                           </div>
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             onClick={() => handleSign(signature)}
-                            className="ml-4"
+                            className="ml-4 shrink-0"
                           >
-                            <PenTool className="h-4 w-4 mr-2" />
+                            <PenTool className="mr-2 h-4 w-4" />
                             Sign Now
                           </Button>
                         </div>
@@ -634,30 +728,113 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     </Card>
                   ))}
                 </div>
+              ) : workflow && allSignatures.length > 0 && workflowPendingCount === 0 ? (
+                <div className="space-y-4">
+                  {mySignedSignatures.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">You signed</h3>
+                      {mySignedSignatures.map((signature) => (
+                        <Card key={signature.id} className="border-l-4 border-l-green-500">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {signature.field_label}
+                                  {signature.signed_at ? ` · ${formatDateTime(signature.signed_at)}` : ""}
+                                </p>
+                              </div>
+                              <Badge className="shrink-0">Signed</Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                  <div className="rounded-lg border border-dashed py-8 text-center">
+                    <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-600 dark:text-green-500" />
+                    <p className="text-base font-medium text-green-700 dark:text-green-400">
+                      All signatures completed
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Full history is on the Timeline tab.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => setActiveTab("timeline")}
+                      className="mt-4 gap-2"
+                    >
+                      <Clock className="h-4 w-4" />
+                      View Timeline
+                    </Button>
+                  </div>
+                </div>
               ) : workflow && allSignatures.length > 0 ? (
-                <div className="text-center py-12">
-                  <CheckCircle2 className="h-16 w-16 mx-auto mb-4 text-green-600 dark:text-green-500" />
-                  <p className="text-base font-medium mb-1 text-green-700 dark:text-green-400">All signatures have been completed</p>
-                  <p className="text-sm text-muted-foreground mt-2 mb-4">View the Timeline tab for signature history</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => setActiveTab("timeline")}
-                    className="gap-2"
-                  >
-                    <Clock className="h-4 w-4" />
-                    View Timeline
-                  </Button>
+                <div className="space-y-4">
+                  {mySignedSignatures.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">You signed</h3>
+                      {mySignedSignatures.map((signature) => (
+                        <Card key={signature.id} className="border-l-4 border-l-green-500">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {signature.field_label}
+                                  {signature.signed_at ? ` · ${formatDateTime(signature.signed_at)}` : ""}
+                                </p>
+                              </div>
+                              <Badge className="shrink-0">Signed</Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">Still waiting</h3>
+                      <Badge variant="outline">
+                        {workflowPendingCount} outstanding
+                      </Badge>
+                    </div>
+                    <Card>
+                      <CardContent className="space-y-2 p-4">
+                        <p className="text-sm text-muted-foreground">
+                          Your part is done. Waiting on:
+                        </p>
+                        <ul className="space-y-1.5">
+                          {outstandingAssignees.map((name) => (
+                            <li key={name} className="flex items-center gap-2 text-sm">
+                              <Clock className="h-3.5 w-3.5 text-amber-500" />
+                              <span className="font-medium">{name}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveTab("timeline")}
+                          className="mt-2 gap-2"
+                        >
+                          <Clock className="h-4 w-4" />
+                          View Timeline
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               ) : (
-                <div className="text-center py-12 text-muted-foreground">
-                  <PenTool className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-base font-medium mb-1">
+                <div className="py-12 text-center text-muted-foreground">
+                  <PenTool className="mx-auto mb-4 h-16 w-16 opacity-50" />
+                  <p className="mb-1 text-base font-medium">
                     {supportsSignatures ? "No signature workflow initiated" : "No signature fields configured"}
                   </p>
-                  <p className="text-sm mb-6">
+                  <p className="mb-6 text-sm">
                     {supportsSignatures
                       ? "Route the form for signatures to begin the workflow"
-                      : "This template has no signature fields. Add signature fields in the form template to enable routing."}
+                      : "This template has no signature fields. Use Forward → Signature to create an approval signature task, or add signature fields to the template."}
                   </p>
                   {formDoc && supportsSignatures && (formDoc.status === "draft" || formDoc.status === "in_progress") && (
                     <Button
@@ -694,7 +871,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {generatedPdf.fileUrl && (
+                          {(generatedPdf.hasFile || generatedPdf.id) && (
                             <>
                               <Button
                                 variant="outline"
@@ -708,12 +885,10 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                               <Button
                                 variant="default"
                                 size="sm"
+                                disabled={!allowDownload}
+                                title={allowDownload ? "Download" : "Download blocked by DRM"}
                                 onClick={() => {
-                                  if (!generatedPdf.fileUrl) return;
-                                  const link = document.createElement('a');
-                                  link.href = generatedPdf.fileUrl;
-                                  link.download = generatedPdf.fileName || 'form-document.pdf';
-                                  link.click();
+                                  void handleVersionDownload(generatedPdf);
                                 }}
                                 className="gap-2"
                               >
@@ -846,7 +1021,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {doc.fileUrl && (
+                            {(doc.hasFile || doc.id) && (
                               <>
                                 {(doc.fileType?.startsWith('image/') || doc.fileType === 'application/pdf' || doc.fileName?.toLowerCase().endsWith('.pdf')) && (
                                   <Button
@@ -861,14 +1036,11 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  disabled={!allowDownload}
                                   onClick={() => {
-                                    if (!doc.fileUrl) return;
-                                    const link = document.createElement('a');
-                                    link.href = doc.fileUrl;
-                                    link.download = doc.fileName || 'document';
-                                    link.click();
+                                    void handleVersionDownload(doc);
                                   }}
-                                  title="Download document"
+                                  title={allowDownload ? "Download document" : "Download blocked by DRM"}
                                 >
                                   <Download className="h-4 w-4" />
                                 </Button>
@@ -956,37 +1128,37 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     </Badge>
                   </div>
                   <div className="max-h-[600px] overflow-y-auto pr-2">
-                    <ol className="relative border-s-2 border-border ml-4 space-y-6">
-                      {[...allSignatures]
-                        .sort((a, b) => a.order - b.order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-                        .map((signature) => {
+                    <ol className="relative ml-4 space-y-6 border-s-2 border-border">
+                      {timelineSignatures.map((signature) => {
                           const isSigned = signature.status === "signed";
                           const isRejected = signature.status === "rejected";
                           const isSkipped = signature.status === "skipped";
                           const isPending = signature.status === "pending";
+                          const assignee = getAssigneeLabel(signature);
+                          const canSign = canCurrentUserSign(signature);
                           
                           return (
                             <li key={signature.id} className="relative pl-6">
-                              <span className={`absolute flex items-center justify-center w-8 h-8 rounded-full -left-4 ring-4 ring-background ${
+                              <span className={`absolute -left-4 flex h-8 w-8 items-center justify-center rounded-full ring-4 ring-background ${
                                 isSigned ? "bg-green-500" : 
                                 isRejected ? "bg-red-500" : 
                                 isSkipped ? "bg-gray-400" : 
                                 "bg-yellow-500"
                               }`}>
                                 {isSigned ? (
-                                  <CheckCircle2 className="w-4 h-4 text-white" />
+                                  <CheckCircle2 className="h-4 w-4 text-white" />
                                 ) : isRejected ? (
-                                  <AlertCircle className="w-4 h-4 text-white" />
+                                  <AlertCircle className="h-4 w-4 text-white" />
                                 ) : (
-                                  <Clock className="w-4 h-4 text-white" />
+                                  <Clock className="h-4 w-4 text-white" />
                                 )}
                               </span>
-                              <Card className={`ml-2 ${isPending ? "border-l-4 border-l-yellow-500" : ""}`}>
+                              <Card className={`ml-2 ${isPending ? "border-l-4 border-l-yellow-500" : isSigned ? "border-l-4 border-l-green-500" : ""}`}>
                                 <CardContent className="p-4">
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1 space-y-2">
-                                      <div className="flex items-center gap-2">
-                                        <h4 className="font-semibold text-sm">{signature.field_label}</h4>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <h4 className="text-sm font-semibold">{assignee}</h4>
                                         <Badge 
                                           variant={
                                             isSigned ? "default" : 
@@ -996,52 +1168,57 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                           }
                                           className="text-xs"
                                         >
-                                          {signature.status.charAt(0).toUpperCase() + signature.status.slice(1)}
+                                          {isPending ? "Pending" : signature.status.charAt(0).toUpperCase() + signature.status.slice(1)}
                                         </Badge>
                                       </div>
-                                      <div className="text-xs text-muted-foreground space-y-1">
-                                        <p>
-                                          <span className="font-medium">Assigned to:</span> {signature.assigned_to_office_name || 
-                                            signature.assigned_to_department_name || 
-                                            signature.assigned_to_division_name || 
-                                            "Unassigned"}
-                                        </p>
-                                        {isSigned && signature.signed_by_name && (
-                                          <p><span className="font-medium">Signed by:</span> {signature.signed_by_name}</p>
-                                        )}
-                                        {isSigned && signature.signer_name && (
-                                          <p><span className="font-medium">Signer:</span> {signature.signer_name} {signature.signer_pn && `(${signature.signer_pn})`}</p>
-                                        )}
-                                        {isSigned && signature.signer_designation && (
-                                          <p><span className="font-medium">Designation:</span> {signature.signer_designation}</p>
-                                        )}
-                                        {isSigned && signature.signed_date && (
-                                          <p><span className="font-medium">Date:</span> {formatDateShort(signature.signed_date)}</p>
+                                      <div className="space-y-1 text-xs text-muted-foreground">
+                                        <p>{signature.field_label}</p>
+                                        {isSigned && signature.signer_designation &&
+                                          !["principal", "acting", "member", "delegate"].includes(
+                                            signature.signer_designation.trim().toLowerCase(),
+                                          ) && (
+                                          <p>
+                                            <span className="font-medium">Designation:</span>{" "}
+                                            {signature.signer_designation}
+                                          </p>
                                         )}
                                         {isSigned && signature.signed_at && (
-                                          <p><span className="font-medium">Time:</span> {formatDateTime(signature.signed_at)}</p>
+                                          <p>
+                                            <span className="font-medium">Signed:</span>{" "}
+                                            {formatDateTime(signature.signed_at)}
+                                          </p>
+                                        )}
+                                        {isSigned && signature.signed_date && !signature.signed_at && (
+                                          <p>
+                                            <span className="font-medium">Date:</span>{" "}
+                                            {formatDateShort(signature.signed_date)}
+                                          </p>
                                         )}
                                         {isRejected && signature.rejection_reason && (
-                                          <p className="text-destructive"><span className="font-medium">Reason:</span> {signature.rejection_reason}</p>
+                                          <p className="text-destructive">
+                                            <span className="font-medium">Reason:</span> {signature.rejection_reason}
+                                          </p>
                                         )}
                                         {isSkipped && (
                                           <p className="italic">This signature was skipped</p>
                                         )}
-                                        {isPending && (
-                                          <p className="text-yellow-600 dark:text-yellow-400 font-medium">Awaiting signature</p>
-                                        )}
                                       </div>
                                     </div>
-                                    {isPending && workflow && (
+                                    {isPending && workflow && canSign && (
                                       <Button 
                                         size="sm" 
                                         variant="outline"
                                         onClick={() => handleSign(signature)}
-                                        className="ml-4"
+                                        className="ml-2 shrink-0"
                                       >
-                                        <PenTool className="h-3 w-3 mr-1" />
+                                        <PenTool className="mr-1 h-3 w-3" />
                                         Sign
                                       </Button>
+                                    )}
+                                    {isPending && workflow && !canSign && (
+                                      <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+                                        Waiting
+                                      </span>
                                     )}
                                   </div>
                                 </CardContent>
@@ -1136,6 +1313,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
           version={previewVersion}
           isOpen={!!previewVersion}
           onClose={() => setPreviewVersion(null)}
+          documentId={documentId}
+          allowDownload={allowDownload}
         />
       )}
     </div>

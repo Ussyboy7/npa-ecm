@@ -66,6 +66,10 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
           fileType: asStringOptional(attachment.file_type),
           fileSize: asNumberOptional(attachment.file_size),
           fileUrl: asStringOptional(attachment.file_url),
+          hasFile:
+            typeof attachment.has_file === 'boolean'
+              ? attachment.has_file
+              : Boolean(asStringOptional(attachment.file_url)),
           createdAt: asStringOptional(attachment.created_at),
           updatedAt: asStringOptional(attachment.updated_at),
         }))
@@ -221,6 +225,7 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
     completionPackage: completionPackage
       ? {
           documentId: asString(completionPackage.document_id),
+          versionId: asStringOptional(completionPackage.version_id),
           title: asString(completionPackage.title),
           fileUrl: asStringOptional(completionPackage.file_url),
           generatedAt: asStringOptional(completionPackage.generated_at),

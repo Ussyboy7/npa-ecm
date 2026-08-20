@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { usePermissionCatalog } from "@/hooks/use-permission-catalog";
@@ -15,7 +16,7 @@ import { getPermissionsByCategory } from "@/lib/role-permissions";
 import { getPermissionProfile } from "@/lib/permissions";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { toast } from "@/components/ui/sonner";
-import { Grid3X3, Loader2, Search } from "lucide-react";
+import { Check, Grid3X3, Loader2, Search } from "lucide-react";
 
 const MATRIX_CATEGORIES = [
   "correspondence",
@@ -180,7 +181,17 @@ export function PermissionMatrixTab() {
                                   {busy ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
-                                    <Checkbox checked={enabled} className="pointer-events-none" />
+                                    <span
+                                      aria-hidden="true"
+                                      className={cn(
+                                        "flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                        enabled
+                                          ? "bg-primary text-primary-foreground"
+                                          : "bg-transparent",
+                                      )}
+                                    >
+                                      {enabled && <Check className="h-3 w-3" />}
+                                    </span>
                                   )}
                                 </Button>
                               ) : (

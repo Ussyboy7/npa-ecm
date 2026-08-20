@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Download, FileText, Edit2, Save, X } from "lucide-react";
 import type { DocumentVersion, DocumentRecord } from "@/lib/api/dms";
 import { createDocumentVersion } from "@/lib/api/dms";
-import { downloadDocumentVersion, fetchDocumentVersionContent } from "@/lib/dms-documents";
+import { downloadCanonicalDocument, fetchCanonicalContent } from "@/lib/canonical-document";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import mammoth from "mammoth";
 import { sanitizeRichText } from "@/lib/sanitize-html";
@@ -39,7 +39,7 @@ export const DocumentVersionPreviewModal = ({
   onVersionCreated,
   allowDownload = true,
 }: DocumentVersionPreviewModalProps) => {
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [imageBlobUrl, setImageBlobUrl] = useState<string | null>(null);
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,7 +53,6 @@ export const DocumentVersionPreviewModal = ({
   const isImage = version.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
   const isWordDocx = version.fileName?.toLowerCase().endsWith('.docx');
   const isWordDoc = version.fileName?.toLowerCase().endsWith('.doc');
-  const useSecureCanvas = Boolean(isPDF && !allowDownload);
   
   // Fetch file as blob when modal opens
   useEffect(() => {
@@ -65,86 +64,66 @@ export const DocumentVersionPreviewModal = ({
         return;
       }
       
-      // If there's a fileUrl, fetch it (PDFs with version id go through DRM content API)
-      if ((version.fileUrl && version.fileUrl.trim() !== '') || (isPDF && version.id)) {
-        logInfo('DocumentVersionPreviewModal: Fetching file', {
-          fileUrl: version.fileUrl,
-          fileName: version.fileName,
-          fileType: version.fileType,
-          isPDF,
-          isWordDocx
-        });
-        setLoading(true);
-        setError(null);
-        setPdfBytes(null);
-
-        const loadBlob = isPDF && version.id
-          ? fetchDocumentVersionContent(version.id)
-          : fetch(version.fileUrl as string, { credentials: 'include' }).then((response) => {
-              if (!response.ok) {
-                if (response.status === 404) {
-                  setError('File not found on server. Preview unavailable for this version.');
-                  setLoading(false);
-                  return null;
-                }
-                throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
-              }
-              return response.blob();
-            });
-
-        loadBlob
-          .then(async (blob) => {
-            if (!blob) return;
-            if (isPDF) {
-              if (useSecureCanvas) {
-                // No blob URL — browser PDF chrome would expose Download.
-                setPdfBytes(await blob.arrayBuffer());
-                setPdfBlobUrl(null);
-                setLoading(false);
-              } else {
-                const url = URL.createObjectURL(blob);
-                setPdfBlobUrl(url);
-                setLoading(false);
-              }
-            } else if (isWordDocx) {
-              // For .docx files, convert to HTML using mammoth
-              blob.arrayBuffer()
-                .then(arrayBuffer => mammoth.convertToHtml({ arrayBuffer }))
-                .then(result => {
-                  setWordHtml(result.value);
-                  setLoading(false);
-                })
-                .catch(err => {
-                  logError('Error converting Word document:', err);
-                  setError(`Failed to convert Word document: ${err.message}`);
-                  setLoading(false);
-                });
-            } else {
-              // For other file types, just reset loading
-              setLoading(false);
-            }
-          })
-          .catch(err => {
-            logError('Error loading file:', err);
-            setError(err instanceof Error ? err.message : String(err));
-            setLoading(false);
-          });
-      } else {
-        // No fileUrl and no contentHtml
-        logInfo('DocumentVersionPreviewModal: No fileUrl or contentHtml', {
-          hasFileUrl: !!version.fileUrl,
-          fileUrl: version.fileUrl,
+      if (!version.id) {
+        logInfo('DocumentVersionPreviewModal: No version id or contentHtml', {
           hasContentHtml: !!(version.contentHtml && version.contentHtml.trim() !== ''),
-          fileName: version.fileName
+          fileName: version.fileName,
         });
         setLoading(false);
         setError(null);
+        return;
       }
+
+      logInfo('DocumentVersionPreviewModal: Fetching via canonical content API', {
+        versionId: version.id,
+        fileName: version.fileName,
+        fileType: version.fileType,
+        isPDF,
+        isWordDocx,
+      });
+      setLoading(true);
+      setError(null);
+      setPdfBytes(null);
+      setImageBlobUrl(null);
+
+      fetchCanonicalContent({
+        kind: 'dms-version',
+        versionId: version.id,
+        fileName: version.fileName,
+      })
+        .then(async (blob) => {
+          if (isPDF) {
+            setPdfBytes(await blob.arrayBuffer());
+            setImageBlobUrl(null);
+            setLoading(false);
+          } else if (isWordDocx) {
+            blob.arrayBuffer()
+              .then(arrayBuffer => mammoth.convertToHtml({ arrayBuffer }))
+              .then(result => {
+                setWordHtml(result.value);
+                setLoading(false);
+              })
+              .catch(err => {
+                logError('Error converting Word document:', err);
+                setError(`Failed to convert Word document: ${err.message}`);
+                setLoading(false);
+              });
+          } else {
+            const url = URL.createObjectURL(blob);
+            setImageBlobUrl(url);
+            setLoading(false);
+          }
+        })
+        .catch(err => {
+          logError('Error loading file:', err);
+          setError(err instanceof Error ? err.message : String(err));
+          setLoading(false);
+        });
     } else {
       // Reset state when modal closes
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
-        setPdfBlobUrl(null);
+      if (imageBlobUrl) {
+        URL.revokeObjectURL(imageBlobUrl);
+        setImageBlobUrl(null);
       }
       setPdfBytes(null);
       setWordHtml(null);
@@ -154,12 +133,12 @@ export const DocumentVersionPreviewModal = ({
     
     // Cleanup blob URL when component unmounts or dependencies change
     return () => {
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
+      if (imageBlobUrl) {
+        URL.revokeObjectURL(imageBlobUrl);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isPDF, isWordDocx, useSecureCanvas, version.id, version.fileUrl, version.contentHtml]);
+  }, [isOpen, isPDF, isWordDocx, version.id, version.fileUrl, version.contentHtml]);
 
   // Initialize edited text when version changes or modal opens
   useEffect(() => {
@@ -185,7 +164,11 @@ export const DocumentVersionPreviewModal = ({
       return;
     }
     try {
-      await downloadDocumentVersion(version.id, version.fileName || 'document');
+      await downloadCanonicalDocument({
+        kind: 'dms-version',
+        versionId: version.id,
+        fileName: version.fileName || 'document',
+      });
     } catch (err) {
       logError('Failed to download from preview modal', err);
       toast.error(err instanceof Error ? err.message : 'Download failed');
@@ -298,7 +281,7 @@ export const DocumentVersionPreviewModal = ({
                       aria-label="Document content"
                     />
                   </div>
-                ) : version.fileUrl && version.fileUrl.trim() !== '' ? (
+                ) : version.id ? (
                   <>
                     {isPDF ? (
                       <div className="w-full h-full min-h-[600px]">
@@ -312,20 +295,15 @@ export const DocumentVersionPreviewModal = ({
                             <p className="text-sm text-muted-foreground mb-4">{error}</p>
                             {downloadAction('Download PDF')}
                           </div>
-                        ) : useSecureCanvas && pdfBytes ? (
+                        ) : pdfBytes ? (
                           <div className="w-full h-full min-h-[600px] overflow-auto">
-                            <p className="px-4 pt-3 text-xs text-muted-foreground">
-                              View-only — download is disabled by DRM policy.
-                            </p>
+                            {!allowDownload ? (
+                              <p className="px-4 pt-3 text-xs text-muted-foreground">
+                                View-only — download is disabled by DRM policy.
+                              </p>
+                            ) : null}
                             <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-[560px]" />
                           </div>
-                        ) : pdfBlobUrl ? (
-                          <iframe
-                            src={pdfBlobUrl}
-                            className="w-full h-full min-h-[600px] border-0"
-                            title="Document Preview"
-                            aria-label={`Preview of ${version.fileName || 'document'}`}
-                          />
                         ) : (
                           <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                             <p className="text-lg font-medium mb-4">Loading PDF preview...</p>
@@ -338,13 +316,18 @@ export const DocumentVersionPreviewModal = ({
                       </div>
                     ) : isImage ? (
                       <div className="flex items-center justify-center p-6 min-h-[600px]">
-                        <Image
-                          src={version.fileUrl}
-                          alt={version.fileName || 'Document'}
-                          width={800}
-                          height={600}
-                          className="max-w-full max-h-[70vh] object-contain"
-                        />
+                        {imageBlobUrl ? (
+                          <Image
+                            src={imageBlobUrl}
+                            alt={version.fileName || 'Document'}
+                            width={800}
+                            height={600}
+                            className="max-w-full max-h-[70vh] object-contain"
+                            unoptimized
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Loading image…</p>
+                        )}
                       </div>
                     ) : isWordDocx ? (
                       <>
@@ -486,8 +469,8 @@ export const DocumentVersionPreviewModal = ({
                 aria-label="Document content"
               />
             </div>
-          ) : version.fileUrl && version.fileUrl.trim() !== '' ? (
-            // Priority 2: Show uploaded file
+          ) : version.id ? (
+            // Priority 2: Show uploaded file via canonical content API
             <>
               {isPDF ? (
                 <div className="w-full h-full min-h-[600px]">
@@ -501,20 +484,15 @@ export const DocumentVersionPreviewModal = ({
                       <p className="text-sm text-muted-foreground mb-4">{error}</p>
                       {downloadAction('Download PDF')}
                     </div>
-                  ) : useSecureCanvas && pdfBytes ? (
+                  ) : pdfBytes ? (
                     <div className="w-full h-full min-h-[600px] overflow-auto">
-                      <p className="px-4 pt-3 text-xs text-muted-foreground">
-                        View-only — download is disabled by DRM policy.
-                      </p>
+                      {!allowDownload ? (
+                        <p className="px-4 pt-3 text-xs text-muted-foreground">
+                          View-only — download is disabled by DRM policy.
+                        </p>
+                      ) : null}
                       <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-[560px]" />
                     </div>
-                  ) : pdfBlobUrl ? (
-                    <iframe
-                      src={pdfBlobUrl}
-                      className="w-full h-full min-h-[600px] border-0"
-                      title="Document Preview"
-                      aria-label={`Preview of ${version.fileName || 'document'}`}
-                    />
                   ) : (
                     <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                       <p className="text-lg font-medium mb-4">Loading PDF preview...</p>
@@ -527,13 +505,18 @@ export const DocumentVersionPreviewModal = ({
                 </div>
               ) : isImage ? (
                 <div className="flex items-center justify-center p-6 min-h-[600px]">
-                  <Image
-                    src={version.fileUrl}
-                    alt={version.fileName || 'Document'}
-                    width={800}
-                    height={600}
-                    className="max-w-full max-h-[70vh] object-contain"
-                  />
+                  {imageBlobUrl ? (
+                    <Image
+                      src={imageBlobUrl}
+                      alt={version.fileName || 'Document'}
+                      width={800}
+                      height={600}
+                      className="max-w-full max-h-[70vh] object-contain"
+                      unoptimized
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Loading image…</p>
+                  )}
                 </div>
               ) : isWordDocx ? (
                 <>

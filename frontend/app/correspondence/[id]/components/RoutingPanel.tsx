@@ -26,7 +26,7 @@ interface RoutingPanelProps {
   distributionPurpose?: 'action' | 'information' | null;
   distributionEntryId?: string | null;
   turnRestrictedDisabled: boolean;
-  completionPackageUrl: string | null;
+  hasCompletionPackage: boolean;
   completionGeneratedAt?: string | null;
   activeDelegation: Record<string, unknown> | null;
   organizationUsers: User[];
@@ -39,7 +39,7 @@ interface RoutingPanelProps {
   onOpenTreatmentModal: () => void;
   onOpenCompletionModal: () => void;
   onOpenDelegateModal: () => void;
-  onDownloadCompletionPackage: (url: string, filename: string) => Promise<void>;
+  onDownloadCompletionPackage: (filename: string) => Promise<void>;
   onSyncFromApi: () => Promise<unknown>;
   onMinuteClick: (minute: Minute) => void;
   onEditMinute: (minute: Minute) => void;
@@ -57,7 +57,7 @@ export function RoutingPanel({
   distributionPurpose,
   distributionEntryId,
   turnRestrictedDisabled,
-  completionPackageUrl,
+  hasCompletionPackage,
   completionGeneratedAt,
   activeDelegation,
   organizationUsers,
@@ -223,7 +223,7 @@ export function RoutingPanel({
               distributionPurpose={distributionPurpose}
               distributionEntryId={distributionEntryId}
               turnRestrictedDisabled={turnRestrictedDisabled}
-              completionPackageUrl={completionPackageUrl}
+              hasCompletionPackage={hasCompletionPackage}
               completionGeneratedAt={completionGeneratedAt}
               activeDelegation={activeDelegation}
               organizationUsers={organizationUsers}

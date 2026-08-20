@@ -3,21 +3,54 @@
  * Uses getBaseUrl() consistently for API base URL resolution
  */
 
-import { getBaseUrl, getStoredAccessToken } from './api-client';
+import { apiFetch, getBaseUrl, hasTokens } from './api-client';
 import { MEDIA_PATH_PREFIX, API_MEDIA_PATH_PREFIX } from './correspondence-constants';
+import { ERROR_AUTHENTICATION_REQUIRED } from './constants';
+
+const ALLOWED_PUBLICISH_MEDIA_PREFIXES = [
+  '/media/signatures/',
+  '/media/seals/',
+  '/media/signature_templates/',
+  '/media/user_signatures/',
+  '/media/accounts/',
+];
+
+function mediaPathToProtectedApi(pathOrUrl: string): string | null {
+  try {
+    const raw = pathOrUrl.startsWith('http')
+      ? new URL(pathOrUrl).pathname
+      : pathOrUrl.startsWith('/')
+        ? pathOrUrl
+        : `/${pathOrUrl}`;
+    const cleaned = raw.replace(/^\/api\/media\//, MEDIA_PATH_PREFIX);
+    if (!cleaned.startsWith(MEDIA_PATH_PREFIX)) return null;
+    if (!ALLOWED_PUBLICISH_MEDIA_PREFIXES.some((p) => cleaned.startsWith(p))) {
+      return null;
+    }
+    const relative = cleaned.slice(MEDIA_PATH_PREFIX.length);
+    return `/platform/protected-media/${relative}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * Builds a download URL for media files, handling both relative and absolute paths
- * Fixes /api/media/ paths to /media/ and uses getBaseUrl() for base URL
+ * Builds a download URL for allowlisted media (signatures/seals) and other
+ * absolute/relative paths used by signature UI. Document binaries use
+ * canonical download APIs instead.
  */
 export const buildDownloadUrl = (path?: string | null): string | undefined => {
   if (!path) return undefined;
-  
+
+  const protectedApi = mediaPathToProtectedApi(path);
+  if (protectedApi) {
+    const baseUrl = getBaseUrl().replace(/\/$/, '');
+    return `${baseUrl}${protectedApi.startsWith('/') ? protectedApi : `/${protectedApi}`}`;
+  }
+
   if (path.startsWith('http')) {
-    // If it's already a full URL, check if it has /api/media/ and fix it
     try {
       const url = new URL(path);
-      // Fix /api/media/ to /media/
       if (url.pathname.startsWith(API_MEDIA_PATH_PREFIX)) {
         url.pathname = url.pathname.replace(API_MEDIA_PATH_PREFIX, MEDIA_PATH_PREFIX);
         return url.toString();
@@ -27,42 +60,26 @@ export const buildDownloadUrl = (path?: string | null): string | undefined => {
     }
     return path;
   }
-  
+
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  // Remove /api/ prefix if present in the path
   const cleanedPath = normalized.replace(/^\/api\/media\//, MEDIA_PATH_PREFIX);
-  
-  // Get base URL and remove /api/v1 suffix if present to get the server root
+
   const baseUrl = getBaseUrl()
     .replace(/\/api\/v1\/?$/, '')
     .replace(/\/api\/?$/, '');
-  
+
   return `${baseUrl}${cleanedPath}`;
 };
 
-/** Force a file save from a media URL (avoids browser PDF viewer / new-tab open). */
-export const forceDownloadMedia = async (
-  pathOrUrl: string,
-  fileName = 'document',
+/** Authenticated download for a correspondence attachment (canonical path). */
+export const downloadCorrespondenceAttachment = async (
+  attachmentId: string,
+  fileName = 'attachment',
 ): Promise<void> => {
-  const url = buildDownloadUrl(pathOrUrl);
-  if (!url) {
-    throw new Error('Download URL is missing');
-  }
-
-  const { getStoredAccessToken } = await import('./api-client');
-  const token = getStoredAccessToken();
-  const headers: HeadersInit = {};
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetch(url, { credentials: 'include', headers });
-  if (!response.ok) {
-    throw new Error(`Download failed (${response.status})`);
-  }
-
-  const blob = await response.blob();
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+  const blob = await apiFetch<Blob>(`/correspondence/attachments/${attachmentId}/download/`, {
+    responseType: 'blob',
+  });
   const saveBlob = new Blob([blob], { type: 'application/octet-stream' });
   const blobUrl = URL.createObjectURL(saveBlob);
   const link = window.document.createElement('a');
@@ -75,41 +92,10 @@ export const forceDownloadMedia = async (
   window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2_000);
 };
 
-/**
- * Fixes a media URL by removing /api/media/ prefix
- * Used in download handlers and other places where URLs need normalization
- */
-export const fixMediaUrl = (url: string): string => {
-  if (url.startsWith('http')) {
-    try {
-      const urlObj = new URL(url);
-      if (urlObj.pathname.startsWith(API_MEDIA_PATH_PREFIX)) {
-        urlObj.pathname = urlObj.pathname.replace(API_MEDIA_PATH_PREFIX, MEDIA_PATH_PREFIX);
-        return urlObj.toString();
-      }
-    } catch {
-      // If URL parsing fails, try string replacement
-      return url.replace(/\/api\/media\//, MEDIA_PATH_PREFIX);
-    }
-    return url;
-  }
-  
-  // Relative URL - remove /api/ prefix
-  return url.replace(/\/api\/media\//, MEDIA_PATH_PREFIX).replace(/^\/api\/media\//, MEDIA_PATH_PREFIX);
+/** Authenticated inline/preview stream for a correspondence attachment. */
+export const fetchCorrespondenceAttachmentContent = async (attachmentId: string): Promise<Blob> => {
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+  return apiFetch<Blob>(`/correspondence/attachments/${attachmentId}/content/`, {
+    responseType: 'blob',
+  });
 };
-
-/**
- * Ensures a URL is absolute by prepending the base URL if needed
- */
-export const ensureAbsoluteUrl = (url: string): string => {
-  if (url.startsWith('http')) {
-    return url;
-  }
-  
-  const baseUrl = getBaseUrl()
-    .replace(/\/api\/v1\/?$/, '')
-    .replace(/\/api\/?$/, '');
-  
-  return `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
-};
-

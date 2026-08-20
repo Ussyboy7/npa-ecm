@@ -200,9 +200,9 @@ export default function ExternalEntitiesPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { label: "Total Entities", value: entities.length, icon: Building2, bgClass: "bg-primary/10", iconClass: "text-primary" },
-              { label: "Active", value: entities.filter((e) => e.is_active).length, icon: UserCheck, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
-              { label: "Ministries", value: entities.filter((e) => e.entity_type === "ministry").length, icon: Building, bgClass: "bg-violet-500/10", iconClass: "text-violet-600" },
-              { label: "Agencies", value: entities.filter((e) => e.entity_type === "agency").length, icon: Users, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
+              { label: "Active", value: entities.filter((e) => e.is_active).length, icon: UserCheck, bgClass: "bg-green-500/10", iconClass: "text-green-600 dark:text-green-400" },
+              { label: "Ministries", value: entities.filter((e) => e.entity_type === "ministry").length, icon: Building, bgClass: "bg-violet-500/10", iconClass: "text-violet-600 dark:text-violet-400" },
+              { label: "Agencies", value: entities.filter((e) => e.entity_type === "agency").length, icon: Users, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
             ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
               <Card key={label}>
                 <CardContent className={registryQueueStatCardContentClass}>

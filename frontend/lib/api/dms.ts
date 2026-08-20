@@ -45,12 +45,25 @@ export {
   replaceDocumentVersion,
   updateDocumentMetadata,
   downloadDocumentVersion,
+  fetchDocumentVersionContent,
+  fetchDocumentVersionPrint,
   canDownloadDocument,
+  canPrintDocument,
+  canShareDocument,
+  versionRequiresApiDelivery,
   shareDocumentWithUsers,
   shareDocument,
   userHasPermission,
   type DocumentRelatedCorrespondenceItem,
 } from '@/lib/dms-documents';
+
+export {
+  type CanonicalDocRef,
+  fetchCanonicalContent,
+  fetchCanonicalPrint,
+  downloadCanonicalDocument,
+  printCanonicalDocument,
+} from '@/lib/canonical-document';
 
 export {
   fetchCollections,

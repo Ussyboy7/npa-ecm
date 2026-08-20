@@ -24,6 +24,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
+    color-scheme: light;
     /* Core Colors */
     --background: 0 0% 100%;
     --foreground: 218 25% 15%;
@@ -98,6 +99,7 @@ All colors MUST be HSL.
   }
 
   .dark {
+    color-scheme: dark;
     --background: 218 30% 8%;
     --foreground: 218 15% 90%;
 
@@ -157,6 +159,22 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /**
+   * Document / memo paper surface — always light, in both themes.
+   * Use for compose editors, PDF canvas pages, and printable previews.
+   * App chrome (shell, cards, rails) should use theme tokens instead.
+   */
+  .doc-paper {
+    background-color: #ffffff;
+    color: #171717;
+    color-scheme: light;
+    caret-color: #171717;
+  }
+
+  .doc-paper :where(a) {
+    color: #1d4ed8;
   }
 
   :focus-visible {

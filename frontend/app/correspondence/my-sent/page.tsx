@@ -403,8 +403,8 @@ const MySentPageContent = () => {
           </div>
         )}
 
-        {/* Pagination */}
-        {count > 0 && (
+        {/* Pagination — correspondences only; hide when shared docs are mixed to avoid count mismatch */}
+        {count > 0 && documentCount === 0 && (
           <PaginationControls
             pagination={pagination}
             showPageSizeSelector={true}

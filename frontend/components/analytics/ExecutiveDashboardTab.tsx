@@ -368,9 +368,9 @@ export const ExecutiveDashboardTab = () => {
                           <div>Backlog: {div.backlog}</div>
                         </div>
                         <div className="flex gap-3 text-xs">
-                          <span className="text-green-700">✓ {div.slaCompliant}</span>
-                          <span className="text-yellow-700">⚠ {div.slaAtRisk}</span>
-                          <span className="text-red-700">✗ {div.slaBreached}</span>
+                          <span className="text-green-700 dark:text-green-400">✓ {div.slaCompliant}</span>
+                          <span className="text-yellow-700 dark:text-yellow-400">⚠ {div.slaAtRisk}</span>
+                          <span className="text-red-700 dark:text-red-400">✗ {div.slaBreached}</span>
                         </div>
                       </div>
                     ))

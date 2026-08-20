@@ -55,6 +55,8 @@ interface ApiCase {
   metadata?: Record<string, unknown>;
   completion_package?: {
     id: string;
+    document_id?: string;
+    version_id?: string;
     title: string;
     file_url?: string;
   };
@@ -99,6 +101,8 @@ function transformApiCase(api: ApiCase): Case {
     metadata: api.metadata,
     completionPackage: api.completion_package ? {
       id: api.completion_package.id,
+      documentId: api.completion_package.document_id || api.completion_package.id,
+      versionId: api.completion_package.version_id,
       title: api.completion_package.title,
       fileUrl: api.completion_package.file_url,
     } : undefined,
@@ -393,6 +397,26 @@ export async function generateCaseCompletionPackage(caseId: string): Promise<Cas
   return apiFetch<Case>(`${BASE_PATH}/${caseId}/generate-completion-package/`, {
     method: 'POST',
   });
+}
+
+/** Download case completion package through authenticated API (DRM-aware). */
+export async function downloadCaseCompletionPackage(
+  caseId: string,
+  fileName = 'completion-package.pdf',
+): Promise<void> {
+  const blob = await apiFetch<Blob>(`${BASE_PATH}/${caseId}/completion-package/download/`, {
+    responseType: 'blob',
+  });
+  const saveBlob = new Blob([blob], { type: 'application/octet-stream' });
+  const blobUrl = URL.createObjectURL(saveBlob);
+  const link = window.document.createElement('a');
+  link.href = blobUrl;
+  link.download = fileName;
+  link.rel = 'noopener';
+  window.document.body.appendChild(link);
+  link.click();
+  window.document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2_000);
 }
 
 /**

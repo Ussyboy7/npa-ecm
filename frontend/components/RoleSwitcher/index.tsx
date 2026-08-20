@@ -17,6 +17,7 @@ import {
   storeOriginalTokens,
   clearOriginalTokens,
   getOriginalTokens,
+  getOriginalUserId,
   storeTokens,
   hasOriginalTokens,
 } from "@/lib/api-client";
@@ -231,12 +232,30 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       }
     }
 
+    // If picking the original user, just return to primary instead of re-impersonating same user
+    const originalUserId = getOriginalUserId();
+    if (originalUserId && selectedUser.id === originalUserId) {
+      setConfirmDialogOpen(false);
+      const origTokens = getOriginalTokens();
+      if (!origTokens?.access || !origTokens?.refresh) {
+        toast.info("You are already using your primary account");
+        return;
+      }
+      const secondsRemaining = origTokens.expiresAt ? Math.max(0, Math.floor((origTokens.expiresAt - Date.now()) / 1000)) : undefined;
+      storeTokens(origTokens.access, origTokens.refresh, secondsRemaining);
+      clearOriginalTokens();
+      toast.success("Returned to your primary account");
+      onClose?.();
+      setTimeout(() => window.location.reload(), 500);
+      return;
+    }
+
     setIsSwitching(true);
     setConfirmDialogOpen(false);
 
     const hadOriginalTokens = hasOriginalTokens();
     if (!isImpersonating && !hadOriginalTokens) {
-      storeOriginalTokens();
+      storeOriginalTokens(currentUser.id);
     }
 
     try {

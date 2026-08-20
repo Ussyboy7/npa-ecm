@@ -11,10 +11,11 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
 from django.db import models, IntegrityError
-from django.db.models import Exists, Prefetch, Q, OuterRef, Subquery, CharField, Count, Case as DBCase, When, IntegerField
+from django.db.models import Exists, Prefetch, Q, OuterRef, Subquery, CharField, Count, Case as DBCase, When, IntegerField, F
 from django.utils import timezone
 from django.db import transaction
-from django.shortcuts import get_object_or_404
+from django.http import FileResponse, HttpResponse
+from common.storage_utils import resolve_media_path
 
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -1573,8 +1574,15 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     def sidebar_counts(self, request):
         from django.core.cache import cache
         from django.core.cache.backends.base import InvalidCacheBackendError
-        from correspondence.models import Minute, CorrespondenceDistribution, Case, CorrespondenceDraft
-        from dms.models import Document
+        from correspondence.models import (
+            Minute,
+            CorrespondenceDistribution,
+            Case,
+            CorrespondenceDraft,
+            CaseCorrespondenceLink,
+        )
+        from dms.models import Document, FormDocument
+        from forms.signature_models import FormSignature
         from organization.models import OfficeMembership, Office
 
         user = request.user
@@ -1660,12 +1668,14 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             if office_ids:
                 office_filter |= Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
 
+            # Exclude from inbox what has already left the office (counts as Office Sent)
+            inbox_exclude_sent = Q(owning_office_id__in=office_ids, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office_id__in=office_ids) if office_ids else Q(pk__in=[])
             office_inbox_count = Correspondence.objects.filter(
                 base_filter & office_filter
-            ).count()
+            ).exclude(inbox_exclude_sent).count()
             unread_inbox_count = Correspondence.objects.filter(
                 base_filter & office_filter
-            ).annotate(is_read=Exists(unread_inbox_subquery)).filter(is_read=False).count()
+            ).exclude(inbox_exclude_sent).annotate(is_read=Exists(unread_inbox_subquery)).filter(is_read=False).count()
 
         my_parallel_subquery = Minute.objects.filter(
             to_user=user,
@@ -1730,18 +1740,32 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             | _sla_due_soon_filter()
         ).count()
 
-        my_sent_minute_ids = Minute.objects.filter(
+        # Canonical with my-sent endpoint: dispatched/sent + pending/in-progress that has left owning office (e.g. upward pending at MD).
+        routed_ids = Minute.objects.filter(
             user=user,
             is_recalled=False,
-            action_type__in=['minute', 'forward', 'approve', 'treat', 'reject'],
+            action_type__in=['minute', 'forward', 'approve', 'treat'],
+            dispatched_at__isnull=False,
         ).values_list('correspondence_id', flat=True).distinct()
         my_sent_dispatch_ids = DispatchRecord.objects.filter(
             dispatched_by=user,
         ).values_list('correspondence_id', flat=True).distinct()
+        acted_ids = Minute.objects.filter(
+            user=user,
+            is_recalled=False,
+            action_type__in=['minute', 'forward', 'approve', 'treat'],
+        ).values_list('correspondence_id', flat=True).distinct()
+        ownership = Q(created_by=user) | Q(id__in=acted_ids) | Q(id__in=my_sent_dispatch_ids)
+        pending_routed = Q(created_by=user, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office=F('owning_office'))
+        sent_filter = Q(id__in=routed_ids) | Q(status__in=[
+            Correspondence.Status.COMPLETED,
+            Correspondence.Status.DISPATCHED,
+            Correspondence.Status.ACKNOWLEDGED,
+            Correspondence.Status.ARCHIVED,
+        ]) | pending_routed
         my_sent_count = Correspondence.objects.filter(
-            Q(is_deleted=False) &
-            (Q(created_by=user) | Q(id__in=my_sent_minute_ids) | Q(id__in=my_sent_dispatch_ids))
-        ).distinct().count()
+            Q(is_deleted=False)
+        ).filter(ownership & sent_filter).distinct().count()
 
         delegated_count = CorrespondenceDelegation.objects.filter(
             assistant=user,
@@ -1773,7 +1797,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 ).filter(
                     Q(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED],
                       dispatch_records__isnull=False) |
-                    Q(id__in=office_sent_minute_ids)
+                    Q(id__in=office_sent_minute_ids) |
+                    Q(status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office=F('owning_office'))
                 ).distinct().count()
             else:
                 office_sent_minute_ids = Minute.objects.filter(
@@ -1791,25 +1816,70 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                       dispatch_records__isnull=False) &
                     (Q(owning_office_id__in=office_ids) | Q(dispatch_records__dispatched_by_id__in=office_user_ids))
                     |
-                    Q(id__in=office_sent_minute_ids)
+                    Q(id__in=office_sent_minute_ids) |
+                    Q(owning_office_id__in=office_ids, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office_id__in=office_ids)
                 ).distinct().count()
 
         case_base = Case.objects.filter(is_deleted=False)
-        my_cases_count = case_base.filter(Q(created_by=user) | Q(assigned_to=user)).count()
+        # Match /cases/my (scope=my → assigned_to only)
+        my_cases_count = case_base.filter(assigned_to=user).count()
         office_cases_count = 0
         if office_ids:
             office_cases_count = case_base.filter(
                 Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
             ).count()
-        all_cases_count = case_base.count()
 
+        # Match /cases/all scope selection used by the frontend
+        grade = getattr(user, "grade_level", "") or ""
+        if user.is_superuser or grade == "MDCS":
+            all_cases_count = case_base.count()
+        elif grade == "EDCS" and getattr(user, "directorate_id", None):
+            from organization.models import Division
+            division_ids = Division.objects.filter(
+                directorate_id=user.directorate_id
+            ).values_list("id", flat=True)
+            directorate_correspondence_ids = Correspondence.objects.filter(
+                directorate_id=user.directorate_id
+            ).values_list("id", flat=True)
+            case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
+                correspondence_id__in=directorate_correspondence_ids
+            ).values_list("case_id", flat=True).distinct()
+            all_cases_count = case_base.filter(
+                Q(division_id__in=division_ids) | Q(id__in=case_ids_from_correspondence)
+            ).count()
+        elif grade == "MSS1" and getattr(user, "division_id", None):
+            division_correspondence_ids = Correspondence.objects.filter(
+                division_id=user.division_id
+            ).values_list("id", flat=True)
+            case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
+                correspondence_id__in=division_correspondence_ids
+            ).values_list("case_id", flat=True).distinct()
+            all_cases_count = case_base.filter(
+                Q(division_id=user.division_id) | Q(id__in=case_ids_from_correspondence)
+            ).count()
+        elif grade == "MSS2" and getattr(user, "department_id", None):
+            department_correspondence_ids = Correspondence.objects.filter(
+                department_id=user.department_id
+            ).values_list("id", flat=True)
+            case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
+                correspondence_id__in=department_correspondence_ids
+            ).values_list("case_id", flat=True).distinct()
+            all_cases_count = case_base.filter(
+                Q(department_id=user.department_id) | Q(id__in=case_ids_from_correspondence)
+            ).count()
+        else:
+            # Personal / default: same as Cases "all" fallback (my + office)
+            all_cases_filter = Q(assigned_to=user)
+            if office_ids:
+                all_cases_filter |= Q(owning_office_id__in=office_ids) | Q(current_office_id__in=office_ids)
+            all_cases_count = case_base.filter(all_cases_filter).count()
+
+        # Match /approvals page (sealed approve minutes with valid seal)
         executive_approvals_count = Minute.objects.filter(
-            to_user=user,
-            purpose="approval",
-            is_recalled=False,
+            action_type=Minute.ActionType.APPROVE,
+            seal_applied__isnull=False,
+            seal_applied__is_valid=True,
             correspondence__is_deleted=False,
-        ).exclude(
-            correspondence__status=Correspondence.Status.COMPLETED
         ).count()
 
         my_documents_count = Document.objects.filter(
@@ -1822,11 +1892,26 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             draft_type=CorrespondenceDraft.DraftType.REGISTRATION,
         ).count()
 
+        pending_signatures_count = FormDocument.objects.filter(
+            document__is_deleted=False,
+            signature_workflow__signatures__assigned_to_user=user,
+            signature_workflow__signatures__status=FormSignature.Status.PENDING,
+        ).distinct().count()
+
+        pending_approval_minutes_count = Minute.objects.filter(
+            to_user=user,
+            purpose="approval",
+            is_recalled=False,
+            correspondence__is_deleted=False,
+        ).exclude(
+            correspondence__status=Correspondence.Status.COMPLETED
+        ).count()
+
         result = {
             "officeInbox": office_inbox_count,
             "unreadInboxCount": unread_inbox_count,
             "myInbox": my_inbox_count,
-            "myWork": my_work_attention_count + executive_approvals_count,
+            "myWork": my_work_attention_count + pending_approval_minutes_count,
             "mySent": my_sent_count,
             "officeSent": office_sent_count,
             "delegated": delegated_count,
@@ -1837,6 +1922,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             "executiveApprovals": executive_approvals_count,
             "myDocuments": my_documents_count,
             "drafts": drafts_count,
+            "pendingSignatures": pending_signatures_count,
         }
 
         try:
@@ -1918,6 +2004,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 base_q |= Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
 
             queryset = self.base_queryset.filter(is_deleted=False).filter(base_q).exclude(status=Correspondence.Status.COMPLETED)
+            # Don't show in inbox what has already left the office (now in Office Sent)
+            if office_ids:
+                queryset = queryset.exclude(
+                    Q(owning_office_id__in=office_ids, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office_id__in=office_ids)
+                )
 
         statuses = request.query_params.getlist("status")
         if statuses:
@@ -2260,11 +2351,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             Correspondence.Status.ACKNOWLEDGED,
             Correspondence.Status.ARCHIVED,
         ]
-        sent_filter = Q(id__in=routed_ids) | Q(status__in=sent_statuses)
+        pending_routed = Q(created_by=user, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office=F('owning_office'))
+        sent_filter = Q(id__in=routed_ids) | Q(status__in=sent_statuses) | pending_routed
 
-        queryset = self.base_queryset.filter(is_deleted=False).filter(ownership & sent_filter).exclude(
-            status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
-        )
+        queryset = self.base_queryset.filter(is_deleted=False).filter(ownership & sent_filter)
 
         if sent_type == "internal":
             queryset = queryset.filter(id__in=routed_ids).exclude(
@@ -2453,11 +2543,18 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             action_type__in=['minute', 'forward', 'approve', 'treat'],
         ).values_list('correspondence_id', flat=True).distinct()
 
+        # Pending/in-progress that has already left the owning office (e.g. upward pending at MD) counts as sent for the owning office.
+        if scope_office_ids:
+            office_pending_routed = Q(owning_office_id__in=scope_office_ids, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office_id__in=scope_office_ids)
+        else:
+            office_pending_routed = Q(status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office=F('owning_office'))
+
         queryset = self.base_queryset.filter(
             is_deleted=False,
         ).filter(
             dispatched_q |
-            Q(id__in=minute_ids)
+            Q(id__in=minute_ids) |
+            office_pending_routed
         ).distinct()
 
         if dispatch_type == "internal":
@@ -2792,12 +2889,16 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         page = paginator.paginate_queryset(queryset, request)
         serializer = self.get_serializer(page, many=True)
         response = paginator.get_paginated_response(serializer.data)
+        completed_count = summary_queryset.filter(status=Correspondence.Status.COMPLETED).count()
+        archived_count = summary_queryset.filter(status=Correspondence.Status.ARCHIVED).count()
         response.data["summary"] = {
             "total": total_count,
             "by_directorate": 0,
             "by_division": 0,
             "by_department": 0,
             "this_year": this_year_count,
+            "completed": completed_count,
+            "archived": archived_count,
             "available_years": sorted(available_years, reverse=True),
         }
         return response
@@ -2985,6 +3086,47 @@ class CorrespondenceAttachmentViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(attachment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def _load_attachment_bytes(self, attachment: CorrespondenceAttachment) -> tuple[bytes, str, str]:
+        file_name = attachment.file_name or "attachment"
+        content_type = attachment.file_type or "application/octet-stream"
+        if not attachment.file_url:
+            raise ValidationError({"detail": "No file stored for this attachment."})
+        file_path = resolve_media_path(attachment.file_url)
+        if file_path.startswith(("http://", "https://")):
+            import requests
+
+            remote = requests.get(file_path, timeout=30)
+            remote.raise_for_status()
+            return remote.content, file_name, remote.headers.get("Content-Type") or content_type
+        if not os.path.isfile(file_path):
+            raise ValidationError({"detail": "Stored attachment file is missing on the server."})
+        with open(file_path, "rb") as handle:
+            return handle.read(), file_name, content_type
+
+    def _attachment_response(self, attachment, *, as_attachment: bool):
+        payload, file_name, content_type = self._load_attachment_bytes(attachment)
+        disposition = "attachment" if as_attachment else "inline"
+        response = HttpResponse(payload, content_type=content_type)
+        response["Content-Disposition"] = f'{disposition}; filename="{file_name}"'
+        response["Content-Length"] = str(len(payload))
+        return response
+
+    @action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, pk=None):
+        attachment = self.get_object()
+        return self._attachment_response(attachment, as_attachment=True)
+
+    @action(detail=True, methods=["get"], url_path="content")
+    def content(self, request, pk=None):
+        attachment = self.get_object()
+        return self._attachment_response(attachment, as_attachment=False)
+
+    @action(detail=True, methods=["get"], url_path="print")
+    def print_attachment(self, request, pk=None):
+        """Inline stream for printing (same bytes as content; canonical print entrypoint)."""
+        attachment = self.get_object()
+        return self._attachment_response(attachment, as_attachment=False)
 
 
 class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):

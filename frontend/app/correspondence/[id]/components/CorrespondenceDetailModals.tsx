@@ -48,9 +48,12 @@ interface CorrespondenceDetailModalsProps {
   refreshMinutes: () => Promise<void>;
   syncFromApi: () => Promise<unknown>;
   lookupUser: (userId?: string) => User | undefined;
-  defaultPreviewAttachmentUrl: string | null | undefined;
   defaultPreviewAttachmentFileName: string | undefined;
   defaultPreviewAttachmentSource: 'attachment' | 'completion-package';
+  previewDocumentVersionId?: string;
+  previewAttachmentId?: string;
+  printDocumentVersionId?: string;
+  onPrintLogged?: () => void;
 }
 
 export function CorrespondenceDetailModals({
@@ -74,9 +77,12 @@ export function CorrespondenceDetailModals({
   refreshMinutes,
   syncFromApi,
   lookupUser,
-  defaultPreviewAttachmentUrl,
   defaultPreviewAttachmentFileName,
   defaultPreviewAttachmentSource,
+  previewDocumentVersionId,
+  previewAttachmentId,
+  printDocumentVersionId,
+  onPrintLogged,
 }: CorrespondenceDetailModalsProps) {
   const primaryDoc = getPrimaryLinkedDocument(linkedDocuments);
   const documentContentHtml =
@@ -192,9 +198,10 @@ export function CorrespondenceDetailModals({
             onSetSelectedAttachmentIndex(null);
           }}
           documentContentHtml={documentContentHtml}
-          attachmentUrl={defaultPreviewAttachmentUrl ?? undefined}
           attachmentFileName={defaultPreviewAttachmentFileName}
           attachmentSource={defaultPreviewAttachmentSource}
+          documentVersionId={previewDocumentVersionId}
+          attachmentId={previewAttachmentId}
         />
       )}
 
@@ -205,8 +212,10 @@ export function CorrespondenceDetailModals({
           isOpen
           onClose={() => closeModal()}
           documentContentHtml={documentContentHtml}
-          attachmentUrl={defaultPreviewAttachmentUrl ?? undefined}
           attachmentFileName={defaultPreviewAttachmentFileName}
+          documentVersionId={printDocumentVersionId}
+          attachmentId={printDocumentVersionId ? undefined : previewAttachmentId}
+          onPrintLogged={onPrintLogged}
         />
       )}
 

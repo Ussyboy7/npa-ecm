@@ -10,12 +10,34 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical, ExternalLink } from 'lucide-react';
+import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical, ExternalLink, Printer } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from "@/components/ui/sonner";
 import type { DocumentAccessLog } from '@/lib/api/dms';
 import type { User } from '@/lib/npa-structure';
+
+type AccessActionFilter = 'all' | DocumentAccessLog['action'];
+
+function accessActionMeta(action: DocumentAccessLog['action']): {
+  label: string;
+  shortLabel: string;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline';
+  icon: typeof Eye;
+} {
+  switch (action) {
+    case 'download':
+      return { label: 'Downloaded', shortLabel: 'Download', variant: 'default', icon: DownloadIcon };
+    case 'attempted-download':
+      return { label: 'Attempted Download', shortLabel: 'Tried DL', variant: 'destructive', icon: DownloadIcon };
+    case 'print':
+      return { label: 'Printed', shortLabel: 'Print', variant: 'default', icon: Printer };
+    case 'attempted-print':
+      return { label: 'Attempted Print', shortLabel: 'Tried Print', variant: 'destructive', icon: Printer };
+    default:
+      return { label: 'Viewed', shortLabel: 'View', variant: 'secondary', icon: Eye };
+  }
+}
 
 interface AccessActivityCardProps {
   documentId: string;
@@ -40,7 +62,7 @@ export const AccessActivityCard = ({
   isLoading = false,
   compact = false,
 }: AccessActivityCardProps) => {
-  const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>('all');
+  const [accessLogFilter, setAccessLogFilter] = useState<AccessActionFilter>('all');
   const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('recent');
@@ -197,7 +219,10 @@ export const AccessActivityCard = ({
     return {
       views: filtered.filter((l) => l.action === 'view').length,
       downloads: filtered.filter((l) => l.action === 'download').length,
-      attempted: filtered.filter((l) => l.action === 'attempted-download').length,
+      prints: filtered.filter((l) => l.action === 'print').length,
+      attempted: filtered.filter(
+        (l) => l.action === 'attempted-download' || l.action === 'attempted-print',
+      ).length,
       users: new Set(filtered.map((l) => l.userId)).size,
     };
   }, [filtered]);
@@ -234,8 +259,8 @@ export const AccessActivityCard = ({
               <p className="text-xs font-semibold tabular-nums">{stats.downloads}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground truncate">Tried</p>
-              <p className="text-xs font-semibold tabular-nums">{stats.attempted}</p>
+              <p className="text-[10px] text-muted-foreground truncate">Print</p>
+              <p className="text-xs font-semibold tabular-nums">{stats.prints}</p>
             </div>
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground truncate">Users</p>
@@ -260,7 +285,7 @@ export const AccessActivityCard = ({
                 <Activity className="h-4 w-4 text-primary" />
                 Access Activity
               </CardTitle>
-              <CardDescription className="mt-1">Recent views and download attempts</CardDescription>
+              <CardDescription className="mt-1">Recent views, downloads, and prints</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               {accessLogs.length > 0 && (
@@ -305,7 +330,7 @@ export const AccessActivityCard = ({
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
               <div>
                 <p className="text-[10px] text-muted-foreground">Views</p>
                 <p className="text-sm font-semibold">{stats.views}</p>
@@ -313,6 +338,10 @@ export const AccessActivityCard = ({
               <div>
                 <p className="text-[10px] text-muted-foreground">Downloads</p>
                 <p className="text-sm font-semibold">{stats.downloads}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Prints</p>
+                <p className="text-sm font-semibold">{stats.prints}</p>
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground">Attempted</p>
@@ -361,16 +390,18 @@ export const AccessActivityCard = ({
             <div className="flex items-center gap-2 flex-wrap">
               <Select
                 value={accessLogFilter}
-                onValueChange={(value) => setAccessLogFilter(value as 'all' | 'view' | 'download' | 'attempted-download')}
+                onValueChange={(value) => setAccessLogFilter(value as AccessActionFilter)}
               >
-                <SelectTrigger className="w-32 h-8 text-xs">
+                <SelectTrigger className="w-40 h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Actions</SelectItem>
                   <SelectItem value="view">Views Only</SelectItem>
                   <SelectItem value="download">Downloads Only</SelectItem>
+                  <SelectItem value="print">Prints Only</SelectItem>
                   <SelectItem value="attempted-download">Attempted Downloads</SelectItem>
+                  <SelectItem value="attempted-print">Attempted Prints</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -418,7 +449,7 @@ export const AccessActivityCard = ({
                     <>
                       <Activity className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
                       <p className="text-xs font-medium text-muted-foreground mb-1">No access activity yet</p>
-                      <p className="text-[10px] text-muted-foreground">Access logs will appear here when users view or download this document.</p>
+                      <p className="text-[10px] text-muted-foreground">Access logs will appear here when users view, download, or print this document.</p>
                     </>
                   ) : (
                     <>
@@ -445,19 +476,8 @@ export const AccessActivityCard = ({
               ) : (
                 filtered.map((log) => {
                   const userName = getDisplayUserName(log);
-                  const actionIcon = log.action === 'download' ? DownloadIcon : Eye;
-                  const actionLabel =
-                    log.action === 'download'
-                      ? 'Downloaded'
-                      : log.action === 'attempted-download'
-                        ? 'Attempted'
-                        : 'Viewed';
-                  const actionVariant =
-                    log.action === 'download'
-                      ? 'default'
-                      : log.action === 'attempted-download'
-                        ? 'destructive'
-                        : 'secondary';
+                  const meta = accessActionMeta(log.action);
+                  const ActionIcon = meta.icon;
 
                   return (
                     <div
@@ -465,16 +485,16 @@ export const AccessActivityCard = ({
                       className="flex items-center gap-2.5 p-2.5 border rounded-lg hover:bg-muted/30 transition-colors"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        {actionIcon === DownloadIcon ? (
-                          <DownloadIcon className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                        ) : (
+                        {log.action === 'view' ? (
                           <button
                             onClick={() => handleViewClick(log)}
                             className="p-0.5 hover:bg-muted rounded transition-colors cursor-pointer"
                             title="View activity details"
                           >
-                            <Eye className="h-3.5 w-3.5 text-muted-foreground hover:text-primary flex-shrink-0" />
+                            <ActionIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-primary flex-shrink-0" />
                           </button>
+                        ) : (
+                          <ActionIcon className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                         )}
                         <Avatar className="h-5 w-5 flex-shrink-0">
                           <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
@@ -482,8 +502,8 @@ export const AccessActivityCard = ({
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-xs font-medium truncate">{userName}</span>
-                        <Badge variant={actionVariant} className="text-[10px] px-1.5 py-0 h-4">
-                          {actionLabel}
+                        <Badge variant={meta.variant} className="text-[10px] px-1.5 py-0 h-4">
+                          {meta.shortLabel}
                         </Badge>
                       </div>
                       <Tooltip>

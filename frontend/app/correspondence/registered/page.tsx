@@ -190,13 +190,10 @@ const RegisteredCorrespondencePage = () => {
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards — global total only; per-status breakdown would need global counts, not page slice */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Total Registered", value: count, icon: FileText, bgClass: "bg-primary/10", iconClass: "text-primary" },
-            { label: "Pending", value: items.filter((c) => c.status === "pending").length, icon: Clock, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
-            { label: "In Progress", value: items.filter((c) => c.status === "in-progress").length, icon: FileText, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
-            { label: "Completed", value: items.filter((c) => c.status === "completed").length, icon: CheckCircle2, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
             ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label} aria-label={label}>
               <CardContent className={registryQueueStatCardContentClass}>

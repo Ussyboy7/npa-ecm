@@ -1,54 +1,73 @@
 /**
- * Custom hook for managing document preview (PDF and Word documents)
- * Handles blob URL creation, cleanup, loading states, and error handling
+ * Document preview hook — loads DOCX (and draft data: PDFs) via canonical delivery.
+ * Stored PDF previews use SecurePdfCanvasPreview at the call site (no blob iframe).
  */
 
 import { useEffect, useState, useRef } from 'react';
-import { logError, logWarn } from '@/lib/client-logger';
-import { getStoredAccessToken } from '@/lib/api-client';
-import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
+import { logError } from '@/lib/client-logger';
 import {
   FILE_LOAD_TIMEOUT,
-  PDF_IFRAME_FALLBACK_TIMEOUT,
   FILE_TYPE_PDF,
   FILE_EXTENSION_DOCX,
-  COMPLETION_PACKAGE_PATTERNS,
 } from '@/lib/correspondence-constants';
+import {
+  type CanonicalDocRef,
+  fetchCanonicalContent,
+} from '@/lib/canonical-document';
 import mammoth from 'mammoth';
 
 export interface Attachment {
+  /** Prefer id fields — fileUrl is ignored except data: URLs for local drafts. */
+  id?: string | null;
   fileUrl?: string | null;
   fileName?: string | null;
   fileType?: string | null;
+  /** When set, loads as DMS version content. */
+  versionId?: string | null;
 }
 
 export interface UseDocumentPreviewResult {
+  /** @deprecated PDFs use canvas at call sites; always null for stored files. */
   pdfBlobUrl: string | null;
   wordHtml: string | null;
   isLoading: boolean;
   error: string | null;
 }
 
+function resolvePreviewRef(attachment: Attachment): CanonicalDocRef | null {
+  if (attachment.versionId) {
+    return {
+      kind: 'dms-version',
+      versionId: attachment.versionId,
+      fileName: attachment.fileName ?? undefined,
+    };
+  }
+  if (attachment.id) {
+    return {
+      kind: 'corr-attachment',
+      attachmentId: attachment.id,
+      fileName: attachment.fileName ?? undefined,
+    };
+  }
+  return null;
+}
+
 /**
- * Hook for previewing PDF and Word documents from attachments
- * 
- * @param attachment - The attachment object containing fileUrl, fileName, and fileType
- * @returns Object containing pdfBlobUrl, wordHtml, isLoading, and error states
+ * Preview Word (mammoth) from a correspondence attachment id or DMS version id.
+ * PDFs are intentionally not loaded here — callers use SecurePdfCanvasPreview.
  */
 export const useDocumentPreview = (attachment: Attachment | null | undefined): UseDocumentPreviewResult => {
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const abortControllerRef = useRef<AbortController | null>(null);
+
   const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    // Reset state if no attachment
-    if (!attachment?.fileUrl) {
-      setPdfBlobUrl(null);
+    cancelledRef.current = false;
+
+    if (!attachment) {
       setWordHtml(null);
       setIsLoading(false);
       setError(null);
@@ -56,12 +75,23 @@ export const useDocumentPreview = (attachment: Attachment | null | undefined): U
     }
 
     const fileName = attachment.fileName || '';
-    const isPDF = attachment.fileType === FILE_TYPE_PDF;
+    const isPDF =
+      attachment.fileType === FILE_TYPE_PDF || fileName.toLowerCase().endsWith('.pdf');
     const isWordDocx = fileName.toLowerCase().endsWith(FILE_EXTENSION_DOCX);
 
-    // Only process PDF and Word documents
-    if (!isPDF && !isWordDocx) {
-      setPdfBlobUrl(null);
+    // PDF canvas preview is owned by SecurePdfCanvasPreview call sites.
+    if (isPDF || !isWordDocx) {
+      setWordHtml(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    const ref = resolvePreviewRef(attachment);
+    const dataUrl =
+      !ref && attachment.fileUrl?.startsWith('data:') ? attachment.fileUrl : null;
+
+    if (!ref && !dataUrl) {
       setWordHtml(null);
       setIsLoading(false);
       setError(null);
@@ -71,163 +101,66 @@ export const useDocumentPreview = (attachment: Attachment | null | undefined): U
     setIsLoading(true);
     setError(null);
 
-    // Build the proper download URL
-    const fileUrl = buildDownloadUrl(attachment.fileUrl);
-    
-    if (!fileUrl) {
-      setError('Invalid file URL');
-      setIsLoading(false);
-      return;
-    }
-
-    // Get authentication token
-    const token = getStoredAccessToken();
-    const headers: HeadersInit = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    // Create abort controller for cleanup
-    abortControllerRef.current = new AbortController();
-    
-    // Set up timeout
     timeoutIdRef.current = setTimeout(() => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        logError('File load timeout after 60 seconds:', { fileUrl, fileName });
-        setError('File load timeout. The file may be too large or the server is slow. Please try downloading the file.');
+      logError('File load timeout after 60 seconds:', { fileName });
+      if (!cancelledRef.current) {
+        setError('File load timeout. Please try downloading the file.');
         setIsLoading(false);
       }
     }, FILE_LOAD_TIMEOUT);
 
-    fetch(fileUrl, {
-      credentials: 'include',
-      headers,
-      signal: abortControllerRef.current.signal,
-    })
-      .then((response) => {
-        if (!response.ok) {
-          // Handle 404 gracefully
-          if (response.status === 404) {
-            if (timeoutIdRef.current) {
-              clearTimeout(timeoutIdRef.current);
-              timeoutIdRef.current = null;
-            }
-            
-            logWarn('File not found (404):', { fileUrl, fileName });
-            
-            // Only show error for non-completion-package files
-            const isCompletionPackage = COMPLETION_PACKAGE_PATTERNS.some(
-              pattern => fileName.toLowerCase().includes(pattern.toLowerCase())
-            );
-            
-            if (!isCompletionPackage) {
-              setError(`File "${fileName}" not found on server. It may have been deleted or moved.`);
-            } else {
-              setError(null);
-            }
-            setIsLoading(false);
-            return null;
+    const load = async () => {
+      try {
+        let blob: Blob;
+        if (ref) {
+          blob = await fetchCanonicalContent(ref);
+        } else {
+          const response = await fetch(dataUrl!);
+          if (!response.ok) {
+            throw new Error(`Failed to load file: ${response.status}`);
           }
-          throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
+          blob = await response.blob();
         }
-        return response.blob();
-      })
-      .then((blob) => {
-        // Skip if blob is null (404 case)
-        if (!blob) {
-          return;
-        }
+        if (cancelledRef.current) return;
 
-        // Clear timeout on success
         if (timeoutIdRef.current) {
           clearTimeout(timeoutIdRef.current);
           timeoutIdRef.current = null;
         }
 
-        if (isPDF) {
-          const url = URL.createObjectURL(blob);
-          blobUrlRef.current = url;
-          setPdfBlobUrl(url);
-          setWordHtml(null);
-          setIsLoading(false);
-        } else if (isWordDocx) {
-          // Convert Word document to HTML using mammoth
-          blob.arrayBuffer()
-            .then((arrayBuffer) => mammoth.convertToHtml({ arrayBuffer }))
-            .then((result) => {
-              setWordHtml(result.value);
-              setPdfBlobUrl(null);
-              setIsLoading(false);
-            })
-            .catch((err) => {
-              logError('Error converting Word document:', err);
-              setError(`Failed to convert Word document: ${err.message}`);
-              setWordHtml(null);
-              setIsLoading(false);
-            });
-        }
-      })
-      .catch((err) => {
-        // Clear timeout on error
-        if (timeoutIdRef.current) {
-          clearTimeout(timeoutIdRef.current);
-          timeoutIdRef.current = null;
-        }
-        
-        // Don't show error if request was aborted (cleanup or timeout)
-        if (err.name === 'AbortError') {
-          logWarn('File load aborted:', { fileUrl, fileName });
-          return;
-        }
-        
-        logError('Error loading file', err);
-        setError(`Failed to load ${isPDF ? 'PDF' : 'Word document'} preview. Please try downloading the file.`);
+        const result = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+        if (cancelledRef.current) return;
+        setWordHtml(result.value);
         setIsLoading(false);
-      });
+      } catch (err) {
+        if (cancelledRef.current) return;
+        if (timeoutIdRef.current) {
+          clearTimeout(timeoutIdRef.current);
+          timeoutIdRef.current = null;
+        }
+        logError('Error loading file', err);
+        setError('Failed to load Word document preview. Please try downloading the file.');
+        setIsLoading(false);
+      }
+    };
 
-    // Cleanup on unmount or when attachment changes
+    void load();
+
     return () => {
-      // Clear timeout
+      cancelledRef.current = true;
       if (timeoutIdRef.current) {
         clearTimeout(timeoutIdRef.current);
         timeoutIdRef.current = null;
       }
-      
-      // Abort fetch if in progress
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-      
-      // Cleanup blob URL
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
-      setPdfBlobUrl(null);
       setWordHtml(null);
       setIsLoading(false);
     };
-  }, [attachment?.fileUrl, attachment?.fileType, attachment?.fileName]);
-
-  // Fallback timeout for iframe loading - clear loading state if iframe onLoad doesn't fire
-  useEffect(() => {
-    if (pdfBlobUrl && isLoading) {
-      const fallbackTimeout = setTimeout(() => {
-        logWarn('PDF iframe load timeout - clearing loading state as fallback', { pdfBlobUrl });
-        setIsLoading(false);
-      }, PDF_IFRAME_FALLBACK_TIMEOUT);
-      
-      return () => clearTimeout(fallbackTimeout);
-    }
-  }, [pdfBlobUrl, isLoading]);
+  }, [attachment?.id, attachment?.versionId, attachment?.fileType, attachment?.fileName, attachment?.fileUrl]);
 
   return {
-    pdfBlobUrl,
+    pdfBlobUrl: null,
     wordHtml,
     isLoading,
     error,
   };
 };
-

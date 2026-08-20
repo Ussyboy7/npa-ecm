@@ -229,8 +229,8 @@ export default function DrmPoliciesPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Total Policies", value: policies.length, icon: Shield, bgClass: "bg-primary/10", iconClass: "text-primary" },
-            { label: "Active", value: policies.filter((p) => p.is_active).length, icon: CheckCircle2, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
-            { label: "Inactive", value: policies.filter((p) => !p.is_active).length, icon: XCircle, bgClass: "bg-slate-500/10", iconClass: "text-slate-600" },
+            { label: "Active", value: policies.filter((p) => p.is_active).length, icon: CheckCircle2, bgClass: "bg-green-500/10", iconClass: "text-green-600 dark:text-green-400" },
+            { label: "Inactive", value: policies.filter((p) => !p.is_active).length, icon: XCircle, bgClass: "bg-slate-500/10", iconClass: "text-slate-600 dark:text-slate-400" },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
               <CardContent className={registryQueueStatCardContentClass}>

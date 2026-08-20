@@ -346,7 +346,7 @@ export const DocumentMetadataEditDialog = ({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent size="xl" height="fill">
-          <DialogHeader>
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
               Edit Document Metadata
@@ -355,7 +355,7 @@ export const DocumentMetadataEditDialog = ({
               Update document details, classification, and metadata
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-4">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-6 py-4 pr-2 -mr-2">
             {/* Basic Information Section */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b">
@@ -453,15 +453,16 @@ export const DocumentMetadataEditDialog = ({
               </div>
             </div>
 
-            {/* Classification & Organization Section */}
+            {/* Access, Classification & Protection */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b">
                 <AlertTriangle className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold">Classification & Organization</h3>
+                <h3 className="text-sm font-semibold">Access, Classification &amp; Protection</h3>
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Sensitivity</Label>
+                  <Label>Document Classification</Label>
+                  <p className="text-[11px] text-muted-foreground">Determines who may access the document and its organizational classification. This is a business and records-governance decision.</p>
                   <Select
                     value={metadataDraft.sensitivity}
                     onValueChange={(value) => {
@@ -567,22 +568,23 @@ export const DocumentMetadataEditDialog = ({
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="doc-drm-policy">DRM Policy</Label>
+                  <Label htmlFor="doc-drm-policy">Document Protection (DRM)</Label>
+                  <p className="text-[11px] text-muted-foreground">Controls download, printing, copying, sharing, and watermarking. Leave as default to apply the protection policy associated with the selected classification.</p>
                   <Select
-                    value={metadataDraft.drmPolicyId ?? 'none'}
+                    value={metadataDraft.drmPolicyId ?? 'inherit'}
                     onValueChange={(value) => {
                       setMetadataDraft((prev) => ({
                         ...prev,
-                        drmPolicyId: value === 'none' ? null : value,
+                        drmPolicyId: value === 'inherit' ? null : value,
                       }));
                       setHasUnsavedChanges(true);
                     }}
                   >
                     <SelectTrigger id="doc-drm-policy">
-                      <SelectValue placeholder="No DRM policy" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="inherit">Inherit from {SENSITIVITY_DETAILS[metadataDraft.sensitivity]?.label ?? metadataDraft.sensitivity} (Default)</SelectItem>
                       {drmPolicies.map((policy) => (
                         <SelectItem key={policy.id} value={policy.id}>
                           {policy.name}
@@ -590,10 +592,25 @@ export const DocumentMetadataEditDialog = ({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Controls download, print, and sharing rights for this document.
-                  </p>
+                  {metadataDraft.drmPolicyId === null && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {metadataDraft.sensitivity === 'public' && 'Default: Download and share.'}
+                      {metadataDraft.sensitivity === 'internal' && 'Default: Authenticated internal access.'}
+                      {metadataDraft.sensitivity === 'confidential' && 'Default: Restricted access + watermark.'}
+                      {metadataDraft.sensitivity === 'restricted' && 'Default: Strict access + view-only.'}
+                    </p>
+                  )}
                 </div>
+              </div>
+            </div>
+
+            {/* Organization */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <FileText className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Organization</h3>
+              </div>
+              <div className="space-y-4">
                 <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="doc-division">Division</Label>

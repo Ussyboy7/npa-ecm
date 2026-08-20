@@ -166,16 +166,23 @@ export const MinuteThreadPanel = ({
                       </Avatar>
                     </div>
 
-                    {/* Content */}
-                    <button
-                      type="button"
+                    {/* Content — div (not button) so Edit/Recall/Add Note buttons are not nested */}
+                    <div
+                      role="button"
+                      tabIndex={0}
                       className={cn(
-                        'group mb-4 flex-1 min-w-0 rounded-2xl border px-3.5 py-3 text-left transition-colors',
+                        'group mb-4 flex-1 min-w-0 rounded-2xl border px-3.5 py-3 text-left transition-colors cursor-pointer',
                         'border-transparent bg-transparent hover:bg-muted/40',
                         isOwn && 'bg-muted/25 hover:bg-muted/45',
                         minuteItem.isRecalled && 'opacity-70',
                       )}
                       onClick={() => onMinuteClick(minuteItem)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onMinuteClick(minuteItem);
+                        }
+                      }}
                     >
                       <div className="flex items-start justify-between gap-2 min-w-0">
                         <div className="min-w-0 flex-1">
@@ -376,7 +383,7 @@ export const MinuteThreadPanel = ({
                             )}
                         </div>
                       )}
-                    </button>
+                    </div>
                   </li>
                 );
               })}

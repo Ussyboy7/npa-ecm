@@ -1,7 +1,6 @@
 "use client";
 
-import Image from 'next/image';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { logError } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,7 @@ import { toast } from "@/components/ui/sonner";
 import { formatDateTime } from "@/lib/datetime";
 import { signForm } from "@/lib/api/forms";
 import { fetchUserSignature, type StoredSignature } from "@/lib/api/signatures";
+import { buildDownloadUrl } from "@/lib/correspondence-url-utils";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
@@ -23,6 +23,12 @@ interface FormSignatureDialogProps {
   signature: FormSignature;
   workflow: FormSignatureWorkflow;
   onSigned?: () => void;
+}
+
+function resolveSignatureImageSrc(signature: StoredSignature | null): string | null {
+  if (!signature?.imageData) return null;
+  if (signature.imageData.startsWith("data:")) return signature.imageData;
+  return buildDownloadUrl(signature.imageData) ?? signature.imageData;
 }
 
 export function FormSignatureDialog({
@@ -42,10 +48,10 @@ export function FormSignatureDialog({
 
     let cancelled = false;
     void fetchUserSignature()
-      .then((signature) => {
+      .then((stored) => {
         if (cancelled) return;
-        setUserSignature(signature);
-        if (!signature) {
+        setUserSignature(stored);
+        if (!stored) {
           toast.error("Please upload your digital signature in Settings → Signature first");
         }
       })
@@ -61,6 +67,8 @@ export function FormSignatureDialog({
     };
   }, [open, currentUser?.id]);
 
+  const signatureSrc = useMemo(() => resolveSignatureImageSrc(userSignature), [userSignature]);
+
   const handleSign = async () => {
     if (!userSignature) {
       toast.error("Please upload your digital signature in Settings → Signature first");
@@ -70,22 +78,9 @@ export function FormSignatureDialog({
     try {
       setSigning(true);
 
-      // Convert base64 signature to File
-      const base64Data = userSignature.imageData.replace(/^data:image\/\w+;base64,/, "");
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: "image/png" });
-      const signatureFile = new File([blob], userSignature.fileName || "signature.png", {
-        type: "image/png",
-      });
-
+      // Backend applies the Settings signature automatically — no re-upload needed.
       await signForm(workflow.id, {
         signature_id: signature.id,
-        signature_file: signatureFile,
         signed_date: signedDate,
       });
 
@@ -107,51 +102,52 @@ export function FormSignatureDialog({
           <DialogTitle>Sign Form: {signature.field_label}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Form Information */}
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
           <div className="space-y-2">
             <Label className="text-sm font-semibold">Form Information</Label>
             <Card>
-              <CardContent className="p-4 space-y-2">
-                <div className="flex justify-between">
+              <CardContent className="space-y-2 p-4">
+                <div className="flex justify-between gap-4">
                   <span className="text-sm text-muted-foreground">Form:</span>
-                  <span className="text-sm font-medium">{workflow.submission_template_name}</span>
+                  <span className="text-sm font-medium text-right">{workflow.submission_template_name}</span>
                 </div>
                 {workflow.submission_reference && (
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-4">
                     <span className="text-sm text-muted-foreground">Reference:</span>
-                    <span className="text-sm font-medium">{workflow.submission_reference}</span>
+                    <span className="text-sm font-medium text-right">{workflow.submission_reference}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-4">
                   <span className="text-sm text-muted-foreground">Signature Field:</span>
-                  <span className="text-sm font-medium">{signature.field_label}</span>
+                  <span className="text-sm font-medium text-right">{signature.field_label}</span>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Digital Signature */}
           <div className="space-y-2">
-            <Label className="text-sm font-semibold">Digital Signature</Label>
+            <Label className="text-sm font-semibold">Your Signature</Label>
             <Card className="border-dashed">
-              <CardContent className="p-4 space-y-4">
-                {userSignature ? (
+              <CardContent className="space-y-4 p-4">
+                {userSignature && signatureSrc ? (
                   <div className="space-y-3">
-                    <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex flex-col gap-4 sm:flex-row">
                       <div className="flex-1 space-y-1 text-sm">
-                        <p className="font-medium text-foreground">Signature on File</p>
+                        <p className="font-medium text-foreground">From Settings → Signature</p>
                         <p className="text-xs text-muted-foreground">
-                          Uploaded {formatDateTime(userSignature.uploadedAt)}{" "}
-                          {userSignature.fileName ? `• ${userSignature.fileName}` : ""}
+                          Uploaded {formatDateTime(userSignature.uploadedAt)}
+                          {userSignature.fileName ? ` • ${userSignature.fileName}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Confirm below to apply this signature to the form. To change it, update
+                          Settings → Signature first.
                         </p>
                       </div>
-                      <div className="p-3 border rounded-lg bg-background self-start">
-                        <Image
-                          src={userSignature.imageData}
-                          alt="Digital signature preview"
-                          width={200}
-                          height={96}
+                      <div className="self-start rounded-lg border doc-paper p-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={signatureSrc}
+                          alt="Your digital signature"
                           className="max-h-24 w-auto object-contain"
                         />
                       </div>
@@ -169,21 +165,19 @@ export function FormSignatureDialog({
                       />
                     </div>
 
-                    <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="rounded-lg bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground">
-                        Your signature will be applied to this form. Your name, designation, and
-                        department will be automatically populated from your profile.
+                        Your name, designation, and department will be filled from your profile.
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-8 space-y-3">
-                    <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
+                  <div className="space-y-3 py-8 text-center">
+                    <AlertCircle className="mx-auto h-8 w-8 text-destructive" />
                     <div className="space-y-1">
                       <p className="font-medium text-foreground">No Signature Found</p>
                       <p className="text-sm text-muted-foreground">
-                        Please upload your digital signature in Settings → Signature before signing
-                        forms.
+                        Upload your digital signature in Settings → Signature before signing forms.
                       </p>
                     </div>
                     <Button variant="outline" size="sm" asChild>
@@ -195,22 +189,28 @@ export function FormSignatureDialog({
             </Card>
           </div>
 
-          {/* Assignment Information */}
           {(signature.assigned_to_office_name ||
             signature.assigned_to_department_name ||
-            signature.assigned_to_division_name) && (
+            signature.assigned_to_division_name ||
+            signature.assigned_to_user_name) && (
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Assigned To</Label>
               <Card>
-                <CardContent className="p-4 space-y-2">
+                <CardContent className="space-y-2 p-4">
+                  {signature.assigned_to_user_name && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-sm text-muted-foreground">User:</span>
+                      <span className="text-sm font-medium">{signature.assigned_to_user_name}</span>
+                    </div>
+                  )}
                   {signature.assigned_to_office_name && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-4">
                       <span className="text-sm text-muted-foreground">Office:</span>
                       <span className="text-sm font-medium">{signature.assigned_to_office_name}</span>
                     </div>
                   )}
                   {signature.assigned_to_department_name && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-4">
                       <span className="text-sm text-muted-foreground">Department:</span>
                       <span className="text-sm font-medium">
                         {signature.assigned_to_department_name}
@@ -218,7 +218,7 @@ export function FormSignatureDialog({
                     </div>
                   )}
                   {signature.assigned_to_division_name && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-4">
                       <span className="text-sm text-muted-foreground">Division:</span>
                       <span className="text-sm font-medium">{signature.assigned_to_division_name}</span>
                     </div>
@@ -236,12 +236,12 @@ export function FormSignatureDialog({
           <Button onClick={handleSign} disabled={signing || !userSignature}>
             {signing ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Signing...
               </>
             ) : (
               <>
-                <ImageIcon className="h-4 w-4 mr-2" />
+                <ImageIcon className="mr-2 h-4 w-4" />
                 Sign Form
               </>
             )}
@@ -251,4 +251,3 @@ export function FormSignatureDialog({
     </Dialog>
   );
 }
-

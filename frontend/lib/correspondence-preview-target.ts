@@ -1,4 +1,3 @@
-import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import type { Correspondence } from '@/lib/npa-structure';
 import type { DocumentRecord } from '@/lib/api/dms';
 
@@ -12,6 +11,11 @@ export function getPrimaryLinkedDocument(linkedDocuments: DocumentRecord[]): Doc
   );
 }
 
+function versionHasPreview(version: { id?: string; hasFile?: boolean; contentHtml?: string | null } | undefined): boolean {
+  if (!version?.id) return false;
+  return Boolean(version.hasFile || (version.contentHtml && version.contentHtml.trim() !== ''));
+}
+
 export function getCorrespondencePreviewContext(
   correspondence: Correspondence | null | undefined,
   linkedDocuments: DocumentRecord[],
@@ -23,45 +27,53 @@ export function getCorrespondencePreviewContext(
       ? correspondence.attachments[selectedAttachmentIndex]
       : null;
 
-  const completionPackageUrl = buildDownloadUrl(correspondence?.completionPackage?.fileUrl ?? null) ?? null;
-  const completionPackageFileName = completionPackageUrl
-    ? completionPackageUrl.split('/').filter(Boolean).pop() ||
-      `${correspondence?.referenceNumber || 'completion-package'}.pdf`
+  const hasCompletionPackage = Boolean(
+    correspondence?.completionPackage?.versionId || correspondence?.completionPackage?.documentId,
+  );
+  const completionPackageFileName = hasCompletionPackage
+    ? `${correspondence?.referenceNumber || 'completion-package'}.pdf`
     : undefined;
 
   const primaryDoc = getPrimaryLinkedDocument(linkedDocuments);
   const linkedDocumentLatestVersion = primaryDoc?.versions?.[primaryDoc.versions.length - 1];
-  const linkedDocumentPreviewUrl = buildDownloadUrl(linkedDocumentLatestVersion?.fileUrl);
+  const linkedHasPreview = versionHasPreview(linkedDocumentLatestVersion);
   const linkedDocumentPreviewFileName = linkedDocumentLatestVersion?.fileName;
 
-  const previewUrl = selectedAttachment
-    ? buildDownloadUrl(selectedAttachment.fileUrl)
-    : linkedDocumentPreviewUrl
-      ? linkedDocumentPreviewUrl
-      : isCompleted && completionPackageUrl
-        ? completionPackageUrl
-        : buildDownloadUrl(correspondence?.attachments?.[0]?.fileUrl);
+  const firstAttachment = correspondence?.attachments?.[0];
+  const firstAttachmentHasFile = Boolean(firstAttachment?.hasFile || firstAttachment?.id);
 
   const previewFileName = selectedAttachment
     ? selectedAttachment.fileName
-    : linkedDocumentPreviewFileName
+    : linkedHasPreview
       ? linkedDocumentPreviewFileName
-      : isCompleted && completionPackageUrl
+      : isCompleted && hasCompletionPackage
         ? completionPackageFileName
-        : correspondence?.attachments?.[0]?.fileName;
+        : firstAttachment?.fileName;
 
   const source: PreviewAttachmentSource = selectedAttachment
     ? 'attachment'
-    : !linkedDocumentPreviewUrl && isCompleted && completionPackageUrl
+    : !linkedHasPreview && isCompleted && hasCompletionPackage
       ? 'completion-package'
       : 'attachment';
 
   return {
     selectedAttachment,
-    completionPackageUrl,
-    previewUrl: previewUrl ?? undefined,
+    hasCompletionPackage,
     previewFileName,
     source,
+    attachmentId:
+      selectedAttachment?.id ??
+      (!linkedHasPreview && !(isCompleted && hasCompletionPackage) && firstAttachmentHasFile
+        ? firstAttachment?.id
+        : undefined),
+    documentVersionId:
+      !selectedAttachment && linkedDocumentLatestVersion?.id
+        ? linkedDocumentLatestVersion.id
+        : source === 'completion-package'
+          ? correspondence?.completionPackage?.versionId
+          : undefined,
+    completionDocumentId: correspondence?.completionPackage?.documentId,
+    completionVersionId: correspondence?.completionPackage?.versionId,
   };
 }
 

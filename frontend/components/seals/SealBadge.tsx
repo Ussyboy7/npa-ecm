@@ -158,7 +158,7 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
         </DialogHeader>
         <div className="flex-1 overflow-y-auto pr-2 space-y-5">
           {/* Seal Preview - Centered */}
-          <div className="flex justify-center p-3 bg-white rounded-lg border border-emerald-200 dark:border-emerald-800">
+          <div className="flex justify-center p-3 doc-paper rounded-lg border border-emerald-200 dark:border-emerald-800">
             <DigitalSealPreview
               ref={previewRef}
               officeName={sealData.officeName}

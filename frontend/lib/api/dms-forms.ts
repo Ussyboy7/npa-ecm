@@ -96,6 +96,8 @@ export interface FormDocumentListParams {
   correspondence?: string;
   search?: string;
   executive?: string;
+  pendingMySignature?: boolean;
+  signedByMe?: boolean;
   page?: number;
   pageSize?: number;
   ordering?: string;
@@ -116,6 +118,8 @@ export async function listFormDocuments(
   if (params?.correspondence) queryParams.append('correspondence', params.correspondence);
   if (params?.search) queryParams.append('search', params.search);
   if (params?.executive) queryParams.append('executive', params.executive);
+  if (params?.pendingMySignature) queryParams.append('pending_my_signature', 'true');
+  if (params?.signedByMe) queryParams.append('signed_by_me', 'true');
   if (params?.page) queryParams.append('page', String(params.page));
   if (params?.pageSize) queryParams.append('page_size', String(params.pageSize));
   if (params?.ordering) queryParams.append('ordering', params.ordering);
@@ -242,5 +246,30 @@ export async function cloneFormDocument(
   return apiFetch<FormDocument>(`${BASE_PATH}/form-documents/${id}/clone/`, {
     method: "POST",
     body: JSON.stringify(payload || {}),
+  });
+}
+
+export type ForwardFormPayload = {
+  target_type: "user" | "division" | "department";
+  action_type: "review" | "input" | "signature";
+  message?: string;
+  user_ids?: string[];
+  division_id?: string;
+  department_id?: string;
+};
+
+export type ForwardFormResult = {
+  notified_count: number;
+  recipient_count: number;
+  form: FormDocument;
+};
+
+export async function forwardFormDocument(
+  id: string,
+  payload: ForwardFormPayload,
+): Promise<ForwardFormResult> {
+  return apiFetch<ForwardFormResult>(`${BASE_PATH}/form-documents/${id}/forward/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }

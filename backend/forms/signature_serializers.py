@@ -13,6 +13,7 @@ class FormSignatureSerializer(serializers.ModelSerializer):
     assigned_to_office_name = serializers.CharField(source="assigned_to_office.name", read_only=True)
     assigned_to_department_name = serializers.CharField(source="assigned_to_department.name", read_only=True)
     assigned_to_division_name = serializers.CharField(source="assigned_to_division.name", read_only=True)
+    assigned_to_user_name = serializers.SerializerMethodField()
     signed_by_name = serializers.CharField(source="signed_by.get_full_name", read_only=True)
     signature_file_url = serializers.SerializerMethodField()
     
@@ -29,6 +30,8 @@ class FormSignatureSerializer(serializers.ModelSerializer):
             "assigned_to_department_name",
             "assigned_to_division",
             "assigned_to_division_name",
+            "assigned_to_user",
+            "assigned_to_user_name",
             "signer_name",
             "signer_pn",
             "signer_designation",
@@ -37,7 +40,6 @@ class FormSignatureSerializer(serializers.ModelSerializer):
             "signed_date",
             "status",
             "order",
-            "assigned_to_user",
             "signed_by",
             "signed_by_name",
             "signed_at",
@@ -54,6 +56,12 @@ class FormSignatureSerializer(serializers.ModelSerializer):
             "signed_by",
         ]
     
+    def get_assigned_to_user_name(self, obj):
+        user = obj.assigned_to_user
+        if not user:
+            return None
+        return user.get_full_name() or user.username
+
     def get_signature_file_url(self, obj):
         """Get the URL for the signature file."""
         if obj.signature_file:

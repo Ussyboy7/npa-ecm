@@ -13,17 +13,23 @@ import { Minute, CorrespondenceAttachment, type Correspondence } from "@/lib/npa
 import { SealBadge } from '@/components/seals/SealBadge';
 import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
 import React, { useState, useEffect, useRef } from "react";
-import { apiFetch, getStoredAccessToken } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import mammoth from "mammoth";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { logDocumentAccess } from "@/lib/api/dms";
+import { logDocumentAccess, type DocumentAccessLog } from "@/lib/api/dms";
 import { fetchDocumentById } from "@/lib/api/dms";
+import {
+  downloadCanonicalDocument,
+  fetchCanonicalContent,
+} from "@/lib/canonical-document";
+import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { sanitizeThemedHtml } from '@/lib/sanitize-html';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { toast } from '@/components/ui/sonner';
 
 /** Short routing note for Treat minutes — full memo lives in treatment response HTML. */
 function getTreatMinuteSummary(minuteText: string): string {
@@ -98,8 +104,11 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<CorrespondenceAttachment | null>(null);
   const [viewAttachment, setViewAttachment] = useState<CorrespondenceAttachment | null>(null);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
-  const [viewPdfBlobUrl, setViewPdfBlobUrl] = useState<string | null>(null);
+  const [viewDelivery, setViewDelivery] = useState<'attachment' | 'dms-version'>('attachment');
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [previewPdfBytes, setPreviewPdfBytes] = useState<ArrayBuffer | null>(null);
+  const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
+  const [viewPdfBytes, setViewPdfBytes] = useState<ArrayBuffer | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [wordError, setWordError] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<unknown[]>([]);
@@ -277,37 +286,51 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
     };
   }, [open, responseLinkedDocumentIds]);
 
-  // Generate PDF blob URL for preview
+  // Generate preview for attachment dialog (canonical content API)
   useEffect(() => {
-    if (previewAttachment && previewAttachment.fileType === 'application/pdf' && previewAttachment.fileUrl) {
+    const isPdf = previewAttachment?.fileType === 'application/pdf';
+    const isImage = Boolean(previewAttachment?.fileType?.startsWith('image/'));
+    if (previewAttachment?.id && (isPdf || isImage)) {
       setLoadingAttachments(true);
-      fetch(previewAttachment.fileUrl, { credentials: 'include' })
-        .then((response) => response.blob())
-        .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          setPdfBlobUrl(url);
+      setPreviewPdfBytes(null);
+      fetchCanonicalContent({
+        kind: 'corr-attachment',
+        attachmentId: previewAttachment.id,
+        fileName: previewAttachment.fileName,
+      })
+        .then(async (blob) => {
+          if (isPdf) {
+            setPreviewPdfBytes(await blob.arrayBuffer());
+            setPreviewImageUrl(null);
+          } else {
+            const url = URL.createObjectURL(blob);
+            setPreviewImageUrl(url);
+            setPreviewPdfBytes(null);
+          }
           setLoadingAttachments(false);
         })
         .catch((error) => {
-          logError('Failed to load PDF:', error);
+          logError('Failed to load preview file:', error);
           setLoadingAttachments(false);
         });
 
       return () => {
-        if (pdfBlobUrl) {
-          URL.revokeObjectURL(pdfBlobUrl);
+        if (previewImageUrl) {
+          URL.revokeObjectURL(previewImageUrl);
         }
       };
     } else {
-      setPdfBlobUrl(null);
+      setPreviewImageUrl(null);
+      setPreviewPdfBytes(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewAttachment]);
 
-  // Generate PDF blob URL or Word HTML for view modal
+  // Generate PDF canvas bytes or Word HTML for view modal (canonical delivery)
   useEffect(() => {
-    if (!viewAttachment || !viewAttachment.fileUrl) {
-      setViewPdfBlobUrl(null);
+    if (!viewAttachment?.id) {
+      setViewImageUrl(null);
+      setViewPdfBytes(null);
       setWordHtml(null);
       return;
     }
@@ -318,114 +341,72 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
     const isHtml = viewAttachment.fileType === 'text/html' ||
       viewAttachment.fileName?.toLowerCase().endsWith('.html') ||
       viewAttachment.fileName?.toLowerCase().endsWith('.htm');
+    const isImage = Boolean(viewAttachment.fileType?.startsWith('image/'));
 
-    if (isPDF) {
+    const ref =
+      viewDelivery === 'dms-version'
+        ? ({
+            kind: 'dms-version' as const,
+            versionId: viewAttachment.id,
+            fileName: viewAttachment.fileName,
+          })
+        : ({
+            kind: 'corr-attachment' as const,
+            attachmentId: viewAttachment.id,
+            fileName: viewAttachment.fileName,
+          });
+
+    if (isPDF || isWordDocx || isHtml || isImage) {
       setLoadingAttachments(true);
-      const token = getStoredAccessToken();
-      const headers: HeadersInit = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      fetch(viewAttachment.fileUrl, { 
-        credentials: 'include',
-        headers,
-      })
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Failed to load PDF: ${response.status} ${response.statusText}`);
+      fetchCanonicalContent(ref)
+        .then(async (blob) => {
+          if (isPDF) {
+            setViewPdfBytes(await blob.arrayBuffer());
+            setViewImageUrl(null);
+            setWordHtml(null);
+            setLoadingAttachments(false);
+            return;
           }
-          return response.blob();
-        })
-        .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          setViewPdfBlobUrl(url);
-          setWordHtml(null);
-          setLoadingAttachments(false);
+          if (isImage) {
+            const url = URL.createObjectURL(blob);
+            setViewImageUrl(url);
+            setViewPdfBytes(null);
+            setWordHtml(null);
+            setLoadingAttachments(false);
+            return;
+          }
+          if (isWordDocx) {
+            const result = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+            setWordHtml(result.value);
+            setViewImageUrl(null);
+            setViewPdfBytes(null);
+            setLoadingAttachments(false);
+            return;
+          }
+          if (isHtml) {
+            const text = await blob.text();
+            setWordHtml(text);
+            setViewImageUrl(null);
+            setViewPdfBytes(null);
+            setLoadingAttachments(false);
+          }
         })
         .catch((error) => {
-          logError('Failed to load PDF:', error);
+          logError('Failed to load preview:', error);
           setLoadingAttachments(false);
+          toast.error(error instanceof Error ? error.message : 'Failed to load preview');
         });
 
       return () => {
-        if (viewPdfBlobUrl) {
-          URL.revokeObjectURL(viewPdfBlobUrl);
-        }
+        if (viewImageUrl) URL.revokeObjectURL(viewImageUrl);
       };
-    } else if (isWordDocx) {
-      setLoadingAttachments(true);
-      const token = getStoredAccessToken();
-      const headers: HeadersInit = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      fetch(viewAttachment.fileUrl, {
-        credentials: 'include',
-        headers,
-      })
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Failed to load Word document: ${response.status} ${response.statusText}`);
-          }
-          return response.blob();
-        })
-        .then((blob) => {
-          return blob.arrayBuffer();
-        })
-        .then((arrayBuffer) => {
-          return mammoth.convertToHtml({ arrayBuffer });
-        })
-        .then((result) => {
-          setWordHtml(result.value);
-          setWordError(null);
-          setViewPdfBlobUrl(null);
-          setLoadingAttachments(false);
-        })
-        .catch((error) => {
-          logError('Error converting Word document:', error);
-          setWordError((error instanceof Error ? error.message : ERROR_UNKNOWN) || 'Failed to convert Word document');
-          setWordHtml(null);
-          setLoadingAttachments(false);
-        });
-    } else if (isHtml) {
-      setLoadingAttachments(true);
-      const token = getStoredAccessToken();
-      const headers: HeadersInit = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      fetch(viewAttachment.fileUrl, {
-        credentials: 'include',
-        headers,
-      })
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Failed to load HTML document: ${response.status} ${response.statusText}`);
-          }
-          return response.text();
-        })
-        .then((html) => {
-          setWordHtml(html);
-          setWordError(null);
-          setViewPdfBlobUrl(null);
-          setLoadingAttachments(false);
-        })
-        .catch((error) => {
-          logError('Error loading HTML document:', error);
-          setWordError('Failed to render HTML document');
-          setWordHtml(null);
-          setLoadingAttachments(false);
-        });
-    } else {
-      setViewPdfBlobUrl(null);
-      setWordHtml(null);
-      setWordError(null);
     }
+
+    setViewImageUrl(null);
+    setViewPdfBytes(null);
+    setWordHtml(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewAttachment]);
+  }, [viewAttachment, viewDelivery]);
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';
@@ -448,7 +429,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
     return null;
   };
 
-  const logMinuteAttachmentDmsAccess = async (action: 'view' | 'download' | 'attempted-download') => {
+  const logMinuteAttachmentDmsAccess = async (action: DocumentAccessLog['action']) => {
     if (!currentUser?.id) return;
     const target = resolveResponseDmsTarget();
     if (!target) return;
@@ -466,14 +447,22 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
   };
 
   const handleDownload = async (attachment: CorrespondenceAttachment) => {
-    if (!attachment.fileUrl) {
+    if (!attachment.id) {
       await logMinuteAttachmentDmsAccess('attempted-download');
+      toast.error('No file available');
       return;
     }
-    await logMinuteAttachmentDmsAccess('download');
-    const opened = window.open(attachment.fileUrl, '_blank');
-    if (!opened) {
+    try {
+      await logMinuteAttachmentDmsAccess('download');
+      await downloadCanonicalDocument({
+        kind: 'corr-attachment',
+        attachmentId: attachment.id,
+        fileName: attachment.fileName || 'document',
+      });
+    } catch (err) {
       await logMinuteAttachmentDmsAccess('attempted-download');
+      logError('Attachment download failed', err);
+      toast.error(err instanceof Error ? err.message : 'Download failed');
     }
   };
 
@@ -483,24 +472,28 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
       const document = await fetchDocumentById(documentId);
       if (!document.versions?.length) {
         logWarn("Linked document has no versions to preview", { documentId });
+        toast.error('No file available to preview');
         return;
       }
 
       const latestVersion = [...document.versions].sort((a, b) => b.versionNumber - a.versionNumber)[0];
-      if (!latestVersion?.fileUrl) {
-        logWarn("Linked document latest version has no file URL", { documentId, versionId: latestVersion?.id });
+      if (!latestVersion?.id || (!latestVersion.hasFile && !latestVersion.contentHtml)) {
+        logWarn("Linked document latest version has no content", { documentId, versionId: latestVersion?.id });
+        toast.error('No file available to preview');
         return;
       }
 
+      setViewDelivery('dms-version');
       setViewAttachment({
         id: latestVersion.id,
         fileName: latestVersion.fileName || document.title,
         fileType: latestVersion.fileType,
         fileSize: latestVersion.fileSize,
-        fileUrl: latestVersion.fileUrl,
+        fileUrl: latestVersion.fileUrl || '',
       });
     } catch (error: unknown) {
       logError("Failed to load linked document preview", error);
+      toast.error('Could not open document preview');
     } finally {
       setLoadingAttachments(false);
     }
@@ -650,7 +643,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                       )}
                     </div>
                     <CollapsibleContent className="mt-2 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1 duration-200 motion-reduce:animate-none">
-                      <div className="rounded-lg border border-border overflow-hidden bg-white text-neutral-900 p-4 max-h-[50vh] overflow-y-auto">
+                      <div className="rounded-lg border border-border overflow-hidden doc-paper p-4 max-h-[50vh] overflow-y-auto">
                         <div
                           className={cn(
                             'prose prose-sm max-w-none text-neutral-900',
@@ -965,6 +958,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                                 className="h-8 w-8"
                                 onClick={() => {
                                   void logMinuteAttachmentDmsAccess('view');
+                                  setViewDelivery('attachment');
                                   setViewAttachment(attachment);
                                 }}
                                 title="View Document"
@@ -1081,10 +1075,10 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-              ) : previewAttachment && previewAttachment.fileType?.startsWith('image/') && previewAttachment.fileUrl ? (
+              ) : previewAttachment && previewAttachment.fileType?.startsWith('image/') && previewImageUrl ? (
                 <div className="flex items-center justify-center p-4">
                   <Image 
-                    src={previewAttachment.fileUrl} 
+                    src={previewImageUrl} 
                     alt={previewAttachment.fileName}
                     width={1200}
                     height={900}
@@ -1092,19 +1086,17 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                     unoptimized
                   />
                 </div>
-              ) : previewAttachment && previewAttachment.fileType === 'application/pdf' && pdfBlobUrl ? (
-                <iframe
-                  src={pdfBlobUrl}
-                  className="w-full h-[70vh] border-0 rounded-lg"
-                  title={`PDF Preview: ${previewAttachment.fileName}`}
-                />
+              ) : previewAttachment && previewAttachment.fileType === 'application/pdf' && previewPdfBytes ? (
+                <div className="w-full overflow-auto">
+                  <SecurePdfCanvasPreview data={previewPdfBytes} minHeightClassName="min-h-[70vh]" />
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                   <p className="text-sm text-muted-foreground">
                     Preview not available for this file type
                   </p>
-                  {previewAttachment?.fileUrl && (
+                  {previewAttachment?.id && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1137,10 +1129,10 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <span className="ml-3 text-sm text-muted-foreground">Loading document...</span>
               </div>
-            ) : viewAttachment && viewAttachment.fileType?.startsWith('image/') && viewAttachment.fileUrl ? (
+            ) : viewAttachment && viewAttachment.fileType?.startsWith('image/') && viewImageUrl ? (
               <div className="flex items-center justify-center p-4 py-8">
                 <Image 
-                  src={viewAttachment.fileUrl} 
+                  src={viewImageUrl} 
                   alt={viewAttachment.fileName}
                   width={1200}
                   height={900}
@@ -1148,13 +1140,9 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                   unoptimized
                 />
               </div>
-            ) : viewAttachment && viewAttachment.fileType === 'application/pdf' && viewPdfBlobUrl ? (
-              <div className="w-full h-full min-h-[600px] py-4">
-                <iframe
-                  src={viewPdfBlobUrl}
-                  className="w-full h-full border-0 rounded-lg"
-                  title={`PDF Document: ${viewAttachment.fileName}`}
-                />
+            ) : viewAttachment && (viewAttachment.fileType === 'application/pdf' || viewAttachment.fileName?.toLowerCase().endsWith('.pdf')) && viewPdfBytes ? (
+              <div className="w-full overflow-auto py-4">
+                <SecurePdfCanvasPreview data={viewPdfBytes} minHeightClassName="min-h-[600px]" />
               </div>
             ) : viewAttachment && wordError ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -1165,10 +1153,10 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
             ) : viewAttachment && wordHtml ? (
               <div className="w-full py-4">
                 <div className="prose prose-base dark:prose-invert max-w-none p-6 overflow-y-auto">
-                  <div dangerouslySetInnerHTML={{ __html: wordHtml }} />
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeThemedHtml(wordHtml) }} />
                 </div>
               </div>
-            ) : viewAttachment && viewAttachment.fileUrl ? (
+            ) : viewAttachment?.id ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                 <p className="text-sm text-muted-foreground mb-2">
@@ -1177,6 +1165,28 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                 <p className="text-xs text-muted-foreground mb-4">
                   {viewAttachment.fileType || 'Unknown file type'}
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (!viewAttachment?.id) return;
+                    if (viewDelivery === 'dms-version') {
+                      void downloadCanonicalDocument({
+                        kind: 'dms-version',
+                        versionId: viewAttachment.id,
+                        fileName: viewAttachment.fileName || 'document',
+                      }).catch((err) => {
+                        logError('Linked document download failed', err);
+                        toast.error(err instanceof Error ? err.message : 'Download failed');
+                      });
+                      return;
+                    }
+                    void handleDownload(viewAttachment);
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download to View
+                </Button>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">

@@ -15,7 +15,9 @@ export type FormFieldType =
   | "file"
   | "email"
   | "url"
-  | "currency";
+  | "currency"
+  | "table"
+  | "calculated";
 
 export interface FormFieldOption {
   value: string;
@@ -41,6 +43,12 @@ export interface FormField {
   options?: FormFieldOption[];
 }
 
+export interface FormSignatureRole {
+  key: string;
+  label: string;
+  fields?: string[];
+}
+
 export interface FormTemplate {
   id: string;
   name: string;
@@ -57,6 +65,10 @@ export interface FormTemplate {
       fields: string[]; // field IDs
     }>;
     layout?: "single" | "multi-column";
+    signatures?: {
+      type?: string;
+      roles?: FormSignatureRole[];
+    };
   };
   created_by?: {
     id: string;
@@ -116,6 +128,7 @@ export interface FormSignature {
   status: "pending" | "signed" | "rejected" | "skipped";
   order: number;
   assigned_to_user?: string;
+  assigned_to_user_name?: string;
   signed_by?: string;
   signed_by_name?: string;
   signed_at?: string;

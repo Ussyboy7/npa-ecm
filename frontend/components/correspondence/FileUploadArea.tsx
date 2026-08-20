@@ -13,6 +13,7 @@ import { Upload, File, X, Eye, FileText, Image as ImageIcon, FileType } from 'lu
 import { useFileUpload, type UploadedFile } from '@/hooks/use-file-upload';
 import Image from 'next/image';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
+import { SecurePdfCanvasPreview } from '@/components/dms/SecurePdfCanvasPreview';
 
 interface FileUploadAreaProps {
   files: UploadedFile[];
@@ -30,7 +31,7 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
   className = '',
 }) => {
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [previewPdfBytes, setPreviewPdfBytes] = useState<ArrayBuffer | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const {
@@ -51,21 +52,21 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
   // Use external files if provided, otherwise use internal state
   const displayFiles = externalFiles.length > 0 ? externalFiles : internalFiles;
 
-  // Generate blob URL for PDF preview
+  // Load PDF bytes for canvas preview (no browser PDF chrome)
   useEffect(() => {
     if (previewFile && previewFile.type === 'application/pdf') {
+      let cancelled = false;
       setPreviewLoading(true);
-      const blob = new Blob([previewFile.file], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      setPdfBlobUrl(url);
-      setPreviewLoading(false);
-
+      void previewFile.file.arrayBuffer().then((bytes) => {
+        if (cancelled) return;
+        setPreviewPdfBytes(bytes);
+        setPreviewLoading(false);
+      });
       return () => {
-        URL.revokeObjectURL(url);
+        cancelled = true;
       };
-    } else {
-      setPdfBlobUrl(null);
     }
+    setPreviewPdfBytes(null);
   }, [previewFile]);
 
   const getFileIcon = (file: UploadedFile) => {
@@ -96,10 +97,7 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
 
   const closePreview = () => {
     setPreviewFile(null);
-    if (pdfBlobUrl) {
-      URL.revokeObjectURL(pdfBlobUrl);
-      setPdfBlobUrl(null);
-    }
+    setPreviewPdfBytes(null);
   };
 
   const isImage = (file: UploadedFile) => file.type.startsWith('image/');
@@ -284,13 +282,8 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
                     unoptimized
                   />
                 </div>
-              ) : previewFile && isPDF(previewFile) && pdfBlobUrl ? (
-                <iframe
-                  src={pdfBlobUrl}
-                  className="w-full h-[70vh] border-0 rounded-lg"
-                  title={`PDF Preview: ${previewFile.name}`}
-                  aria-label={`PDF document preview: ${previewFile.name}`}
-                />
+              ) : previewFile && isPDF(previewFile) && previewPdfBytes ? (
+                <SecurePdfCanvasPreview data={previewPdfBytes} minHeightClassName="min-h-[70vh]" />
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   {previewFile && (() => {

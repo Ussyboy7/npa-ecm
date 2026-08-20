@@ -157,8 +157,7 @@ export function DocumentVersionsPanel({
           const isProcessing = versionOCR?.isProcessing || false;
           const hasOCRText = Boolean(version.ocrText && version.ocrText.trim() !== "");
           const canShowOCR =
-            (version.fileUrl &&
-              version.fileUrl.trim() !== "" &&
+            ((version.hasFile || Boolean(version.id)) &&
               (version.fileType?.startsWith("image/") ||
                 version.fileType === "application/pdf" ||
                 version.fileType ===
@@ -226,7 +225,7 @@ export function DocumentVersionsPanel({
                         Compare to v{olderVersion.versionNumber}
                       </DropdownMenuItem>
                     )}
-                    {version.fileUrl?.trim() && (
+                    {(version.hasFile || Boolean(version.id)) && (
                       <DropdownMenuItem
                         disabled={!canDownload}
                         onClick={() => void handleDownload(version)}

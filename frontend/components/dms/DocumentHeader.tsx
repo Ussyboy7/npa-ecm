@@ -45,6 +45,7 @@ interface DocumentHeaderProps {
   onDownload?: () => void;
   onFullscreen?: () => void;
   canDownload?: boolean;
+  canShare?: boolean;
   canFullscreen?: boolean;
   hasLinkedCorrespondence?: boolean;
 }
@@ -62,6 +63,7 @@ export const DocumentHeader = ({
   onDownload,
   onFullscreen,
   canDownload = false,
+  canShare = true,
   canFullscreen = false,
   hasLinkedCorrespondence = false,
 }: DocumentHeaderProps) => {
@@ -195,6 +197,8 @@ export const DocumentHeader = ({
               size="sm"
               className="bg-gradient-primary hover:opacity-90 transition-opacity motion-reduce:transition-none"
               onClick={onShare}
+              disabled={!canShare}
+              title={canShare ? "Share document" : "Sharing blocked by DRM policy"}
             >
               <Share2 className="h-4 w-4 mr-2" />
               Share

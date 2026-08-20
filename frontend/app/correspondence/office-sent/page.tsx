@@ -65,6 +65,7 @@ const OfficeSentPage = () => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('all');
+  const [hasSetDefaultOffice, setHasSetDefaultOffice] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [dispatchFilter, setDispatchFilter] = useState<DispatchFilter>('all');
   const [sortBy, setSortBy] = useState<string>('dispatch_date');
@@ -96,6 +97,14 @@ const OfficeSentPage = () => {
   }, [currentUser, officeMemberships]);
 
   const hasOfficeAccess = isSuperAdmin || userOfficeIds.length > 0;
+
+  // Default office filter to holder's primary office (ICT for gmict) — not "All Offices"
+  useEffect(() => {
+    if (!isSuperAdmin && !hasSetDefaultOffice && userOfficeIds.length > 0 && selectedOfficeId === 'all') {
+      setSelectedOfficeId(userOfficeIds[0]);
+      setHasSetDefaultOffice(true);
+    }
+  }, [userOfficeIds, isSuperAdmin, selectedOfficeId, hasSetDefaultOffice]);
 
   const selectableOffices = useMemo(() => {
     if (isSuperAdmin) return offices;

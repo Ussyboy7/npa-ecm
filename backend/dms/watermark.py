@@ -1,10 +1,12 @@
-"""Apply byte-level text watermarks to PDF payloads at serve time."""
+"""Apply byte-level text watermarks and PDF permission flags at serve time."""
 
 from __future__ import annotations
 
 import io
+import secrets
 
 from pypdf import PdfReader, PdfWriter
+from pypdf.constants import UserAccessPermissions
 from reportlab.lib.colors import Color
 from reportlab.pdfgen import canvas
 
@@ -48,6 +50,46 @@ def apply_text_watermark(pdf_bytes: bytes, text: str) -> bytes:
         page.merge_page(overlay_page, over=True)
         writer.add_page(page)
 
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+def apply_pdf_access_restrictions(
+    pdf_bytes: bytes,
+    *,
+    allow_print: bool = True,
+    allow_extract: bool = True,
+) -> bytes:
+    """
+    Encrypt PDF with empty user password so viewers open it, but owner
+    permissions block print and/or extract when policy requires it.
+    """
+    if not is_pdf_bytes(pdf_bytes):
+        return pdf_bytes
+    if allow_print and allow_extract:
+        return pdf_bytes
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    writer = PdfWriter()
+    writer.append_pages_from_reader(reader)
+
+    # Start from no grants, then add back what policy allows.
+    permissions = UserAccessPermissions(0)
+    if allow_print:
+        permissions |= UserAccessPermissions.PRINT
+        permissions |= UserAccessPermissions.PRINT_TO_REPRESENTATION
+    if allow_extract:
+        permissions |= UserAccessPermissions.EXTRACT
+        permissions |= UserAccessPermissions.EXTRACT_TEXT_AND_GRAPHICS
+
+    owner_password = secrets.token_urlsafe(24)
+    writer.encrypt(
+        user_password="",
+        owner_password=owner_password,
+        use_128bit=True,
+        permissions_flag=permissions,
+    )
     out = io.BytesIO()
     writer.write(out)
     return out.getvalue()

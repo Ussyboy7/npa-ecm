@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDistanceToNow } from 'date-fns';
-import { Activity, User as UserIcon, Clock, Eye, Download as DownloadIcon, Shield } from 'lucide-react';
+import { Activity, User as UserIcon, Clock, Eye, Download as DownloadIcon, Shield, Printer } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDateTime } from '@/lib/correspondence-helpers';
@@ -15,6 +15,21 @@ interface AccessActivityDetailsDialogProps {
   onClose: () => void;
 }
 
+function actionPresentation(action: DocumentAccessLog['action']) {
+  switch (action) {
+    case 'download':
+      return { label: 'Downloaded', failed: false, icon: DownloadIcon };
+    case 'attempted-download':
+      return { label: 'Attempted Download', failed: true, icon: DownloadIcon };
+    case 'print':
+      return { label: 'Printed', failed: false, icon: Printer };
+    case 'attempted-print':
+      return { label: 'Attempted Print', failed: true, icon: Printer };
+    default:
+      return { label: 'Viewed', failed: false, icon: Eye };
+  }
+}
+
 export function AccessActivityDetailsDialog({
   log,
   accessLogs,
@@ -25,13 +40,8 @@ export function AccessActivityDetailsDialog({
 
   const user = userLookup.get(log.userId);
   const displayUserName = user?.name ?? log.userName ?? 'Unknown User';
-  const actionLabel =
-    log.action === 'download'
-      ? 'Downloaded'
-      : log.action === 'attempted-download'
-        ? 'Attempted Download'
-        : 'Viewed';
-  const ActionIcon = log.action === 'download' ? DownloadIcon : Eye;
+  const presentation = actionPresentation(log.action);
+  const ActionIcon = presentation.icon;
 
   const userLogs = accessLogs.filter((entry) => entry.userId === log.userId);
   const sortedUserLogs = [...userLogs].sort(
@@ -58,8 +68,8 @@ export function AccessActivityDetailsDialog({
               <div className="flex-1">
                 <p className="text-sm font-medium">Action</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <p className="text-sm text-muted-foreground">{actionLabel}</p>
-                  {log.action === 'attempted-download' && (
+                  <p className="text-sm text-muted-foreground">{presentation.label}</p>
+                  {presentation.failed && (
                     <Badge variant="destructive" className="text-[10px]">
                       Failed
                     </Badge>

@@ -1,7 +1,5 @@
 """Root URL configuration for the ECM backend."""
 
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -49,5 +47,5 @@ urlpatterns = [
     path('api/', include((api_v1_patterns, 'api'), namespace='api_legacy')),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Public /media/ is intentionally not mounted. Document bytes go through DRM APIs;
+# allowlisted signature/seal assets use /api/v1/platform/protected-media/.

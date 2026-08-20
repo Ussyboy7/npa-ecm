@@ -24,6 +24,9 @@ NPA-ECM uses a **custom** rich-text surface for memo composition, document uploa
 
 - Rename / honest labelling (“Rich text editor”)
 - Paste pipeline (`onPaste` → sanitize HTML or plain text)
+- Word/Office paste cleanup (`cleanOfficeHtml` / `sanitizePastedRichText`)
+- Find and replace (toolbar + Ctrl/Cmd+F)
+- Print / PDF preview using page setup (`openComposePrintPreview`)
 - Sanitize on emit and on insert (link / image / table / signature)
 - Focused value sync (external `value` does not overwrite while focused)
 - Toolbar a11y: `role="toolbar"`, `aria-pressed` / `aria-label` on toggles
@@ -43,7 +46,7 @@ Live co-authoring today remains **session/presence scaffolding only** (`Document
 
 ## Product domain features (keep when migrating engines)
 
-Page setup (paper/margins), signature insert, merge tokens, table row/col tools, NPA memo chrome. These should become TipTap extensions if/when the engine migrates — not discarded.
+Page setup (paper/margins), print/PDF preview, find/replace, Word paste cleanup, signature insert, merge tokens, table row/col tools, NPA memo chrome. These should become TipTap extensions if/when the engine migrates — not discarded.
 
 ## Related Docs
 

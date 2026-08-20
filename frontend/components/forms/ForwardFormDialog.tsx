@@ -1,21 +1,30 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, User, Building2, Briefcase } from 'lucide-react';
+import { Loader2, Send, User, Building2, Briefcase, Search, X } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { toast } from "@/components/ui/sonner";
+import { toast } from '@/components/ui/sonner';
 import { logError } from '@/lib/client-logger';
-import { updateFormDocument } from '@/lib/api/dms-forms';
-import { createNotification } from '@/lib/api/notifications';
+import { getApiErrorMessage } from '@/lib/api-error';
+import { forwardFormDocument } from '@/lib/api/dms-forms';
 import type { FormDocument } from '@/lib/api/dms-forms';
+import type { User as OrgUser } from '@/lib/npa-structure';
+import { isSeedLikeUser } from '@/lib/organization-data';
 
 interface ForwardFormDialogProps {
   open: boolean;
@@ -23,6 +32,13 @@ interface ForwardFormDialogProps {
   form: FormDocument | null;
   onForwarded?: () => void;
 }
+
+const isSeedOrDebugUser = (user: OrgUser): boolean => {
+  const email = (user.email || '').toLowerCase();
+  const name = (user.name || '').trim().toLowerCase();
+  if (!name || !email) return true;
+  return isSeedLikeUser(user);
+};
 
 export function ForwardFormDialog({
   open,
@@ -38,23 +54,76 @@ export function ForwardFormDialog({
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [message, setMessage] = useState('');
   const [actionType, setActionType] = useState<'review' | 'input' | 'signature'>('review');
+  const [userSearch, setUserSearch] = useState('');
 
   useEffect(() => {
     if (!open) {
-      // Reset form when dialog closes
       setSelectedUsers([]);
       setSelectedDivision('');
       setSelectedDepartment('');
       setMessage('');
       setTargetType('user');
       setActionType('review');
+      setUserSearch('');
     }
   }, [open]);
+
+  const availableUsers = useMemo(
+    () =>
+      users
+        .filter((u) => u.active !== false && !isSeedOrDebugUser(u))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [users],
+  );
+
+  const availableDivisions = useMemo(
+    () => divisions.filter((d) => d.isActive !== false).sort((a, b) => a.name.localeCompare(b.name)),
+    [divisions],
+  );
+
+  const availableDepartments = useMemo(
+    () =>
+      departments
+        .filter((d) => d.isActive !== false)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [departments],
+  );
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return availableUsers;
+    return availableUsers.filter((user) =>
+      [user.name, user.email, user.systemRole, user.username]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(q)),
+    );
+  }, [availableUsers, userSearch]);
+
+  const divisionRecipientCount = useMemo(() => {
+    if (!selectedDivision) return 0;
+    return availableUsers.filter((u) => u.division === selectedDivision).length;
+  }, [availableUsers, selectedDivision]);
+
+  const departmentRecipientCount = useMemo(() => {
+    if (!selectedDepartment) return 0;
+    return availableUsers.filter((u) => u.department === selectedDepartment).length;
+  }, [availableUsers, selectedDepartment]);
+
+  const pendingRecipientCount = useMemo(() => {
+    if (targetType === 'user') return selectedUsers.length;
+    if (targetType === 'division') return divisionRecipientCount;
+    return departmentRecipientCount;
+  }, [targetType, selectedUsers.length, divisionRecipientCount, departmentRecipientCount]);
+
+  const toggleUser = (userId: string, checked: boolean) => {
+    setSelectedUsers((prev) =>
+      checked ? (prev.includes(userId) ? prev : [...prev, userId]) : prev.filter((id) => id !== userId),
+    );
+  };
 
   const handleForward = async () => {
     if (!form) return;
 
-    // Validate selection
     if (targetType === 'user' && selectedUsers.length === 0) {
       toast.error('Please select at least one user');
       return;
@@ -68,281 +137,275 @@ export function ForwardFormDialog({
       return;
     }
 
+    if (targetType !== 'user' && pendingRecipientCount === 0) {
+      toast.error('No active users found for that selection');
+      return;
+    }
+
+    if (
+      targetType !== 'user' &&
+      pendingRecipientCount > 0 &&
+      !window.confirm(
+        `This will notify ${pendingRecipientCount} user${pendingRecipientCount === 1 ? '' : 's'}. Continue?`,
+      )
+    ) {
+      return;
+    }
+
     try {
       setForwarding(true);
 
-      // Update form status to in_progress if it's draft
-      if (form.status === 'draft') {
-        await updateFormDocument(form.id, {
-          status: 'in_progress',
-        });
-      }
+      const result = await forwardFormDocument(form.id, {
+        target_type: targetType,
+        action_type: actionType,
+        message: message.trim() || undefined,
+        user_ids: targetType === 'user' ? selectedUsers : undefined,
+        division_id: targetType === 'division' ? selectedDivision : undefined,
+        department_id: targetType === 'department' ? selectedDepartment : undefined,
+      });
 
-      // Create notifications for forwarded users
-      const notificationPromises: Promise<unknown>[] = [];
-      const actionUrl = `/forms/${form.document.id}`;
-      const actionText = actionType === 'review' ? 'review' : actionType === 'input' ? 'provide input on' : 'sign';
-      
-      if (targetType === 'user' && selectedUsers.length > 0) {
-        // Notify specific users
-        for (const userId of selectedUsers) {
-          const user = availableUsers.find(u => u.id === userId);
-          if (user) {
-            notificationPromises.push(
-              createNotification({
-                recipient: userId,
-                title: `Form Forwarded: ${form.document.title}`,
-                message: message || `You have been asked to ${actionText} this form.`,
-                notificationType: actionType === 'signature' ? 'workflow' : 'document',
-                priority: 'high',
-                module: 'forms',
-                relatedObjectType: 'form_document',
-                relatedObjectId: form.document.id,
-                actionUrl: actionUrl,
-                actionRequired: true,
-              }).catch(err => {
-                logError(`Failed to notify user ${userId}`, err);
-                // Don't fail the whole operation if one notification fails
-              })
-            );
-          }
-        }
-      } else if (targetType === 'division' && selectedDivision) {
-        // Notify all users in division
-        const divisionUsers = availableUsers.filter(u => u.division === selectedDivision);
-        for (const user of divisionUsers) {
-            notificationPromises.push(
-              createNotification({
-                recipient: user.id,
-                title: `Form Forwarded: ${form.document.title}`,
-                message: message || `A form has been forwarded to your division for ${actionText}.`,
-                notificationType: actionType === 'signature' ? 'workflow' : 'document',
-                priority: 'high',
-                module: 'forms',
-                relatedObjectType: 'form_document',
-                relatedObjectId: form.document.id,
-                actionUrl: actionUrl,
-                actionRequired: true,
-              }).catch(err => {
-                logError(`Failed to notify user ${user.id}`, err);
-              })
-            );
-        }
-      } else if (targetType === 'department' && selectedDepartment) {
-        // Notify all users in department
-        const departmentUsers = availableUsers.filter(u => u.department === selectedDepartment);
-        for (const user of departmentUsers) {
-            notificationPromises.push(
-              createNotification({
-                recipient: user.id,
-                title: `Form Forwarded: ${form.document.title}`,
-                message: message || `A form has been forwarded to your department for ${actionText}.`,
-                notificationType: actionType === 'signature' ? 'workflow' : 'document',
-                priority: 'high',
-                module: 'forms',
-                relatedObjectType: 'form_document',
-                relatedObjectId: form.document.id,
-                actionUrl: actionUrl,
-                actionRequired: true,
-              }).catch(err => {
-                logError(`Failed to notify user ${user.id}`, err);
-              })
-            );
-        }
-      }
-
-      // Wait for all notifications to be created (but don't fail if some fail)
-      await Promise.allSettled(notificationPromises);
-
-      toast.success('Form forwarded successfully');
+      toast.success(
+        `Form forwarded to ${result.recipient_count} recipient${result.recipient_count === 1 ? '' : 's'}`,
+      );
       onForwarded?.();
       onOpenChange(false);
-      } catch (error: unknown) {
+    } catch (error: unknown) {
       logError('Failed to forward form', error);
-      toast.error('Failed to forward form');
+      toast.error(getApiErrorMessage(error, 'Failed to forward form'));
     } finally {
       setForwarding(false);
     }
   };
 
-  const availableUsers = users.filter(u => u.active);
-  const availableDivisions = divisions.filter(d => d.isActive);
-  const availableDepartments = departments.filter(d => d.isActive);
+  const actionLabel =
+    actionType === 'review' ? 'review' : actionType === 'input' ? 'input' : 'signature';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg" height="fill">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent size="xl" height="fill" density="flush">
+        <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
+          <DialogTitle className="flex items-center gap-2 pr-8">
             <Send className="h-5 w-5 text-primary" />
             Forward Form
           </DialogTitle>
           <DialogDescription>
-            Forward this form to users for {actionType === 'review' ? 'review' : actionType === 'input' ? 'input' : 'signature'}
+            Forward this form to users for {actionLabel}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Form Info */}
-          {form && (
-            <div className="p-3 bg-muted rounded-lg">
-              <div className="text-sm font-medium">{form.document.title}</div>
-              {form.template && (
-                <div className="text-xs text-muted-foreground mt-1">
-                  Template: {form.template.name}
-                </div>
-              )}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+          <div className="space-y-5">
+            {form && (
+              <div className="rounded-lg bg-muted p-3">
+                <div className="text-sm font-medium">{form.document.title}</div>
+                {form.template && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Template: {form.template.name}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Action Type</Label>
+                <Select
+                  value={actionType}
+                  onValueChange={(v) => setActionType(v as 'review' | 'input' | 'signature')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="review">Review</SelectItem>
+                    <SelectItem value="input">Input/Edit</SelectItem>
+                    <SelectItem value="signature">Signature (creates pending sign task)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Forward To</Label>
+                <Select
+                  value={targetType}
+                  onValueChange={(v) => setTargetType(v as 'user' | 'division' | 'department')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Specific Users</SelectItem>
+                    <SelectItem value="division">Division</SelectItem>
+                    <SelectItem value="department">Department</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          )}
 
-          {/* Action Type */}
-          <div className="space-y-2">
-            <Label>Action Type</Label>
-            <Select value={actionType} onValueChange={(v) => setActionType(v as 'review' | 'input' | 'signature')}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="review">Review</SelectItem>
-                <SelectItem value="input">Input/Edit</SelectItem>
-                <SelectItem value="signature">Signature</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            {targetType === 'user' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Select Users</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedUsers.length} selected · {filteredUsers.length} shown
+                  </span>
+                </div>
 
-          {/* Target Type */}
-          <div className="space-y-2">
-            <Label>Forward To</Label>
-            <Select value={targetType} onValueChange={(v) => setTargetType(v as 'user' | 'division' | 'department')}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="user">Specific Users</SelectItem>
-                <SelectItem value="division">Division</SelectItem>
-                <SelectItem value="department">Department</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder="Search by name, email, or role…"
+                    className="pl-8"
+                    autoComplete="off"
+                  />
+                </div>
 
-          {/* User Selection */}
-          {targetType === 'user' && (
-            <div className="space-y-2">
-              <Label>Select Users</Label>
-              <ScrollArea className="h-48 border rounded-md p-3">
-                <div className="space-y-2">
-                  {availableUsers.map((user) => (
-                    <div key={user.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`user-${user.id}`}
-                        checked={selectedUsers.includes(user.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedUsers([...selectedUsers, user.id]);
-                          } else {
-                            setSelectedUsers(selectedUsers.filter(id => id !== user.id));
-                          }
-                        }}
-                      />
-                      <Label
-                        htmlFor={`user-${user.id}`}
-                        className="text-sm font-normal cursor-pointer flex items-center gap-2 flex-1"
-                      >
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span>{user.name}</span>
-                        {user.email && (
-                          <span className="text-xs text-muted-foreground">({user.email})</span>
-                        )}
-                      </Label>
+                <div className="max-h-64 overflow-y-auto rounded-md border p-2">
+                  {filteredUsers.length === 0 ? (
+                    <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                      No users match your search.
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {filteredUsers.map((user) => {
+                        const checked = selectedUsers.includes(user.id);
+                        return (
+                          <div
+                            key={user.id}
+                            className="flex items-center space-x-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
+                          >
+                            <Checkbox
+                              id={`user-${user.id}`}
+                              checked={checked}
+                              onCheckedChange={(value) => toggleUser(user.id, value === true)}
+                            />
+                            <Label
+                              htmlFor={`user-${user.id}`}
+                              className="flex flex-1 cursor-pointer items-center gap-2 text-sm font-normal"
+                            >
+                              <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate">{user.name}</span>
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {user.email}
+                                  {user.systemRole ? ` · ${user.systemRole}` : ''}
+                                </span>
+                              </span>
+                            </Label>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </ScrollArea>
-              {selectedUsers.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {selectedUsers.map(userId => {
-                    const user = availableUsers.find(u => u.id === userId);
-                    return user ? (
-                      <Badge key={userId} variant="secondary" className="text-xs">
-                        {user.name}
-                      </Badge>
-                    ) : null;
-                  })}
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Division Selection */}
-          {targetType === 'division' && (
+                {selectedUsers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedUsers.map((userId) => {
+                      const user = availableUsers.find((u) => u.id === userId);
+                      if (!user) return null;
+                      return (
+                        <Badge key={userId} variant="secondary" className="gap-1 pr-1 text-xs">
+                          {user.name}
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 hover:bg-muted-foreground/20"
+                            onClick={() => toggleUser(userId, false)}
+                            aria-label={`Remove ${user.name}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {targetType === 'division' && (
+              <div className="space-y-2">
+                <Label>Select Division</Label>
+                <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a division" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableDivisions.map((division) => (
+                      <SelectItem key={division.id} value={division.id}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <span>{division.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedDivision && (
+                  <p className="text-sm text-muted-foreground">
+                    {divisionRecipientCount} active user
+                    {divisionRecipientCount === 1 ? '' : 's'} will be notified.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {targetType === 'department' && (
+              <div className="space-y-2">
+                <Label>Select Department</Label>
+                <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableDepartments.map((department) => (
+                      <SelectItem key={department.id} value={department.id}>
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-muted-foreground" />
+                          <span>{department.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedDepartment && (
+                  <p className="text-sm text-muted-foreground">
+                    {departmentRecipientCount} active user
+                    {departmentRecipientCount === 1 ? '' : 's'} will be notified.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label>Select Division</Label>
-              <Select value={selectedDivision} onValueChange={setSelectedDivision}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a division" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableDivisions.map((division) => (
-                    <SelectItem key={division.id} value={division.id}>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <span>{division.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Message (Optional)</Label>
+              <Textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Add a note about why you're forwarding this form..."
+                rows={3}
+              />
             </div>
-          )}
-
-          {/* Department Selection */}
-          {targetType === 'department' && (
-            <div className="space-y-2">
-              <Label>Select Department</Label>
-              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableDepartments.map((department) => (
-                    <SelectItem key={department.id} value={department.id}>
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="h-4 w-4 text-muted-foreground" />
-                        <span>{department.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Message */}
-          <div className="space-y-2">
-            <Label>Message (Optional)</Label>
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Add a note about why you're forwarding this form..."
-              rows={3}
-            />
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t px-4 py-3 sm:px-6">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={forwarding}>
             Cancel
           </Button>
-          <Button onClick={handleForward} disabled={forwarding}>
+          <Button onClick={handleForward} disabled={forwarding || pendingRecipientCount === 0}>
             {forwarding ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Forwarding...
               </>
             ) : (
               <>
-                <Send className="h-4 w-4 mr-2" />
+                <Send className="mr-2 h-4 w-4" />
                 Forward
+                {pendingRecipientCount > 0 ? ` (${pendingRecipientCount})` : ''}
               </>
             )}
           </Button>

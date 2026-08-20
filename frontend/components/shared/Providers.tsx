@@ -35,7 +35,13 @@ export function Providers({
   }
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem
+      storageKey="npa-ecm-theme"
+      disableTransitionOnChange
+    >
       <OrganizationProvider initialData={initialOrgData}>
         <TooltipProvider>
           {children}

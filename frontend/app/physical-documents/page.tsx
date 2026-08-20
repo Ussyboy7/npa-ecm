@@ -296,7 +296,7 @@ function PhysicalDocumentsForm() {
       case 'filed':
         return <Badge variant="default" className="bg-success/10 text-success border-success/20 whitespace-nowrap">Filed</Badge>;
       case 'archived':
-        return <Badge variant="default" className="bg-blue-500/10 text-blue-600 border-blue-500/20 whitespace-nowrap">Archived</Badge>;
+        return <Badge variant="default" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 whitespace-nowrap">Archived</Badge>;
       case 'destroyed':
         return <Badge variant="outline" className="whitespace-nowrap">Destroyed</Badge>;
       case 'missing':

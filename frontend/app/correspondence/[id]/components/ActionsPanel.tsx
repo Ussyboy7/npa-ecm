@@ -38,7 +38,7 @@ interface ActionsPanelProps {
   distributionPurpose?: 'information' | 'action' | null;
   distributionEntryId?: string | null;
   turnRestrictedDisabled?: boolean;
-  completionPackageUrl?: string | null;
+  hasCompletionPackage?: boolean;
   completionGeneratedAt?: string | null;
   activeDelegation?: Record<string, unknown> | null;
   organizationUsers?: User[];
@@ -49,7 +49,7 @@ interface ActionsPanelProps {
   onOpenTreatmentModal?: () => void;
   onOpenCompletionModal?: () => void;
   onOpenDelegateModal?: () => void;
-  onDownloadCompletionPackage?: (url: string, filename: string) => Promise<void>;
+  onDownloadCompletionPackage?: (filename: string) => Promise<void>;
   onSyncFromApi?: () => Promise<unknown>;
   compact?: boolean;
   /** Hide Minute/Endorse primary buttons when header/mobile already owns that CTA */
@@ -66,7 +66,7 @@ export function ActionsPanel({
   isForInformationOnly = false,
   distributionPurpose = 'action',
   turnRestrictedDisabled = false,
-  completionPackageUrl,
+  hasCompletionPackage,
   completionGeneratedAt,
   activeDelegation,
   organizationUsers = [],
@@ -508,13 +508,12 @@ export function ActionsPanel({
                     : `Closed${completionGeneratedAt ? ` on ${formatDateShort(completionGeneratedAt)}` : ""}.`}
             </p>
           </div>
-          {completionPackageUrl && onDownloadCompletionPackage && (
+          {hasCompletionPackage && onDownloadCompletionPackage && (
             <Button
               variant="secondary"
               className={primaryButtonClass}
               onClick={() =>
                 onDownloadCompletionPackage(
-                  completionPackageUrl,
                   `completion-package-${correspondence.referenceNumber || correspondence.id}.pdf`,
                 )
               }

@@ -16,12 +16,14 @@ export function AppearanceSection({ theme, onThemeChange }: AppearanceSectionPro
     <TabsContent value="appearance" className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Theme Settings</CardTitle>
-          <CardDescription>Customize the appearance of the application</CardDescription>
+          <CardTitle>Theme</CardTitle>
+          <CardDescription>
+            Light and Dark apply to every page in NPA ECM. Choose System to follow your device.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-3">
-            <Label>Color Theme</Label>
+            <Label>Color mode</Label>
             <div className="grid grid-cols-3 gap-4">
               <Button
                 variant={theme === 'light' ? 'default' : 'outline'}
@@ -48,6 +50,9 @@ export function AppearanceSection({ theme, onThemeChange }: AppearanceSectionPro
                 System
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Document previews and the compose editor stay on white paper in both modes so memos remain print-accurate.
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -31,6 +31,8 @@ class FormTemplate(UUIDModel, SoftDeleteModel, TimeStampedModel):
         EMAIL = "email", "Email"
         URL = "url", "URL"
         CURRENCY = "currency", "Currency"
+        TABLE = "table", "Table"
+        CALCULATED = "calculated", "Calculated"
 
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
@@ -145,3 +147,18 @@ class FormSubmission(UUIDModel, TimeStampedModel):
         structure = self.template.structure or {}
         fields = structure.get("fields", [])
         return any(field.get("type") == "file" and "signature" in field.get("name", "").lower() for field in fields)
+
+
+class FormSerialCounter(models.Model):
+    """Per-series integer counter for official form serials (CHQ / HQ / form No.)."""
+
+    key = models.CharField(max_length=64, unique=True)
+    last_value = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Form serial counter"
+        verbose_name_plural = "Form serial counters"
+
+    def __str__(self) -> str:
+        return f"{self.key}={self.last_value}"

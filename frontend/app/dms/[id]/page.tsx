@@ -17,6 +17,7 @@ import {
   getDocumentAccessLogs,
   downloadDocumentVersion,
   canDownloadDocument,
+  canShareDocument,
   type DocumentRecord,
   type DocumentVersion,
   type DocumentAccessLog,
@@ -221,6 +222,7 @@ const DocumentDetailContent = () => {
                 departments={departments}
                 hasLinkedCorrespondence={relatedCorrespondence.length > 0}
                 canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
+                canShare={canShareDocument(document)}
                 canFullscreen={Boolean(selectedVersion)}
                 onFullscreen={() => handleOpenFullscreen()}
                 onDownload={handleDownloadLatest}

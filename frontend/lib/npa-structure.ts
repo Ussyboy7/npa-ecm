@@ -107,6 +107,7 @@ export type CorrespondenceAttachment = {
   fileType?: string;
   fileSize?: number;
   fileUrl?: string;
+  hasFile?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -190,6 +191,7 @@ export type Correspondence = {
   linkedDocumentIds?: string[];
   completionPackage?: {
     documentId: string;
+    versionId?: string;
     title: string;
     fileUrl?: string;
     generatedAt?: string;
@@ -428,6 +430,8 @@ export type Case = {
   metadata?: Record<string, unknown>;
   completionPackage?: {
     id: string;
+    documentId?: string;
+    versionId?: string;
     title: string;
     fileUrl?: string;
   };

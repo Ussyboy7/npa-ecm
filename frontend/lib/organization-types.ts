@@ -181,6 +181,9 @@ export type CreateUserInput = {
 };
 
 export type UpdateUserInput = {
+  username?: string;
+  firstName?: string;
+  lastName?: string;
   systemRole?: string | null;
   gradeLevel?: string | null;
   directorateId?: string | null;

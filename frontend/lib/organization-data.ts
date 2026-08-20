@@ -175,11 +175,26 @@ const upsertById = <T extends { id: string }>(items: T[], item: T, comparator?: 
   return comparator ? comparator(next) : next;
 };
 
+/** Seed/debug accounts that duplicate real login users (e.g. +seed-user- emails). */
+const isSeedLikeUser = (user: Pick<User, "email" | "username" | "name">): boolean => {
+  const email = (user.email || "").toLowerCase();
+  const username = (user.username || "").trim().toLowerCase();
+  const name = (user.name || "").trim().toLowerCase();
+
+  if (name === "debug" || username === "debug") return true;
+  if (username.startsWith("user-")) return true;
+  if (email.includes("+seed-user-") || email.includes("+seed@") || email.includes("+seed-")) return true;
+  if (username.startsWith("seed-") || username.includes("seed-user")) return true;
+  return false;
+};
+
 const isCanonicalUser = (user: User): boolean => {
   const username = user.username ?? "";
   if (!username) return true;
   if (username === "superadmin") return true;
-  return username.startsWith("user-");
+  // Prefer real login usernames (gmprocurement) over seed shells (user-gm-procurement).
+  if (isSeedLikeUser(user)) return false;
+  return !username.startsWith("user-");
 };
 
 const userDetailScore = (user: User): number => {
@@ -238,6 +253,7 @@ export {
   sortByName,
   upsertById,
   isCanonicalUser,
+  isSeedLikeUser,
   userDetailScore,
   dedupeUsers,
 };

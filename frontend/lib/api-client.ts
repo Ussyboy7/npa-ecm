@@ -316,7 +316,7 @@ export const logout = async () => {
   clearTokens();
 };
 
-export const storeOriginalTokens = () => {
+export const storeOriginalTokens = (userId?: string) => {
   if (!isBrowser()) return;
   const access = getStoredAccessToken();
   const refresh = getStoredRefreshToken();
@@ -327,6 +327,18 @@ export const storeOriginalTokens = () => {
   if (expiresAt) {
     localStorage.setItem('original_access_exp', expiresAt);
   }
+  if (userId) {
+    localStorage.setItem('original_user_id', userId);
+  } else {
+    // Try to decode user ID from current access token
+    try {
+      const payload = JSON.parse(atob(access.split('.')[1] || ''));
+      const uid = payload.user_id || payload.sub || payload.id;
+      if (uid) localStorage.setItem('original_user_id', String(uid));
+    } catch {
+      // ignore
+    }
+  }
 };
 
 export const clearOriginalTokens = () => {
@@ -334,6 +346,7 @@ export const clearOriginalTokens = () => {
   localStorage.removeItem('original_access_token');
   localStorage.removeItem('original_refresh_token');
   localStorage.removeItem('original_access_exp');
+  localStorage.removeItem('original_user_id');
 };
 
 export const getOriginalTokens = () => {
@@ -346,9 +359,40 @@ export const getOriginalTokens = () => {
   return { access, refresh, expiresAt };
 };
 
+export const getOriginalUserId = (): string | null => {
+  if (!isBrowser()) return null;
+  return localStorage.getItem('original_user_id');
+};
+
 export const hasOriginalTokens = () => {
   const tokens = getOriginalTokens();
   return Boolean(tokens && tokens.access && tokens.refresh);
+};
+
+export const isImpersonatingUser = (currentUserId?: string | null): boolean => {
+  if (!hasOriginalTokens()) return false;
+  let originalId = getOriginalUserId();
+  if (!originalId) {
+    // Back-compat for sessions stored before original_user_id existed — decode from token
+    try {
+      const tokens = getOriginalTokens();
+      if (tokens?.access) {
+        const payload = JSON.parse(atob(tokens.access.split('.')[1] || ''));
+        originalId = String(payload.user_id || payload.sub || payload.id || '');
+        if (originalId) localStorage.setItem('original_user_id', originalId);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!originalId || !currentUserId) return true;
+  const same = String(originalId) === String(currentUserId);
+  if (same) {
+    // Auto-clear stale impersonation where we ended up back on original user
+    clearOriginalTokens();
+    return false;
+  }
+  return true;
 };
 
 export const impersonateUser = async (userId: string) => {

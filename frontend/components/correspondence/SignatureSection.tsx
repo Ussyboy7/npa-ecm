@@ -75,7 +75,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
         </div>
         {signature ? (
           <Card>
-            <CardContent className="p-4 bg-white">
+            <CardContent className="p-4 doc-paper">
               <div className="flex flex-col items-center justify-center space-y-3">
                 <DigitalSealPreview
                   officeName={signature.sealOfficeName || DEFAULT_SEAL_OFFICE_NAME}

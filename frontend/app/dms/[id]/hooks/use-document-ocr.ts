@@ -213,7 +213,7 @@ export function useDocumentOcr({ document, refreshDocument }: UseDocumentOcrOpti
         }
       }
 
-      if (!version.fileUrl || version.fileUrl.trim() === '') {
+      if (!(version.hasFile || version.id)) {
         toast.error('No file available for OCR processing');
         return;
       }

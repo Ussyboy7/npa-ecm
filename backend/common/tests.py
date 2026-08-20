@@ -1,14 +1,42 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.client import RequestFactory
 from rest_framework.test import APIClient
 
 from common.middleware import SecurityHeadersMiddleware
 from common.pagination import CatalogPageNumberPagination, StandardPageNumberPagination
+from common.user_identity import (
+    canonical_email,
+    canonical_employee_id,
+    canonical_username,
+)
 from organization.models import Role
 from organization.permissions_catalog import ROLE_PERMISSION_PRESETS
 
 User = get_user_model()
+
+
+class CanonicalUsernameTests(SimpleTestCase):
+    def test_strips_user_prefix_and_hyphens(self):
+        self.assertEqual(canonical_username("user-gm-procurement"), "gmprocurement")
+        self.assertEqual(canonical_username("user-ed-fa"), "edfa")
+        self.assertEqual(canonical_username("user-pa-md"), "pamd")
+        self.assertEqual(canonical_username("user-md"), "md")
+
+    def test_passthrough_login_username(self):
+        self.assertEqual(canonical_username("gmprocurement"), "gmprocurement")
+
+    def test_superadmin_alias(self):
+        self.assertEqual(canonical_username("user-super-admin"), "superadmin")
+
+    def test_canonical_email_strips_seed_tag(self):
+        self.assertEqual(
+            canonical_email("gm.procurement+seed-user-gm-procurement@npa.gov.ng"),
+            "gm.procurement@npa.gov.ng",
+        )
+
+    def test_canonical_employee_id(self):
+        self.assertEqual(canonical_employee_id("NPA020-SEED-user-gm"), "NPA020")
 
 
 class PaginationConfigTests(TestCase):

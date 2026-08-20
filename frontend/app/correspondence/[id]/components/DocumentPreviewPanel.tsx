@@ -27,21 +27,23 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import type { Correspondence } from '@/lib/npa-structure';
-import { logDocumentAccess, type DocumentRecord } from '@/lib/api/dms';
-import { buildDownloadUrl, forceDownloadMedia } from '@/lib/correspondence-url-utils';
+import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
+import { fetchCorrespondenceAttachmentContent } from '@/lib/correspondence-url-utils';
 import { getCorrespondencePreviewContext, getPrimaryLinkedDocument, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
 import { useDocumentPreview } from '@/hooks/use-document-preview';
 import { toast } from "@/components/ui/sonner";
 import { logError, logWarn } from '@/lib/client-logger';
-import { apiFetch, getStoredAccessToken } from '@/lib/api-client';
+import { apiFetch } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { SecurePdfCanvasPreview } from '@/components/dms/SecurePdfCanvasPreview';
 import {
   canDownloadDocument,
-  downloadDocumentVersion,
+  canPrintDocument,
   fetchDocumentVersionContent,
 } from '@/lib/dms-documents';
+import { downloadCanonicalDocument } from '@/lib/canonical-document';
+import { CanonicalDocumentViewer } from '@/components/dms/CanonicalDocumentViewer';
 import { corrType } from '../correspondence-type';
 import { cn } from '@/lib/utils';
 import { sanitizeThemedHtml } from '@/lib/sanitize-html';
@@ -103,6 +105,68 @@ const getFileTypeLabel = (fileType?: string, fileName?: string) => {
   if (type.includes('text') || ext === 'txt') return 'Text';
   return 'Document';
 };
+
+function AttachmentImagePreview({
+  attachmentId,
+  fileName,
+}: {
+  attachmentId: string;
+  fileName?: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSrc(null);
+    setError(null);
+    fetchCorrespondenceAttachmentContent(attachmentId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load image');
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachmentId]);
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center p-4 text-sm text-muted-foreground">
+        {error}
+      </div>
+    );
+  }
+  if (!src) {
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <div
+      className="h-full flex items-center justify-center p-4 bg-muted/30"
+      aria-label={`Image preview: ${fileName || 'attachment'}`}
+    >
+      <Image
+        src={src}
+        alt={fileName || 'Document image'}
+        width={800}
+        height={600}
+        className="max-w-full max-h-full object-contain"
+        unoptimized
+      />
+    </div>
+  );
+}
 
 export const DocumentPreviewPanel = ({
   correspondence,
@@ -173,7 +237,15 @@ export const DocumentPreviewPanel = ({
   }, [previewLinkedDoc, selectedLinkedDocVersion]);
 
   const { wordHtml, isLoading: documentPreviewLoading, error: documentPreviewError } =
-    useDocumentPreview(activeAttachment);
+    useDocumentPreview(
+      activeAttachment
+        ? {
+            id: activeAttachment.id,
+            fileName: activeAttachment.fileName,
+            fileType: activeAttachment.fileType,
+          }
+        : null,
+    );
 
   const [securePdfBytes, setSecurePdfBytes] = useState<ArrayBuffer | null>(null);
   const [securePdfLoading, setSecurePdfLoading] = useState(false);
@@ -206,22 +278,16 @@ export const DocumentPreviewPanel = ({
         return;
       }
 
-      // Correspondence attachment PDF via media URL
+      // Correspondence attachment PDF via authenticated attachment API
       const name = activeAttachment?.fileName?.toLowerCase() || '';
       const isPdf =
         activeAttachment?.fileType === 'application/pdf' || name.endsWith('.pdf');
-      if (!isPdf || !activeAttachment?.fileUrl) return;
+      if (!isPdf || !activeAttachment?.id) return;
 
-      const url = buildDownloadUrl(activeAttachment.fileUrl);
-      if (!url) return;
       setSecurePdfLoading(true);
       try {
-        const token = getStoredAccessToken();
-        const headers: HeadersInit = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const response = await fetch(url, { credentials: 'include', headers });
-        if (!response.ok) throw new Error(`Failed to load PDF (${response.status})`);
-        const bytes = await response.arrayBuffer();
+        const blob = await fetchCorrespondenceAttachmentContent(activeAttachment.id);
+        const bytes = await blob.arrayBuffer();
         if (cancelled) return;
         setSecurePdfBytes(bytes);
       } catch (err) {
@@ -245,7 +311,7 @@ export const DocumentPreviewPanel = ({
     (correspondence as Correspondence & { auto_created_document_id?: string })?.auto_created_document_id ||
     effectiveLinkedDoc?.id;
 
-  const logPreviewPanelDmsAccess = useCallback(async (action: 'view' | 'download' | 'attempted-download') => {
+  const logPreviewPanelDmsAccess = useCallback(async (action: DocumentAccessLog['action']) => {
     if (!currentUser?.id) return;
     const target = resolveCorrespondenceDmsAccessTarget(
       correspondence,
@@ -267,15 +333,19 @@ export const DocumentPreviewPanel = ({
   }, [correspondence, currentUser?.id, linkedDocuments, previewContext.source]);
 
   const handleForceDownload = useCallback(
-    async (fileUrl: string | null | undefined, fileName?: string) => {
-      if (!fileUrl) {
+    async (fileName?: string, attachmentId?: string) => {
+      if (!attachmentId) {
         void logPreviewPanelDmsAccess('attempted-download');
         toast.error('No file available to download');
         return;
       }
       try {
         void logPreviewPanelDmsAccess('download');
-        await forceDownloadMedia(fileUrl, fileName || 'document');
+        await downloadCanonicalDocument({
+          kind: 'corr-attachment',
+          attachmentId,
+          fileName: fileName || 'document',
+        });
       } catch (err) {
         void logPreviewPanelDmsAccess('attempted-download');
         logError('Download failed', err);
@@ -286,19 +356,19 @@ export const DocumentPreviewPanel = ({
   );
 
   const handleLinkedVersionDownload = useCallback(
-    async (versionId: string | undefined, fileUrl: string | null | undefined, fileName?: string) => {
-      if (!versionId && !fileUrl) {
+    async (versionId: string | undefined, fileName?: string) => {
+      if (!versionId) {
         void logPreviewPanelDmsAccess('attempted-download');
         toast.error('No file available to download');
         return;
       }
       try {
         void logPreviewPanelDmsAccess('download');
-        if (versionId) {
-          await downloadDocumentVersion(versionId, fileName);
-          return;
-        }
-        await forceDownloadMedia(fileUrl!, fileName || 'document');
+        await downloadCanonicalDocument({
+          kind: 'dms-version',
+          versionId,
+          fileName: fileName || 'document',
+        });
       } catch (err) {
         void logPreviewPanelDmsAccess('attempted-download');
         logError('Download failed', err);
@@ -478,7 +548,6 @@ export const DocumentPreviewPanel = ({
                           e.stopPropagation();
                           void handleLinkedVersionDownload(
                             version?.id,
-                            version?.fileUrl,
                             version?.fileName || doc.title,
                           );
                         }}
@@ -563,18 +632,20 @@ export const DocumentPreviewPanel = ({
                         )}
                       </div>
                     </div>
+                    {attachment.hasFile && attachment.id ? (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 flex-shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void handleForceDownload(attachment.fileUrl, attachment.fileName);
+                        void handleForceDownload(attachment.fileName, attachment.id);
                       }}
                       aria-label={`Download ${attachment.fileName}`}
                     >
                       <Download className="h-3.5 w-3.5" />
                     </Button>
+                    ) : null}
                   </div>
                 );
               })}
@@ -689,6 +760,7 @@ export const DocumentPreviewPanel = ({
                   'Document';
                 const displaySize = activeAttachment?.fileSize ?? previewLinkedVersion?.fileSize;
                 const canDlLinked = previewLinkedDoc ? canDownloadDocument(previewLinkedDoc) : true;
+                const canPrintLinked = previewLinkedDoc ? canPrintDocument(previewLinkedDoc) : true;
                 
                 return (
                   <div className="border-b border-border/40 bg-background/90 px-3 md:px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 flex-shrink-0 min-w-0">
@@ -730,13 +802,13 @@ export const DocumentPreviewPanel = ({
                           <span className="hidden sm:inline">View in DMS</span>
                         </Button>
                       )}
-                      {activeAttachment?.fileUrl && (
+                      {activeAttachment?.hasFile && activeAttachment.id && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
                           onClick={() => {
-                            void handleForceDownload(activeAttachment.fileUrl, activeAttachment.fileName);
+                            void handleForceDownload(activeAttachment.fileName, activeAttachment.id);
                           }}
                           aria-label="Download document"
                           title="Download"
@@ -752,7 +824,6 @@ export const DocumentPreviewPanel = ({
                           onClick={() => {
                             void handleLinkedVersionDownload(
                               previewLinkedVersion.id,
-                              previewLinkedVersion.fileUrl,
                               previewLinkedVersion.fileName,
                             );
                           }}
@@ -770,12 +841,29 @@ export const DocumentPreviewPanel = ({
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
+                          disabled={Boolean(previewLinkedDoc) && !canPrintLinked}
                           onClick={() => {
-                            void logPreviewPanelDmsAccess('attempted-download'); // log print as access
+                            if (previewLinkedDoc && !canPrintLinked) {
+                              void logPreviewPanelDmsAccess('attempted-print');
+                              toast.error(
+                                previewLinkedDoc.drmRights?.message ||
+                                  'Print blocked by DRM policy',
+                              );
+                              return;
+                            }
+                            // DMS version prints are audited by GET /versions/{id}/print/
                             onOpenPrintPreview();
                           }}
-                          aria-label="Print document"
-                          title="Print"
+                          aria-label={
+                            previewLinkedDoc && !canPrintLinked
+                              ? 'Print blocked by DRM'
+                              : 'Print document'
+                          }
+                          title={
+                            previewLinkedDoc && !canPrintLinked
+                              ? 'Print blocked by DRM'
+                              : 'Print'
+                          }
                         >
                           <Printer className="h-3.5 w-3.5" />
                         </Button>
@@ -870,6 +958,7 @@ export const DocumentPreviewPanel = ({
                   !!previewLinkedVersion &&
                   (previewLinkedVersion.fileType === 'application/pdf' ||
                     previewLinkedVersion.fileName?.toLowerCase().endsWith('.pdf'));
+                const canDlLinked = linkedDoc ? canDownloadDocument(linkedDoc) : true;
 
                 if (documentPreviewLoading && !previewLinkedDoc) {
                   return (
@@ -889,15 +978,15 @@ export const DocumentPreviewPanel = ({
                       <p className="text-sm font-medium text-destructive mb-2">
                         {documentPreviewError}
                       </p>
-                      {activeAttachment?.fileUrl && (
+                      {(activeAttachment?.hasFile && activeAttachment.id) && (
                         <div className="flex gap-2 mt-4">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
                               void handleForceDownload(
-                                activeAttachment.fileUrl,
                                 activeAttachment.fileName,
+                                activeAttachment.id,
                               );
                             }}
                           >
@@ -941,19 +1030,13 @@ export const DocumentPreviewPanel = ({
                   }
                 }
 
-                // Image Preview
-                if (activeAttachment?.fileUrl && activeAttachment.fileType?.startsWith('image/')) {
-                  const imageUrl = buildDownloadUrl(activeAttachment.fileUrl);
+                // Image Preview — always via attachment content API
+                if (activeAttachment?.fileType?.startsWith('image/') && activeAttachment.id) {
                   return (
-                    <div className="h-full flex items-center justify-center p-4 bg-muted/30" aria-label={`Image preview: ${activeAttachment.fileName}`}>
-                      <Image
-                        src={imageUrl || activeAttachment.fileUrl}
-                        alt={activeAttachment.fileName || 'Document image'}
-                        width={800}
-                        height={600}
-                        className="max-w-full max-h-full object-contain"
-                      />
-                    </div>
+                    <AttachmentImagePreview
+                      attachmentId={activeAttachment.id}
+                      fileName={activeAttachment.fileName}
+                    />
                   );
                 }
 
@@ -973,7 +1056,7 @@ export const DocumentPreviewPanel = ({
                 if (documentContentHtml && documentContentHtml.trim().length > 0) {
                   return (
                     <div
-                      className="h-full overflow-auto p-6 bg-white text-black max-w-none"
+                      className="h-full overflow-auto p-6 doc-paper max-w-none"
                       aria-label="Document content preview"
                       style={{ colorScheme: 'light' }}
                     >
@@ -982,12 +1065,22 @@ export const DocumentPreviewPanel = ({
                   );
                 }
 
-                // Linked DMS Document - render via fileUrl (non-PDF)
-                if (selectedVersion?.fileUrl && !linkedIsPdf) {
-                  const ft = selectedVersion.fileType?.toLowerCase() || '';
-                  const fn = selectedVersion.fileName?.toLowerCase() || '';
-
-                  if (selectedVersion.fileUrl.startsWith('data:')) {
+                // Linked DMS Document — canonical content API (never raw /media)
+                if (selectedVersion?.id && !linkedIsPdf && (selectedVersion.hasFile || selectedVersion.contentHtml)) {
+                  if (selectedVersion.contentHtml?.trim() && !selectedVersion.hasFile) {
+                    return (
+                      <div
+                        className="h-full overflow-auto p-6 doc-paper max-w-none"
+                        aria-label="Document content preview"
+                        style={{ colorScheme: 'light' }}
+                      >
+                        <div dangerouslySetInnerHTML={{ __html: sanitizeThemedHtml(selectedVersion.contentHtml) }} />
+                      </div>
+                    );
+                  }
+                  if (selectedVersion.fileUrl?.startsWith('data:')) {
+                    const ft = selectedVersion.fileType?.toLowerCase() || '';
+                    const fn = selectedVersion.fileName?.toLowerCase() || '';
                     if (ft.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg)$/.test(fn)) {
                       return (
                         <div className="h-full flex items-center justify-center p-4 bg-muted/30" aria-label={`Image preview: ${selectedVersion.fileName}`}>
@@ -1001,80 +1094,19 @@ export const DocumentPreviewPanel = ({
                         </div>
                       );
                     }
-
-                    if (ft === 'text/html' || fn.endsWith('.html')) {
-                      return (
-                        <div className="h-full w-full bg-muted/20">
-                          <iframe
-                            src={selectedVersion.fileUrl}
-                            className="w-full h-full border-0"
-                            title={`HTML Preview: ${selectedVersion.fileName || 'Document'}`}
-                          />
-                        </div>
-                      );
-                    }
-                  } else {
-                    const downloadUrl = buildDownloadUrl(selectedVersion.fileUrl);
-
-                    if (downloadUrl && (ft.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/.test(fn))) {
-                      return (
-                        <div className="h-full flex items-center justify-center p-4 bg-muted/30" aria-label={`Image preview: ${selectedVersion.fileName}`}>
-                          <Image
-                            src={downloadUrl}
-                            alt={selectedVersion.fileName || 'Document image'}
-                            width={800}
-                            height={600}
-                            className="max-w-full max-h-full object-contain"
-                          />
-                        </div>
-                      );
-                    }
-
-                    if (fn.endsWith('.docx') || ft.includes('word') || ft.includes('officedocument') || fn.endsWith('.doc')) {
-                      return (
-                        <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-muted/20">
-                          <FileText className="h-12 w-12 text-muted-foreground/60 mb-4" />
-                          <p className="text-sm font-medium text-foreground mb-1">
-                            Word Document Preview
-                          </p>
-                          <p className="text-xs text-muted-foreground mb-4 max-w-xs">
-                            Preview is not available for Word documents. Download the file or view it in DMS.
-                          </p>
-                          <div className="flex gap-2">
-                            {canDownloadDocument(linkedDoc) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  void handleLinkedVersionDownload(
-                                    selectedVersion.id,
-                                    selectedVersion.fileUrl,
-                                    selectedVersion.fileName,
-                                  );
-                                }}
-                              >
-                                <Download className="h-4 w-4 mr-2" />
-                                Download
-                              </Button>
-                            )}
-                            {(previewLinkedDoc?.id || autoCreatedDocumentId) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  void logPreviewPanelDmsAccess('view');
-                                  router.push(`/dms/${previewLinkedDoc?.id || autoCreatedDocumentId}`);
-                                }}
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                View in DMS
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
                   }
+                  return (
+                    <CanonicalDocumentViewer
+                      source={{
+                        kind: 'dms-version',
+                        versionId: selectedVersion.id,
+                        fileName: selectedVersion.fileName,
+                      }}
+                      fileType={selectedVersion.fileType}
+                      allowDownload={canDlLinked}
+                      minHeightClassName="min-h-full"
+                    />
+                  );
                 }
 
                 // Correspondence letter body (when no attachment / linked DMS file)
@@ -1082,7 +1114,7 @@ export const DocumentPreviewPanel = ({
                 if (bodyHtml) {
                   return (
                     <div
-                      className="h-full overflow-auto p-6 bg-white text-black"
+                      className="h-full overflow-auto p-6 doc-paper"
                       aria-label="Correspondence body"
                       style={{ colorScheme: 'light' }}
                     >
@@ -1111,7 +1143,7 @@ export const DocumentPreviewPanel = ({
                       <div className="mb-4 pb-4 border-b border-border">
                         <h4 className="text-sm font-semibold text-muted-foreground mb-2">Treatment Response</h4>
                       </div>
-                      <div className="rounded-lg border border-border overflow-hidden bg-white text-neutral-900 p-4">
+                      <div className="rounded-lg border border-border overflow-hidden doc-paper p-4">
                         <div
                           className={cn(
                             'prose prose-sm max-w-none text-neutral-900',

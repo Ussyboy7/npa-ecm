@@ -871,7 +871,7 @@
     },
     {
       "id": "user-gm-admin",
-      "name": "Mrs. Adaeze Obi",
+      "name": "Mrs. Adaeze Obi-Okafor",
       "email": "gm.admin@npa.gov.ng",
       "employeeId": "NPA021",
       "gradeLevel": "MSS1",
@@ -921,7 +921,7 @@
     },
     {
       "id": "user-gm-lands-assets",
-      "name": "Mrs. Ngozi Eze",
+      "name": "Chioma Okoro",
       "email": "gm.lands@npa.gov.ng",
       "employeeId": "NPA026",
       "gradeLevel": "MSS1",
@@ -1061,7 +1061,7 @@
     },
     {
       "id": "user-gm-operations",
-      "name": "Mr. Tunde Adeyemi",
+      "name": "Mr. Segun Adeyemi",
       "email": "gm.operations@npa.gov.ng",
       "employeeId": "NPA039",
       "gradeLevel": "MSS1",
@@ -1081,7 +1081,7 @@
     },
     {
       "id": "user-gm-oversea-liaison",
-      "name": "Mrs. Amaka Eze",
+      "name": "Mrs. Amaka Ogbonna",
       "email": "gm.oversea.liaison@npa.gov.ng",
       "employeeId": "NPA041",
       "gradeLevel": "MSS1",
@@ -1091,7 +1091,7 @@
     },
     {
       "id": "user-gm-seaview-properties",
-      "name": "Mr. Chidi Nwankwo",
+      "name": "Mr. Emeka Nwankwo",
       "email": "gm.seaview.properties@npa.gov.ng",
       "employeeId": "NPA042",
       "gradeLevel": "MSS1",
@@ -1101,7 +1101,7 @@
     },
     {
       "id": "user-agm-software",
-      "name": "Kayode Ejiro",
+      "name": "Fola Adeyinka",
       "email": "agm.software@npa.gov.ng",
       "employeeId": "NPA040",
       "gradeLevel": "MSS2",
@@ -1156,7 +1156,7 @@
     },
     {
       "id": "user-agm-finance",
-      "name": "Mrs. Eze",
+      "name": "Ngozi Okoro",
       "email": "agm.finance@npa.gov.ng",
       "employeeId": "NPA045",
       "gradeLevel": "MSS2",
@@ -1596,7 +1596,7 @@
     },
     {
       "id": "user-agm-admin-archives",
-      "name": "Mrs. Obi",
+      "name": "Mrs. Nnenna Obi",
       "email": "agm.admin.archives@npa.gov.ng",
       "employeeId": "NPA085",
       "gradeLevel": "MSS2",
@@ -1750,7 +1750,7 @@
     },
     {
       "id": "user-staff-junior",
-      "name": "Mr. Nwankwo",
+      "name": "Mr. Chidi Okoro",
       "email": "staff.junior@npa.gov.ng",
       "employeeId": "NPA094",
       "gradeLevel": "JSS3",
@@ -1922,7 +1922,7 @@
     },
     {
       "id": "user-agm-nbv",
-      "name": "Mr. Adeyemi",
+      "name": "Tunde Ojo",
       "email": "agm.nbv@npa.gov.ng",
       "employeeId": "NPA111",
       "gradeLevel": "MSS2",

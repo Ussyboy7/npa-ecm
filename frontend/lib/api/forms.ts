@@ -1,6 +1,6 @@
 /** API client for forms and templates. */
 
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, getBaseUrl, getStoredAccessToken } from "@/lib/api-client";
 import { fetchAllPaginated } from "@/lib/pagination-utils";
 import type { FormTemplate, FormSubmission, FormSubmissionListItem, FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
@@ -27,6 +27,21 @@ const buildFormTemplatesCacheKey = (params?: {
     search: params?.search ?? null,
   });
 
+const buildSignaturesCacheKey = (params?: {
+  workflow?: string;
+  status?: string;
+}) => {
+  // Scope by access token so impersonation / login switches never reuse another
+  // user's pending-signature list.
+  const token = getStoredAccessToken() ?? "";
+  const tokenScope = token ? token.slice(-24) : "anon";
+  return JSON.stringify({
+    scope: tokenScope,
+    workflow: params?.workflow ?? null,
+    status: params?.status ?? null,
+  });
+};
+
 export const invalidateFormTemplatesCache = (): void => {
   formTemplatesCache.clear();
   formTemplatesPromises.clear();
@@ -36,6 +51,13 @@ export const invalidateSignaturesCache = (): void => {
   signaturesCache.clear();
   signaturesPromises.clear();
 };
+
+if (typeof window !== "undefined") {
+  window.addEventListener("npa_ecm_auth_changed", () => {
+    invalidateSignaturesCache();
+    invalidateFormTemplatesCache();
+  });
+}
 
 // Form Templates
 export async function getFormTemplates(params?: {
@@ -200,8 +222,7 @@ export async function deleteFormSubmission(id: string): Promise<void> {
  * Get PDF URL for a form submission
  */
 export function getFormSubmissionPdfUrl(submissionId: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
-  return `${baseUrl}/api/v1${BASE_PATH}/submissions/${submissionId}/generate_pdf/`;
+  return `${getBaseUrl()}${BASE_PATH}/submissions/${submissionId}/generate_pdf/`;
 }
 
 // Signature Workflow APIs
@@ -259,10 +280,7 @@ export async function getSignatures(params?: {
   workflow?: string;
   status?: string;
 }, force = false): Promise<FormSignature[]> {
-  const cacheKey = JSON.stringify({
-    workflow: params?.workflow ?? null,
-    status: params?.status ?? null,
-  });
+  const cacheKey = buildSignaturesCacheKey(params);
   const now = Date.now();
   const cached = signaturesCache.get(cacheKey);
   if (!force && cached && now - cached.timestamp < SIGNATURES_CACHE_TTL_MS) {
@@ -313,24 +331,15 @@ export async function signForm(workflowId: string, data: {
   if (data.signed_date) formData.append("signed_date", data.signed_date);
   if (data.notes) formData.append("notes", data.notes);
 
-  // Use fetch directly for FormData to avoid JSON serialization issues
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
-  const token = localStorage.getItem("access_token");
-  
-  const response = await fetch(`${baseUrl}/api/v1${BASE_PATH}/signature-workflows/${workflowId}/sign/`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
+  const result = await apiFetch<FormSignature>(
+    `${BASE_PATH}/signature-workflows/${workflowId}/sign/`,
+    {
+      method: "POST",
+      body: formData,
     },
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: "Failed to sign form" }));
-    throw new Error(errorData.error || errorData.message || "Failed to sign form");
-  }
+  );
 
   invalidateSignaturesCache();
-  return response.json();
+  return result;
 }
 

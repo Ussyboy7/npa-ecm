@@ -23,6 +23,8 @@ export interface ApiCase {
   metadata?: Record<string, unknown>;
   completion_package?: {
     id: string;
+    document_id?: string;
+    version_id?: string;
     title: string;
     file_url?: string;
   };
@@ -89,6 +91,8 @@ export function mapApiCase(api: ApiCase): Case {
     metadata: api.metadata,
     completionPackage: api.completion_package ? {
       id: api.completion_package.id,
+      documentId: api.completion_package.document_id || api.completion_package.id,
+      versionId: api.completion_package.version_id,
       title: api.completion_package.title,
       fileUrl: api.completion_package.file_url,
     } : undefined,

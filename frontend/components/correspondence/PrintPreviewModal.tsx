@@ -2,14 +2,20 @@
 
 import React from 'react';
 import { logError } from '@/lib/client-logger';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
-import { generateDocumentHTML, downloadAsPDF } from '@/lib/document-generator';
+import { generateDocumentHTML } from '@/lib/document-generator';
+import {
+  type CanonicalDocRef,
+  fetchCanonicalPrint,
+  printCanonicalDocument,
+} from '@/lib/canonical-document';
+import { SecurePdfCanvasPreview } from '@/components/dms/SecurePdfCanvasPreview';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
-import mammoth from 'mammoth';
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
+import { toast } from '@/components/ui/sonner';
 
 interface PrintPreviewModalProps {
   correspondence: Correspondence;
@@ -17,8 +23,10 @@ interface PrintPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   documentContentHtml?: string;
-  attachmentUrl?: string;
   attachmentFileName?: string;
+  documentVersionId?: string;
+  attachmentId?: string;
+  onPrintLogged?: () => void;
 }
 
 const PrintPreviewModalContent = ({ 
@@ -27,138 +35,91 @@ const PrintPreviewModalContent = ({
   isOpen, 
   onClose,
   documentContentHtml,
-  attachmentUrl,
-  attachmentFileName
+  attachmentFileName,
+  documentVersionId,
+  attachmentId,
+  onPrintLogged,
 }: PrintPreviewModalProps) => {
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
-  const [wordHtml, setWordHtml] = useState<string | null>(null);
+  const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const isPDF = attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.pdf');
-  const isWordDocx = attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.docx');
-  const isWordDoc = attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.doc');
-  
-  // Fetch PDF or Word document as blob when modal opens
+
+  const printRef = useMemo((): CanonicalDocRef | null => {
+    if (documentVersionId) {
+      return { kind: 'dms-version', versionId: documentVersionId, fileName: attachmentFileName };
+    }
+    if (attachmentId) {
+      return { kind: 'corr-attachment', attachmentId, fileName: attachmentFileName };
+    }
+    return null;
+  }, [documentVersionId, attachmentId, attachmentFileName]);
+
   useEffect(() => {
-    if (isOpen && attachmentUrl) {
-      setLoading(true);
-      setError(null);
-      
-      fetch(attachmentUrl, {
-        credentials: 'include',
-      })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
-          }
-          return response.blob();
-        })
-        .then(blob => {
-          if (isPDF) {
-            // For PDFs, create blob URL for iframe
-            const url = URL.createObjectURL(blob);
-            setPdfBlobUrl(url);
-            setLoading(false);
-          } else if (isWordDocx) {
-            // For .docx files, convert to HTML using mammoth
-            blob.arrayBuffer()
-              .then(arrayBuffer => mammoth.convertToHtml({ arrayBuffer }))
-              .then(result => {
-                setWordHtml(result.value);
-                setLoading(false);
-              })
-              .catch(err => {
-                logError('Error converting Word document:', err);
-                setError(`Failed to convert Word document: ${err.message}`);
-                setLoading(false);
-              });
-          } else {
-            setLoading(false);
-          }
-        })
-        .catch(err => {
-          logError('Error loading file:', err);
-          setError(err.message);
-          setLoading(false);
-        });
-    } else {
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
-        setPdfBlobUrl(null);
-      }
-      setWordHtml(null);
+    if (!isOpen) {
+      setPdfBytes(null);
       setLoading(false);
       setError(null);
+      return;
     }
-    
-    return () => {
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
+
+    let cancelled = false;
+
+    const load = async () => {
+      if (!printRef) {
+        setLoading(false);
+        setError(null);
+        setPdfBytes(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const blob = await fetchCanonicalPrint(printRef);
+        if (cancelled) return;
+        setPdfBytes(await blob.arrayBuffer());
+      } catch (err) {
+        if (cancelled) return;
+        logError('Error loading print preview file:', err);
+        const message = err instanceof Error ? err.message : 'Failed to load file';
+        setError(message);
+        toast.error(
+          message.includes('403') || /print blocked|DRM|Forbidden/i.test(message)
+            ? 'Print blocked by DRM policy'
+            : message,
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isPDF, isWordDocx, attachmentUrl]);
-  
-  const handlePrint = () => {
-    if (isPDF && pdfBlobUrl) {
-      // For PDFs, print directly from blob URL
-      const printWindow = window.open(pdfBlobUrl, '_blank');
-      if (printWindow) {
-        printWindow.onload = () => {
-          printWindow.print();
-        };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, printRef]);
+
+  const handlePrint = async () => {
+    try {
+      if (printRef) {
+        await printCanonicalDocument(printRef);
+        onPrintLogged?.();
+        return;
       }
-    } else if (isWordDocx && wordHtml) {
-      // For Word documents, create a print-friendly HTML page
-      const printHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${attachmentFileName || 'Document'}</title>
-          <style>
-            @media print {
-              body { margin: 0; }
-            }
-            body {
-              font-family: 'Times New Roman', serif;
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 40px;
-              line-height: 1.6;
-            }
-            .prose {
-              max-width: none;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="prose">
-            ${wordHtml}
-          </div>
-        </body>
-        </html>
-      `;
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
-        printWindow.onload = () => {
-          printWindow.print();
-        };
-      }
-    } else {
-      // For other content, use the document generator
-      downloadAsPDF({ 
-        correspondence, 
+      // HTML composition print (no binary print stream)
+      const html = generateDocumentHTML({
+        correspondence,
         minutes,
         documentContentHtml,
-        attachmentUrl,
-        attachmentFileName
+        attachmentFileName,
       });
+      await printCanonicalDocument({ kind: 'html', html, fileName: attachmentFileName || 'document.html' });
+      onPrintLogged?.();
+    } catch (err) {
+      logError('Print failed', err);
+      toast.error(err instanceof Error ? err.message : 'Print failed');
     }
-    onClose();
   };
 
   return (
@@ -167,84 +128,32 @@ const PrintPreviewModalContent = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Printer className="h-5 w-5 text-primary" />
-            Print Preview & Download
+            Print Preview
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto border border-border rounded-lg bg-background">
-          {isPDF && attachmentUrl ? (
+          {printRef ? (
             <>
               {loading ? (
                 <div className="flex items-center justify-center p-12 min-h-[600px]">
-                  <p className="text-sm text-muted-foreground">Loading PDF...</p>
+                  <p className="text-sm text-muted-foreground">Loading document…</p>
                 </div>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
-                  <p className="text-lg font-medium mb-4 text-destructive">Error loading PDF</p>
-                  <p className="text-sm text-muted-foreground mb-4">{error}</p>
-                  <iframe
-                    srcDoc={generateDocumentHTML({ 
-                      correspondence, 
-                      minutes,
-                      documentContentHtml,
-                      attachmentUrl,
-                      attachmentFileName
-                    })}
-                    className="w-full h-full min-h-[600px] border-0"
-                    title="Print Preview"
-                  />
-                </div>
-              ) : pdfBlobUrl ? (
-                <iframe
-                  src={pdfBlobUrl}
-                  className="w-full h-full min-h-[600px] border-0"
-                  title="Print Preview"
-                />
-              ) : (
-                <iframe
-                  srcDoc={generateDocumentHTML({ 
-                    correspondence, 
-                    minutes,
-                    documentContentHtml,
-                    attachmentUrl,
-                    attachmentFileName
-                  })}
-                  className="w-full h-full min-h-[600px] border-0"
-                  title="Print Preview"
-                />
-              )}
-            </>
-          ) : isWordDocx && attachmentUrl ? (
-            <>
-              {loading ? (
-                <div className="flex items-center justify-center p-12 min-h-[600px]">
-                  <p className="text-sm text-muted-foreground">Loading Word document...</p>
-                </div>
-              ) : error ? (
-                <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
-                  <p className="text-lg font-medium mb-4 text-destructive">Error loading Word document</p>
+                  <p className="text-lg font-medium mb-4 text-destructive">Error loading document</p>
                   <p className="text-sm text-muted-foreground mb-4">{error}</p>
                 </div>
-              ) : wordHtml ? (
-                <div className="prose prose-base dark:prose-invert max-w-none p-6">
-                  <div dangerouslySetInnerHTML={{ __html: wordHtml }} />
-                </div>
+              ) : pdfBytes ? (
+                <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-[600px]" />
               ) : null}
             </>
-          ) : isWordDoc && attachmentUrl ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
-              <p className="text-lg font-medium mb-4">{attachmentFileName || 'Word Document'}</p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Print preview is not available for .doc files. Please download to view.
-              </p>
-            </div>
           ) : (
             <iframe
               srcDoc={generateDocumentHTML({ 
                 correspondence, 
                 minutes,
                 documentContentHtml,
-                attachmentUrl,
                 attachmentFileName
               })}
               className="w-full h-full min-h-[600px] border-0"
@@ -255,13 +164,15 @@ const PrintPreviewModalContent = ({
 
         <div className="flex items-center justify-between gap-4 pt-4 border-t">
           <div className="text-xs text-muted-foreground">
-            {(isPDF || isWordDocx) && attachmentUrl ? 'Previewing uploaded document' : 'Preview reflects the latest document details and minute thread.'}
+            {printRef
+              ? 'Use Print to open the system dialog (logged). Preview has no browser save chrome.'
+              : 'Preview reflects the latest document details and minute thread.'}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handlePrint} className="gap-2">
+            <Button onClick={() => void handlePrint()} className="gap-2" disabled={Boolean(error && printRef)}>
               <Printer className="h-4 w-4" />
               Print
             </Button>

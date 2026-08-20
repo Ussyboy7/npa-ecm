@@ -334,6 +334,9 @@ export const OrganizationProvider: React.FC<{
 
   const buildUserPayload = (input: UpdateUserInput) =>
     cleanPayload({
+      username: input.username,
+      first_name: input.firstName,
+      last_name: input.lastName,
       system_role: input.systemRole,
       grade_level: input.gradeLevel,
       directorate: input.directorateId === undefined ? undefined : input.directorateId || null,

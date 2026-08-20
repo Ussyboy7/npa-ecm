@@ -34,7 +34,7 @@ export const getDocumentAccessLogs = async (documentId: string): Promise<Documen
       userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
       userName,
       userEmail,
-      action: (item.action as 'view' | 'download' | 'attempted-download') ?? 'view',
+      action: (item.action as DocumentAccessLog['action']) ?? 'view',
       sensitivity: typeof item.sensitivity === 'string' ? item.sensitivity : 'internal',
       timestamp: typeof item.timestamp === 'string' ? item.timestamp : new Date().toISOString(),
     };
@@ -77,7 +77,7 @@ export const logDocumentAccess = async (payload: CreateAccessLogPayload): Promis
     userId: String((user && 'id' in user) ? user.id : response.user_id ?? payload.userId),
     userName,
     userEmail,
-    action: (response.action as 'view' | 'download' | 'attempted-download') ?? payload.action,
+    action: (response.action as DocumentAccessLog['action']) ?? payload.action,
     sensitivity: typeof response.sensitivity === 'string' ? response.sensitivity : payload.sensitivity,
     timestamp: typeof response.timestamp === 'string' ? response.timestamp : new Date().toISOString(),
   };

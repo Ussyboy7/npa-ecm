@@ -303,12 +303,46 @@ export const fetchDocumentVersionContent = async (versionId: string): Promise<Bl
   });
 };
 
+/** Print/inline stream blocked when DRM disallows print. */
+export const fetchDocumentVersionPrint = async (versionId: string): Promise<Blob> => {
+  if (!hasTokens()) {
+    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+  }
+  return apiFetch<Blob>(`/dms/versions/${versionId}/print/`, {
+    responseType: 'blob',
+  });
+};
+
 export const canDownloadDocument = (document: DocumentRecord | null | undefined): boolean => {
   if (!document) return false;
   const rights = document.drmRights;
   if (!rights) return true;
   if (rights.expired || rights.view_only) return false;
   return rights.allow_download !== false;
+};
+
+export const canPrintDocument = (document: DocumentRecord | null | undefined): boolean => {
+  if (!document) return false;
+  const rights = document.drmRights;
+  if (!rights) return true;
+  if (rights.expired || rights.view_only) return false;
+  return rights.allow_print !== false;
+};
+
+export const canShareDocument = (document: DocumentRecord | null | undefined): boolean => {
+  if (!document) return false;
+  const rights = document.drmRights;
+  if (!rights) return true;
+  if (rights.expired) return false;
+  return rights.allow_external_share !== false;
+};
+
+/** True when version bytes must be loaded via /content|download (no raw media URL). */
+export const versionRequiresApiDelivery = (version: { fileUrl?: string; drmDelivery?: string; hasFile?: boolean } | null | undefined): boolean => {
+  if (!version) return false;
+  if (version.drmDelivery === 'api') return true;
+  if (version.drmDelivery === 'media') return false;
+  return Boolean(version.hasFile && !(version.fileUrl || '').trim());
 };
 
 // ============ SHARING ============

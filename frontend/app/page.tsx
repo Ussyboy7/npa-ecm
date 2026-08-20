@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
 
 const features = [
@@ -235,6 +236,7 @@ export default function LandingPage() {
             <Link href="#phases" className="text-sm font-medium text-muted-foreground hover:text-foreground">
               Phases
             </Link>
+            <ThemeToggle />
             <Button asChild variant="outline" className="gap-2">
               <Link href="/verify">
                 <Shield className="h-4 w-4" />

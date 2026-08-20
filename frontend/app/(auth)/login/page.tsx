@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
 import { login, clearTokens, isMfaChallenge, verifyLoginMFA, requestLoginMFAEmail, getOidcLoginUrl, fetchOidcStatus } from "@/lib/api-client";
 import { getStoredRedirectPath } from "@/lib/auth-errors";
@@ -273,20 +274,23 @@ function LoginForm() {
 
       <div className="flex min-h-dvh items-start justify-center px-6 py-8 sm:px-8 sm:py-12 lg:min-h-0 lg:items-center">
         <div className="w-full max-w-md space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground">
               <ArrowLeft className="h-4 w-4" />
               Back to landing
             </Link>
-            <div className="relative h-10 w-10 overflow-hidden rounded-lg border border-border bg-white" aria-label={`${NPA_BRAND_NAME} logo`}>
-              <Image
-                src={NPA_LOGO_URL}
-                alt={`${NPA_BRAND_NAME} crest`}
-                fill
-                unoptimized
-                sizes="40px"
-                className="object-contain"
-              />
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <div className="relative h-10 w-10 overflow-hidden rounded-lg border border-border bg-white" aria-label={`${NPA_BRAND_NAME} logo`}>
+                <Image
+                  src={NPA_LOGO_URL}
+                  alt={`${NPA_BRAND_NAME} crest`}
+                  fill
+                  unoptimized
+                  sizes="40px"
+                  className="object-contain"
+                />
+              </div>
             </div>
           </div>
 

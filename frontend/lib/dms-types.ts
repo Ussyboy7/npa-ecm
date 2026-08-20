@@ -25,6 +25,10 @@ export interface DocumentVersion {
   fileType: string;
   fileSize: number;
   fileUrl?: string;
+  /** True when a file or HTML body exists server-side (even if fileUrl is redacted). */
+  hasFile?: boolean;
+  /** "api" = must use /content|/download; "media" = direct fileUrl may be present */
+  drmDelivery?: 'api' | 'media';
   contentHtml?: string;
   contentJson?: unknown;
   contentText?: string;
@@ -221,7 +225,7 @@ export interface DocumentAccessLog {
   userId: string;
   userName?: string;
   userEmail?: string;
-  action: 'view' | 'download' | 'attempted-download';
+  action: 'view' | 'download' | 'attempted-download' | 'print' | 'attempted-print';
   sensitivity: string;
   timestamp: string;
 }
@@ -229,7 +233,7 @@ export interface DocumentAccessLog {
 export interface CreateAccessLogPayload {
   documentId: string;
   userId: string;
-  action: 'view' | 'download' | 'attempted-download';
+  action: 'view' | 'download' | 'attempted-download' | 'print' | 'attempted-print';
   sensitivity: string;
 }
 
@@ -379,6 +383,16 @@ export const mapDocumentPermission = (data: Record<string, unknown>): DocumentPe
 
 export const mapDocumentVersion = (data: Record<string, unknown>): DocumentVersion => {
   const uploadedBy = data.uploaded_by as Record<string, unknown> | undefined;
+  const fileUrl = typeof data.file_url === 'string' && data.file_url.trim() ? data.file_url : undefined;
+  const hasHtml = typeof data.content_html === 'string' && data.content_html.trim().length > 0;
+  const hasFile =
+    typeof data.has_file === 'boolean'
+      ? data.has_file
+      : Boolean(fileUrl) || hasHtml;
+  const drmDelivery =
+    data.drm_delivery === 'api' || data.drm_delivery === 'media'
+      ? data.drm_delivery
+      : undefined;
   return {
     id: String(data.id),
     documentId: String(data.document ?? data.document_id),
@@ -386,7 +400,9 @@ export const mapDocumentVersion = (data: Record<string, unknown>): DocumentVersi
     fileName: typeof data.file_name === 'string' ? data.file_name : 'file',
     fileType: typeof data.file_type === 'string' ? data.file_type : 'application/octet-stream',
     fileSize: typeof data.file_size === 'number' ? data.file_size : 0,
-    fileUrl: typeof data.file_url === 'string' ? data.file_url : undefined,
+    fileUrl,
+    hasFile,
+    drmDelivery,
     contentHtml: typeof data.content_html === 'string' ? data.content_html : undefined,
     contentJson: data.content_json,
     contentText: typeof data.content_text === 'string' ? data.content_text : undefined,

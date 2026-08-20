@@ -34,9 +34,27 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
     # Override file_url to allow data URLs (which are longer than 200 chars)
     # The view will convert data URLs to proper file URLs before saving
     file_url = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=None)
+    has_file = serializers.SerializerMethodField()
+    drm_delivery = serializers.SerializerMethodField()
+
+    def get_has_file(self, obj) -> bool:
+        return bool((getattr(obj, "file_url", None) or "").strip() or (getattr(obj, "content_html", None) or "").strip())
+
+    def get_drm_delivery(self, obj) -> str:
+        from .drm import resolve_document_rights, should_withhold_direct_media
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        document = getattr(obj, "document", None)
+        if document is None:
+            return "media"
+        rights = resolve_document_rights(document, user)
+        if should_withhold_direct_media(rights) or rights.get("expired"):
+            return "api"
+        return "media"
     
     def to_representation(self, instance):
-        """Convert relative file URLs to absolute URLs when serializing."""
+        """Convert relative file URLs to absolute URLs, then apply DRM redaction."""
         data = super().to_representation(instance)
         if data.get('file_url') and not data['file_url'].startswith(('http://', 'https://', 'data:')):
             # If it's a relative path, convert to absolute URL
@@ -76,6 +94,18 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
                     if file_url.startswith('/api/media/'):
                         file_url = file_url.replace('/api/media/', '/media/')
                     data['file_url'] = f"{scheme}://{host}{file_url}"
+
+        from .drm import apply_version_drm_redaction
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        document = getattr(instance, "document", None)
+        if document is not None:
+            apply_version_drm_redaction(data, document, user)
+        else:
+            raw_url = (data.get("file_url") or "").strip()
+            data["has_file"] = bool(raw_url) or bool((data.get("content_html") or "").strip())
+            data["drm_delivery"] = "media"
         return data
 
     class Meta:
@@ -88,6 +118,8 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
             "file_type",
             "file_size",
             "file_url",
+            "has_file",
+            "drm_delivery",
             "content_html",
             "content_json",
             "content_text",
@@ -103,6 +135,8 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "version_number",
+            "has_file",
+            "drm_delivery",
             "uploaded_by",
             "uploaded_at",
             "content_text",

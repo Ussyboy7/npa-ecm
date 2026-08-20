@@ -4,7 +4,7 @@ import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
-import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,7 +64,7 @@ import {
 } from "@/lib/api/document-templates";
 import { getWorkflowTemplates, deleteWorkflowTemplate, updateWorkflowTemplate } from "@/lib/api/workflow";
 import { getFormTemplates, deleteFormTemplate, cloneFormTemplate, createFormTemplate } from "@/lib/api/forms";
-import type { WorkflowTemplate } from "@/lib/types/workflow";
+import type { WorkflowStep, WorkflowTemplate } from "@/lib/types/workflow";
 import { logError } from "@/lib/client-logger";
 import type { FormTemplate } from "@/lib/types/forms";
 import {
@@ -98,6 +98,44 @@ const scopeOptions: { value: TemplateScope; label: string }[] = [
 ];
 
 type HubTab = "documents" | "minutes" | "workflows" | "forms";
+
+type WorkflowGroupKey = "upward" | "downward" | "special";
+
+const WORKFLOW_GROUP_ORDER: WorkflowGroupKey[] = ["upward", "downward", "special"];
+
+const WORKFLOW_GROUP_LABELS: Record<WorkflowGroupKey, string> = {
+  upward: "Upward approval",
+  downward: "Downward assignment",
+  special: "Special",
+};
+
+function workflowGroupKey(template: WorkflowTemplate): WorkflowGroupKey {
+  const slug = template.slug.toLowerCase();
+  if (slug.includes("assignment") || slug.includes("downward")) return "downward";
+  if (slug.includes("urgent") || slug.includes("information") || slug.includes("parallel") || slug.includes("fyi")) {
+    return "special";
+  }
+  return "upward";
+}
+
+function workflowStepChain(steps: WorkflowStep[]): string {
+  return [...steps]
+    .sort((a, b) => a.order - b.order)
+    .map((step) => {
+      const role = step.required_role?.trim();
+      if (role) {
+        const short = role
+          .replace("Assistant General Manager", "AGM")
+          .replace("General Manager", "GM")
+          .replace("Executive Director", "ED")
+          .replace("Managing Director", "MD");
+        return short;
+      }
+      return step.title;
+    })
+    .filter(Boolean)
+    .join(" → ");
+}
 
 function TemplatesHubForm() {
   const router = useRouter();
@@ -396,6 +434,21 @@ function TemplatesHubForm() {
     });
   }, [workflowTemplates, workflowSearch]);
 
+  const groupedWorkflowTemplates = useMemo(() => {
+    const groups: Record<WorkflowGroupKey, WorkflowTemplate[]> = {
+      upward: [],
+      downward: [],
+      special: [],
+    };
+    for (const template of filteredWorkflowTemplates) {
+      groups[workflowGroupKey(template)].push(template);
+    }
+    for (const key of WORKFLOW_GROUP_ORDER) {
+      groups[key].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return groups;
+  }, [filteredWorkflowTemplates]);
+
   const handleDeleteWorkflowClick = (id: string, name: string) => {
     setWorkflowToDelete({ id, name });
     setDeleteConfirmText("");
@@ -556,22 +609,22 @@ function TemplatesHubForm() {
       case "audit":
         return {
           accent: "border-l-amber-500",
-          badge: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+          badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
         };
       case "finance":
         return {
           accent: "border-l-emerald-500",
-          badge: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
+          badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
         };
       case "procurement":
         return {
           accent: "border-l-blue-500",
-          badge: "bg-blue-500/10 text-blue-700 border-blue-500/20",
+          badge: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
         };
       default:
         return {
           accent: "border-l-slate-500",
-          badge: "bg-slate-500/10 text-slate-700 border-slate-500/20",
+          badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20",
         };
     }
   };
@@ -592,19 +645,21 @@ function TemplatesHubForm() {
 
   const tabSubtitle = useMemo(() => {
     if (activeTab === "workflows") {
-      return "Preview approval chains here, then open the full editor to change steps.";
+      return "Grouped approval chains — preview steps and roles, then open the editor to change them.";
     }
     if (activeTab === "forms") {
-      return "Preview form templates here, then open the builder to edit fields.";
+      return "Preview sections and sign-off chains, then open the builder to edit fields.";
     }
     if (activeTab === "minutes") {
-      return "Choose scope, pick a minute template from the list, or create a new one.";
+      return "Pick a scope, then select or create a minute template.";
     }
     if (!canAccessAdvancedTemplates) {
       return "Manage document and minute templates for your scope. Workflow and form templates are managed by executives.";
     }
-    return "Choose scope, pick a template from the list, or create a new document template.";
+    return "Pick a scope, then select or create a document template.";
   }, [activeTab, canAccessAdvancedTemplates]);
+
+  const docMinuteCtaLabel = activeTab === "minutes" ? "New minute template" : "New document template";
 
   const headerActions = useMemo(() => {
     if (activeTab === "workflows") {
@@ -649,24 +704,25 @@ function TemplatesHubForm() {
       <>
         <Button size="sm" className="bg-gradient-primary" onClick={handleCreateNewDocTemplate}>
           <Plus className="h-4 w-4 mr-2" />
-          New template
+          {docMinuteCtaLabel}
         </Button>
         <ContextualHelp
-          title="How to manage templates"
-          description="Use tabs to switch between document, minute, workflow, and form templates."
+          title={activeTab === "minutes" ? "Minute templates" : "Document templates"}
+          description="Templates are stored per scope (organization, directorate, division, department, or personal)."
           steps={[
-            "Pick scope, then select a template from the list to edit.",
-            "Use New template to create one for the current scope.",
+            "Set scope level, then pick a template from the list to edit.",
+            `Use ${docMinuteCtaLabel} to create one for the current scope.`,
             "Search by title or description in the bar above the tabs.",
           ]}
         />
       </>
     );
-  }, [activeTab, router, handleCreateNewDocTemplate]);
+  }, [activeTab, router, handleCreateNewDocTemplate, docMinuteCtaLabel]);
 
   const renderWorkflowPreviewPanel = () => {
     if (!workflowPreview) return null;
     const sortedSteps = [...workflowPreview.steps].sort((a, b) => a.order - b.order);
+    const chain = workflowStepChain(sortedSteps);
     return (
       <Dialog open={workflowPreviewId !== null} onOpenChange={(open) => { if (!open) setWorkflowPreviewId(null); }}>
         <DialogContent size="md" height="scroll">
@@ -679,19 +735,34 @@ function TemplatesHubForm() {
             ) : null}
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                {WORKFLOW_GROUP_LABELS[workflowGroupKey(workflowPreview)]}
+              </Badge>
+              <Badge variant="outline" className={correspondenceQueueBadgeClass}>
                 {workflowPreview.applies_to === "correspondence" ? "Correspondence" : "Document"}
               </Badge>
               <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
                 {sortedSteps.length} steps
               </Badge>
-              <Badge variant={workflowPreview.is_active ? "default" : "secondary"} className={correspondenceQueueBadgeClass}>
-                {workflowPreview.is_active ? "Active" : "Inactive"}
-              </Badge>
+              {!workflowPreview.is_active ? (
+                <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                  Inactive
+                </Badge>
+              ) : null}
             </div>
+            {chain ? (
+              <p className="text-sm font-medium text-foreground">{chain}</p>
+            ) : null}
             {sortedSteps.length > 0 ? (
-              <ol className="list-decimal space-y-1 pl-5 text-sm">
+              <ol className="list-decimal space-y-2 pl-5 text-sm">
                 {sortedSteps.map((step) => (
-                  <li key={step.id}>{step.title}</li>
+                  <li key={step.id}>
+                    <span className="font-medium text-foreground">{step.title}</span>
+                    {(step.required_role || step.required_grade_level) ? (
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {[step.required_role, step.required_grade_level].filter(Boolean).join(" · ")}
+                      </span>
+                    ) : null}
+                  </li>
                 ))}
               </ol>
             ) : (
@@ -719,7 +790,14 @@ function TemplatesHubForm() {
   const renderFormPreviewPanel = () => {
     if (!formPreview) return null;
     const styles = getFormCategoryStyles(formPreview.category);
-    const fieldCount = formPreview.structure?.fields?.length || 0;
+    const fields = formPreview.structure?.fields ?? [];
+    const sections = formPreview.structure?.sections ?? [];
+    const signatureRoles = formPreview.structure?.signatures?.roles ?? [];
+    const fieldCount = fields.length;
+    const fieldById = new Map(fields.map((field) => [field.id, field]));
+    const fieldByName = new Map(fields.map((field) => [field.name, field]));
+    const resolveField = (key: string) => fieldById.get(key) ?? fieldByName.get(key);
+
     return (
       <Dialog open={formPreviewId !== null} onOpenChange={(open) => { if (!open) setFormPreviewId(null); }}>
         <DialogContent size="md" height="scroll">
@@ -734,16 +812,58 @@ function TemplatesHubForm() {
               <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "capitalize", styles.badge)}>
                 {formPreview.category_display || formPreview.category}
               </Badge>
-              <Badge variant={formPreview.is_active ? "default" : "outline"} className={correspondenceQueueBadgeClass}>
-                {formPreview.is_active ? "Active" : "Inactive"}
-              </Badge>
               <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
                 {fieldCount} fields
               </Badge>
+              {sections.length > 0 ? (
+                <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                  {sections.length} sections
+                </Badge>
+              ) : null}
+              {signatureRoles.length > 0 ? (
+                <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                  {signatureRoles.length} sign-offs
+                </Badge>
+              ) : null}
+              {!formPreview.is_active ? (
+                <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                  Inactive
+                </Badge>
+              ) : null}
             </div>
-            {fieldCount > 0 ? (
+
+            {sections.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sections</p>
+                {sections.map((section) => {
+                  const sectionFields = section.fields
+                    .map((key) => resolveField(key))
+                    .filter((field): field is NonNullable<typeof field> => Boolean(field));
+                  return (
+                    <div key={section.id} className="rounded-md border border-border/60 px-3 py-2">
+                      <p className="text-sm font-medium text-foreground">{section.title}</p>
+                      {sectionFields.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                          {sectionFields.slice(0, 6).map((field) => (
+                            <li key={field.id}>
+                              {field.label || field.name}
+                              <span className="ml-1.5 uppercase opacity-70">{field.type}</span>
+                            </li>
+                          ))}
+                          {sectionFields.length > 6 ? (
+                            <li>+ {sectionFields.length - 6} more</li>
+                          ) : null}
+                        </ul>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted-foreground">No fields in this section.</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : fieldCount > 0 ? (
               <ul className="space-y-1 text-sm">
-                {formPreview.structure?.fields?.slice(0, 8).map((field) => (
+                {fields.slice(0, 8).map((field) => (
                   <li key={field.id} className="text-muted-foreground">
                     {field.label || field.name}
                     <span className="ml-2 text-xs uppercase">{field.type}</span>
@@ -756,6 +876,17 @@ function TemplatesHubForm() {
             ) : (
               <p className="text-sm text-muted-foreground">No fields configured yet.</p>
             )}
+
+            {signatureRoles.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sign-off chain</p>
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-foreground">
+                  {signatureRoles.map((role) => (
+                    <li key={role.key}>{role.label}</li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button
@@ -777,14 +908,12 @@ function TemplatesHubForm() {
 
   const renderDocumentMinutePanel = (panelType: "document" | "minute") => {
     const isMinute = panelType === "minute";
+    const createLabel = isMinute ? "New minute template" : "New document template";
     return (
       <div className="space-y-4">
         <Card>
           <CardHeader className="pb-4">
-            <CardDescription>
-              {isMinute ? "Choose scope, then pick a template from the list below." : "Choose scope, then pick a template from the list below."}
-            </CardDescription>
-            <div className="grid gap-4 md:grid-cols-3 pt-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label>Scope Level</Label>
                 <Select value={activeScope} onValueChange={(v) => setActiveScope(v as TemplateScope)}>
@@ -825,7 +954,7 @@ function TemplatesHubForm() {
                     ? "Try a different title or description keyword."
                     : `Create a template for this scope, or switch scope to find existing templates.`
                 }
-                actionLabel={templateListSearch.trim() ? undefined : "New template"}
+                actionLabel={templateListSearch.trim() ? undefined : createLabel}
                 onAction={templateListSearch.trim() ? undefined : handleCreateNewDocTemplate}
               />
             ) : (
@@ -859,7 +988,9 @@ function TemplatesHubForm() {
               <DialogContent size="lg" height="scroll">
                 <DialogHeader>
                   <DialogTitle>
-                    {selectedTemplateId ? "Edit template" : "New template"}
+                    {selectedTemplateId
+                      ? `Edit ${isMinute ? "minute" : "document"} template`
+                      : createLabel}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
@@ -929,19 +1060,19 @@ function TemplatesHubForm() {
       ) : (
         <ClientErrorBoundary>
           <AdminPageShell
-            title="Templates"
+            title="Template Hub"
             subtitle={tabSubtitle}
             icon={LayoutTemplate}
             actions={headerActions}
           >
           <StatStrip
             items={[
-              { key: "documents", label: "Document templates", value: documentCount },
-              { key: "minutes", label: "Minute templates", value: minuteCount },
+              { key: "documents", label: "Documents · all scopes", value: documentCount },
+              { key: "minutes", label: "Minutes · all scopes", value: minuteCount },
               ...(canAccessAdvancedTemplates
                 ? [
-                    { key: "workflows", label: "Workflow templates", value: workflowStats.total },
-                    { key: "forms", label: "Form templates", value: formTemplates.length },
+                    { key: "workflows", label: "Workflows", value: workflowStats.total },
+                    { key: "forms", label: "Forms", value: formTemplates.length },
                   ]
                 : []),
             ]}
@@ -1023,96 +1154,109 @@ function TemplatesHubForm() {
                       message={
                         workflowSearch.trim()
                           ? "Try a different name, slug, or description keyword."
-                          : "Create a workflow to define approval steps for correspondence or documents."
+                          : "Workflow templates define multi-step approval chains for correspondence and documents. Create one to get started — you can clone and edit it later."
                       }
                       actionLabel={workflowSearch.trim() ? undefined : "Create workflow"}
                       onAction={workflowSearch.trim() ? undefined : () => router.push("/admin/workflow-templates/new")}
                     />
                   ) : (
-                    <div className={correspondenceQueueListStackClass}>
-                      {filteredWorkflowTemplates.map((template) => (
-                        <ListRowCard
-                          key={template.id}
-                          density="compact"
-                          className={cn(workflowPreviewId === template.id ? "ring-2 ring-primary" : "")}
-                          onRowClick={() => setWorkflowPreviewId(template.id)}
-                          leading={(
-                            <div className={cn(correspondenceQueueLeadingBoxClass, "bg-success/10")}>
-                              <GitBranch className={cn(correspondenceQueueLeadingIconClass, "text-success")} />
+                    <div className="space-y-6">
+                      {WORKFLOW_GROUP_ORDER.map((groupKey) => {
+                        const groupTemplates = groupedWorkflowTemplates[groupKey];
+                        if (groupTemplates.length === 0) return null;
+                        return (
+                          <div key={groupKey} className="space-y-2">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {WORKFLOW_GROUP_LABELS[groupKey]}
+                            </h3>
+                            <div className={correspondenceQueueListStackClass}>
+                              {groupTemplates.map((template) => {
+                                const chain = workflowStepChain(template.steps);
+                                return (
+                                  <ListRowCard
+                                    key={template.id}
+                                    density="compact"
+                                    className={cn(workflowPreviewId === template.id ? "ring-2 ring-primary" : "")}
+                                    onRowClick={() => setWorkflowPreviewId(template.id)}
+                                    leading={(
+                                      <div className={cn(correspondenceQueueLeadingBoxClass, "bg-success/10")}>
+                                        <GitBranch className={cn(correspondenceQueueLeadingIconClass, "text-success")} />
+                                      </div>
+                                    )}
+                                    actions={(
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                            aria-label="More actions"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <MoreVertical className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem onClick={() => router.push(`/admin/workflow-templates/${template.id}`)}>
+                                            <Edit className="mr-2 h-4 w-4" />
+                                            Edit
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              router.push(`/admin/workflow-templates/${template.id}?clone=true`)
+                                            }
+                                          >
+                                            <Copy className="mr-2 h-4 w-4" />
+                                            Clone
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem onClick={() => handleToggleWorkflowActive(template)}>
+                                            {template.is_active ? (
+                                              <PowerOff className="mr-2 h-4 w-4" />
+                                            ) : (
+                                              <Power className="mr-2 h-4 w-4" />
+                                            )}
+                                            {template.is_active ? "Deactivate" : "Activate"}
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => handleDeleteWorkflowClick(template.id, template.name)}
+                                            className="text-destructive"
+                                          >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    )}
+                                  >
+                                    <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
+                                    {chain ? (
+                                      <p className="mt-0.5 text-xs font-medium text-foreground/80">{chain}</p>
+                                    ) : null}
+                                    {template.description ? (
+                                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
+                                    ) : null}
+                                    <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
+                                      <span className={correspondenceQueueMetaItemClass}>
+                                        <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                                          {template.steps.length} steps
+                                        </Badge>
+                                      </span>
+                                      {!template.is_active ? (
+                                        <span className={correspondenceQueueMetaItemClass}>
+                                          <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                                            Inactive
+                                          </Badge>
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </ListRowCard>
+                                );
+                              })}
                             </div>
-                          )}
-                          actions={(
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                  aria-label="More actions"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => router.push(`/admin/workflow-templates/${template.id}`)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    router.push(`/admin/workflow-templates/${template.id}?clone=true`)
-                                  }
-                                >
-                                  <Copy className="mr-2 h-4 w-4" />
-                                  Clone
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleToggleWorkflowActive(template)}>
-                                  {template.is_active ? (
-                                    <PowerOff className="mr-2 h-4 w-4" />
-                                  ) : (
-                                    <Power className="mr-2 h-4 w-4" />
-                                  )}
-                                  {template.is_active ? "Deactivate" : "Activate"}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteWorkflowClick(template.id, template.name)}
-                                  className="text-destructive"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        >
-                          <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
-                          {template.description ? (
-                            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
-                          ) : null}
-                          <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
-                            <span className={correspondenceQueueMetaItemClass}>
-                              <Badge variant="outline" className={correspondenceQueueBadgeClass}>
-                                {template.applies_to === "correspondence" ? "Correspondence" : "Document"}
-                              </Badge>
-                            </span>
-                            <span className={correspondenceQueueMetaItemClass}>
-                              <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
-                                {template.steps.length} steps
-                              </Badge>
-                            </span>
-                            <span className={correspondenceQueueMetaItemClass}>
-                              <Badge
-                                variant={template.is_active ? "default" : "secondary"}
-                                className={correspondenceQueueBadgeClass}
-                              >
-                                {template.is_active ? "Active" : "Inactive"}
-                              </Badge>
-                            </span>
                           </div>
-                        </ListRowCard>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -1127,8 +1271,20 @@ function TemplatesHubForm() {
                   ) : filteredFormTemplates.length === 0 ? (
                     <EmptyState
                       icon={<FormInput className={registryQueueEmptyIconClass} />}
-                      title="No form templates found"
-                      message="Adjust search or category filters, or create a new form template."
+                      title={
+                        formCategoryFilter !== "all"
+                          ? `No ${formCategoryFilter} form templates`
+                          : formSearch.trim()
+                            ? "No form templates match your search"
+                            : "No form templates found"
+                      }
+                      message={
+                        formCategoryFilter !== "all"
+                          ? "Only Audit forms are seeded today. Switch the category filter to All or Audit, or create a new template."
+                          : formSearch.trim()
+                            ? "Try a different name or clear the search."
+                            : "Create a form template to collect structured data with fields and sign-off roles."
+                      }
                       actionLabel="Create form"
                       onAction={() => setShowFormCreate(true)}
                     />
@@ -1136,6 +1292,8 @@ function TemplatesHubForm() {
                     <div className={correspondenceQueueListStackClass}>
                       {filteredFormTemplates.map((template) => {
                         const styles = getFormCategoryStyles(template.category);
+                        const sectionCount = template.structure?.sections?.length || 0;
+                        const signatureCount = template.structure?.signatures?.roles?.length || 0;
                         return (
                           <ListRowCard
                             key={template.id}
@@ -1188,6 +1346,11 @@ function TemplatesHubForm() {
                             )}
                           >
                             <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
+                            {signatureCount > 0 ? (
+                              <p className="mt-0.5 text-xs font-medium text-foreground/80">
+                                {(template.structure?.signatures?.roles ?? []).map((role) => role.label).join(" → ")}
+                              </p>
+                            ) : null}
                             {template.description ? (
                               <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
                             ) : null}
@@ -1201,16 +1364,31 @@ function TemplatesHubForm() {
                                 </Badge>
                               </span>
                               <span className={correspondenceQueueMetaItemClass}>
-                                <Badge
-                                  variant={template.is_active ? "default" : "outline"}
-                                  className={correspondenceQueueBadgeClass}
-                                >
-                                  {template.is_active ? "Active" : "Inactive"}
+                                <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                                  {template.structure?.fields?.length || 0} fields
                                 </Badge>
                               </span>
-                              <span className={correspondenceQueueMetaItemClass}>
-                                {template.structure?.fields?.length || 0} fields
-                              </span>
+                              {sectionCount > 0 ? (
+                                <span className={correspondenceQueueMetaItemClass}>
+                                  <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                                    {sectionCount} sections
+                                  </Badge>
+                                </span>
+                              ) : null}
+                              {signatureCount > 0 ? (
+                                <span className={correspondenceQueueMetaItemClass}>
+                                  <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                                    {signatureCount} sign-offs
+                                  </Badge>
+                                </span>
+                              ) : null}
+                              {!template.is_active ? (
+                                <span className={correspondenceQueueMetaItemClass}>
+                                  <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                                    Inactive
+                                  </Badge>
+                                </span>
+                              ) : null}
                             </div>
                           </ListRowCard>
                         );

@@ -19,6 +19,8 @@ import { replaceDocumentVersion, type DocumentVersion } from '@/lib/api/dms';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
 import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
+import { useSignature } from '@/hooks/use-signature';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import { FileUploadZone } from './FileUploadZone';
 import { RichTextEditor } from './RichTextEditor';
 import { Loader2, AlertTriangle, PenTool, Upload as UploadIcon } from 'lucide-react';
@@ -50,12 +52,17 @@ export const ReplaceVersionDialog = ({
   document,
   onComplete,
 }: ReplaceVersionDialogProps) => {
+  const { currentUser } = useCurrentUser();
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composeMode, setComposeMode] = useState(() => Boolean(version?.contentHtml));
   const [editorHtml, setEditorHtml] = useState(() => version?.contentHtml ?? '');
+  const { signature: userSignature } = useSignature({
+    userId: currentUser?.id,
+    autoLoad: open && composeMode,
+  });
 
   const handleFileSelect = useCallback((selectedFile: File | null) => {
     setFile(selectedFile);
@@ -183,12 +190,14 @@ export const ReplaceVersionDialog = ({
             </div>
 
             {composeMode ? (
-              <div className="min-h-[400px] border rounded-lg overflow-hidden">
+              <div className="min-h-[400px]">
                 <RichTextEditor
                   value={editorHtml}
                   onChange={(html: string) => setEditorHtml(html)}
                   placeholder="Edit the document content..."
                   showCharacterCount
+                  showHeader={false}
+                  signatureImageUrl={userSignature?.imageData}
                 />
               </div>
             ) : (

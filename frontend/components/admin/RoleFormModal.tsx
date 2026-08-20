@@ -209,7 +209,7 @@ export const RoleFormModal = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="2xl" height="fill">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>
             {existingRole ? "Edit Role" : "Create New Role"}
           </DialogTitle>
@@ -220,7 +220,7 @@ export const RoleFormModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto space-y-6 pr-2 -mr-2">
           {/* Role Details */}
           <div className="space-y-4">
             <div className="space-y-2">

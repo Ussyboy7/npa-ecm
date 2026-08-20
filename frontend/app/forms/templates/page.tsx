@@ -94,22 +94,22 @@ const FormsTemplatesPage = () => {
     switch (category) {
       case "audit":
         return {
-          badge: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+          badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
           border: "border-l-amber-500",
         };
       case "finance":
         return {
-          badge: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
+          badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
           border: "border-l-emerald-500",
         };
       case "procurement":
         return {
-          badge: "bg-blue-500/10 text-blue-700 border-blue-500/20",
+          badge: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
           border: "border-l-blue-500",
         };
       default:
         return {
-          badge: "bg-slate-500/10 text-slate-700 border-slate-500/20",
+          badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20",
           border: "border-l-slate-500",
         };
     }
@@ -137,7 +137,7 @@ const FormsTemplatesPage = () => {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Total Templates", value: templates.length, icon: LayoutTemplate, bgClass: "bg-primary/10", iconClass: "text-primary" },
-            { label: "Categories", value: categories.length, icon: FolderOpen, bgClass: "bg-violet-500/10", iconClass: "text-violet-600" },
+            { label: "Categories", value: categories.length, icon: FolderOpen, bgClass: "bg-violet-500/10", iconClass: "text-violet-600 dark:text-violet-400" },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
               <CardContent className={registryQueueStatCardContentClass}>
