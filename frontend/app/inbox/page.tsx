@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from 'react';
-import { fetchSLATargets } from '@/lib/sla-client';
+import { fetchSLATargets, DEFAULT_SLA_TARGETS } from '@/lib/sla-client';
 import { logError } from '@/lib/client-logger';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -172,7 +172,7 @@ const ExecutiveInbox = () => {
         if (!ignore) setSlaTargets(targets);
       } catch (err) {
         logError('Failed to load SLA targets', err);
-        if (!ignore) setSlaTargets({ urgent: 2, high: 3, medium: 5, low: 7 });
+        if (!ignore) setSlaTargets(DEFAULT_SLA_TARGETS);
       }
     };
     void loadSLATargets();

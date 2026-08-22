@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -44,6 +44,8 @@ export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const { currentUser } = useCurrentUser();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const { officeMemberships } = useOrganization();
   const counts = useSidebarCounts(currentUser?.id);
   const permissions = useUserPermissions(currentUser ?? undefined);
@@ -64,7 +66,7 @@ export function AppSidebar() {
   ), [permissions.canViewCorrespondenceRegistry, permissions.canDistribute, userOfficeIds.length]);
 
   const isActivePath = (path: string) => {
-    if (!pathname) return false;
+    if (!mounted || !pathname) return false;
     if (path === '/dms') {
       return pathname === '/dms' || pathname.startsWith('/dms/') || pathname === '/documents' || pathname.startsWith('/documents/');
     }

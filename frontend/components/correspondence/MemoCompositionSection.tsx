@@ -4,39 +4,29 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, CheckCircle } from 'lucide-react';
-import { TemplateManager } from './TemplateManager';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertCircle, CheckCircle, FileText, Save } from 'lucide-react';
 import { RichTextEditor } from '@/components/dms/RichTextEditor';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import type { DocumentTemplate } from '@/lib/api/document-templates';
 
 interface MemoCompositionSectionProps {
-  // Subject
   memoSubject: string;
   onMemoSubjectChange: (subject: string) => void;
   memoSubjectError?: string;
-  
-  // Content
   memoContent: string;
   onMemoContentChange: (content: string) => void;
   memoContentError?: string;
   characterCount: number;
-  
-  // Templates
   templates: DocumentTemplate[];
   selectedTemplateId: string | null;
   onTemplateSelect: (templateId: string | null) => void;
   onTemplateApply: (template: DocumentTemplate) => void;
   onTemplateSave: (name: string, content: string) => void;
-  onTemplateDelete: (templateId: string) => void;
   newTemplateName: string;
   onNewTemplateNameChange: (name: string) => void;
-  templateSectionOpen: boolean;
-  onTemplateSectionOpenChange: (open: boolean) => void;
   getTemplatePlainText: (template: DocumentTemplate) => string;
-  canDeleteTemplate: (template: DocumentTemplate) => boolean;
-  
-  // Suggested note
+  signatureImageUrl?: string;
   showSuggestedNote: boolean;
   suggestedCoveringNote: string;
   onUseSuggestedNote: () => void;
@@ -57,13 +47,10 @@ export const MemoCompositionSection = ({
   onTemplateSelect,
   onTemplateApply,
   onTemplateSave,
-  onTemplateDelete,
   newTemplateName,
   onNewTemplateNameChange,
-  templateSectionOpen,
-  onTemplateSectionOpenChange,
   getTemplatePlainText,
-  canDeleteTemplate,
+  signatureImageUrl,
   showSuggestedNote,
   suggestedCoveringNote,
   onUseSuggestedNote,
@@ -89,19 +76,18 @@ export const MemoCompositionSection = ({
         <Input
           id="subject"
           value={memoSubject}
-          onChange={(e) => {
-            onMemoSubjectChange(e.target.value);
-          }}
+          onChange={(e) => onMemoSubjectChange(e.target.value)}
           placeholder="Re: Subject of response"
           className={memoSubjectError ? 'border-destructive' : ''}
           maxLength={MODAL_CONSTANTS.MEMO_SUBJECT.MAX}
         />
+        <p className="text-xs text-muted-foreground">Used as memo subject line and DMS document title.</p>
         {memoSubjectError && (
           <p className="text-xs text-destructive">{memoSubjectError}</p>
         )}
       </div>
 
-      {/* Memo Content with Templates */}
+      {/* Memo Content */}
       <div className="space-y-3">
         <Label className="flex items-center justify-between">
           <span>Memo Content *</span>
@@ -110,24 +96,70 @@ export const MemoCompositionSection = ({
           </span>
         </Label>
 
-        {/* Template Manager */}
-        <TemplateManager
-          templates={templates}
-          selectedTemplateId={selectedTemplateId}
-          onTemplateSelect={onTemplateSelect}
-          onTemplateApply={onTemplateApply}
-          onTemplateSave={onTemplateSave}
-          onTemplateDelete={onTemplateDelete}
-          currentContent={memoContent}
-          newTemplateName={newTemplateName}
-          onNewTemplateNameChange={onNewTemplateNameChange}
-          templateSectionOpen={templateSectionOpen}
-          onTemplateSectionOpenChange={onTemplateSectionOpenChange}
-          title="Response Templates"
-          placeholder="Template name"
-          canDelete={canDeleteTemplate}
-          getTemplatePlainText={getTemplatePlainText}
-        />
+        {/* Template toolbar — inline, matching document creation */}
+        {templates.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <FileText className="h-3.5 w-3.5" />
+              <span>Templates</span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <Select
+              value={selectedTemplateId ?? ''}
+              onValueChange={(value) => onTemplateSelect(value || null)}
+            >
+              <SelectTrigger className="h-8 min-w-[14rem] max-w-[20rem]">
+                <SelectValue placeholder="Pick a template" />
+              </SelectTrigger>
+              <SelectContent>
+                {templates.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => {
+                const t = templates.find((x) => x.id === selectedTemplateId);
+                if (t) onTemplateApply(t);
+              }}
+              disabled={!selectedTemplateId}
+            >
+              Apply
+            </Button>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-1">
+              <Input
+                value={newTemplateName}
+                onChange={(e) => onNewTemplateNameChange(e.target.value)}
+                placeholder="Template name"
+                className="h-8 w-[160px] text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newTemplateName.trim() && memoContent.trim()) {
+                    onTemplateSave(newTemplateName.trim(), memoContent);
+                    onNewTemplateNameChange('');
+                  }
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => {
+                  if (newTemplateName.trim() && memoContent.trim()) {
+                    onTemplateSave(newTemplateName.trim(), memoContent);
+                    onNewTemplateNameChange('');
+                  }
+                }}
+                disabled={!newTemplateName.trim() || !memoContent.trim()}
+              >
+                <Save className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Suggested Covering Note */}
         {showSuggestedNote && hasFiles && !memoContent.trim() && (
@@ -140,24 +172,14 @@ export const MemoCompositionSection = ({
                     <strong>Suggested covering note:</strong>
                   </p>
                   <p className="text-sm text-muted-foreground italic">
-                    "{suggestedCoveringNote}"
+                    &ldquo;{suggestedCoveringNote}&rdquo;
                   </p>
                   <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="default"
-                      onClick={onUseSuggestedNote}
-                    >
+                    <Button type="button" size="sm" variant="default" onClick={onUseSuggestedNote}>
                       <CheckCircle className="h-3 w-3 mr-1" />
                       Use This
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={onDismissSuggestedNote}
-                    >
+                    <Button type="button" size="sm" variant="ghost" onClick={onDismissSuggestedNote}>
                       Dismiss
                     </Button>
                   </div>
@@ -171,16 +193,18 @@ export const MemoCompositionSection = ({
           value={memoContent}
           onChange={(html) => onMemoContentChange(html)}
           placeholder="Compose your response memo here..."
-          className={`max-h-[400px] overflow-y-auto ${memoContentError ? 'border-destructive' : ''}`}
-          showCharacterCount={false}
+          className={`min-h-[300px] ${memoContentError ? 'border-destructive' : ''}`}
+          showCharacterCount
           showHeader={false}
-          showPageSetup={false}
-          showPageNumbers={false}
+          signatureImageUrl={signatureImageUrl}
           tokens={[
-            { label: 'Correspondent', value: '{correspondent}' },
-            { label: 'Subject', value: '{subject}' },
-            { label: 'Reference', value: '{reference}' },
-            { label: 'Date', value: '{date}' },
+            { label: 'Title', value: '{{document.title}}' },
+            { label: 'Reference', value: '{{document.reference}}' },
+            { label: 'Sender', value: '{{sender.name}}' },
+            { label: 'Recipient', value: '{{recipient.name}}' },
+            { label: 'Division', value: '{{division.name}}' },
+            { label: 'Department', value: '{{department.name}}' },
+            { label: 'Date', value: '{{date.today}}' },
           ]}
         />
         {memoContentError && (

@@ -22,6 +22,10 @@ class UserSerializer(serializers.ModelSerializer):
     system_role = serializers.PrimaryKeyRelatedField(
         queryset=Role.objects.all(), allow_null=True, required=False
     )
+    # CharField model fields lack null=True so DRF rejects ``null``.
+    # Accept null here and normalise to "" before save.
+    employee_id = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    grade_level = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     system_role_name = serializers.SerializerMethodField()
     directorate_name = serializers.SerializerMethodField()
     division_name = serializers.SerializerMethodField()
@@ -124,7 +128,15 @@ class UserSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    @staticmethod
+    def _normalise_charfields(validated_data: dict) -> None:
+        """Convert null to ``""`` for CharField columns that lack ``null=True``."""
+        for field in ("employee_id", "grade_level"):
+            if field in validated_data and validated_data[field] is None:
+                validated_data[field] = ""
+
     def create(self, validated_data):
+        self._normalise_charfields(validated_data)
         password = validated_data.pop("password", None)
         user = super().create(validated_data)
         if password:
@@ -133,6 +145,7 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
+        self._normalise_charfields(validated_data)
         password = validated_data.pop("password", None)
         user = super().update(instance, validated_data)
         if password:
@@ -188,10 +201,15 @@ class ExecutiveSignatureSerializer(serializers.ModelSerializer):
     
     def get_signature_url(self, obj):
         if obj.signature_image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.signature_image.url)
-            return obj.signature_image.url
+            try:
+                import base64, mimetypes
+                storage_path = obj.signature_image.path
+                content_type = mimetypes.guess_type(storage_path)[0] or "image/png"
+                with open(storage_path, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("ascii")
+                return f"data:{content_type};base64,{encoded}"
+            except Exception:
+                return None
         return None
     
     def get_has_signature(self, obj):

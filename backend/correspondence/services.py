@@ -110,6 +110,15 @@ class CorrespondenceDocumentService:
         # ---------- PRIMARY document (the memo) ----------
         has_memo = bool(correspondence.body_html and correspondence.body_html.strip())
         has_treatment = bool(correspondence.treatment_response and correspondence.treatment_response.strip())
+
+        # Skip auto-creation if the correspondence already has linked DMS documents
+        # (e.g. TreatmentModal linked an HTML memo before this service runs)
+        existing_links = CorrespondenceDocumentLink.objects.filter(
+            correspondence=correspondence
+        ).select_related('document')
+        if existing_links.exists():
+            return [link.document for link in existing_links]
+
         if has_memo or has_treatment:
             primary = Document.objects.create(
                 title=document_title or correspondence.subject,

@@ -1134,7 +1134,8 @@ export const DocumentPreviewPanel = ({
 
                 // Treatment response fallback
                 const treatmentResponse = correspondence.treatmentResponse;
-                if (treatmentResponse) {
+                const isFallbackOnly = treatmentResponse && /^Response to [A-Z]{2,4}\/[A-Z]{2,4}\/\d{4}\/[A-F0-9]+$/i.test(treatmentResponse.trim());
+                if (treatmentResponse && !isFallbackOnly) {
                   return (
                     <div
                       className="h-full overflow-auto p-6"
@@ -1152,6 +1153,26 @@ export const DocumentPreviewPanel = ({
                           dangerouslySetInnerHTML={{ __html: sanitizeThemedHtml(treatmentResponse) }}
                         />
                       </div>
+                    </div>
+                  );
+                }
+
+                // Empty treatment response — show placeholder
+                if (correspondence.treatmentResponse) {
+                  return (
+                    <div
+                      className="h-full flex flex-col items-center justify-center p-8 text-center bg-muted/20"
+                      aria-label="Treatment response pending"
+                    >
+                      <div className="mb-4 p-4 rounded-full bg-muted/50">
+                        <FileText className="h-10 w-10 text-muted-foreground/60" />
+                      </div>
+                      <p className="text-base font-semibold text-foreground mb-2">
+                        Treatment response submitted
+                      </p>
+                      <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                        The response correspondence was created but no content was recorded. Open the response to view or update it.
+                      </p>
                     </div>
                   );
                 }

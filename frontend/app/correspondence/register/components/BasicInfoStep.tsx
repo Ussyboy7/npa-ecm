@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/popover';
 import { FormData, FlowType, generateReferenceNumber } from '../register-utils';
 import { PRIORITY_OPTIONS, DOCUMENT_TYPE_OPTIONS } from '../register-constants';
-import { fetchSLATargets, type SLATargets } from '@/lib/sla-client';
+import { fetchSLATargets, DEFAULT_SLA_TARGETS, type SLATargets } from '@/lib/sla-client';
 
 const DOCUMENT_TYPE_HELP: Record<string, string> = {
   letter: 'Formal correspondence to or from external parties. Typically on letterhead with reference numbers.',
@@ -58,7 +58,7 @@ export const BasicInfoStep = memo(function BasicInfoStep({
       .then(setSlaTargets)
       .catch(() => {
         // Use defaults if fetch fails
-        setSlaTargets({ urgent: 2, high: 3, medium: 5, low: 7 });
+        setSlaTargets(DEFAULT_SLA_TARGETS);
       });
   }, []);
 

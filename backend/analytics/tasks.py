@@ -254,7 +254,7 @@ def _send_escalation_email(escalation, correspondence, rule, recipients: list[st
         "reference": correspondence.reference_number,
         "days_pending": (timezone.now().date() - correspondence.received_date).days if correspondence.received_date else 0,
         "sla_target": "N/A",  # Would be populated from SLA config
-        "link": f"{settings.FRONTEND_URL}/correspondence/{correspondence.id}",
+        "link": f"{settings.FRONTEND_BASE_URL}/correspondence/{correspondence.id}",
     }
     
     # Render subject
@@ -561,7 +561,7 @@ def send_daily_digest() -> dict[str, Any]:
             "priority": correspondence.priority,
             "division": division.name if division else "Unassigned",
             "days_pending": days_pending,
-            "link": f"{settings.FRONTEND_URL}/correspondence/{correspondence.id}",
+            "link": f"{settings.FRONTEND_BASE_URL}/correspondence/{correspondence.id}",
         }
 
         for email in recipients:
@@ -606,7 +606,7 @@ def send_daily_digest() -> dict[str, Any]:
             {
                 "count": len(items),
                 "items": items,
-                "frontend_url": settings.FRONTEND_URL,
+                "frontend_url": settings.FRONTEND_BASE_URL,
             }
         )
         subject = subject_template.render(context)

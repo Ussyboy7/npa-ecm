@@ -1839,7 +1839,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 directorate_id=user.directorate_id
             ).values_list("id", flat=True)
             directorate_correspondence_ids = Correspondence.objects.filter(
-                directorate_id=user.directorate_id
+                division_id__in=division_ids
             ).values_list("id", flat=True)
             case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
                 correspondence_id__in=directorate_correspondence_ids

@@ -96,15 +96,15 @@ export const DocumentUploadDialog = ({
   initialComposeMode,
   asPage = false,
 }: DocumentUploadDialogProps) => {
-  const { divisions, departments } = useOrganization();
+  const { divisions, departments, directorates } = useOrganization();
   const activeDivisions = useMemo(() => divisions.filter((division) => division.isActive !== false), [divisions]);
   const activeDepartments = useMemo(() => departments.filter((department) => department.isActive !== false), [departments]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>('memo');
   const [status, setStatus] = useState<DocumentStatus>('draft');
-  const [divisionId, setDivisionId] = useState<string | undefined>(currentUser.division);
-  const [departmentId, setDepartmentId] = useState<string | undefined>(currentUser.department);
+  const [divisionId, setDivisionId] = useState<string | undefined>(undefined);
+  const [departmentId, setDepartmentId] = useState<string | undefined>(undefined);
   const [referenceNumber, setReferenceNumber] = useState('');
   const [tagsInput, setTagsInput] = useState('');
   const [notes, setNotes] = useState('');
@@ -204,15 +204,18 @@ export const DocumentUploadDialog = ({
   }, [divisionId, departmentId, activeDepartments]);
 
   // Resolve org units for tokens (prefer form selection, fall back to user profile).
+  // Only use form selections, don't fall back to user profile
   const resolvedDivision = useMemo(() => {
-    const id = divisionId || currentUser.division;
-    return id ? activeDivisions.find((div) => div.id === id) : undefined;
-  }, [divisionId, currentUser.division, activeDivisions]);
+    return divisionId ? activeDivisions.find((div) => div.id === divisionId) : undefined;
+  }, [divisionId, activeDivisions]);
 
   const resolvedDepartment = useMemo(() => {
-    const id = departmentId || currentUser.department;
-    return id ? activeDepartments.find((dept) => dept.id === id) : undefined;
-  }, [departmentId, currentUser.department, activeDepartments]);
+    return departmentId ? activeDepartments.find((dept) => dept.id === departmentId) : undefined;
+  }, [departmentId, activeDepartments]);
+
+  const resolvedDirectorate = useMemo(() => {
+    return currentUser.directorate ? directorates.find((d) => d.id === currentUser.directorate) : undefined;
+  }, [currentUser.directorate, directorates]);
 
   const buildTokenValues = useCallback((): Record<string, string> => {
     const today = new Date();
@@ -226,12 +229,12 @@ export const DocumentUploadDialog = ({
       'document.reference': referenceNumber.trim() || 'N/A',
       'preparedBy.name': currentUser.name || 'Unknown',
       'preparedBy.role': currentUser.systemRole || 'User',
-      'sender.name': currentUser.name || 'Unknown',
+      'sender.name': currentUser.systemRole || currentUser.name || 'Unknown',
       'sender.title': currentUser.systemRole || 'User',
-      'recipient.name': recipientName.trim() || '[Recipient Name]',
-      'recipient.department': resolvedDepartment?.name || '[Department Name]',
-      'division.name': resolvedDivision?.name || '[Division Name]',
-      'department.name': resolvedDepartment?.name || '[Department Name]',
+      'recipient.name': recipientName.trim() || '',
+      'recipient.department': resolvedDepartment?.name || '',
+      'division.name': resolvedDivision?.name || resolvedDirectorate?.name || '',
+      'department.name': resolvedDepartment?.name || '',
       'date.today': formattedDate,
     };
   }, [
@@ -242,6 +245,7 @@ export const DocumentUploadDialog = ({
     recipientName,
     resolvedDivision?.name,
     resolvedDepartment?.name,
+    resolvedDirectorate?.name,
   ]);
 
   const replaceTemplateTokens = useCallback(
@@ -318,8 +322,6 @@ export const DocumentUploadDialog = ({
         description,
         documentType,
         status,
-        divisionId,
-        departmentId,
         referenceNumber,
         recipientName,
         tagsInput,
@@ -359,8 +361,8 @@ export const DocumentUploadDialog = ({
           setDescription(draft.description || '');
           setDocumentType(draft.documentType || 'memo');
           setStatus(draft.status || 'draft');
-          setDivisionId(draft.divisionId);
-          setDepartmentId(draft.departmentId);
+          setDivisionId(undefined);
+          setDepartmentId(undefined);
           setReferenceNumber(draft.referenceNumber || '');
           setRecipientName(draft.recipientName || '');
           setTagsInput(draft.tagsInput || '');

@@ -71,6 +71,13 @@ class User(AbstractUser):
             models.Index(fields=["date_joined"]),
             models.Index(fields=["last_login"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["employee_id"],
+                name="unique_employee_id_when_set",
+                condition=~models.Q(employee_id=""),
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.get_full_name() or self.username

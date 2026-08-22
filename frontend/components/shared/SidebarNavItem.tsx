@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -34,18 +35,22 @@ export function SidebarNavItem({
   badgeVariant = "default",
   description,
 }: SidebarNavItemProps) {
-  const badgeContent = badge != null && badge > 0 ? (
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const showBadge = mounted && badge != null && badge > 0;
+  const badgeContent = showBadge ? (
     <Badge variant={badgeVariant} className="ml-auto shrink-0">
-      {badge > 99 ? "99+" : badge}
+      {badge! > 99 ? "99+" : badge}
     </Badge>
   ) : null;
 
-  const badgeOverlay = badge != null && badge > 0 ? (
+  const badgeOverlay = showBadge ? (
     <Badge
       variant={badgeVariant}
       className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
     >
-      {badge > 99 ? "99+" : badge}
+      {badge! > 99 ? "99+" : badge}
     </Badge>
   ) : null;
 
@@ -55,7 +60,7 @@ export function SidebarNavItem({
         <Tooltip>
           <TooltipTrigger asChild>
             <SidebarMenuButton asChild isActive={isActive}>
-              <Link href={href} className="relative">
+              <Link href={href} className="relative" suppressHydrationWarning>
                 <Icon className="h-4 w-4" />
                 {badgeOverlay}
                 <span className="sr-only">{label}</span>
@@ -75,8 +80,8 @@ export function SidebarNavItem({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={isActive}>
-        <Link href={href} className="flex items-center justify-between w-full">
+      <SidebarMenuButton asChild isActive={isActive} suppressHydrationWarning>
+        <Link href={href} className="flex items-center justify-between w-full" suppressHydrationWarning>
           <div className="flex items-center gap-2">
             <Icon className="h-4 w-4" />
             <span>{label}</span>

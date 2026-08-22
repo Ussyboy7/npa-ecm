@@ -19,7 +19,7 @@ import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import type { Correspondence } from "@/lib/npa-structure";
 import { InboxItemCard } from "@/app/inbox/components/InboxItemCard";
 import { InboxApprovalCard } from "@/app/inbox/components/InboxApprovalCard";
-import { fetchSLATargets } from "@/lib/sla-client";
+import { fetchSLATargets, DEFAULT_SLA_TARGETS } from "@/lib/sla-client";
 import { calculateSLAStatus } from "@/lib/inbox-sla";
 import SecretaryDashboardContent from "./components/SecretaryDashboardContent";
 import {
@@ -86,7 +86,7 @@ const Dashboard = () => {
         const targets = await fetchSLATargets();
         if (!ignore) setSlaTargets(targets);
       } catch {
-        if (!ignore) setSlaTargets({ urgent: 2, high: 3, medium: 5, low: 7 });
+        if (!ignore) setSlaTargets(DEFAULT_SLA_TARGETS);
       }
     };
     void loadTargets();

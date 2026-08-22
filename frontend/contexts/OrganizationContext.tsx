@@ -338,13 +338,13 @@ export const OrganizationProvider: React.FC<{
       first_name: input.firstName,
       last_name: input.lastName,
       system_role: input.systemRole,
-      grade_level: input.gradeLevel,
+      grade_level: input.gradeLevel || undefined,
       directorate: input.directorateId === undefined ? undefined : input.directorateId || null,
       division: input.divisionId === undefined ? undefined : input.divisionId || null,
       department: input.departmentId === undefined ? undefined : input.departmentId || null,
       is_active: input.isActive,
       email: input.email,
-      employee_id: input.employeeId === undefined ? undefined : input.employeeId ?? null,
+      employee_id: input.employeeId === undefined ? undefined : input.employeeId || undefined,
       password: input.password,
     });
 
@@ -356,12 +356,12 @@ export const OrganizationProvider: React.FC<{
       last_name: input.lastName,
       password: input.password,
       system_role: input.systemRole,
-      grade_level: input.gradeLevel,
+      grade_level: input.gradeLevel || undefined,
       directorate: input.directorateId === undefined ? undefined : input.directorateId || null,
       division: input.divisionId === undefined ? undefined : input.divisionId || null,
       department: input.departmentId === undefined ? undefined : input.departmentId || null,
       is_active: input.isActive !== undefined ? input.isActive : true,
-      employee_id: input.employeeId === undefined ? undefined : input.employeeId ?? null,
+      employee_id: input.employeeId === undefined ? undefined : input.employeeId || undefined,
     });
 
   const addDirectorate = useCallback(async (directorate: CreateDirectorateInput) => {

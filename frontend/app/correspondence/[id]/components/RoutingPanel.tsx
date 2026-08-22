@@ -9,8 +9,6 @@ import { Check, Clock, GitBranch, ArrowUp, ArrowDown, Users, Mail } from 'lucide
 import type { Correspondence, Minute, Office, OfficeMembership, User } from '@/lib/npa-structure';
 import { ActionsPanel } from './ActionsPanel';
 import { MinuteThreadPanel } from './MinuteThreadPanel';
-import { WorkflowProgressIndicator } from '@/components/correspondence/WorkflowProgressIndicator';
-import { SealTrackingPanel } from '@/components/seals/SealTrackingPanel';
 import { ParallelRoutingStatusPanel } from '@/components/correspondence/ParallelRoutingStatusPanel';
 import { corrType } from '../correspondence-type';
 import { cn } from '@/lib/utils';
@@ -77,7 +75,6 @@ export function RoutingPanel({
   onRecallMinute,
   onAddNote,
 }: RoutingPanelProps) {
-  const hasSeals = minutes.some((m) => m.sealData || m.signature);
   const [activeTab, setActiveTab] = useState<'thread' | 'workflow' | 'action'>('thread');
 
   return (
@@ -133,26 +130,11 @@ export function RoutingPanel({
       {activeTab === 'workflow' && (
         <ScrollArea className="flex-1 min-h-0 animate-in fade-in duration-200 motion-reduce:animate-none">
           <div className="p-4 space-y-3">
-            {minutes.length > 0 ? (
-              <WorkflowProgressIndicator
-                correspondence={correspondence}
-                minutes={minutes}
-                currentApprover={
-                  correspondence.currentApproverId
-                    ? lookupUser(correspondence.currentApproverId)
-                    : undefined
-                }
-                users={organizationUsers}
-                offices={offices}
-                officeMemberships={officeMemberships}
-              />
-            ) : (
-              <RoutingHistoryCard
-                correspondence={correspondence}
-                lookupUser={lookupUser}
-              />
-            )}
-            {hasSeals && <SealTrackingPanel minutes={minutes} />}
+            <RoutingHistoryCard
+              correspondence={correspondence}
+              minutes={minutes}
+              lookupUser={lookupUser}
+            />
             <ParallelRoutingStatusPanel
               correspondenceId={correspondence.id}
               onRefresh={onSyncFromApi}
@@ -271,19 +253,31 @@ const formatDate = (dateStr: string) => {
 
 function RoutingHistoryCard({
   correspondence,
+  minutes,
   lookupUser,
 }: {
   correspondence: Correspondence;
+  minutes: Minute[];
   lookupUser: (userId?: string) => User | undefined;
 }) {
   const createdByUser = lookupUser(correspondence.createdById);
-  const currentApproverUser = lookupUser(correspondence.currentApproverId);
 
   const originRole = createdByUser?.systemRole || (createdByUser?.gradeLevel ? GRADE_NAMES[createdByUser.gradeLevel] : undefined);
-  const currentRole = currentApproverUser?.systemRole || (currentApproverUser?.gradeLevel ? GRADE_NAMES[currentApproverUser.gradeLevel] : undefined);
 
   const DirectionIcon = correspondence.direction === 'upward' ? ArrowUp : ArrowDown;
   const directionLabel = correspondence.direction === 'upward' ? 'Upward' : 'Downward';
+
+  const sortedMinutes = [...minutes]
+    .filter((m) => !m.isRecalled)
+    .sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0));
+
+  const actionLabel: Record<string, string> = {
+    approve: 'Approved',
+    minute: 'Minute',
+    forward: 'Forwarded',
+    treat: 'Treated',
+    reject: 'Rejected',
+  };
 
   return (
     <Card>
@@ -305,19 +299,18 @@ function RoutingHistoryCard({
           <div className="absolute left-[15px] top-[20px] bottom-[20px] w-0.5 bg-muted" />
 
           {/* Origin step */}
-          <div className="flex items-start gap-3 pb-7 relative">
+          <div className="flex items-start gap-3 pb-5 relative">
             <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full border-2 bg-green-500 border-green-500 text-white flex-shrink-0">
               <Check className="h-4 w-4" />
             </div>
             <div className="flex-1 min-w-0 pt-0.5">
-              <p className="text-xs text-muted-foreground">Sent from</p>
+              <p className="text-xs text-muted-foreground">Created by</p>
               <p className="text-sm font-medium text-foreground">
-                {correspondence.owningOfficeName || 'Unknown office'}
+                {originRole || 'Unknown'}
               </p>
               {correspondence.createdByName && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  by {correspondence.createdByName}
-                  {originRole ? ` (${originRole})` : ''}
+                  {correspondence.createdByName}
                 </p>
               )}
               {correspondence.receivedDate && (
@@ -328,6 +321,48 @@ function RoutingHistoryCard({
             </div>
           </div>
 
+          {/* Intermediate steps from minutes */}
+          {sortedMinutes.map((m) => {
+            const mUser = lookupUser(m.userId);
+            const mRole = mUser?.systemRole || (m.gradeLevel ? GRADE_NAMES[m.gradeLevel] : undefined);
+            const label = actionLabel[m.actionType] || m.actionType;
+
+            // Show the sender's context: office name if available, otherwise sender's designation
+            const headerText = m.fromOfficeName || mRole || 'Unknown';
+
+            return (
+              <div key={m.id} className="flex items-start gap-3 pb-5 relative">
+                <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full border-2 bg-green-500 border-green-500 text-white flex-shrink-0">
+                  <Check className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-sm font-medium text-foreground">
+                      {headerText}
+                    </p>
+                    <Badge variant="outline" className="text-[10px] h-5 flex-shrink-0 capitalize">
+                      {label}
+                    </Badge>
+                  </div>
+                  {m.userName && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {m.userName}
+                      {mRole ? ` (${mRole})` : ''}
+                    </p>
+                  )}
+                  {m.minuteText && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                      {m.minuteText}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(m.timestamp)}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+
           {/* Current step */}
           <div className="flex items-start gap-3 relative">
             <div className="relative z-10 flex items-center justify-center w-8 h-8 rounded-full border-2 bg-primary border-primary text-primary-foreground animate-pulse flex-shrink-0">
@@ -336,16 +371,13 @@ function RoutingHistoryCard({
             <div className="flex-1 min-w-0 pt-0.5">
               <div className="flex items-center gap-2 mb-0.5">
                 <p className="text-sm font-medium text-primary">
-                  With {currentApproverUser?.name || correspondence.currentApproverName || 'Unknown'}
+                  With {correspondence.currentOfficeName || 'Unknown office'}
                 </p>
                 <Badge variant="default" className="text-[10px] h-5 flex-shrink-0">Current</Badge>
               </div>
               <p className="text-sm text-foreground">
-                {correspondence.currentOfficeName || 'Unknown office'}
+                {correspondence.currentApproverName || 'Unknown'}
               </p>
-              {currentRole && (
-                <p className="text-xs text-muted-foreground">{currentRole}</p>
-              )}
               {correspondence.receivedDate && (
                 <p className="text-xs text-muted-foreground">
                   Since {formatDate(correspondence.receivedDate)}

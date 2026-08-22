@@ -39,6 +39,7 @@ export function Providers({
       attribute="class"
       defaultTheme="light"
       enableSystem
+      enableColorScheme={false}
       storageKey="npa-ecm-theme"
       disableTransitionOnChange
     >

@@ -42,13 +42,19 @@ from .services import AnalyticsService
 
 
 class WorkflowAdminMixin:
-    """SLA and escalation rule administration."""
+    """SLA and escalation rule administration.
+
+    Write operations (POST/PUT/PATCH/DELETE) require ``can_manage_org_structure``.
+    Read-only actions (GET/HEAD/OPTIONS) are open to any authenticated user so
+    that non-admin pages (dashboard, inbox, etc.) can display SLA targets.
+    """
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        from organization.permission_utils import require_permission
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            from organization.permission_utils import require_permission
 
-        require_permission(request.user, "can_manage_org_structure")
+            require_permission(request.user, "can_manage_org_structure")
 
 
 class AnalyticsReadMixin:

@@ -503,7 +503,8 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
 
   const isTreatMinute = minute.actionType === 'treat';
   const treatmentHtml = responseCorrespondence?.treatmentResponse?.trim() || '';
-  const hasTreatmentMemo = isTreatMinute && Boolean(treatmentHtml);
+  const isFallbackOnly = treatmentHtml && /^Response to [A-Z]{2,4}\/[A-Z]{2,4}\/\d{4}\/[A-F0-9]+$/i.test(treatmentHtml);
+  const hasTreatmentMemo = isTreatMinute && Boolean(treatmentHtml) && !isFallbackOnly;
   const minuteContentText = isTreatMinute
     ? getTreatMinuteSummary(minute.minuteText || '')
     : (minute.minuteText || 'No minute text.');
@@ -656,6 +657,24 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
+                )}
+                {isTreatMinute && !hasTreatmentMemo && responseCorrespondence && (
+                  <div className="mt-3 p-3 rounded-lg bg-muted/30 border border-border border-dashed">
+                    <p className="text-xs text-muted-foreground">
+                      Treatment response submitted but no content was recorded.
+                      {' '}
+                      <button
+                        type="button"
+                        className="underline hover:text-foreground"
+                        onClick={() => {
+                          onOpenChange(false);
+                          router.push(`/correspondence/${responseCorrespondence.id}`);
+                        }}
+                      >
+                        Open response
+                      </button>
+                    </p>
+                  </div>
                 )}
                 {minute.originalMinuteText && minute.originalMinuteText !== minute.minuteText && (
                   <div className="mt-2 p-3 rounded-lg bg-muted/30 border border-border border-dashed">

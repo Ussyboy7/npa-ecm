@@ -69,7 +69,6 @@ import React from 'react';
 import {
   getTemplatesForUser,
   saveTemplate,
-  deleteTemplate,
   type DocumentTemplate,
 } from '@/lib/api/document-templates';
 import {
@@ -98,7 +97,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [responseType, setResponseType] = useState<'memo' | 'existing-document' | 'new-document'>('memo');
   const [memoSubject, setMemoSubject] = useState(`Re: ${correspondence.subject}`);
   const [memoSubjectError, setMemoSubjectError] = useState('');
-  const [documentTitle, setDocumentTitle] = useState(`Re: ${correspondence.subject}`);
   const [memoContent, setMemoContent] = useState('');
   const [memoContentError, setMemoContentError] = useState('');
   const [forwardTo, setForwardTo] = useState('');
@@ -127,7 +125,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [draftId, setDraftId] = useState<string | null>(null);
   const [_searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   const [attachmentsSectionOpen, setAttachmentsSectionOpen] = useState(false);
   
   // Removed old filtering state - now using RoutingSection
@@ -190,7 +187,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
     const loadMemoTemplates = async () => {
       try {
-        const templates = await getTemplatesForUser(activeUser, 'treatment');
+        const templates = await getTemplatesForUser(activeUser, 'document');
         setMemoTemplates(templates);
       } catch (error: unknown) {
         logError('Failed to load memo templates:', error);
@@ -512,13 +509,33 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   };
 
   const handleApplyTemplate = (template: DocumentTemplate) => {
-      // Replace placeholders - use contentHtml or contentText
-      let content = template.contentText || template.contentHtml || '';
-      content = content.replace(/\{correspondent\}/g, correspondence.senderName || '');
+      let content = template.contentHtml || template.contentText || '';
+
+      const senderDivision = currentUser?.division ? divisions.find(d => d.id === currentUser.division) : undefined;
+      const senderDepartment = currentUser?.department ? departments.find(d => d.id === currentUser.department) : undefined;
+      const senderDirectorate = currentUser?.directorate ? directorates.find(d => d.id === currentUser.directorate) : undefined;
+      const recipientUser = forwardTo ? users.find(u => u.id === forwardTo) : undefined;
+
+      const tokenValues: Record<string, string> = {
+        'division.name': senderDivision?.name || senderDirectorate?.name || '',
+        'department.name': senderDepartment?.name || '',
+        'recipient.name': recipientUser?.systemRole || correspondence.senderName || '',
+        'sender.name': currentUser?.systemRole || currentUser?.name || '',
+        'date.today': formatDateShort(new Date().toISOString()),
+        'document.reference': correspondence.referenceNumber || '',
+        'document.title': correspondence.subject || '',
+      };
+
+      for (const [key, value] of Object.entries(tokenValues)) {
+        content = content.replaceAll(`{{${key}}}`, value);
+      }
+
+      // Also replace legacy single-brace tokens
+      content = content.replace(/\{correspondent\}/g, currentUser?.systemRole || correspondence.senderName || '');
       content = content.replace(/\{subject\}/g, correspondence.subject || '');
       content = content.replace(/\{reference\}/g, correspondence.referenceNumber || '');
       content = content.replace(/\{date\}/g, formatDateShort(new Date().toISOString()));
-      
+
       setMemoContent(content);
       const div = document.createElement('div');
       div.innerHTML = content;
@@ -545,7 +562,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       contentText: plainText,
       createdBy: currentUser.id,
       updatedBy: currentUser.id,
-      templateType: 'treatment',
+      templateType: 'document',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -553,20 +570,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setMemoTemplates(prev => [...prev, template]);
     setNewTemplateName('');
     toast.success('Template saved');
-  };
-
-  const handleDeleteTemplate = async (templateId: string) => {
-    try {
-      await deleteTemplate(templateId);
-      setMemoTemplates(prev => prev.filter(t => t.id !== templateId));
-      if (selectedTemplateId === templateId) {
-        setSelectedTemplateId(null);
-      }
-      toast.success('Template deleted');
-    } catch (error: unknown) {
-      logError('Failed to delete template', error);
-      toast.error('Failed to delete template. Please try again.');
-    }
   };
 
   // Keyboard shortcuts
@@ -806,7 +809,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       const responseFormData = new FormData();
       responseFormData.append('reference_number', generateReferenceNumber(division?.code || 'NPA'));
       responseFormData.append('subject', memoSubject.trim());
-      responseFormData.append('document_title', documentTitle.trim());
+      responseFormData.append('document_title', memoSubject.trim());
 
       // Include content based on response type
       if (responseType === 'memo') {
@@ -1314,17 +1317,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
             {/* Memo Composition Section - Only for memo response type */}
             {responseType === 'memo' && (
               <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="document-title">Document Title</Label>
-                  <Input
-                    id="document-title"
-                    value={documentTitle}
-                    onChange={(e) => setDocumentTitle(e.target.value)}
-                    placeholder="Title for the DMS document"
-                    maxLength={200}
-                  />
-                  <p className="text-xs text-muted-foreground">This will be the title of the document created in DMS.</p>
-                </div>
                 <MemoCompositionSection
               memoSubject={memoSubject}
               onMemoSubjectChange={(subject) => {
@@ -1341,13 +1333,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
               onTemplateApply={handleApplyTemplate}
               onTemplateSave={handleSaveAsTemplate}
-              onTemplateDelete={handleDeleteTemplate}
               newTemplateName={newTemplateName}
               onNewTemplateNameChange={setNewTemplateName}
-              templateSectionOpen={templateSectionOpen}
-              onTemplateSectionOpenChange={setTemplateSectionOpen}
               getTemplatePlainText={getTemplatePlainText}
-              canDeleteTemplate={(template) => template.scope === 'user' && template.createdBy === currentUser?.id}
+              signatureImageUrl={userSignature?.imageData}
               showSuggestedNote={showSuggestedNote}
               suggestedCoveringNote={suggestedCoveringNote}
               onUseSuggestedNote={handleUseSuggestedNote}

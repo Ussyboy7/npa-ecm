@@ -6,6 +6,10 @@ export type PreviewAttachmentSource = 'attachment' | 'completion-package';
 export function getPrimaryLinkedDocument(linkedDocuments: DocumentRecord[]): DocumentRecord | undefined {
   return (
     linkedDocuments.find(d => d.role === 'primary') ??
+    linkedDocuments.find(d => {
+      const latest = d.versions?.[d.versions.length - 1];
+      return latest?.contentHtml?.trim();
+    }) ??
     linkedDocuments.find(d => d.versions.length > 0) ??
     linkedDocuments[0]
   );

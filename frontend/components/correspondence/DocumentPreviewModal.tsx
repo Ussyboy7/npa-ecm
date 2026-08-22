@@ -48,7 +48,8 @@ const DocumentPreviewModalContent = ({
   allowDownload = true,
 }: DocumentPreviewModalProps) => {
   const treatmentResponse = correspondence?.treatmentResponse;
-  const hasTreatmentSummary = Boolean(treatmentResponse && treatmentResponse.trim().length > 0);
+  const isFallbackOnly = treatmentResponse && /^Response to [A-Z]{2,4}\/[A-Z]{2,4}\/\d{4}\/[A-F0-9]+$/i.test(treatmentResponse.trim());
+  const hasTreatmentSummary = Boolean(treatmentResponse && treatmentResponse.trim().length > 0 && !isFallbackOnly);
   const sourceLabel = attachmentSource === 'completion-package' ? 'Completion Package' : 'Attached Document';
 
   const docRef = useMemo((): CanonicalDocRef | null => {

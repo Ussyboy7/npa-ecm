@@ -14,6 +14,14 @@ import {
   type UserSignaturePreferences,
 } from '@/lib/api/signatures';
 
+const SIGNATURE_UPDATED_EVENT = 'signature-updated';
+
+export const emitSignatureUpdated = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(SIGNATURE_UPDATED_EVENT));
+  }
+};
+
 interface UseSignatureOptions {
   userId?: string;
   autoLoad?: boolean;
@@ -140,6 +148,15 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
       setSignature(null);
     }
     return () => controller.abort();
+  }, [userId, autoLoad, loadSignature]);
+
+  // Listen for global signature updates (e.g. from Settings page)
+  useEffect(() => {
+    const handler = () => {
+      if (userId && autoLoad) void loadSignature();
+    };
+    window.addEventListener(SIGNATURE_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(SIGNATURE_UPDATED_EVENT, handler);
   }, [userId, autoLoad, loadSignature]);
 
   return {

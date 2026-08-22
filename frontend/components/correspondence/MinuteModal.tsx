@@ -25,11 +25,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { toast } from "@/components/ui/sonner";
 import { formatDateShort, formatDateTime } from "@/lib/datetime";
 import { ensureSealImageCached } from "@/lib/seal-cache";
@@ -44,7 +39,6 @@ import {
   Image as ImageIcon,
   AlertCircle,
   Loader2,
-  ChevronDown,
   Shield,
   Clock,
 } from 'lucide-react';
@@ -77,7 +71,7 @@ import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerifica
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { fetchSLATargets, type SLATargets } from '@/lib/sla-client';
+import { fetchSLATargets, DEFAULT_SLA_TARGETS, type SLATargets } from '@/lib/sla-client';
 import React from 'react';
 
 interface MinuteModalProps {
@@ -120,7 +114,6 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const submittingRef = useRef(false);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 const [minuteTemplates, setMinuteTemplates] = useState<DocumentTemplate[]>([]);
-const [selectedMinuteTemplateId, setSelectedMinuteTemplateId] = useState<string | null>(null);
 const [newTemplateName, setNewTemplateName] = useState('');
 const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
@@ -233,7 +226,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         .then(setSlaTargets)
         .catch(() => {
           // Use defaults if fetch fails
-          setSlaTargets({ urgent: 2, high: 3, medium: 5, low: 7 });
+          setSlaTargets(DEFAULT_SLA_TARGETS);
         });
     }
   }, [isOpen]);
@@ -398,7 +391,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           setActionType('minute');
           setApplySignature(false);
           setNewTemplateName('');
-          setSelectedMinuteTemplateId(null);
         }
       }).catch((error) => {
         logError('Failed to load draft', error);
@@ -521,25 +513,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     [correspondence.id, getMinutesByCorrespondenceId],
   );
 
-  useEffect(() => {
-    const available = filteredMinuteTemplates;
-    if (available.length === 0) {
-      setSelectedMinuteTemplateId(null);
-      return;
-    }
-    setSelectedMinuteTemplateId(prev => {
-      if (prev && available.some(template => template.id === prev)) {
-        return prev;
-      }
-      return available[0]?.id ?? null;
-    });
-  }, [filteredMinuteTemplates]);
-
-  const selectedMinuteTemplate = useMemo(
-    () => minuteTemplates.find(template => template.id === selectedMinuteTemplateId) ?? null,
-    [minuteTemplates, selectedMinuteTemplateId],
-  );
-
 
 
   // Get previous minute
@@ -653,7 +626,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         actionType,
       });
       await refreshMinuteTemplates();
-      setSelectedMinuteTemplateId(created.id);
       setNewTemplateName('');
       toast.success('Template saved for quick reuse.');
     } catch (error: unknown) {
@@ -1350,7 +1322,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       }}
     >
       <DialogContent size="xl" height="fill">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
             Minute Correspondence
@@ -1365,7 +1337,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <div className="space-y-6 py-2">
           {/* Document Summary */}
           <Card className="bg-muted/50">
@@ -1531,102 +1503,102 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           </div>
 
           {/* Your Minute/Approval Text */}
-          <div className="space-y-3">
-            <Label htmlFor="minute" className="flex items-center gap-2">
-              {actionType === 'approve' ? (
-                <>
-                  <Shield className="h-4 w-4 text-emerald-600" />
-                  Approval Comments *
-                </>
-              ) : (
-                <>
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  Your Minute *
-                </>
-              )}
-            </Label>
+          <div>
             {actionType === 'approve' && (
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+              <div className="mb-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
                 <p className="text-xs text-emerald-700 dark:text-emerald-300">
                   <strong>Executive Approval:</strong> This will apply a digital executive seal to the document. 
                   Your signature is required and will be embedded in the seal.
                 </p>
               </div>
             )}
+            <Textarea
+              id="minute"
+              placeholder={
+                actionType === 'approve' 
+                  ? "Enter your approval comments or decision (this will be included with the digital seal)..."
+                  : "Enter your comments, instructions, or recommendations..."
+              }
+              value={minuteText}
+              onChange={(e) => handleTextChange(e.target.value)}
+              className={`min-h-[160px] resize-none text-[15px] leading-relaxed ${minuteTextError ? 'border-destructive' : ''} ${
+                actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
+              }`}
+              maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+              aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
+              aria-required="true"
+              aria-invalid={!!minuteTextError}
+              aria-describedby={
+                minuteTextError ? "minute-text-help minute-text-error" : "minute-text-help"
+              }
+            />
+            <div className="flex items-center justify-between mt-1.5 min-h-[20px]">
+              {minuteTextError ? (
+                <p id="minute-text-error" className="text-xs text-destructive" role="alert">
+                  {minuteTextError}
+                </p>
+              ) : (
+                <span />
+              )}
+              <p id="minute-text-help" className="text-xs text-muted-foreground tabular-nums">
+                {minuteText.length}/{MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+              </p>
+            </div>
           </div>
 
-          {/* Comment / Approval text — above Route To so you write first, then choose recipient */}
-          <Textarea
-            id="minute"
-            placeholder={
-              actionType === 'approve' 
-                ? "Enter your approval comments or decision (this will be included with the digital seal)..."
-                : "Enter your comments, instructions, or recommendations..."
-            }
-            value={minuteText}
-            onChange={(e) => handleTextChange(e.target.value)}
-            className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''} ${
-              actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
-            }`}
-            maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-            aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
-            aria-required="true"
-            aria-invalid={!!minuteTextError}
-            aria-describedby={
-              minuteTextError ? "minute-text-help minute-text-error" : "minute-text-help"
-            }
-          />
-          <p id="minute-text-help" className="text-xs text-muted-foreground">
-            {MODAL_CONSTANTS.MINUTE_TEXT.MIN}–{MODAL_CONSTANTS.MINUTE_TEXT.MAX} characters.
-          </p>
-          {minuteTextError ? (
-            <p id="minute-text-error" className="text-xs text-destructive" role="alert">
-              {minuteTextError}
-            </p>
-          ) : null}
+          {/* Template Chips — inline, tap to insert */}
+          {filteredMinuteTemplates.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {filteredMinuteTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium
+                    bg-secondary/60 hover:bg-secondary text-secondary-foreground
+                    transition-colors duration-150 active:scale-95"
+                  onClick={() => {
+                    const text = getTemplatePlainText(template);
+                    if (!text) return;
+                    setMinuteText(prev => {
+                      const trimmed = prev.trim();
+                      if (!trimmed) return text;
+                      return trimmed + '\n\n' + text;
+                    });
+                  }}
+                >
+                  <FileText className="h-3 w-3 opacity-50" />
+                  {template.title}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {/* Minute Templates Section (document templates for minute text) */}
-          {(minuteTemplates.length > 0 || minuteText.trim().length > 0) && (
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-full justify-between">
-                  <span className="text-sm">Minute Templates</span>
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="space-y-3 pt-2">
-                  {selectedMinuteTemplate && (
-                    <div className="rounded-md border border-dashed p-2 text-xs bg-background">
-                      <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
-                      <p className="text-muted-foreground line-clamp-2">
-                        {getTemplatePlainText(selectedMinuteTemplate)}
-                      </p>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      value={newTemplateName}
-                      onChange={(e) => setNewTemplateName(e.target.value)}
-                      placeholder="Save current as template..."
-                      className="flex-1 min-w-[150px] h-8"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSaveMinuteTemplate}
-                      disabled={!minuteText.trim()}
-                    >
-                      <Save className="h-3 w-3 mr-1" />
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+          {/* Save as template — subtle inline action */}
+          {minuteText.trim().length > 0 && (
+            <div className="flex items-center gap-2">
+              <Input
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                placeholder="Save as template..."
+                className="h-7 text-xs flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSaveMinuteTemplate();
+                  }
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={handleSaveMinuteTemplate}
+                disabled={!newTemplateName.trim()}
+              >
+                <Save className="h-3 w-3 mr-1" />
+                Save
+              </Button>
+            </div>
           )}
 
           {/* Route To - Using extracted RoutingSection component */}
@@ -1760,9 +1732,9 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             </Card>
           )}
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 border-t pt-3 mt-2">
           <Button 
             variant="outline" 
             onClick={handleSaveDraft}

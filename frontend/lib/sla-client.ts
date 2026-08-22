@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from './api-client';
+import { logError } from './client-logger';
 import { isRecord, asString } from '@/lib/type-utils';
 
 // =============================================================================
@@ -464,6 +465,13 @@ export const invalidateSLATargetsCache = (): void => {
   slaTargetsPromise = null;
 };
 
+export const DEFAULT_SLA_TARGETS: SLATargets = {
+  urgent: 48,
+  high: 72,
+  medium: 120,
+  low: 168,
+};
+
 export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
   const now = Date.now();
   if (!force && slaTargetsCache && now - slaTargetsCachedAt < SLA_TARGETS_CACHE_TTL_MS) {
@@ -474,16 +482,21 @@ export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
   }
 
   slaTargetsPromise = (async () => {
-    const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
-    const targets = {
-      urgent: asNumber(response.urgent, 48),
-      high: asNumber(response.high, 72),
-      medium: asNumber(response.medium, 120),
-      low: asNumber(response.low, 168),
-    };
-    slaTargetsCache = targets;
-    slaTargetsCachedAt = Date.now();
-    return targets;
+    try {
+      const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
+      const targets = {
+        urgent: asNumber(response.urgent, DEFAULT_SLA_TARGETS.urgent),
+        high: asNumber(response.high, DEFAULT_SLA_TARGETS.high),
+        medium: asNumber(response.medium, DEFAULT_SLA_TARGETS.medium),
+        low: asNumber(response.low, DEFAULT_SLA_TARGETS.low),
+      };
+      slaTargetsCache = targets;
+      slaTargetsCachedAt = Date.now();
+      return targets;
+    } catch (err) {
+      logError('Failed to fetch SLA targets, using defaults', err);
+      return DEFAULT_SLA_TARGETS;
+    }
   })();
   slaTargetsPromise.finally(() => { slaTargetsPromise = null; });
 

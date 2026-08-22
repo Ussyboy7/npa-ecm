@@ -4,14 +4,14 @@ import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 import { ALLOWED_SIGNATURE_MIME_TYPES, ACCEPT_IMAGE_SIGNATURE } from '@/lib/file-types';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from "@/components/ui/sonner";
-import { 
-  AlertCircle, 
-  ImageIcon, 
-  Trash2, 
-  Shield, 
-  Eye, 
-  Upload, 
-  Settings2, 
+import {
+  AlertCircle,
+  ImageIcon,
+  Trash2,
+  Shield,
+  Eye,
+  Upload,
+  Settings2,
   Download,
   Printer,
   RotateCcw,
@@ -23,7 +23,9 @@ import {
   Info,
   Lock,
   Maximize2,
+  Pen,
 } from 'lucide-react';
+import { SignaturePad } from './SignaturePad';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -65,6 +67,7 @@ import {
   updateSignatureSettings,
   type StoredSignature,
 } from '@/lib/api/signatures';
+import { emitSignatureUpdated } from '@/hooks/use-signature';
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import { logError } from '@/lib/client-logger';
 import { formatDateShort } from '@/lib/datetime';
@@ -89,7 +92,7 @@ export const SignatureSettingsCard = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upload' | 'preview'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'draw' | 'preview'>('upload');
   const [show2FADialog, setShow2FADialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [previewSize, setPreviewSize] = useState<250 | 300 | 400>(300);
@@ -258,6 +261,7 @@ export const SignatureSettingsCard = () => {
       
       if (uploaded) {
         setSignature(uploaded);
+        emitSignatureUpdated();
         toast.success('Signature uploaded successfully', {
           description: 'Your signature is now ready to use for document approvals.',
           duration: 3000,
@@ -297,10 +301,47 @@ export const SignatureSettingsCard = () => {
     }
   }, [sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
 
+  const handleDrawSave = useCallback(async (dataUrl: string) => {
+    try {
+      setIsUploading(true);
+      setUploadProgress(30);
+
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'drawn-signature.png', { type: 'image/png' });
+
+      setUploadProgress(60);
+      const uploaded = await uploadUserSignature(file, {
+        sealOfficeName,
+        sealOfficeTitle,
+        sealPrefix,
+        require2fa,
+      });
+
+      setUploadProgress(100);
+      if (uploaded) {
+        setSignature(uploaded);
+        emitSignatureUpdated();
+        toast.success('Signature saved', {
+          description: 'Your drawn signature is now ready to use.',
+        });
+        setActiveTab('preview');
+        setTimeout(() => setUploadProgress(0), 1000);
+      }
+    } catch (error: unknown) {
+      setUploadProgress(0);
+      logError('Failed to save drawn signature', error);
+      toast.error('Failed to save signature. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
+
   const handleDeleteSignature = useCallback(async () => {
     try {
       await deleteUserSignatureFromBackend();
       setSignature(null);
+      emitSignatureUpdated();
       setShowDeleteDialog(false);
       toast.success('Signature deleted successfully', {
         description: 'You can upload a new signature anytime.',
@@ -516,11 +557,15 @@ export const SignatureSettingsCard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'upload' | 'preview')}>
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'upload' | 'draw' | 'preview')}>
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="upload" className="flex items-center gap-2">
                   <Upload className="h-4 w-4" />
-                  Upload Signature
+                  Upload
+                </TabsTrigger>
+                <TabsTrigger value="draw" className="flex items-center gap-2">
+                  <Pen className="h-4 w-4" />
+                  Draw
                 </TabsTrigger>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -621,6 +666,23 @@ export const SignatureSettingsCard = () => {
                     )}
                   </div>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="draw" className="space-y-6 mt-6">
+                <div className="flex items-start gap-4 p-4 border border-dashed rounded-lg bg-muted/30">
+                  <Pen className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <p>Draw your signature using your mouse or touch screen.</p>
+                    <p>Use <strong>Undo</strong> to remove the last stroke, or <strong>Clear</strong> to start over.</p>
+                  </div>
+                </div>
+                <SignaturePad onSave={handleDrawSave} />
+                {isUploading && (
+                  <div className="space-y-2">
+                    <Progress value={uploadProgress} className="h-2" />
+                    <p className="text-xs text-muted-foreground text-center">Saving signature...</p>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="preview" className="space-y-6 mt-6">
