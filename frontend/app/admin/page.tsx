@@ -34,7 +34,6 @@ import {
   FolderTree,
   LifeBuoy,
   LayoutDashboard,
-  RefreshCw,
   Loader2,
   Download,
   UserCog,
@@ -218,12 +217,6 @@ export default function AdminPage() {
       title="Administration Dashboard"
       subtitle="Enterprise system monitoring and user management"
       icon={LayoutDashboard}
-      actions={
-        <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      }
     >
       <div className="space-y-6">
         {/* System Summary Bar */}
