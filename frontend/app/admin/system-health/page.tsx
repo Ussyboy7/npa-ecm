@@ -22,9 +22,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
-  Clock,
-  RefreshCw,
-  XCircle,
   Server,
   Database,
   HardDrive,
@@ -176,7 +173,6 @@ export default function SystemHealthPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingBackup, setDownloadingBackup] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState("");
   const isMountedRef = useRef(true);
 
   const canAccess = permissions.canAccessSystemHealth || currentUser?.isSuperuser;
@@ -207,9 +203,6 @@ export default function SystemHealthPage() {
         );
         const overall = readinessResult.status === "healthy" ? "healthy" : "error";
         setReadinessOverall(overall as HealthStatus);
-        setLastUpdated(
-          new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        );
       } catch (err) {
         logError("Failed to load system health", err);
         if (!opts.silent && isMountedRef.current) {
@@ -328,12 +321,6 @@ export default function SystemHealthPage() {
       title="System Health"
       subtitle="Live infrastructure monitoring — API process, database, disk volume, cache, backups, and API performance."
       icon={Activity}
-      actions={
-        <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      }
     >
       <ClientErrorBoundary>
         {loading && !metrics ? (
@@ -342,17 +329,6 @@ export default function SystemHealthPage() {
           <ErrorState message={error} onRetry={() => void loadData()} />
         ) : (
           <>
-            {/* Auto-refresh indicator */}
-            {lastUpdated && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
-                <span className="relative inline-flex h-2 w-2">
-                  <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-75 animate-ping" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                Auto-refresh · updated {lastUpdated}
-              </p>
-            )}
-
             {/* Summary strip */}
             <Card className={`bg-gradient-to-r border ${statusSurfaceClass(overallStatus)}`}>
               <CardContent className="p-4 sm:p-5">

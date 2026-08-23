@@ -221,12 +221,25 @@ class UsersByRoleView(APIView):
 
 
 def _check_backup_status() -> dict:
-    """Scan BACKUP_DIR for the most recent backup file."""
-    backup_dir = getattr(
+    """Scan for the most recent backup file across known locations."""
+    configured = getattr(
         settings,
         "BACKUP_DIR",
         os.path.join(settings.BASE_DIR, "backups", "local"),
     )
+
+    # Also check common host-side locations when running inside Docker
+    backup_dirs = [configured]
+    for candidate in [
+        os.path.join(settings.BASE_DIR, "backups", "local"),
+        os.path.join(settings.BASE_DIR, "backups", "stag"),
+        os.path.join(settings.BASE_DIR, "backups"),
+        "/backups",
+        os.path.expanduser("~/ecm_backups"),
+        os.path.expanduser("~/ecm-predeploy-backups"),
+    ]:
+        if candidate not in backup_dirs:
+            backup_dirs.append(candidate)
 
     result = {
         "status": "missing",
@@ -236,13 +249,32 @@ def _check_backup_status() -> dict:
         "filename": None,
     }
 
-    if not os.path.isdir(backup_dir):
-        return result
-
-    patterns = ["db-*.sql", "predeploy_*.sql", "*.dump"]
-    backup_files = []
-    for pattern in patterns:
-        backup_files.extend(glob.glob(os.path.join(backup_dir, pattern)))
+    patterns = ["db-*.sql", "predeploy_*.sql", "*.dump", "*.json"]
+    backup_files: list[str] = []
+    for d in backup_dirs:
+        if not os.path.isdir(d):
+            continue
+        for pattern in patterns:
+            backup_files.extend(glob.glob(os.path.join(d, pattern)))
+        # Also scan for any file that looks like a backup (contains backup/dump)
+        try:
+            for name in os.listdir(d):
+                lower = name.lower()
+                if "backup" in lower or "dump" in lower:
+                    full = os.path.join(d, name)
+                    if os.path.isfile(full) and full not in backup_files:
+                        backup_files.append(full)
+                # Recursive scan: check one level deeper
+                full_sub = os.path.join(d, name)
+                if os.path.isdir(full_sub) and not name.startswith("."):
+                    for subname in os.listdir(full_sub):
+                        sublower = subname.lower()
+                        if "backup" in sublower or sublower.endswith((".sql", ".dump", ".json")):
+                            full = os.path.join(full_sub, subname)
+                            if os.path.isfile(full) and full not in backup_files:
+                                backup_files.append(full)
+        except PermissionError:
+            continue
 
     if not backup_files:
         return result
@@ -251,9 +283,9 @@ def _check_backup_status() -> dict:
     stat = os.stat(latest)
     age_hours = (timezone.now().timestamp() - stat.st_mtime) / 3600
 
-    if age_hours < 24:
+    if age_hours < 36:
         status = "healthy"
-    elif age_hours < 48:
+    elif age_hours < 96:
         status = "warning"
     else:
         status = "missing"
@@ -459,21 +491,47 @@ class BackupLatestDownloadView(APIView):
 
             raise PermissionDenied("Superuser access required.")
 
-        backup_dir = getattr(
+        configured = getattr(
             settings,
             "BACKUP_DIR",
             os.path.join(settings.BASE_DIR, "backups", "local"),
         )
+        backup_dirs = [configured]
+        for candidate in [
+            os.path.join(settings.BASE_DIR, "backups", "local"),
+            os.path.join(settings.BASE_DIR, "backups", "stag"),
+            os.path.join(settings.BASE_DIR, "backups"),
+            "/backups",
+            os.path.expanduser("~/ecm_backups"),
+            os.path.expanduser("~/ecm-predeploy-backups"),
+        ]:
+            if candidate not in backup_dirs:
+                backup_dirs.append(candidate)
 
-        if not os.path.isdir(backup_dir):
-            from django.http import Http404
-
-            raise Http404("No backup directory found.")
-
-        patterns = ["db-*.sql", "predeploy_*.sql", "*.dump"]
-        backup_files = []
-        for pattern in patterns:
-            backup_files.extend(glob.glob(os.path.join(backup_dir, pattern)))
+        patterns = ["db-*.sql", "predeploy_*.sql", "*.dump", "*.json"]
+        backup_files: list[str] = []
+        for d in backup_dirs:
+            if not os.path.isdir(d):
+                continue
+            for pattern in patterns:
+                backup_files.extend(glob.glob(os.path.join(d, pattern)))
+            try:
+                for name in os.listdir(d):
+                    lower = name.lower()
+                    if "backup" in lower or "dump" in lower:
+                        full = os.path.join(d, name)
+                        if os.path.isfile(full) and full not in backup_files:
+                            backup_files.append(full)
+                    full_sub = os.path.join(d, name)
+                    if os.path.isdir(full_sub) and not name.startswith("."):
+                        for subname in os.listdir(full_sub):
+                            sublower = subname.lower()
+                            if "backup" in sublower or sublower.endswith((".sql", ".dump", ".json")):
+                                full = os.path.join(full_sub, subname)
+                                if os.path.isfile(full) and full not in backup_files:
+                                    backup_files.append(full)
+            except PermissionError:
+                continue
 
         if not backup_files:
             from django.http import Http404

@@ -234,6 +234,8 @@ MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 CLAMAV_SCAN_ENABLED = os.getenv("CLAMAV_SCAN_ENABLED", "false").lower() == "true"
 CLAMAV_BINARY_PATH = os.getenv("CLAMAV_BINARY_PATH", "clamscan")
 
+BACKUP_DIR = os.getenv("BACKUP_DIR", str(BASE_DIR / "backups" / "local"))
+
 # ---------------------------------------------------------------------------
 # Django REST Framework & OpenAPI
 # ---------------------------------------------------------------------------
