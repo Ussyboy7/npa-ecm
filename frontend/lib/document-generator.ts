@@ -3,6 +3,7 @@ import { logError } from '@/lib/client-logger';
 
 import { Correspondence, Minute } from './npa-structure';
 import { getUserById, getDivisionById } from './npa-structure';
+import { buildExportDocumentCss, DOC_PAPER, SEAL_PANEL_BG } from './theme-colors';
 
 export interface DocumentContent {
   correspondence: Correspondence;
@@ -30,7 +31,7 @@ export function generateDocumentHTML(content: DocumentContent): string {
         <title>${correspondence.referenceNumber} - ${correspondence.subject}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+          ${buildExportDocumentCss()}
         </style>
       </head>
       <body>
@@ -51,8 +52,8 @@ export function generateDocumentHTML(content: DocumentContent): string {
         <title>${correspondence.referenceNumber} - ${correspondence.subject}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
-          .summary-label { font-weight: bold; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #ddd; color: #666; }
+          ${buildExportDocumentCss()}
+          .summary-label { font-weight: bold; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid ${DOC_PAPER.border}; color: ${DOC_PAPER.muted}; }
           .summary-content { white-space: pre-wrap; }
         </style>
       </head>
@@ -100,9 +101,9 @@ export function generateDocumentHTML(content: DocumentContent): string {
   }).join('');
 
   const documentBody = `
-    <div class="content" style="margin: 0; padding: 60px 40px; text-align: center; color: hsl(218 15% 45%);">
+    <div class="content" style="margin: 0; padding: 60px 40px; text-align: center; color: ${DOC_PAPER.muted};">
       <p style="font-size: 18px; margin-bottom: 10px; color: inherit;">No document preview available</p>
-      <p style="font-size: 14px; color: hsl(218 15% 55%);">
+      <p style="font-size: 14px; color: ${DOC_PAPER.muted};">
         No document has been uploaded or linked to this correspondence.
       </p>
     </div>
@@ -125,24 +126,13 @@ export function generateDocumentHTML(content: DocumentContent): string {
           margin: 0 auto;
           padding: 40px;
           line-height: 1.6;
-          background: hsl(0 0% 100%);
-          color: hsl(218 25% 15%);
-        }
-        @media (prefers-color-scheme: dark) {
-          body {
-            background: hsl(218 30% 8%);
-            color: hsl(218 15% 90%);
-          }
+          background: ${DOC_PAPER.background};
+          color: ${DOC_PAPER.foreground};
         }
         .header {
-          border-bottom: 2px solid hsl(218 25% 15%);
+          border-bottom: 2px solid ${DOC_PAPER.foreground};
           padding-bottom: 20px;
           margin-bottom: 30px;
-        }
-        @media (prefers-color-scheme: dark) {
-          .header {
-            border-bottom-color: hsl(218 15% 90%);
-          }
         }
         .header h1 {
           margin: 0 0 10px 0;
@@ -163,14 +153,9 @@ export function generateDocumentHTML(content: DocumentContent): string {
         }
         .meta-label {
           font-weight: bold;
-          color: hsl(218 15% 45%);
+          color: ${DOC_PAPER.muted};
           font-size: 12px;
           margin-bottom: 4px;
-        }
-        @media (prefers-color-scheme: dark) {
-          .meta-label {
-            color: hsl(218 15% 65%);
-          }
         }
         .content {
           margin: 30px 0;
@@ -179,13 +164,8 @@ export function generateDocumentHTML(content: DocumentContent): string {
         }
         .minutes-section {
           margin-top: 40px;
-          border-top: 2px solid hsl(218 20% 88%);
+          border-top: 2px solid ${DOC_PAPER.border};
           padding-top: 30px;
-        }
-        @media (prefers-color-scheme: dark) {
-          .minutes-section {
-            border-top-color: hsl(218 30% 20%);
-          }
         }
         .minutes-section h2 {
           font-size: 18px;
@@ -195,37 +175,20 @@ export function generateDocumentHTML(content: DocumentContent): string {
         .footer {
           margin-top: 50px;
           padding-top: 20px;
-          border-top: 1px solid hsl(218 20% 88%);
+          border-top: 1px solid ${DOC_PAPER.border};
           font-size: 12px;
-          color: hsl(218 15% 45%);
+          color: ${DOC_PAPER.muted};
           text-align: center;
-        }
-        @media (prefers-color-scheme: dark) {
-          .footer {
-            border-top-color: hsl(218 30% 20%);
-            color: hsl(218 15% 65%);
-          }
         }
         .minute-item {
           margin-bottom: 20px;
           padding: 15px;
-          background: hsl(218 15% 95%);
-          color: hsl(218 25% 15%);
-        }
-        @media (prefers-color-scheme: dark) {
-          .minute-item {
-            background: hsl(218 30% 18%);
-            color: hsl(218 15% 90%);
-          }
+          background: ${SEAL_PANEL_BG};
+          color: ${DOC_PAPER.foreground};
         }
         .minute-meta {
           font-size: 12px;
-          color: hsl(218 15% 45%);
-        }
-        @media (prefers-color-scheme: dark) {
-          .minute-meta {
-            color: hsl(218 15% 65%);
-          }
+          color: ${DOC_PAPER.muted};
         }
         .minute-badge {
           padding: 2px 8px;
@@ -234,19 +197,14 @@ export function generateDocumentHTML(content: DocumentContent): string {
           margin-right: 8px;
         }
         .minute-badge-neutral {
-          background: hsl(218 20% 88%);
-        }
-        @media (prefers-color-scheme: dark) {
-          .minute-badge-neutral {
-            background: hsl(218 30% 20%);
-          }
+          background: ${DOC_PAPER.border};
         }
       </style>
     </head>
     <body>
       <div class="header">
         <h1>NIGERIAN PORTS AUTHORITY</h1>
-        <div style="font-size: 14px; color: hsl(218 15% 45%);">
+        <div style="font-size: 14px; color: ${DOC_PAPER.muted};">
           ${division?.name || 'Corporate Services'}
         </div>
       </div>

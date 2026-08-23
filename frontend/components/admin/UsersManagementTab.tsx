@@ -1010,7 +1010,7 @@ export const UsersManagementTab = forwardRef<
                       }
                     }}
                     aria-label="Select all users"
-                    className="h-3.5 w-3.5 rounded border-gray-300"
+                    className="h-3.5 w-3.5 rounded border-input"
                   />
                 </TableHead>
                 <TableHead className="w-[200px]">
@@ -1105,7 +1105,7 @@ export const UsersManagementTab = forwardRef<
                           setSelectedUserIds(newSelection);
                         }}
                         aria-label={`Select ${user.name}`}
-                        className="h-3.5 w-3.5 rounded border-gray-300"
+                        className="h-3.5 w-3.5 rounded border-input"
                       />
                     </TableCell>
                     <TableCell className="py-1.5">

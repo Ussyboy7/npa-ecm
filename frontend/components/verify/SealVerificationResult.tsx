@@ -82,7 +82,7 @@ export function SealVerificationResult({
 
   if (verification.valid) {
     return (
-      <Card className="bg-slate-800/50 border-slate-700 overflow-hidden">
+      <Card className="overflow-hidden">
         {/* Success Banner */}
         <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 p-6 text-white">
           <div className="flex items-center justify-between">
@@ -120,7 +120,7 @@ export function SealVerificationResult({
 
         <CardContent className="p-6 space-y-6">
           {/* Digital Seal Preview */}
-          <div className="flex justify-center py-6 bg-gradient-to-br from-slate-900/50 to-slate-800/50 rounded-lg border border-slate-700">
+          <div className="flex justify-center rounded-lg border border-border bg-muted/30 py-6">
             <DigitalSealPreview
               ref={sealPreviewRef}
               officeName={verification.office_name}
@@ -136,15 +136,15 @@ export function SealVerificationResult({
           </div>
 
           {/* Serial Number - Enhanced */}
-          <div className="text-center py-5 bg-gradient-to-r from-emerald-950/30 to-emerald-900/20 rounded-lg border border-emerald-800/30">
-            <p className="text-xs text-emerald-400 uppercase tracking-wider mb-2 font-semibold">Serial Number</p>
+          <div className="rounded-lg border border-emerald-200 bg-gradient-to-r from-emerald-50 to-emerald-100/80 py-5 text-center dark:border-emerald-800/30 dark:from-emerald-950/30 dark:to-emerald-900/20">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Serial Number</p>
             <div className="flex items-center justify-center gap-2 mb-2">
-              <p className="text-2xl font-mono font-bold text-white tracking-wider">{verification.serial_number}</p>
+              <p className="text-2xl font-mono font-bold text-foreground tracking-wider">{verification.serial_number}</p>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleCopySerial}
-                className="h-8 w-8 p-0 text-emerald-400 hover:text-emerald-300"
+                className="h-8 w-8 p-0 text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
                 aria-label="Copy serial number"
               >
                 {copied ? (
@@ -155,7 +155,7 @@ export function SealVerificationResult({
               </Button>
             </div>
             <div className="mt-3 flex items-center justify-center gap-2">
-              <Badge variant="outline" className="bg-emerald-600/20 text-emerald-400 border-emerald-600/50">
+              <Badge variant="outline" className="border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-600/50 dark:bg-emerald-600/20 dark:text-emerald-400">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
                 Verified
               </Badge>
@@ -164,52 +164,52 @@ export function SealVerificationResult({
 
           {/* Details - Enhanced Grid Layout */}
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 hover:border-slate-600 transition-colors">
+            <div className="rounded-lg border border-border bg-muted/30 p-4 transition-colors hover:border-border/80">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-full bg-emerald-600/20 flex items-center justify-center flex-shrink-0">
                   <User className="h-5 w-5 text-emerald-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-400 mb-1">Sealed By</p>
-                  <p className="text-white font-semibold text-sm">{verification.sealed_by}</p>
-                  <p className="text-xs text-slate-400 mt-1">{verification.office_title}</p>
+                  <p className="mb-1 text-xs text-muted-foreground">Sealed By</p>
+                  <p className="text-sm font-semibold text-foreground">{verification.sealed_by}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{verification.office_title}</p>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 hover:border-slate-600 transition-colors">
+            <div className="rounded-lg border border-border bg-muted/30 p-4 transition-colors hover:border-border/80">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-full bg-blue-600/20 flex items-center justify-center flex-shrink-0">
                   <Shield className="h-5 w-5 text-blue-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-400 mb-1">Organization</p>
-                  <p className="text-white font-semibold text-sm">{verification.office_name}</p>
+                  <p className="mb-1 text-xs text-muted-foreground">Organization</p>
+                  <p className="text-sm font-semibold text-foreground">{verification.office_name}</p>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 hover:border-slate-600 transition-colors">
+            <div className="rounded-lg border border-border bg-muted/30 p-4 transition-colors hover:border-border/80">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-full bg-purple-600/20 flex items-center justify-center flex-shrink-0">
                   <Calendar className="h-5 w-5 text-purple-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-400 mb-1">Date & Time</p>
-                  <p className="text-white font-semibold text-sm">{formatSealDate(verification.sealed_at)}</p>
+                  <p className="mb-1 text-xs text-muted-foreground">Date & Time</p>
+                  <p className="text-sm font-semibold text-foreground">{formatSealDate(verification.sealed_at)}</p>
                 </div>
               </div>
             </div>
 
             {(verification.document_title || verification.correspondence_subject) && (
-              <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700/50 hover:border-slate-600 transition-colors md:col-span-2">
+              <div className="rounded-lg border border-border bg-muted/30 p-4 transition-colors hover:border-border/80 md:col-span-2">
                 <div className="flex items-start gap-3">
                   <div className="h-10 w-10 rounded-full bg-amber-600/20 flex items-center justify-center flex-shrink-0">
                     <FileText className="h-5 w-5 text-amber-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-400 mb-1">Document</p>
-                    <p className="text-white font-semibold text-sm break-words mb-2">
+                    <p className="mb-1 text-xs text-muted-foreground">Document</p>
+                    <p className="mb-2 break-words text-sm font-semibold text-foreground">
                       {verification.document_title || verification.correspondence_subject}
                     </p>
                     <div className="flex gap-2">
@@ -245,17 +245,17 @@ export function SealVerificationResult({
           </div>
 
           {/* Footer - Enhanced */}
-          <div className="pt-6 border-t border-slate-700">
+          <div className="border-t border-border pt-6">
             <div className="flex flex-col items-center gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-950/30 rounded-full border border-emerald-800/50">
-                <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                <p className="text-sm font-semibold text-emerald-400">Verified & Authentic</p>
+              <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 dark:border-emerald-800/50 dark:bg-emerald-950/30">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Verified & Authentic</p>
               </div>
               <div className="text-center space-y-1">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   Verified on {formatSealDateLong(new Date().toISOString())}
                 </p>
-                <p className="text-xs text-slate-500 max-w-md">
+                <p className="max-w-md text-xs text-muted-foreground/80">
                   The authenticity of this document is confirmed by the Nigerian Ports Authority 
                   Electronic Correspondence Management system.
                 </p>
@@ -265,7 +265,6 @@ export function SealVerificationResult({
                   variant="outline"
                   size="sm"
                   onClick={handleDownloadCertificate}
-                  className="border-slate-600 hover:bg-slate-700"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download Certificate
@@ -275,7 +274,6 @@ export function SealVerificationResult({
                     variant="outline"
                     size="sm"
                     onClick={onVerifyAnother}
-                    className="border-slate-600 hover:bg-slate-700"
                   >
                     Verify Another
                   </Button>
@@ -290,7 +288,7 @@ export function SealVerificationResult({
 
   // Invalid seal
   return (
-    <Card className="bg-slate-800/50 border-slate-700 overflow-hidden">
+    <Card className="overflow-hidden">
       {/* Error Banner */}
       <div className="bg-gradient-to-r from-red-600 to-red-500 p-6 text-white">
         <div className="flex items-center justify-between">
@@ -323,15 +321,15 @@ export function SealVerificationResult({
 
       <CardContent className="p-6 space-y-6">
         {/* Serial Number - Enhanced */}
-        <div className="text-center py-5 bg-gradient-to-r from-red-950/30 to-red-900/20 rounded-lg border border-red-800/30">
-          <p className="text-xs text-red-400 uppercase tracking-wider mb-2 font-semibold">Serial Number</p>
+        <div className="rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-red-100/80 py-5 text-center dark:border-red-800/30 dark:from-red-950/30 dark:to-red-900/20">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Serial Number</p>
           <div className="flex items-center justify-center gap-2 mb-2">
-            <p className="text-2xl font-mono font-bold text-white tracking-wider">{serial}</p>
+            <p className="text-2xl font-mono font-bold text-foreground tracking-wider">{serial}</p>
             <Button
               variant="ghost"
               size="sm"
               onClick={handleCopySerial}
-              className="h-8 w-8 p-0 text-red-400 hover:text-red-300"
+              className="h-8 w-8 p-0 text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
               aria-label="Copy serial number"
             >
               {copied ? (
@@ -342,7 +340,7 @@ export function SealVerificationResult({
             </Button>
           </div>
           <div className="mt-3 flex items-center justify-center gap-2">
-            <Badge variant="destructive" className="bg-red-600/20 text-red-400 border-red-600/50">
+            <Badge variant="destructive" className="border-red-300 bg-red-100 text-red-800 dark:border-red-600/50 dark:bg-red-600/20 dark:text-red-400">
               <XCircle className="h-3 w-3 mr-1" />
               Invalid
             </Badge>
@@ -350,16 +348,16 @@ export function SealVerificationResult({
         </div>
 
         {verification.invalidated_at && (
-          <div className="p-4 bg-red-950/50 rounded-lg border border-red-900">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/50">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
               <div>
-                <p className="text-sm font-medium text-red-400">This seal was invalidated</p>
-                <p className="text-xs text-red-300 mt-1">
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">This seal was invalidated</p>
+                <p className="mt-1 text-xs text-red-600 dark:text-red-300">
                   Date: {formatSealDate(verification.invalidated_at)}
                 </p>
                 {verification.invalidated_reason && (
-                  <p className="text-xs text-red-300 mt-1">
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-300">
                     Reason: {verification.invalidated_reason}
                   </p>
                 )}
@@ -369,12 +367,12 @@ export function SealVerificationResult({
         )}
 
         {/* Warning */}
-        <div className="p-4 bg-amber-950/50 rounded-lg border border-amber-900">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/50">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700 dark:text-amber-400" />
             <div>
-              <p className="text-sm font-medium text-amber-400">Warning</p>
-              <p className="text-xs text-amber-200 mt-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-400">Warning</p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">
                 This document may be fraudulent or the seal may have been tampered with. 
                 Please contact the Nigerian Ports Authority to verify the authenticity of this document.
               </p>
@@ -383,10 +381,10 @@ export function SealVerificationResult({
         </div>
 
         {/* Contact Info - Enhanced */}
-        <div className="pt-6 border-t border-slate-700">
-          <div className="text-center space-y-3">
-            <p className="text-sm font-medium text-slate-300">Need Help?</p>
-            <p className="text-sm text-slate-400">
+        <div className="border-t border-border pt-6">
+          <div className="space-y-3 text-center">
+            <p className="text-sm font-medium text-foreground">Need Help?</p>
+            <p className="text-sm text-muted-foreground">
               For inquiries, contact NPA at{" "}
               <a 
                 href="mailto:info@nigerianports.gov.ng" 
@@ -401,7 +399,6 @@ export function SealVerificationResult({
                   variant="outline"
                   size="sm"
                   onClick={onRetry}
-                  className="border-slate-600 hover:bg-slate-700"
                 >
                   <Shield className="h-4 w-4 mr-2" />
                   Retry Verification
@@ -412,7 +409,6 @@ export function SealVerificationResult({
                   variant="outline"
                   size="sm"
                   onClick={onVerifyAnother}
-                  className="border-slate-600 hover:bg-slate-700"
                 >
                   Verify Another Seal
                 </Button>

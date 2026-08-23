@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useCallback, useReducer, useRef, useState, Suspense } from 'react';
 import { logError, logWarn } from '@/lib/client-logger';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { toast } from "@/components/ui/sonner";
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
@@ -30,10 +30,19 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
 import { isCorrespondenceClosed } from '@/lib/correspondence-helpers';
+import { SearchHighlightBanner } from '@/components/search/SearchHighlightBanner';
+import {
+  readSearchHighlight,
+  SEARCH_MATCH_PARAM,
+  SEARCH_Q_PARAM,
+} from '@/lib/search-highlight';
 
 const CorrespondenceDetailContent = () => {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const { query: highlightQuery, matchField } = readSearchHighlight(searchParams);
   const id = params.id as string;
   const { getCorrespondenceById, refreshData, syncFromApi, mergeMinutes } = useCorrespondence();
   const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
@@ -115,7 +124,6 @@ const CorrespondenceDetailContent = () => {
     (f: boolean) => dispatch({ type: 'SET_DOCUMENT_FOCUS', payload: f }),
   ], [dispatch]);
   
-  const searchParams = useSearchParams();
   const statusParam = searchParams?.get('status');
   const initialStatus = statusParam ?? cachedCorrespondence?.status;
   const correspondence = remoteCorrespondence ?? cachedCorrespondence;
@@ -588,6 +596,22 @@ const CorrespondenceDetailContent = () => {
           dispatchedCount={minutes.filter((m) => !m.isRecalled && m.dispatchedAt).length}
           acknowledgedCount={minutes.filter((m) => !m.isRecalled && m.acknowledgedAt).length}
         />
+
+        {highlightQuery ? (
+          <div className="px-4 py-2 border-b border-border/40">
+            <SearchHighlightBanner
+              query={highlightQuery}
+              matchField={matchField}
+              onDismiss={() => {
+                const next = new URLSearchParams(searchParams.toString());
+                next.delete(SEARCH_Q_PARAM);
+                next.delete(SEARCH_MATCH_PARAM);
+                const qs = next.toString();
+                router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+              }}
+            />
+          </div>
+        ) : null}
 
         <PhysicalCopySection documents={correspondence.physicalDocuments ?? []} />
 

@@ -376,7 +376,7 @@ def format_currency(amount: Any) -> str:
                 return ""
             num_amount = float(cleaned)
         else:
-            num_amount = float(amount)
+        num_amount = float(amount)
         return f"₦{num_amount:,.2f}"
     except (ValueError, TypeError):
         return f"₦{amount}"
@@ -974,7 +974,7 @@ def generate_witnessing_deliveries_pdf(form_data: Dict[str, Any]) -> bytes:
                 elif form_data.get(f"{prefix}_signature"):
                     c.setFont(font_regular, 6.5)
                     c.drawCentredString(x + w / 2, y - 0.28 * cm, "[Signed]")
-            else:
+        else:
                 c.setFont(font_bold if i == 0 else font_regular, 6.5)
                 c.drawCentredString(x + w / 2, y - 0.28 * cm, vals[i][:22])
             x += w

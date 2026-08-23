@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -492,7 +493,7 @@ function MyDocumentsForm() {
 
 export function DocumentsListPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
       <MyDocumentsForm />
     </Suspense>
   );
@@ -656,7 +657,7 @@ function DocumentCard({ doc, showRoleBadge }: { doc: DocumentRecord; showRoleBad
       case 'form':
         return 'border-cyan-200 bg-cyan-500/10 text-cyan-600 dark:border-cyan-800 dark:text-cyan-400';
       default:
-        return 'border-border bg-gray-500/10 text-gray-600 dark:text-gray-400';
+        return 'border-border bg-muted/50 text-muted-foreground';
     }
   };
 

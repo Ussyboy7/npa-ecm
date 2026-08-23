@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from 'react';
+import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -640,7 +641,7 @@ function PhysicalDocumentsForm() {
 }
 
 const PhysicalDocumentsPage = () => (
-  <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+  <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
     <PhysicalDocumentsForm />
   </Suspense>
 );

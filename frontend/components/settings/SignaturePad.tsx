@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, type FC, type PointerEvent as ReactPointerEvent } from 'react';
+import { SIGNATURE_INK, DOC_PAPER } from '@/lib/theme-colors';
 import { Button } from '@/components/ui/button';
 import { Undo2, Trash2 } from 'lucide-react';
 
@@ -13,7 +14,7 @@ interface Point {
   y: number;
 }
 
-export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
+export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -21,7 +22,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
   const currentStrokeRef = useRef<Point[]>([]);
   const lastPointRef = useRef<Point | null>(null);
 
-  const getPoint = useCallback((e: React.PointerEvent<HTMLCanvasElement>): Point => {
+  const getPoint = useCallback((e: ReactPointerEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     return {
@@ -47,7 +48,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#1a1a1a';
+    ctx.strokeStyle = SIGNATURE_INK;
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -56,7 +57,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
     }
   }, [drawStroke]);
 
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setIsDrawing(true);
@@ -65,13 +66,13 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
     lastPointRef.current = point;
   }, [getPoint]);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return;
     const point = getPoint(e);
     currentStrokeRef.current.push(point);
 
     const ctx = canvasRef.current!.getContext('2d')!;
-    ctx.strokeStyle = '#1a1a1a';
+    ctx.strokeStyle = SIGNATURE_INK;
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -133,7 +134,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
     trimmed.width = maxX - minX + pad * 2;
     trimmed.height = maxY - minY + pad * 2;
     const tCtx = trimmed.getContext('2d')!;
-    tCtx.fillStyle = 'white';
+    tCtx.fillStyle = DOC_PAPER.background;
     tCtx.fillRect(0, 0, trimmed.width, trimmed.height);
     tCtx.drawImage(canvas, minX - pad, minY - pad, trimmed.width, trimmed.height, 0, 0, trimmed.width, trimmed.height);
     onSave(trimmed.toDataURL('image/png'));
@@ -141,7 +142,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave }) => {
 
   return (
     <div className="space-y-3">
-      <div className="relative border rounded-lg bg-white overflow-hidden">
+      <div className="relative overflow-hidden rounded-lg border bg-white">
         <canvas
           ref={canvasRef}
           width={800}

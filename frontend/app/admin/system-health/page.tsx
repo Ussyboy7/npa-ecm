@@ -50,13 +50,13 @@ function statusColor(status: string) {
 function statusSurfaceClass(status: string) {
   switch (status) {
     case "healthy":
-      return "from-emerald-950/40 to-emerald-900/20 border-emerald-500/20";
+      return "from-emerald-50 to-emerald-100/50 border-emerald-200 dark:from-emerald-950/40 dark:to-emerald-900/20 dark:border-emerald-500/20";
     case "warning":
-      return "from-amber-950/40 to-amber-900/20 border-amber-500/20";
+      return "from-amber-50 to-amber-100/50 border-amber-200 dark:from-amber-950/40 dark:to-amber-900/20 dark:border-amber-500/20";
     case "error":
-      return "from-red-950/40 to-red-900/20 border-red-500/20";
+      return "from-red-50 to-red-100/50 border-red-200 dark:from-red-950/40 dark:to-red-900/20 dark:border-red-500/20";
     default:
-      return "from-slate-900/50 to-slate-800/50 border-slate-700/50";
+      return "from-muted/50 to-muted/30 border-border";
   }
 }
 

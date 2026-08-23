@@ -38,36 +38,24 @@ def auto_ocr_new_document_version(sender, instance, created, **kwargs):
     if not document:
         return
 
-    # Skip if OCR already exists for this document
-    from capture.models import CaptureJob, OCRResult
-    if OCRResult.objects.filter(document=document).exists():
-        return
+    from capture.services import queue_ocr_job
 
-    # Skip if a pending or processing OCR job already exists
-    if CaptureJob.objects.filter(
-        document=document,
-        job_type=CaptureJob.JobType.OCR,
-        status__in=[CaptureJob.JobStatus.PENDING, CaptureJob.JobStatus.PROCESSING],
-    ).exists():
-        return
-
-    # Enqueue OCR via Celery
-    try:
-        from capture.tasks import process_ocr_job
-
-        # Use the document version's system user (or None for anonymous)
+    uploaded_by = instance.uploaded_by
+    if not uploaded_by:
         from django.contrib.auth import get_user_model
-        User = get_user_model()
-        system_user = User.objects.filter(is_superuser=True).first()
+        uploaded_by = get_user_model().objects.filter(is_superuser=True).first()
 
-        job = CaptureJob.objects.create(
-            job_type=CaptureJob.JobType.OCR,
-            status=CaptureJob.JobStatus.PENDING,
+    try:
+        queue_ocr_job(
             document=document,
-            config={"auto_triggered": True, "source": "auto_upload_ocr"},
-            created_by=system_user,
+            created_by=uploaded_by,
+            config={
+                "auto_triggered": True,
+                "source": "auto_upload_ocr",
+                "language": "eng",
+                "extract_metadata": True,
+            },
         )
-        process_ocr_job.delay(str(job.id))
     except Exception:
         import logging
         logger = logging.getLogger(__name__)

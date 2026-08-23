@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,12 +33,11 @@ import { useOrgUsers } from "@/hooks/use-org-users";
 import { formatDate } from '@/lib/correspondence-helpers';
 import { highlightText } from '@/lib/search-highlight';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
-import { exportToCSV } from '@/lib/admin-export';
-import { Download } from 'lucide-react';
 import { isRecord } from '@/lib/type-utils';
+import { buildSearchHighlightParams } from '@/lib/search-highlight';
 
 interface AdvancedSearchProps {
-  onResultSelect?: (result: Record<string, unknown>) => void;
+  onResultSelect?: (result: Record<string, unknown>, query: string) => void;
   context?: 'all' | 'documents' | 'correspondence' | 'cases';
 }
 
@@ -134,10 +133,10 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update search type when context prop changes
+  // Update search type when context prop changes (page tabs own the type)
   useEffect(() => {
     if (context) {
-      setSearchType(context === 'all' ? 'all' : context);
+      setSearchType(context);
     }
   }, [context]);
 
@@ -289,68 +288,10 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     }
   };
 
-  const handleExport = () => {
-    if (!results || results.results.length === 0) {
-      toast.error('No results to export');
-      return;
-    }
-
-    const exportData = results.results
-      .filter(isRecord)
-      .map((result) => {
-      const resultType = result._type || (result.document_type ? 'document' : result.case_type ? 'case' : 'correspondence');
-      const author =
-        typeof result.author === 'string'
-          ? result.author
-          : isRecord(result.author) && typeof (result.author as Record<string, unknown>).name === 'string'
-            ? String((result.author as Record<string, unknown>).name)
-            : '';
-      return {
-        type: resultType,
-        title: result.title || result.subject || result.case_number || 'Untitled',
-        reference_number: result.reference_number || result.case_number || '',
-        status: result.status || '',
-        sensitivity: result.sensitivity || '',
-        priority: result.priority || '',
-        author,
-        created_at: result.created_at || result.received_date || '',
-        snippet: result._search_snippet || result.search_snippet || result.description || result.body || '',
-      };
-    });
-
-    exportToCSV(exportData, [
-      { key: 'type', label: 'Type' },
-      { key: 'title', label: 'Title' },
-      { key: 'reference_number', label: 'Reference Number' },
-      { key: 'status', label: 'Status' },
-      { key: 'sensitivity', label: 'Classification' },
-      { key: 'priority', label: 'Priority' },
-      { key: 'author', label: 'Author' },
-      { key: 'created_at', label: 'Created At' },
-      { key: 'snippet', label: 'Snippet' },
-    ], {
-      filename: `search-results-${new Date().toISOString().split('T')[0]}.csv`,
-    });
-
-    toast.success(`Exported ${exportData.length} results to CSV`);
-  };
-
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Advanced Search
-          </CardTitle>
-          <CardDescription>
-            Search documents, correspondence, and cases with full-text search and filters
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Inline Filter Bar */}
-          <Card>
-            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+      {/* Filter strip — no nested card / no duplicate page title */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/30 p-2">
               <div className="relative min-w-[200px] flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -384,20 +325,8 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                 )}
               </div>
 
-              <Select value={searchType} onValueChange={(v) => setSearchType(v as 'documents' | 'correspondence' | 'cases' | 'all')}>
-                <SelectTrigger className="h-8 w-[130px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="documents">Documents</SelectItem>
-                  <SelectItem value="correspondence">Correspondence</SelectItem>
-                  <SelectItem value="cases">Cases</SelectItem>
-                </SelectContent>
-              </Select>
-
               {(searchType === 'documents' || searchType === 'all') && (
-                <div className="flex items-center gap-2 h-8 px-2 border rounded-md">
+                <div className="flex items-center gap-2 h-8 px-2 border rounded-md bg-background">
                   <Switch
                     id="semantic-search"
                     checked={searchMode === 'semantic'}
@@ -410,6 +339,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                 </div>
               )}
 
+              {(searchType === 'documents' || searchType === 'all') && (
               <Select
                 value={filters?.document_type || 'all'}
                 onValueChange={(value) =>
@@ -429,6 +359,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                   <SelectItem value="form">Form</SelectItem>
                 </SelectContent>
               </Select>
+              )}
 
               <Select
                 value={filters?.status || 'all'}
@@ -631,8 +562,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                 <Save className="h-3 w-3 mr-1" />
                 Save
               </Button>
-            </CardContent>
-          </Card>
+      </div>
 
           {/* Search History & Saved Searches */}
           {!results && (searchHistory.length > 0 || savedSearches.length > 0) && (
@@ -701,29 +631,14 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
 
       {/* Results */}
       {results && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle id="search-results-heading">
-                Search Results ({results.total_count} found)
-              </CardTitle>
-              {results.results.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExport}
-                  aria-label="Export search results to CSV"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
-              )}
-            </div>
+            <CardTitle id="search-results-heading">
+              Search Results ({results.total_count} found)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div
@@ -777,23 +692,37 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                           key={typeof result.id === 'string' || typeof result.id === 'number' ? String(result.id) : String(idx)}
                           className="cursor-pointer hover:bg-accent transition-colors"
                           onClick={() => {
+                            const id =
+                              typeof result.id === "string" || typeof result.id === "number"
+                                ? String(result.id)
+                                : "";
+                            const matchField = String(
+                              result._match_field ?? result.match_field ?? "",
+                            );
+                            const qs = buildSearchHighlightParams(query, matchField);
                             if (isCase) {
-                              const id = typeof result.id === 'string' || typeof result.id === 'number' ? String(result.id) : '';
-                              window.location.href = `/cases/${id}`;
+                              window.location.href = `/cases/${id}${qs}`;
                             } else {
-                              onResultSelect?.(result);
+                              onResultSelect?.(result, query);
                             }
                           }}
                           role="button"
                           tabIndex={0}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
+                            if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
+                              const id =
+                                typeof result.id === "string" || typeof result.id === "number"
+                                  ? String(result.id)
+                                  : "";
+                              const matchField = String(
+                                result._match_field ?? result.match_field ?? "",
+                              );
+                              const qs = buildSearchHighlightParams(query, matchField);
                               if (isCase) {
-                                const id = typeof result.id === 'string' || typeof result.id === 'number' ? String(result.id) : '';
-                                window.location.href = `/cases/${id}`;
+                                window.location.href = `/cases/${id}${qs}`;
                               } else {
-                                onResultSelect?.(result);
+                                onResultSelect?.(result, query);
                               }
                             }
                           }}

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAbortController } from "@/hooks/use-abort-controller";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
+import { SearchHighlightBanner } from "@/components/search/SearchHighlightBanner";
+import {
+  readSearchHighlight,
+  SEARCH_MATCH_PARAM,
+  SEARCH_Q_PARAM,
+} from "@/lib/search-highlight";
 import { Button } from "@/components/ui/button";
 import { LinkCorrespondenceDialog } from "@/components/cases/LinkCorrespondenceDialog";
 import { LinkDocumentDialog } from "@/components/cases/LinkDocumentDialog";
@@ -65,6 +71,9 @@ import {
 const CaseDetailPage = () => {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const { query: highlightQuery, matchField } = readSearchHighlight(searchParams);
   const caseId = params.id as string;
   const { currentUser, hydrated } = useCurrentUser();
   const { offices } = useOrganization();
@@ -415,6 +424,21 @@ const CaseDetailPage = () => {
             owningOfficeName={owningOffice?.name}
             assignedToName={assignedTo?.name}
           />
+          {highlightQuery ? (
+            <div className="px-4 py-2 border-b border-border/40">
+              <SearchHighlightBanner
+                query={highlightQuery}
+                matchField={matchField}
+                onDismiss={() => {
+                  const next = new URLSearchParams(searchParams.toString());
+                  next.delete(SEARCH_Q_PARAM);
+                  next.delete(SEARCH_MATCH_PARAM);
+                  const qs = next.toString();
+                  router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                }}
+              />
+            </div>
+          ) : null}
           <CaseMobileTabBar
             commentsCount={commentsCount}
             mobileActiveTab={mobileActiveTab}

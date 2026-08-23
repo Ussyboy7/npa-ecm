@@ -42,11 +42,11 @@ export class SealVerificationErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card>
           <CardContent className="py-12 text-center">
-            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-red-500" />
-            <h3 className="text-lg font-semibold text-white mb-2">Something went wrong</h3>
-            <p className="text-sm text-slate-400 mb-4">
+            <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-destructive" />
+            <h3 className="mb-2 text-lg font-semibold text-foreground">Something went wrong</h3>
+            <p className="mb-4 text-sm text-muted-foreground">
               {this.state.error?.message || 'An unexpected error occurred during verification'}
             </p>
             <Button onClick={this.handleReset}>

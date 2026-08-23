@@ -52,7 +52,7 @@ function getStatusColor(status: string) {
     case "unhealthy":
       return "text-red-500";
     default:
-      return "text-gray-500";
+      return "text-muted-foreground";
   }
 }
 
@@ -220,14 +220,14 @@ export default function AdminPage() {
     >
       <div className="space-y-6">
         {/* System Summary Bar */}
-        <Card className="bg-gradient-to-r from-slate-900/50 to-slate-800/50 border-slate-700/50">
+        <Card className="bg-gradient-to-r from-muted/40 to-muted/20 border-border">
           <CardContent className="p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-500" />
-                <span className="text-sm font-medium text-green-400">System Status: Operational</span>
+                <span className="text-sm font-medium text-green-700 dark:text-green-400">System Status: Operational</span>
               </div>
-              <div className="hidden h-4 w-px bg-slate-600 sm:block" />
+              <div className="hidden h-4 w-px bg-border sm:block" />
               <div className="flex items-center gap-2">
                 <span className="relative inline-flex h-2 w-2">
                   <span className="absolute inset-0 rounded-full bg-green-400 opacity-75 animate-ping" />
@@ -235,10 +235,10 @@ export default function AdminPage() {
                 </span>
                 <button
                   onClick={() => void openOnlineModal()}
-                  className="text-sm text-slate-300 hover:text-white transition-colors"
+                  className="text-sm text-foreground transition-colors hover:text-foreground/80"
                 >
                   {onlineNow} online now
-                  <span className="text-slate-500"> ({presenceWindowLabel})</span>
+                  <span className="text-muted-foreground"> ({presenceWindowLabel})</span>
                 </button>
               </div>
             </div>
@@ -592,7 +592,7 @@ export default function AdminPage() {
                       variant="outline"
                       className="w-full h-auto py-3 flex flex-col items-center gap-1"
                     >
-                      <Settings className="h-5 w-5 text-slate-500" />
+                      <Settings className="h-5 w-5 text-muted-foreground" />
                       <span className="text-xs">Settings</span>
                     </Button>
                   </Link>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
+import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -748,7 +749,7 @@ function ApprovalsForm() {
 
 export default function ApprovalsPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
       <ApprovalsForm />
     </Suspense>
   );

@@ -3,6 +3,7 @@ import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, Suspense } from "react";
+import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -505,7 +506,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
       <LoginForm />
     </Suspense>
   );

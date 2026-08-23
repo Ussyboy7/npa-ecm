@@ -11,6 +11,7 @@ import { toast } from "@/components/ui/sonner";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { Correspondence, Minute } from "@/lib/npa-structure";
 import { ModalErrorBoundary } from "@/components/shared/ModalErrorBoundary";
+import { buildExportDocumentCss } from "@/lib/theme-colors";
 
 interface CompletionSummaryModalProps {
   open?: boolean;
@@ -28,7 +29,7 @@ function buildExportHtml(correspondence: Correspondence, minutes: Minute[], comp
     )
     .join("");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Completion Summary — ${correspondence.referenceNumber}</title>
-<style>body{font-family:system-ui,sans-serif;padding:24px;max-width:800px;margin:0 auto}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px;text-align:left}h1{font-size:1.25rem}</style></head><body>
+<style>${buildExportDocumentCss()}</style></head><body>
 <h1>Correspondence Completion Summary</h1>
 <p><strong>Reference:</strong> ${correspondence.referenceNumber}</p>
 <p><strong>Subject:</strong> ${correspondence.subject}</p>
@@ -167,7 +168,7 @@ function CompletionSummaryModalContent({
               </CardHeader>
               <CardContent>
                 <div
-                  className="prose prose-sm max-w-none border rounded-md p-4 max-h-96 overflow-y-auto"
+                  className="prose prose-sm dark:prose-invert max-w-none border rounded-md p-4 max-h-96 overflow-y-auto"
                   dangerouslySetInnerHTML={{ __html: documentContentHtml }}
                 />
               </CardContent>

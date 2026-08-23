@@ -2,7 +2,13 @@
 
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { SearchHighlightBanner } from '@/components/search/SearchHighlightBanner';
+import {
+  readSearchHighlight,
+  SEARCH_MATCH_PARAM,
+  SEARCH_Q_PARAM,
+} from '@/lib/search-highlight';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -42,6 +48,9 @@ import { EmptyState } from '@/components/shared/EmptyState';
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { query: highlightQuery, matchField } = readSearchHighlight(searchParams);
   const documentId = params?.id;
 
   const {
@@ -267,6 +276,22 @@ const DocumentDetailContent = () => {
                 }
               />
 
+              {highlightQuery ? (
+                <div className="px-4 py-2 border-b border-border/40">
+                  <SearchHighlightBanner
+                    query={highlightQuery}
+                    matchField={matchField}
+                    onDismiss={() => {
+                      const next = new URLSearchParams(searchParams.toString());
+                      next.delete(SEARCH_Q_PARAM);
+                      next.delete(SEARCH_MATCH_PARAM);
+                      const qs = next.toString();
+                      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                    }}
+                  />
+                </div>
+              ) : null}
+
               <DocumentMobileTabBar
                 commentsCount={comments.length}
                 mobileActiveTab={mobileActiveTab}
@@ -288,6 +313,8 @@ const DocumentDetailContent = () => {
                   onSelectVersion: handleSelectVersion,
                   onDownload: handleDownloadVersion,
                   canDownload: canDownloadDocument(document),
+                  highlightQuery,
+                  matchField,
                   versionsManage: {
                     userLookup,
                     uploadUser,

@@ -1,11 +1,12 @@
 "use client";
 
 import { Suspense } from "react";
+import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import AuthCallbackPage from "./AuthCallbackPage";
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading…</div>}>
+    <Suspense fallback={<PageSuspenseFallback />}>
       <AuthCallbackPage />
     </Suspense>
   );

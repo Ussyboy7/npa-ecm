@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback, Suspense } from 'react';
+import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -679,7 +680,7 @@ const RecordsArchiveForm = () => {
 };
 
 const RecordsArchivePage = () => (
-  <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+  <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
     <CorrespondenceProvider>
       <RecordsArchiveForm />
     </CorrespondenceProvider>

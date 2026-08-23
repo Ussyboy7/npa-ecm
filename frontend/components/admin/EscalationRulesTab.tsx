@@ -93,7 +93,7 @@ const TRIGGER_ICONS: Record<string, React.ReactNode> = {
   sla_warning: <AlertTriangle className="h-4 w-4 text-yellow-500" />,
   sla_breach: <AlertTriangle className="h-4 w-4 text-red-500" />,
   sla_critical: <Zap className="h-4 w-4 text-red-600" />,
-  stale: <Clock className="h-4 w-4 text-gray-500" />,
+  stale: <Clock className="h-4 w-4 text-muted-foreground" />,
   priority_urgent: <ArrowUpRight className="h-4 w-4 text-orange-500" />,
   reassigned: <Users className="h-4 w-4 text-blue-500" />,
 };

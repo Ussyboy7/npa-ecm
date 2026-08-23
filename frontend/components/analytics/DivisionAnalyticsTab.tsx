@@ -22,20 +22,10 @@ import { StatStrip } from "@/components/shared/StatStrip";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { fetchEnhancedDivisionPerformance, type EnhancedDivisionPerformance } from "@/lib/sla-client";
 import { ArrowRight } from "lucide-react";
-
-const COMPLIANCE_COLORS = {
-  good: "#22c55e",
-  warn: "#eab308",
-  bad: "#ef4444",
-};
-
-function complianceColor(rate: number) {
-  if (rate >= 85) return COMPLIANCE_COLORS.good;
-  if (rate >= 70) return COMPLIANCE_COLORS.warn;
-  return COMPLIANCE_COLORS.bad;
-}
+import { useThemeChartColors } from "@/hooks/use-theme-chart-colors";
 
 export function DivisionAnalyticsTab() {
+  const chartColors = useThemeChartColors();
   const { directorates } = useOrganization();
   const [selectedPeriod, setSelectedPeriod] = useState("30");
   const [directorateId, setDirectorateId] = useState("all");
@@ -138,7 +128,7 @@ export function DivisionAnalyticsTab() {
                   <Tooltip formatter={(value: number) => [`${value}%`, "SLA Compliance"]} />
                   <Bar dataKey="slaComplianceRate" radius={[0, 4, 4, 0]}>
                     {divisions.slice(0, 10).map((entry) => (
-                      <Cell key={entry.id ?? entry.name} fill={complianceColor(entry.slaComplianceRate)} />
+                      <Cell key={entry.id ?? entry.name} fill={chartColors.divisionComplianceColor(entry.slaComplianceRate)} />
                     ))}
                   </Bar>
                 </BarChart>

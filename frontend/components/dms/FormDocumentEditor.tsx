@@ -1142,7 +1142,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                               <span className={`absolute -left-4 flex h-8 w-8 items-center justify-center rounded-full ring-4 ring-background ${
                                 isSigned ? "bg-green-500" : 
                                 isRejected ? "bg-red-500" : 
-                                isSkipped ? "bg-gray-400" : 
+                                isSkipped ? "bg-muted-foreground" : 
                                 "bg-yellow-500"
                               }`}>
                                 {isSigned ? (

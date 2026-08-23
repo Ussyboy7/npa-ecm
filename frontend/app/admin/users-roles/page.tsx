@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
@@ -308,7 +309,7 @@ function UsersRolesForm() {
 
 export default function UsersRolesPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
       <UsersRolesForm />
     </Suspense>
   );

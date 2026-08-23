@@ -3,6 +3,7 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { logError } from '@/lib/client-logger';
 import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense } from 'react';
+import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -850,7 +851,7 @@ const CorrespondenceRegisterForm = () => {
 };
 
 const CorrespondenceRegister = () => (
-  <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+  <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
     <CorrespondenceProvider>
       <CorrespondenceRegisterForm />
     </CorrespondenceProvider>

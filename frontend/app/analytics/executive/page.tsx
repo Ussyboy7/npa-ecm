@@ -32,7 +32,7 @@ export default function ExecutiveDashboardPage() {
                   steps={[
                     'Review SLA compliance by division and priority.',
                     'Watch escalations requiring executive action.',
-                    'Export snapshots for briefings and meetings.',
+                    'Check bottlenecks and delayed approvals.',
                   ]}
                 />
               </div>

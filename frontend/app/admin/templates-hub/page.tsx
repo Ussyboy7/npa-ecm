@@ -2,6 +2,7 @@
 import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -1538,7 +1539,7 @@ function TemplatesHubForm() {
 
 export default function TemplatesHubPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
       <TemplatesHubForm />
     </Suspense>
   );

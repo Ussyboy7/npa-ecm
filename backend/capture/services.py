@@ -494,3 +494,55 @@ class BatchProcessingService:
 
         return results
 
+
+def queue_ocr_job(
+    *,
+    document: Document,
+    created_by,
+    config: dict | None = None,
+    force_reprocess: bool = False,
+) -> tuple[CaptureJob, bool]:
+    """Enqueue OCR for a document unless an active job already exists.
+
+    Returns ``(job, created)``. When ``created`` is False, an existing job was reused.
+    """
+    from capture.models import OCRResult
+    from capture.tasks import process_ocr_job
+
+    if not force_reprocess:
+        active = CaptureJob.objects.filter(
+            document=document,
+            job_type=CaptureJob.JobType.OCR,
+            status__in=[CaptureJob.JobStatus.PENDING, CaptureJob.JobStatus.PROCESSING],
+        ).first()
+        if active:
+            return active, False
+
+        if OCRResult.objects.filter(document=document).exists():
+            latest = (
+                CaptureJob.objects.filter(
+                    document=document,
+                    job_type=CaptureJob.JobType.OCR,
+                    status=CaptureJob.JobStatus.COMPLETED,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if latest:
+                return latest, False
+
+    job = CaptureJob.objects.create(
+        job_type=CaptureJob.JobType.OCR,
+        status=CaptureJob.JobStatus.PENDING,
+        created_by=created_by,
+        document=document,
+        config=config or {},
+    )
+    try:
+        process_ocr_job.delay(str(job.id))
+    except Exception as exc:
+        job.status = CaptureJob.JobStatus.FAILED
+        job.error_message = f"Failed to queue job: {exc}"
+        job.save(update_fields=["status", "error_message"])
+        raise
+    return job, True

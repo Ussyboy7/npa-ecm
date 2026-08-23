@@ -41,6 +41,8 @@ import {
   Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DOC_PAPER, readThemeHsl, THEME_HSL, EDITOR_HIGHLIGHT } from "@/lib/theme-colors";
+import { useTheme } from "next-themes";
 import { sanitizeRichText, sanitizePastedRichText } from "@/lib/sanitize-html";
 import { PageSetupDialog, type PageSettings, getPageDimensions, buildComposePrintHtml } from "./PageSetupDialog";
 import {
@@ -81,7 +83,7 @@ const DEFAULT_PAGE_SETTINGS: PageSettings = {
 
 const FONT_FAMILIES = ["Verdana", "Arial", "Times New Roman", "Georgia", "Courier New"] as const;
 const LINE_HEIGHT_OPTIONS = ["1", "1.15", "1.5", "2", "2.5", "3"] as const;
-const DEFAULT_TEXT_COLOR = "#111827";
+const DEFAULT_TEXT_COLOR = DOC_PAPER.foreground;
 
 type ToolbarMeta = {
   block: string;
@@ -155,6 +157,7 @@ export function RichTextEditor({
   showPageSetup = true,
   showPageNumbers = true,
 }: RichTextEditorProps) {
+  const { resolvedTheme } = useTheme();
   const editorRef = useRef<HTMLDivElement>(null);
   const editorShellRef = useRef<HTMLDivElement>(null);
   const isFocusedRef = useRef(false);
@@ -675,7 +678,14 @@ export function RichTextEditor({
   const handlePrintPreview = () => {
     if (!editorRef.current) return;
     const raw = editorRef.current.innerHTML || htmlValue || "";
-    setPrintPreviewHtml(buildComposePrintHtml(sanitizeRichText(raw), pageSettings, "Compose preview"));
+    setPrintPreviewHtml(
+      buildComposePrintHtml(
+        sanitizeRichText(raw),
+        pageSettings,
+        "Compose preview",
+        resolvedTheme === "dark",
+      ),
+    );
     setShowPrintPreview(true);
   };
 
@@ -740,7 +750,7 @@ export function RichTextEditor({
           const colsHtml = Array.from({ length: cols })
             .map(
               (__, colIndex) =>
-                `<td style="border:1px solid #d1d5db; padding:8px;">Cell ${rowIndex + 1}.${colIndex + 1}</td>`,
+                `<td style="border:1px solid ${DOC_PAPER.border}; padding:8px;">Cell ${rowIndex + 1}.${colIndex + 1}</td>`,
             )
             .join("");
           return `<tr>${colsHtml}</tr>`;
@@ -798,7 +808,7 @@ export function RichTextEditor({
       const refCell = cells[Math.min(index, cells.length - 1)];
       const newCell = document.createElement(refCell?.tagName?.toLowerCase() === "th" ? "th" : "td");
       newCell.textContent = "New cell";
-      newCell.style.border = "1px solid #d1d5db";
+      newCell.style.border = `1px solid ${DOC_PAPER.border}`;
       newCell.style.padding = "8px";
       refCell?.insertAdjacentElement("afterend", newCell);
     });
@@ -984,7 +994,7 @@ export function RichTextEditor({
 
   const startTableMove = (table: HTMLTableElement) => {
     if (!editorRef.current) return;
-    table.style.outline = "2px solid #3b82f6";
+    table.style.outline = `2px solid ${readThemeHsl("--primary", THEME_HSL.primary)}`;
     table.style.opacity = "0.85";
 
     const onUp = (event: MouseEvent) => {
@@ -1709,7 +1719,7 @@ export function RichTextEditor({
                     <input
                       type="color"
                       aria-label="Highlight color"
-                      defaultValue="#fff59d"
+                      defaultValue={EDITOR_HIGHLIGHT}
                       onChange={(e) => applyCommandWithValue("hiliteColor", e.target.value)}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
@@ -1874,7 +1884,7 @@ export function RichTextEditor({
               top: imageOverlay.top,
               width: imageOverlay.width,
               height: imageOverlay.height,
-              border: "1px solid #a3a3a3",
+              border: `1px solid ${DOC_PAPER.border}`,
               pointerEvents: "none",
               zIndex: 10,
             }}

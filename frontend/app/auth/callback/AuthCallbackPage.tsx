@@ -34,7 +34,7 @@ export default function AuthCallbackPage() {
   }, [router, searchParams]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       <LoadingState message="Completing sign-in…" />
     </div>
   );

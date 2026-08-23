@@ -25,6 +25,7 @@ import {
   listBatchUploads,
   listCaptureJobs,
   retryCaptureJob,
+  cancelCaptureJob,
   type BatchUpload,
   type CaptureJob,
 } from "@/lib/api/capture";
@@ -46,7 +47,7 @@ function jobStatusBadge(status: CaptureJob["status"]) {
     processing: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
     completed: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
     failed: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-    cancelled: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+    cancelled: "bg-muted text-muted-foreground border-border",
   };
   return <Badge className={styles[status]}>{status}</Badge>;
 }
@@ -68,6 +69,7 @@ function CaptureHubContent() {
   const [jobs, setJobs] = useState<CaptureJob[]>([]);
   const [batches, setBatches] = useState<BatchUpload[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionJobId, setActionJobId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -102,8 +104,108 @@ function CaptureHubContent() {
     return () => clearInterval(interval);
   }, [hasActiveJobs]);
 
-  const activeJobs = jobs.filter((j) => j.status === "pending" || j.status === "processing");
+  const activeJobs = useMemo(() => {
+    const active = jobs.filter((j) => j.status === "pending" || j.status === "processing");
+    const latestByDocument = new Map<string, CaptureJob>();
+    for (const job of active) {
+      const docId = job.document?.id;
+      if (!docId) {
+        latestByDocument.set(job.id, job);
+        continue;
+      }
+      const existing = latestByDocument.get(docId);
+      if (!existing || new Date(job.created_at) > new Date(existing.created_at)) {
+        latestByDocument.set(docId, job);
+      }
+    }
+    return Array.from(latestByDocument.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+  }, [jobs]);
   const completedJobs = jobs.filter((j) => j.status === "completed").slice(0, 20);
+
+  const handleCancelJob = async (jobId: string) => {
+    setActionJobId(jobId);
+    try {
+      await cancelCaptureJob(jobId);
+      toast.success("Job cancelled");
+      await loadData();
+    } catch {
+      toast.error("Failed to cancel job");
+    } finally {
+      setActionJobId(null);
+    }
+  };
+
+  const handleRestartJob = async (jobId: string) => {
+    setActionJobId(jobId);
+    try {
+      await retryCaptureJob(jobId);
+      toast.success("Job restarted from the beginning");
+      await loadData();
+    } catch {
+      toast.error("Failed to restart job");
+    } finally {
+      setActionJobId(null);
+    }
+  };
+
+  const renderJobActions = (job: CaptureJob) => {
+    const busy = actionJobId === job.id;
+
+    if (job.status === "failed") {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          disabled={busy}
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await handleRestartJob(job.id);
+          }}
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : "Restart"}
+        </Button>
+      );
+    }
+
+    if (job.status === "pending" || job.status === "processing") {
+      return (
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={busy}
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              await handleRestartJob(job.id);
+            }}
+          >
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : "Restart"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-muted-foreground"
+            disabled={busy}
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              await handleCancelJob(job.id);
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      );
+    }
+
+    return undefined;
+  };
 
   return (
     <QueuePageShell
@@ -178,28 +280,7 @@ function CaptureHubContent() {
                       )} />
                     </div>
                   )}
-                  actions={job.status === "failed" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={async (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        try {
-                          await retryCaptureJob(job.id);
-                          toast.success("Job requeued");
-                          await loadData();
-                        } catch {
-                          toast.error("Failed to retry job");
-                        }
-                      }}
-                    >
-                      Retry
-                    </Button>
-                  ) : job.status === "processing" ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : undefined}
+                  actions={renderJobActions(job)}
                 >
                   <div className="flex items-start justify-between gap-3 mb-1">
                     <div className="flex-1 min-w-0">

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SealVerificationResult } from "@/components/verify/SealVerificationResult";
 import { VerifyForm } from "@/components/verify/VerifyForm";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
+import { PublicPortalShell } from "@/components/shared/PublicPortalShell";
 import { verifySeal, type SealVerification } from "@/lib/api/seal-verification";
 
 export default function VerifyPage() {
@@ -70,7 +71,8 @@ export default function VerifyPage() {
   }, [serial, retryTick]);
 
   return (
-    <QueuePageShell
+    <PublicPortalShell portalSubtitle="Seal Verification">
+      <QueuePageShell
       title="Verify Seal"
       subtitle={`Verification result for ${serial}`}
       actions={
@@ -162,7 +164,8 @@ export default function VerifyPage() {
           </CardContent>
         </Card>
       </div>
-    </QueuePageShell>
+      </QueuePageShell>
+    </PublicPortalShell>
   );
 }
 

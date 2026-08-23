@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, type ComponentProps } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { highlightText, isOcrMatchField } from "@/lib/search-highlight";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import {
   FileText,
   Download,
@@ -43,6 +45,9 @@ interface DocumentPreviewPanelProps {
   onToggleDocumentFocus?: () => void;
   /** When set, Preview | Versions toggle and Manage strip open this panel. */
   versionsManage?: VersionsManageProps;
+  /** Search highlight from /search?q=…&match=… */
+  highlightQuery?: string;
+  matchField?: string;
 }
 
 function fileTypeLabel(version: DocumentVersion): string {
@@ -66,12 +71,38 @@ export function DocumentPreviewPanel({
   documentFocus = false,
   onToggleDocumentFocus,
   versionsManage,
+  highlightQuery = "",
+  matchField = "",
 }: DocumentPreviewPanelProps) {
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [documentSurface, setDocumentSurface] = useState<"preview" | "manage">("preview");
+  const preferOcr =
+    Boolean(highlightQuery.trim()) &&
+    isOcrMatchField(matchField) &&
+    Boolean(selectedVersion?.ocrText?.trim());
+  const [previewTab, setPreviewTab] = useState<"preview" | "ocr">(preferOcr ? "ocr" : "preview");
+  const ocrPaneRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (preferOcr) setPreviewTab("ocr");
+  }, [preferOcr, highlightQuery, matchField, selectedVersion?.id]);
+
+  useEffect(() => {
+    if (previewTab !== "ocr" || !highlightQuery.trim()) return;
+    const timer = window.setTimeout(() => {
+      ocrPaneRef.current?.querySelector("mark.search-hit")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [previewTab, highlightQuery, selectedVersion?.id]);
+
   const isForm = document.documentType === "form";
   const showVersionStrip = versions.length > 1 || Boolean(versionsManage);
   const isManageMode = documentSurface === "manage" && Boolean(versionsManage) && !isForm;
+  const hasOcr = Boolean(selectedVersion?.ocrText?.trim());
+  const showOcrTab = hasOcr;
 
   const handleDownload = () => {
     if (!selectedVersion || !canDownload) return;
@@ -259,11 +290,44 @@ export function DocumentPreviewPanel({
 
                 <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                   {selectedVersion ? (
-                    <DmsVersionPreviewContent
-                      version={selectedVersion}
-                      expanded={isPreviewFullscreen}
-                      allowDownload={canDownload}
-                    />
+                    showOcrTab ? (
+                      <Tabs
+                        value={previewTab}
+                        onValueChange={(v) => setPreviewTab(v as "preview" | "ocr")}
+                        className="flex h-full min-h-0 flex-col"
+                      >
+                        <TabsList className="mx-3 mt-2 w-fit shrink-0">
+                          <TabsTrigger value="preview">Preview</TabsTrigger>
+                          <TabsTrigger value="ocr">
+                            Extracted text
+                            {preferOcr ? " · match" : ""}
+                          </TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="preview" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                          <DmsVersionPreviewContent
+                            version={selectedVersion}
+                            expanded={isPreviewFullscreen}
+                            allowDownload={canDownload}
+                            highlightQuery={isOcrMatchField(matchField) ? "" : highlightQuery}
+                          />
+                        </TabsContent>
+                        <TabsContent value="ocr" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                          <div
+                            ref={ocrPaneRef}
+                            className="whitespace-pre-wrap p-4 text-sm leading-relaxed text-foreground"
+                          >
+                            {highlightText(selectedVersion.ocrText || "", highlightQuery)}
+                          </div>
+                        </TabsContent>
+                      </Tabs>
+                    ) : (
+                      <DmsVersionPreviewContent
+                        version={selectedVersion}
+                        expanded={isPreviewFullscreen}
+                        allowDownload={canDownload}
+                        highlightQuery={highlightQuery}
+                      />
+                    )
                   ) : (
                     <div className="flex items-center justify-center h-full min-h-[200px] text-sm text-muted-foreground">
                       Select a version to preview.

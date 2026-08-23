@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileText } from "lucide-react";
+import { DOC_PAPER, getPrintPreviewChrome } from "@/lib/theme-colors";
 
 export type PaperSize = "a4" | "letter" | "legal";
 export type PageOrientation = "portrait" | "landscape";
@@ -60,13 +61,15 @@ export function buildComposePrintHtml(
   html: string,
   settings: PageSettings,
   title = "Document",
+  darkChrome = false,
 ): string {
   const dims = getPageDimensions(settings);
   const paperLabel = settings.paperSize.toUpperCase();
   const safeTitle = title.replace(/[<>&"]/g, "");
   const bodyHtml = html.trim()
     ? html
-    : '<p style="color:#6b7280;margin:0;">No content to preview. Add text in the editor first.</p>';
+    : `<p style="color:${DOC_PAPER.muted};margin:0;">No content to preview. Add text in the editor first.</p>`;
+  const { surroundBg, surroundColor } = getPrintPreviewChrome(darkChrome);
 
   const pageCss = `
     @page {
@@ -76,8 +79,8 @@ export function buildComposePrintHtml(
     html, body {
       margin: 0;
       padding: 0;
-      background: #e5e7eb;
-      color: #111827;
+      background: ${surroundBg};
+      color: ${surroundColor};
       font-family: Verdana, Geneva, sans-serif;
       font-size: 12px;
       line-height: 1.5;
@@ -88,17 +91,17 @@ export function buildComposePrintHtml(
       min-height: ${dims.heightMm}mm;
       margin: 16px auto;
       padding: ${settings.marginTop}mm ${settings.marginRight}mm ${settings.marginBottom}mm ${settings.marginLeft}mm;
-      background: #fff;
-      color: #111827;
+      background: ${DOC_PAPER.background};
+      color: ${DOC_PAPER.foreground};
       box-shadow: 0 1px 4px rgba(0,0,0,0.12);
     }
     .sheet img { max-width: 100%; }
     .sheet table { width: 100%; border-collapse: collapse; }
-    .sheet td, .sheet th { border: 1px solid #d1d5db; padding: 8px; }
+    .sheet td, .sheet th { border: 1px solid ${DOC_PAPER.border}; padding: 8px; }
     .sheet ul { list-style: disc; padding-left: 1.5rem; }
     .sheet ol { list-style: decimal; padding-left: 1.5rem; }
     @media print {
-      html, body { background: #fff; }
+      html, body { background: ${DOC_PAPER.background}; }
       .sheet {
         margin: 0;
         box-shadow: none;
@@ -131,7 +134,12 @@ export function openComposePrintPreview(
   settings: PageSettings,
   title = "Document",
 ): void {
-  const fullHtml = buildComposePrintHtml(html, settings, title);
+  const fullHtml = buildComposePrintHtml(
+    html,
+    settings,
+    title,
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+  );
   const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const previewWindow = window.open(url, "_blank");

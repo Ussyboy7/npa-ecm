@@ -408,19 +408,20 @@ Summary:"""
 
 
 class FileUploadService:
-    """Service for processing file uploads (base64 decode, save to disk, OCR)."""
+    """Service for processing file uploads (base64 decode, save to disk).
 
-    SUPPORTED_OCR_TYPES = {
-        'image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf',
-    }
+    OCR is intentionally not run here — it blocks the HTTP request for large
+    PDFs (pdf2image @ 300dpi + Tesseract per page). Background OCR is handled by
+    the DocumentVersion post_save signal and/or capture.process_ocr.
+    """
 
     @classmethod
     def process_data_url(cls, file_url: str, file_name: str, file_type: str,
                          document_identifier: str | None = None,
                          version: object | None = None) -> dict:
-        """Process a base64 data URL: decode, validate, save to disk, run OCR.
+        """Process a base64 data URL: decode, validate, save to disk.
 
-        Returns a dict with keys: file_url, file_size, file_type, file_name, ocr_text (optional).
+        Returns a dict with keys: file_url, file_size, file_type, file_name.
         Raises ValidationError on failure.
         """
         from django.core.files.base import ContentFile
@@ -460,15 +461,6 @@ class FileUploadService:
         if not media_url.startswith('/'):
             media_url = f'/{media_url}'
         data['file_url'] = f"{media_url.rstrip('/')}/{saved_path}"
-
-        if mime_type in cls.SUPPORTED_OCR_TYPES:
-            try:
-                file_full_path = os.path.join(media_root, saved_path)
-                ocr_text = OCRService.extract_text(file_full_path, mime_type)
-                if ocr_text:
-                    data['ocr_text'] = ocr_text
-            except Exception as e:
-                logger.warning("OCR extraction failed after upload: %s", e)
 
         return data
 

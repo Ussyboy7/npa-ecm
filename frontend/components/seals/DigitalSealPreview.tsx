@@ -3,6 +3,13 @@ import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 
 import { useEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from "react";
 import { logError, logWarn } from '@/lib/client-logger';
+import {
+  DOC_PAPER,
+  SEAL_INK,
+  SEAL_PANEL_BG,
+  SEAL_QR,
+  SEAL_SIGNATURE_BG,
+} from '@/lib/theme-colors';
 import QRCode from "qrcode";
 
 interface DigitalSealPreviewProps {
@@ -82,8 +89,8 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
           width: 200,
           margin: 0,
           color: {
-            dark: '#1e3a5f',
-            light: '#ffffff',
+            dark: SEAL_QR.dark,
+            light: SEAL_QR.light,
           },
           errorCorrectionLevel: 'M',
         });
@@ -212,13 +219,13 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
     ctx.clearRect(0, 0, size, size);
 
     // White background circle
-    ctx.fillStyle = "white";
+    ctx.fillStyle = DOC_PAPER.background;
     ctx.beginPath();
     ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
     ctx.fill();
 
     // Outer ring
-    ctx.strokeStyle = "#1e3a5f";
+    ctx.strokeStyle = SEAL_INK;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(centerX, centerY, outerRadius - 1, 0, Math.PI * 2);
@@ -233,7 +240,7 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
     // Draw curved text - Top
     ctx.save();
     ctx.font = `900 ${size * 0.055}px "Arial Black", Arial, sans-serif`;
-    ctx.fillStyle = "#1e3a5f";
+    ctx.fillStyle = SEAL_INK;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     
@@ -258,7 +265,7 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
     // Draw curved text - Bottom
     ctx.save();
     ctx.font = `900 ${size * 0.040}px "Arial Black", Arial, sans-serif`;
-    ctx.fillStyle = "#1e3a5f";
+    ctx.fillStyle = SEAL_INK;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     
@@ -282,7 +289,7 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
 
     // Stars
     ctx.font = `900 ${size * 0.07}px Arial`;
-    ctx.fillStyle = "#1e3a5f";
+    ctx.fillStyle = SEAL_INK;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("★", centerX - textRadius, centerY);
@@ -304,14 +311,14 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
       // Placeholder
       ctx.beginPath();
       ctx.arc(centerX, logoY, logoSize / 2.2, 0, Math.PI * 2);
-      ctx.fillStyle = "#f0f4f8";
+      ctx.fillStyle = SEAL_PANEL_BG;
       ctx.fill();
-      ctx.strokeStyle = "#1e3a5f";
+      ctx.strokeStyle = SEAL_INK;
       ctx.lineWidth = 2;
       ctx.stroke();
       
       ctx.font = `900 ${size * 0.08}px "Arial Black", Arial`;
-      ctx.fillStyle = "#1e3a5f";
+      ctx.fillStyle = SEAL_INK;
       ctx.textAlign = "center";
       ctx.fillText("NPA", centerX, logoY);
     }
@@ -331,14 +338,14 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
       );
     } else {
       ctx.font = `italic 700 ${size * 0.08}px "Brush Script MT", "Segoe Script", cursive`;
-      ctx.fillStyle = "#1a1a2e";
+      ctx.fillStyle = DOC_PAPER.foreground;
       ctx.textAlign = "center";
       ctx.fillText(signatureText, centerX, sigY);
     }
 
     // DIGITALLY APPROVED
     ctx.font = `900 ${size * 0.032}px "Arial Black", Arial, sans-serif`;
-    ctx.fillStyle = "#1e3a5f";
+    ctx.fillStyle = SEAL_INK;
     ctx.textAlign = "center";
     ctx.fillText("DIGITALLY APPROVED", centerX, centerY + size * 0.16);
 
@@ -362,13 +369,13 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
       const qrSize = size * 0.08;
       const qrY = centerY + size * 0.25;
       
-      ctx.fillStyle = "white";
+      ctx.fillStyle = DOC_PAPER.background;
       ctx.fillRect(centerX - qrSize / 2 - 2, qrY - 2, qrSize + 4, qrSize + 4);
-      ctx.strokeStyle = "#1e3a5f";
+      ctx.strokeStyle = SEAL_INK;
       ctx.lineWidth = 1;
       ctx.strokeRect(centerX - qrSize / 2 - 2, qrY - 2, qrSize + 4, qrSize + 4);
       
-      ctx.fillStyle = "#1e3a5f";
+      ctx.fillStyle = SEAL_INK;
       const cellSize = qrSize / 7;
       const qrPattern = [
         [1,1,1,0,1,1,1],

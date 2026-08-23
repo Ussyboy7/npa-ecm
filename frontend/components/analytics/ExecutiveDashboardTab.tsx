@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -23,15 +22,13 @@ import {
   Legend,
 } from 'recharts';
 import {
-  FileDown,
-  Download,
   Flame,
   CheckCircle,
   ArrowRight,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatStrip } from '@/components/shared/StatStrip';
-import { downloadAnalyticsExport, fetchExecutiveAnalytics, type ExecutiveAnalytics } from '@/lib/analytics-client';
+import { fetchExecutiveAnalytics, type ExecutiveAnalytics } from '@/lib/analytics-client';
 import { formatDateShort } from '@/lib/datetime';
 import {
   fetchEnhancedSLAAnalytics,
@@ -43,16 +40,14 @@ import {
   type EfficiencyAnalysis,
   type Escalation,
 } from '@/lib/sla-client';
+import { useThemeChartColors } from '@/hooks/use-theme-chart-colors';
+import { getHeatmapSurfaceClass } from '@/lib/theme-colors';
+import { cn } from '@/lib/utils';
 
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: '#ef4444',
-  high: '#f97316',
-  medium: '#eab308',
-  low: '#22c55e',
-};
+const DEFAULT_RANGE_DAYS = 30;
 
 export const ExecutiveDashboardTab = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('30');
+  const chartColors = useThemeChartColors();
   const [data, setData] = useState<ExecutiveAnalytics | null>(null);
   const [slaData, setSlaData] = useState<EnhancedSLAAnalytics | null>(null);
   const [divisionPerf, setDivisionPerf] = useState<EnhancedDivisionPerformance | null>(null);
@@ -60,7 +55,6 @@ export const ExecutiveDashboardTab = () => {
   const [escalations, setEscalations] = useState<Escalation[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -69,10 +63,10 @@ export const ExecutiveDashboardTab = () => {
       setError(null);
       try {
         const [execResponse, slaResponse, divResponse, effResponse, escResponse] = await Promise.all([
-          fetchExecutiveAnalytics(selectedPeriod),
-          fetchEnhancedSLAAnalytics({ range: parseInt(selectedPeriod) }),
-          fetchEnhancedDivisionPerformance({ range: parseInt(selectedPeriod) }),
-          fetchEfficiencyAnalysis({ range: parseInt(selectedPeriod) }),
+          fetchExecutiveAnalytics(String(DEFAULT_RANGE_DAYS)),
+          fetchEnhancedSLAAnalytics({ range: DEFAULT_RANGE_DAYS }),
+          fetchEnhancedDivisionPerformance({ range: DEFAULT_RANGE_DAYS }),
+          fetchEfficiencyAnalysis({ range: DEFAULT_RANGE_DAYS }),
           fetchEscalations({ status: 'pending' }),
         ]);
         
@@ -98,7 +92,7 @@ export const ExecutiveDashboardTab = () => {
     return () => {
       ignore = true;
     };
-  }, [selectedPeriod]);
+  }, []);
 
   const departmentActivity = data?.departmentActivity ?? [];
   const delayedApprovals = data?.delayedApprovals ?? [];
@@ -118,65 +112,12 @@ export const ExecutiveDashboardTab = () => {
   }, [divisionPerf?.divisions]);
   const bottlenecks = efficiencyData?.bottlenecks ?? [];
 
-  // Chart colors
-  const getComplianceColor = (rate: number) => {
-    if (rate >= 90) return '#22c55e';
-    if (rate >= 75) return '#eab308';
-    if (rate >= 50) return '#f97316';
-    return '#ef4444';
-  };
-
-  const heatmapColor = (slaCompliance: number) => {
-    const complianceIntensity = Math.max(0, (100 - slaCompliance) / 100);
-    const lightness = 95 - complianceIntensity * 40;
-    const hue = slaCompliance >= 80 ? 142 : slaCompliance >= 60 ? 45 : 0;
-    return `hsl(${hue} 70% ${lightness}%)`;
-  };
-
-  const triggerDownload = async (format: 'csv' | 'pdf') => {
-    try {
-      setExporting(format);
-      const blob = await downloadAnalyticsExport({ type: 'executive', format, range: selectedPeriod });
-      const filename = `executive-analytics-${selectedPeriod}d.${format}`;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download export');
-    } finally {
-      setExporting(null);
-    }
-  };
+  // Chart colors (theme tokens)
+  const getComplianceColor = chartColors.complianceColor;
 
   return (
     <ClientErrorBoundary>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-start">
-          <div></div>
-          <div className="flex gap-2 items-center">
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={loading}>
-              <SelectTrigger className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">Last 7 Days</SelectItem>
-                <SelectItem value="30">Last 30 Days</SelectItem>
-                <SelectItem value="90">Last 90 Days</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" onClick={() => triggerDownload('csv')} disabled={loading || exporting !== null}>
-              <Download className="h-4 w-4 mr-2" /> CSV
-            </Button>
-            <Button size="sm" onClick={() => triggerDownload('pdf')} disabled={loading || exporting !== null}>
-              <FileDown className="h-4 w-4 mr-2" /> PDF
-            </Button>
-          </div>
-        </div>
-
         {error && (
           <Card>
             <CardContent className="py-6">
@@ -192,7 +133,7 @@ export const ExecutiveDashboardTab = () => {
               key: "total",
               label: "Total Correspondence",
               value: slaSummary.total,
-              hint: `In the last ${selectedPeriod} days`,
+              hint: `In the last ${DEFAULT_RANGE_DAYS} days`,
             },
             {
               key: "compliance",
@@ -253,9 +194,9 @@ export const ExecutiveDashboardTab = () => {
                         layout="vertical"
                         margin={{ left: 20, right: 20 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                        <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                        <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
+                        <CartesianGrid strokeDasharray="3 3" horizontal stroke={chartColors.gridStroke} vertical={false} />
+                        <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12, fill: chartColors.axisFill }} />
+                        <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12, fill: chartColors.axisFill }} />
                         <Tooltip formatter={(value: number) => [`${value}%`, 'SLA Compliance']} />
                         <Bar dataKey="slaComplianceRate" radius={[0, 4, 4, 0]}>
                           {slaByDivision.slice(0, 8).map((entry, index) => (
@@ -282,7 +223,7 @@ export const ExecutiveDashboardTab = () => {
                           <div className="flex items-center gap-2">
                             <div
                               className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: PRIORITY_COLORS[item.priority] }}
+                              style={{ backgroundColor: chartColors.priorityColor(item.priority) }}
                             />
                             <span className="font-medium capitalize">{item.label}</span>
                           </div>
@@ -323,13 +264,13 @@ export const ExecutiveDashboardTab = () => {
                     </div>
                   ) : (
                     <LineChart data={weeklyTrend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
+                      <XAxis dataKey="week" tick={{ fontSize: 12, fill: chartColors.axisFill }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: chartColors.axisFill }} />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="completed" stroke="#16a34a" strokeWidth={2} name="Completed" />
-                      <Line type="monotone" dataKey="pending" stroke="#dc2626" strokeWidth={2} name="Pending" />
+                      <Line type="monotone" dataKey="completed" stroke={chartColors.lineCompleted} strokeWidth={2} name="Completed" />
+                      <Line type="monotone" dataKey="pending" stroke={chartColors.linePending} strokeWidth={2} name="Pending" />
                     </LineChart>
                   )}
                 </ResponsiveContainer>
@@ -353,8 +294,7 @@ export const ExecutiveDashboardTab = () => {
                     slaByDivision.map((div) => (
                       <div
                         key={div.id ?? div.name}
-                        className="rounded-lg border p-4 space-y-3"
-                        style={{ backgroundColor: heatmapColor(div.slaComplianceRate) }}
+                        className={cn("space-y-3 rounded-lg border p-4", getHeatmapSurfaceClass(div.slaComplianceRate))}
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold">{div.name}</span>
@@ -394,9 +334,9 @@ export const ExecutiveDashboardTab = () => {
                       </div>
                     ) : (
                       <BarChart data={departmentActivity}>
-                        <CartesianGrid vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" />
-                        <YAxis allowDecimals={false} />
+                        <CartesianGrid vertical={false} stroke={chartColors.gridStroke} />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: chartColors.axisFill }} interval={0} angle={-15} textAnchor="end" />
+                        <YAxis allowDecimals={false} tick={{ fill: chartColors.axisFill }} />
                         <Tooltip />
                         <Bar dataKey="total" fill="hsl(var(--primary))" />
                       </BarChart>

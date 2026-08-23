@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,7 +11,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from "@/components/ui/sonner";
 import { Scan, Upload, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { createDocument } from '@/lib/api/dms';
-import { processOCR } from '@/lib/api/capture';
 import { logError } from '@/lib/client-logger';
 import { useRouter } from 'next/navigation';
 import {
@@ -38,12 +37,11 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   const router = useRouter();
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [scanPhase, setScanPhase] = useState("");
   const [scannedFile, setScannedFile] = useState<File | null>(null);
   const [scanMode, setScanMode] = useState<'manual' | 'scanner'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { getSignal, reset } = useAbortController();
-
-
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -75,14 +73,14 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
     }
 
 
-    const signal = getSignal();
+    getSignal();
 
     setIsScanning(true);
     setScanProgress(0);
+    setScanPhase("Reading file…");
 
     try {
-      // Step 1: Read file
-      setScanProgress(10);
+      setScanProgress(15);
       const fileUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -90,8 +88,8 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
         reader.readAsDataURL(scannedFile);
       });
 
-      // Step 2: Create document with version
-      setScanProgress(30);
+      setScanProgress(40);
+      setScanPhase("Uploading document…");
       const document = await createDocument(
         {
           title: scannedFile.name.replace(/\.[^/.]+$/, ''),
@@ -108,51 +106,42 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
         }
       );
 
-      // Step 3: Process OCR automatically
-      setScanProgress(70);
-      try {
-        await processOCR(document.id, {
-          language: 'eng',
-          extract_metadata: true,
-        });
-        setScanProgress(90);
-        toast.success('Document scanned and OCR processing started');
-      } catch (error: unknown) {
-        logError('Failed to start OCR processing', error);
-        // Continue even if OCR fails
-      }
+      setScanProgress(90);
+      setScanPhase("Finishing…");
 
       setScanProgress(100);
-      toast.success('Document scanned successfully');
-      
-      // Navigate to document after a short delay
-      setTimeout(() => {
-        onOpenChange(false);
-        router.push(`/dms/${document.id}`);
-      }, 1000);
+      setScanPhase("Done");
+      setIsScanning(false);
+      toast.success('Document uploaded — OCR will start automatically');
 
+      onOpenChange(false);
+      router.push(`/dms/${document.id}`);
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
+        setIsScanning(false);
+        setScanProgress(0);
+        setScanPhase("");
         return;
       }
       logError('Scan failed', error);
       toast.error((error instanceof Error ? error.message : 'Failed to scan document'));
       setIsScanning(false);
       setScanProgress(0);
+      setScanPhase("");
     }
-  }, [scannedFile, scanMode, router, onOpenChange]);
+  }, [scannedFile, scanMode, router, onOpenChange, getSignal]);
 
   const handleClose = useCallback(() => {
     if (isScanning) {
-      // Cancel scan if in progress
       reset();
       setIsScanning(false);
     }
     setScannedFile(null);
     setScanProgress(0);
+    setScanPhase("");
     setScanMode('manual');
     onOpenChange(false);
-  }, [isScanning, onOpenChange]);
+  }, [isScanning, onOpenChange, reset]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -251,7 +240,7 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
               {isScanning && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span>Scanning Progress</span>
+                    <span>{scanPhase || "Scanning Progress"}</span>
                     <span>{scanProgress}%</span>
                   </div>
                   <Progress value={scanProgress} />
@@ -277,7 +266,7 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
             {isScanning ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Scanning...
+                {scanPhase || "Scanning…"}
               </>
             ) : (
               <>

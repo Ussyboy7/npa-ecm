@@ -17,6 +17,7 @@ import {
   fetchCorrespondenceAttachmentContent,
 } from '@/lib/correspondence-url-utils';
 import { downloadCaseCompletionPackage } from '@/lib/api/cases';
+import { DOC_PAPER } from '@/lib/theme-colors';
 
 export type CanonicalDocRef =
   | { kind: 'dms-version'; versionId: string; fileName?: string }
@@ -58,7 +59,7 @@ async function openPrintBlob(blob: Blob): Promise<void> {
 
   printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Print</title>
 <style>
-  html, body { margin: 0; padding: 0; background: #fff; }
+  html, body { margin: 0; padding: 0; background: ${DOC_PAPER.background}; }
   .page { page-break-after: always; text-align: center; }
   .page:last-child { page-break-after: auto; }
   img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
@@ -66,7 +67,7 @@ async function openPrintBlob(blob: Blob): Promise<void> {
     .page { page-break-after: always; }
     .page:last-child { page-break-after: auto; }
   }
-</style></head><body><p style="font:14px sans-serif;padding:24px;color:#666">Preparing print…</p></body></html>`);
+</style></head><body><p style="font:14px sans-serif;padding:24px;color:${DOC_PAPER.muted}">Preparing print…</p></body></html>`);
   printWindow.document.close();
 
   try {

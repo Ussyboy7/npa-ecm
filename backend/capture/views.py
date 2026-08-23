@@ -21,6 +21,7 @@ from capture.serializers import (
     ScanSessionSerializer,
 )
 from capture.tasks import process_batch_upload, process_ocr_job
+from capture.services import queue_ocr_job
 
 
 class CaptureJobViewSet(viewsets.ModelViewSet):
@@ -56,34 +57,46 @@ class CaptureJobViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def retry(self, request, pk=None):
-        """Retry a failed or stuck pending job."""
+        """Retry a failed, pending, or stuck processing job (full restart)."""
         job = self.get_object()
-        
-        # Only allow retry for failed or stuck pending jobs
-        if job.status not in [CaptureJob.JobStatus.FAILED, CaptureJob.JobStatus.PENDING]:
+
+        if job.status not in [
+            CaptureJob.JobStatus.FAILED,
+            CaptureJob.JobStatus.PENDING,
+            CaptureJob.JobStatus.PROCESSING,
+        ]:
             return Response(
-                {"error": "Job can only be retried if it's failed or stuck in pending"},
+                {"error": "Job can only be retried if it's failed, pending, or stuck processing"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
-        # Reset job status
+
         job.status = CaptureJob.JobStatus.PENDING
         job.error_message = None
-        job.save(update_fields=["status", "error_message"])
-        
-        # Queue the task again
+        job.progress_percentage = 0
+        job.processed_items = 0
+        job.total_items = 0
+        job.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "progress_percentage",
+                "processed_items",
+                "total_items",
+            ]
+        )
+
         try:
             if job.job_type == CaptureJob.JobType.OCR:
                 process_ocr_job.delay(str(job.id))
                 return Response({
                     "status": "retried",
-                    "message": "Job has been queued for processing"
+                    "message": "Job has been queued for processing",
+                    "job": CaptureJobSerializer(job).data,
                 })
-            else:
-                return Response(
-                    {"error": "Retry not supported for this job type"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            return Response(
+                {"error": "Retry not supported for this job type"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except Exception as e:
             logger.error(f"Failed to retry job {job.id}: {str(e)}")
             job.status = CaptureJob.JobStatus.FAILED
@@ -92,7 +105,7 @@ class CaptureJobViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     "error": "Failed to queue job for retry",
-                    "detail": str(e)
+                    "detail": str(e),
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
@@ -187,40 +200,37 @@ class CaptureViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        capture_job = CaptureJob.objects.create(
-            job_type=CaptureJob.JobType.OCR,
-            status=CaptureJob.JobStatus.PENDING,
-            created_by=request.user,
-            document=document,
-            config={
-                "language": language if not auto_detect_language else None,
-                "auto_detect_language": auto_detect_language,
-                "extract_metadata": extract_metadata,
-                "force_reprocess": force_reprocess,
-            },
-        )
-
-        # Process asynchronously - handle Redis connection errors gracefully
         try:
-            process_ocr_job.delay(str(capture_job.id))
+            capture_job, created = queue_ocr_job(
+                document=document,
+                created_by=request.user,
+                config={
+                    "language": language if not auto_detect_language else None,
+                    "auto_detect_language": auto_detect_language,
+                    "extract_metadata": extract_metadata,
+                    "force_reprocess": force_reprocess,
+                },
+                force_reprocess=force_reprocess,
+            )
         except Exception as e:
-            # If Celery broker (Redis) is unavailable, log error and mark job as failed
-            logger.error(f"Failed to queue OCR job {capture_job.id}: {str(e)}")
-            capture_job.status = CaptureJob.JobStatus.FAILED
-            capture_job.error_message = f"Failed to queue job: {str(e)}"
-            capture_job.save()
+            logger.error(f"Failed to queue OCR job for document {document_id}: {str(e)}")
+            failed_job = CaptureJob.objects.filter(
+                document=document,
+                job_type=CaptureJob.JobType.OCR,
+                status=CaptureJob.JobStatus.FAILED,
+            ).order_by("-created_at").first()
             return Response(
                 {
                     "error": "Failed to queue OCR job. Please ensure Redis is running.",
                     "detail": str(e),
-                    "job": CaptureJobSerializer(capture_job).data,
+                    "job": CaptureJobSerializer(failed_job).data if failed_job else None,
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         return Response(
             CaptureJobSerializer(capture_job).data,
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
     @action(detail=False, methods=["post"])

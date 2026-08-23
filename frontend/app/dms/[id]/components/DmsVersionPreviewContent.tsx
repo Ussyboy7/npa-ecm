@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, FileText, Loader2, AlertCircle } from "lucide-react";
 import { sanitizeRichText } from "@/lib/sanitize-html";
+import { highlightHtml } from "@/lib/search-highlight";
 import {
   downloadCanonicalDocument,
   fetchCanonicalContent,
@@ -16,12 +17,32 @@ interface DmsVersionPreviewContentProps {
   version: DocumentVersion;
   expanded?: boolean;
   allowDownload?: boolean;
+  /** When set (from Search), highlight matches in HTML / Word preview. */
+  highlightQuery?: string;
+}
+
+function useScrollToSearchHit(enabled: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const root = containerRef.current;
+    if (!root) return;
+    const timer = window.setTimeout(() => {
+      root.querySelector("mark.search-hit")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [enabled]);
+  return containerRef;
 }
 
 export function DmsVersionPreviewContent({
   version,
   expanded = false,
   allowDownload = true,
+  highlightQuery = "",
 }: DmsVersionPreviewContentProps) {
   const minHeight = expanded ? "min-h-[480px]" : "min-h-[200px]";
   const fileName = version.fileName || "Document";
@@ -31,6 +52,8 @@ export function DmsVersionPreviewContent({
   const isWordDoc = fileName.toLowerCase().endsWith(".doc");
   const hasHtml = Boolean(version.contentHtml && version.contentHtml.trim() !== "");
   const hasBinary = Boolean(version.hasFile || version.id);
+  const highlightActive = Boolean(highlightQuery.trim());
+  const containerRef = useScrollToSearchHit(highlightActive);
 
   const [apiBlobUrl, setApiBlobUrl] = useState<string | null>(null);
   const [apiPdfBytes, setApiPdfBytes] = useState<ArrayBuffer | null>(null);
@@ -110,24 +133,32 @@ export function DmsVersionPreviewContent({
       </button>
     ) : null;
 
-  if (hasHtml) {
+  const renderHighlightedHtml = (html: string) => {
+    const sanitized = sanitizeRichText(html);
+    const withHits = highlightQuery.trim()
+      ? highlightHtml(sanitized, highlightQuery.trim())
+      : sanitized;
     return (
       <div
+        ref={containerRef}
         className={`document-print-area doc-paper ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
         style={{
           fontFamily: "Verdana, Geneva, sans-serif",
           fontSize: "12px",
           lineHeight: "1.5",
-          color: "#000",
           padding: expanded ? "40px" : "24px",
           maxWidth: "800px",
           margin: "0 auto",
           textAlign: "left",
         }}
       >
-        <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml || "") }} />
+        <div dangerouslySetInnerHTML={{ __html: withHits }} />
       </div>
     );
+  };
+
+  if (hasHtml) {
+    return renderHighlightedHtml(version.contentHtml || "");
   }
 
   if (!version.id) {
@@ -188,23 +219,7 @@ export function DmsVersionPreviewContent({
   }
 
   if (isWordDocx && wordHtml) {
-    return (
-      <div
-        className={`document-print-area doc-paper ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
-        style={{
-          fontFamily: "Verdana, Geneva, sans-serif",
-          fontSize: "12px",
-          lineHeight: "1.5",
-          color: "#000",
-          padding: expanded ? "40px" : "24px",
-          maxWidth: "800px",
-          margin: "0 auto",
-          textAlign: "left",
-        }}
-      >
-        <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
-      </div>
-    );
+    return renderHighlightedHtml(wordHtml);
   }
 
   if (isWordDoc) {

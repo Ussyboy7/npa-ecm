@@ -257,16 +257,14 @@ export const DocumentVersionPreviewModal = ({
                 {version.contentHtml && version.contentHtml.trim() !== '' ? (
                   // Priority 1: Show HTML content from editor (sanitized)
                   <div
-                    className="document-print-area"
+                    className="document-print-area doc-paper"
                     style={{
                       fontFamily: "Verdana, Geneva, sans-serif",
                       fontSize: "12px",
                       lineHeight: "1.5",
-                      color: "#000",
                       padding: "40px",
                       maxWidth: "800px",
                       margin: "0 auto",
-                      background: "#fff",
                       textAlign: "left",
                     }}
                   >
@@ -445,16 +443,14 @@ export const DocumentVersionPreviewModal = ({
           ) : version.contentHtml && version.contentHtml.trim() !== '' ? (
             // Priority 1: Show HTML content from editor (sanitized)
             <div
-              className="document-print-area"
+              className="document-print-area doc-paper"
               style={{
                 fontFamily: "Verdana, Geneva, sans-serif",
                 fontSize: "12px",
                 lineHeight: "1.5",
-                color: "#000",
                 padding: "40px",
                 maxWidth: "800px",
                 margin: "0 auto",
-                background: "#fff",
                 textAlign: "left",
               }}
             >
