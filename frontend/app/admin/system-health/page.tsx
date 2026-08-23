@@ -6,14 +6,7 @@ import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
@@ -177,44 +170,7 @@ export default function SystemHealthPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" /> Recent User Activity
-                </CardTitle>
-                <CardDescription>Latest audit log entries across the platform</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Time</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Description</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {status.recent_activity.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {formatDateTime(entry.timestamp)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {entry.user?.username ?? "System"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{entry.action}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-md truncate">
-                          {entry.description || entry.object_repr}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+
           </div>
         ) : null}
       </ClientErrorBoundary>
