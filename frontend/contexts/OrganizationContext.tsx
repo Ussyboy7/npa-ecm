@@ -117,7 +117,6 @@ export const OrganizationProvider: React.FC<{
         directoratesRows,
         divisionsRows,
         departmentsRows,
-        delegationsRaw,
         rolesRows,
         officesRows,
         officeMembershipsRows,
@@ -125,7 +124,6 @@ export const OrganizationProvider: React.FC<{
         fetchFirstPage('/organization/directorates/?ordering=name'),
         fetchFirstPage('/organization/divisions/?ordering=name'),
         fetchFirstPage('/organization/departments/?ordering=name'),
-        fetchAllCatalogPaginated<Record<string, unknown>>('/correspondence/delegations/'),
         fetchFirstPage('/organization/roles/?ordering=name'),
         fetchFirstPage('/organization/offices/?ordering=name'),
         fetchFirstPage('/organization/office-memberships/?ordering=office__name'),
@@ -134,7 +132,6 @@ export const OrganizationProvider: React.FC<{
       const apiDirectorates = directoratesRows.map(mapApiDirectorate);
       const apiDivisions = divisionsRows.map(mapApiDivision);
       const apiDepartments = departmentsRows.map(mapApiDepartment);
-      const apiDelegations = delegationsRaw.filter(isRecord).map(mapApiDelegation);
       const apiRoles = rolesRows.map(mapApiRole);
       const apiOffices = officesRows.map(mapApiOffice);
       const apiOfficeMemberships = officeMembershipsRows.map(mapApiOfficeMembership);
@@ -147,7 +144,6 @@ export const OrganizationProvider: React.FC<{
       setDirectorates(sortedDirectorates);
       setDivisions(sortedDivisions);
       setDepartments(sortedDepartments);
-      setAssistantAssignments(apiDelegations);
       const sortedOffices = sortByName(apiOffices);
       setOffices(sortedOffices);
       setOfficeMemberships(apiOfficeMemberships);
@@ -166,6 +162,12 @@ export const OrganizationProvider: React.FC<{
         divisions: sortedDivisions.length,
         departments: sortedDepartments.length,
       });
+
+      // Defer delegations fetch — only 6 pages need this
+      fetchFirstPage('/correspondence/delegations/').then((rows) => {
+        const apiDelegations = rows.filter(isRecord).map(mapApiDelegation);
+        setAssistantAssignments(apiDelegations);
+      }).catch((err) => logError('Failed to load delegations', err));
     } catch (error: unknown) {
       logError('Failed to load organization data from API', error);
       if (error instanceof Error) {
