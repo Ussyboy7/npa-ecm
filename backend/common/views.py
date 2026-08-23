@@ -319,6 +319,202 @@ class AdminDashboardAlertsView(APIView):
         )
 
 
+class OnlineUsersView(APIView):
+    """List currently online users."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from organization.permission_utils import require_permission
+        from accounts.presence import list_online_users, presence_window_seconds
+
+        require_permission(request.user, "can_access_system_health")
+
+        users = list_online_users()
+        return Response(
+            {
+                "users": users,
+                "count": len(users),
+                "presenceWindowSeconds": presence_window_seconds(),
+            }
+        )
+
+
+class SystemMetricsView(APIView):
+    """Infrastructure metrics, performance, and backup status."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from organization.permission_utils import require_permission
+        from common.middleware import read_api_timing_window
+
+        require_permission(request.user, "can_access_system_health")
+
+        import shutil
+
+        api_uptime_seconds = int(time.time() - _START_TIME)
+        api_uptime_hours = api_uptime_seconds // 3600
+        api_uptime_minutes = (api_uptime_seconds % 3600) // 60
+        if api_uptime_hours > 0:
+            api_uptime_text = f"{api_uptime_hours}h {api_uptime_minutes}m"
+        else:
+            api_uptime_text = f"{api_uptime_minutes}m"
+
+        db_uptime_text = None
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT now() - pg_postmaster_start_time()")
+                row = cursor.fetchone()
+                if row and row[0]:
+                    interval = row[0]
+                    if hasattr(interval, "total_seconds"):
+                        secs = int(interval.total_seconds())
+                    else:
+                        secs = 0
+                    db_hours = secs // 3600
+                    db_days = db_hours // 24
+                    if db_days > 0:
+                        db_uptime_text = f"{db_days}d {db_hours % 24}h"
+                    else:
+                        db_uptime_text = f"{db_hours}h"
+        except Exception:
+            pass
+
+        db_engine = "PostgreSQL"
+
+        media_root = getattr(settings, "MEDIA_ROOT", "/app/media")
+        disk_info = {"total_gb": 0, "free_gb": 0, "used_pct": 0}
+        try:
+            usage = shutil.disk_usage(str(media_root))
+            total_gb = round(usage.total / (1024**3), 1)
+            free_gb = round(usage.free / (1024**3), 1)
+            used_pct = round(((usage.total - usage.free) / usage.total) * 100, 1)
+            disk_info = {"total_gb": total_gb, "free_gb": free_gb, "used_pct": used_pct}
+        except Exception:
+            pass
+
+        media_size_gb = 0
+        try:
+            total_size = 0
+            for dirpath, dirnames, filenames in os.walk(str(media_root)):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    if os.path.isfile(fp):
+                        total_size += os.path.getsize(fp)
+            media_size_gb = round(total_size / (1024**3), 2)
+        except Exception:
+            pass
+
+        timing = read_api_timing_window()
+
+        backup = _check_backup_status()
+
+        return Response(
+            {
+                "systemHealth": [
+                    {
+                        "name": "API Server",
+                        "status": "healthy",
+                        "icon": "Server",
+                        "uptime": api_uptime_text,
+                        "detail": f"Process started {timezone.now().strftime('%H:%M')}",
+                    },
+                    {
+                        "name": "Database",
+                        "status": "healthy" if db_uptime_text else "unknown",
+                        "icon": "Database",
+                        "uptime": db_uptime_text,
+                        "detail": f"Engine: {db_engine}",
+                    },
+                    {
+                        "name": "File Storage",
+                        "status": "healthy" if disk_info["used_pct"] < 90 else "warning",
+                        "icon": "HardDrive",
+                        "uptime": None,
+                        "detail": f"{disk_info['free_gb']} GB free of {disk_info['total_gb']} GB ({disk_info['used_pct']}% used)",
+                        "diskUsage": disk_info,
+                    },
+                ],
+                "performance": {
+                    "responseTimeMs": timing.get("avg_ms"),
+                    "errorRate": timing.get("error_rate_pct"),
+                    "responseTimeSample": timing.get("sample"),
+                    "mediaStorageGb": media_size_gb,
+                },
+                "backup": backup,
+                "uptimeSeconds": api_uptime_seconds,
+            }
+        )
+
+
+class BackupLatestDownloadView(APIView):
+    """Download the latest backup file (superuser only)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied("Superuser access required.")
+
+        backup_dir = getattr(
+            settings,
+            "BACKUP_DIR",
+            os.path.join(settings.BASE_DIR, "backups", "local"),
+        )
+
+        if not os.path.isdir(backup_dir):
+            from django.http import Http404
+
+            raise Http404("No backup directory found.")
+
+        patterns = ["db-*.sql", "predeploy_*.sql", "*.dump"]
+        backup_files = []
+        for pattern in patterns:
+            backup_files.extend(glob.glob(os.path.join(backup_dir, pattern)))
+
+        if not backup_files:
+            from django.http import Http404
+
+            raise Http404("No backup files found.")
+
+        latest = max(backup_files, key=os.path.getmtime)
+        from django.http import FileResponse
+
+        return FileResponse(
+            open(latest, "rb"),
+            as_attachment=True,
+            filename=os.path.basename(latest),
+        )
+
+
+class LiveDashboardView(APIView):
+    """Lightweight 30s poll: online count + system health only."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from organization.permission_utils import require_permission
+        from accounts.presence import count_online_users, presence_window_seconds
+
+        require_permission(request.user, "can_access_system_health")
+
+        services, _ = _check_services()
+
+        return Response(
+            {
+                "onlineNow": count_online_users(),
+                "presenceWindowSeconds": presence_window_seconds(),
+                "systemHealth": [
+                    {"name": name, "status": status} for name, status in services.items()
+                ],
+                "serverTime": timezone.now().isoformat(),
+            }
+        )
+
+
 @require_http_methods(["GET"])
 def health_live(request):
     """

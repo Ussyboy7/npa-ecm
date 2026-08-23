@@ -8,6 +8,10 @@ from .views import (
     AdminDashboardOverviewView,
     UsersByRoleView,
     AdminDashboardAlertsView,
+    OnlineUsersView,
+    SystemMetricsView,
+    BackupLatestDownloadView,
+    LiveDashboardView,
 )
 
 urlpatterns = [
@@ -26,6 +30,26 @@ urlpatterns = [
         "admin-dashboard/alerts/",
         AdminDashboardAlertsView.as_view(),
         name="admin-dashboard-alerts",
+    ),
+    path(
+        "admin-dashboard/online-users/",
+        OnlineUsersView.as_view(),
+        name="admin-dashboard-online-users",
+    ),
+    path(
+        "admin-dashboard/metrics/",
+        SystemMetricsView.as_view(),
+        name="admin-dashboard-metrics",
+    ),
+    path(
+        "admin-dashboard/backup/download/",
+        BackupLatestDownloadView.as_view(),
+        name="admin-dashboard-backup-download",
+    ),
+    path(
+        "admin-dashboard/live/",
+        LiveDashboardView.as_view(),
+        name="admin-dashboard-live",
     ),
     path("protected-media/<path:path>", ProtectedMediaView.as_view(), name="protected-media"),
 ]

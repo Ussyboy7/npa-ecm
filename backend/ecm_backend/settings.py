@@ -134,6 +134,7 @@ MIDDLEWARE = [
     "common.middleware.UserActivityMiddleware",  # Track user activity
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "common.middleware.ApiTimingMiddleware",  # Track API response times for admin dashboard
 ]
 
 ROOT_URLCONF = "ecm_backend.urls"

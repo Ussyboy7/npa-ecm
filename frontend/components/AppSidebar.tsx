@@ -72,6 +72,7 @@ export function AppSidebar() {
     }
     if (path === '/inbox') return pathname === '/inbox';
     if (path === '/verify') return pathname.startsWith('/verify');
+    if (path === '/admin') return pathname === '/admin';
     if (path === '/admin/organization') return pathname === '/admin/organization' || pathname.startsWith('/admin/acting-appointments');
     if (path === '/admin/acting-appointments') return pathname === '/admin/acting-appointments';
     if (path === '/admin/users-roles') return ['/admin/users-roles', '/admin/users', '/admin/roles', '/admin/assistants'].includes(pathname);
@@ -286,7 +287,7 @@ export function AppSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {visibility.showAdminDashboard && <AdminNavItem href="/admin/dashboard" icon={LayoutDashboard} label="Dashboard" isActive={isActivePath('/admin/dashboard')} isCollapsed={isCollapsed} />}
+                    {visibility.showAdminDashboard && <AdminNavItem href="/admin" icon={LayoutDashboard} label="Dashboard" isActive={isActivePath('/admin')} isCollapsed={isCollapsed} />}
 
                     {showOrgAccessAdmin && (
                       <SidebarSubsectionLabel label="Org & access" isCollapsed={isCollapsed} />
