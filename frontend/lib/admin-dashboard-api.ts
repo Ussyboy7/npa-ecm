@@ -29,6 +29,8 @@ export interface DashboardMetrics {
   systemHealth: SystemHealthItem[];
   performance: PerformanceMetrics;
   backup: BackupStatus;
+  onlineNow: number;
+  presenceWindowSeconds: number;
   uptimeSeconds: number;
 }
 

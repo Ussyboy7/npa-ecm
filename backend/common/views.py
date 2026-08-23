@@ -379,6 +379,7 @@ class SystemMetricsView(APIView):
 
     def get(self, request):
         from organization.permission_utils import require_permission
+        from accounts.presence import count_online_users, presence_window_seconds
         from common.middleware import read_api_timing_window
 
         require_permission(request.user, "can_access_system_health")
@@ -475,6 +476,8 @@ class SystemMetricsView(APIView):
                     "mediaStorageGb": media_size_gb,
                 },
                 "backup": backup,
+                "onlineNow": count_online_users(),
+                "presenceWindowSeconds": presence_window_seconds(),
                 "uptimeSeconds": api_uptime_seconds,
             }
         )

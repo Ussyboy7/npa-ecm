@@ -124,6 +124,10 @@ export default function AdminPage() {
       setMetrics(m as DashboardMetrics | null);
       setUsersByRole(ur as UsersByRoleResponse | null);
       setAlerts(al as DashboardAlerts | null);
+      if (m) {
+        setOnlineNow((m as DashboardMetrics).onlineNow ?? 0);
+        setPresenceWindow((m as DashboardMetrics).presenceWindowSeconds ?? 120);
+      }
     } finally {
       if (isMountedRef.current) setLoading(false);
       inFlightRef.current = false;
