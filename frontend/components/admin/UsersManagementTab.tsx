@@ -2,6 +2,7 @@
 import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
@@ -156,6 +157,7 @@ export const UsersManagementTab = forwardRef<
   // Load from URL params or localStorage
   const [internalSearchQuery, setInternalSearchQuery] = useState('');
   const searchQuery = controlledSearchQuery ?? internalSearchQuery;
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const setSearchQuery = useCallback((value: string) => {
     onSearchQueryChange?.(value);
     if (controlledSearchQuery === undefined) {
@@ -272,8 +274,8 @@ export const UsersManagementTab = forwardRef<
         page_size: pageSize,
       };
       
-      if (searchQuery.trim()) {
-        queryParams.search = searchQuery.trim();
+      if (debouncedSearchQuery.trim()) {
+        queryParams.search = debouncedSearchQuery.trim();
       }
       
       // Apply filters
@@ -328,7 +330,7 @@ export const UsersManagementTab = forwardRef<
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, filters, sortState, resolveRoleId]);
+  }, [currentPage, pageSize, debouncedSearchQuery, filters, sortState, resolveRoleId]);
   
   // Map API users to local User type (must be before useEffects that use it)
   const mappedUsers = useMemo(() => {

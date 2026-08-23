@@ -8,6 +8,69 @@ from organization.permission_utils import get_role_permissions
 from .models import User, ExecutiveSignature, DocumentSeal, SignatureTemplate, UserSignaturePreferences
 
 
+class UserListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for list views — excludes permissions and password."""
+    system_role_name = serializers.SerializerMethodField()
+    directorate_name = serializers.SerializerMethodField()
+    division_name = serializers.SerializerMethodField()
+    department_name = serializers.SerializerMethodField()
+
+    def get_system_role_name(self, obj):
+        try:
+            if obj.system_role:
+                return obj.system_role.name
+            if getattr(obj, 'is_superuser', False):
+                return "System Administrator"
+            return ""
+        except (AttributeError, ValueError):
+            return ""
+
+    def get_directorate_name(self, obj):
+        try:
+            return obj.directorate.name if obj.directorate else ""
+        except (AttributeError, ValueError):
+            return ""
+
+    def get_division_name(self, obj):
+        try:
+            return obj.division.name if obj.division else ""
+        except (AttributeError, ValueError):
+            return ""
+
+    def get_department_name(self, obj):
+        try:
+            return obj.department.name if obj.department else ""
+        except (AttributeError, ValueError):
+            return ""
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_active",
+            "is_superuser",
+            "is_staff",
+            "is_management",
+            "grade_level",
+            "system_role",
+            "system_role_name",
+            "employee_id",
+            "directorate",
+            "division",
+            "department",
+            "directorate_name",
+            "division_name",
+            "department_name",
+            "last_login",
+            "date_joined",
+        ]
+        read_only_fields = ["id", "last_login", "date_joined"]
+
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=False, trim_whitespace=False)
     directorate = serializers.PrimaryKeyRelatedField(

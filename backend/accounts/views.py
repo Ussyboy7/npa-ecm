@@ -29,6 +29,7 @@ from .login_mfa import (
 from common.throttles import LoginRateThrottle, OTPRateThrottle, PasswordChangeRateThrottle
 from .models import User, ExecutiveSignature, DocumentSeal, SealOTP, SignatureTemplate, UserSignaturePreferences
 from .serializers import (
+    UserListSerializer,
     UserSerializer, 
     ExecutiveSignatureSerializer,
     ExecutiveSignatureUploadSerializer,
@@ -126,6 +127,11 @@ class UserViewSet(viewsets.ModelViewSet):
 
     queryset = User.objects.select_related("directorate", "division", "department", "system_role")
     serializer_class = UserSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return UserListSerializer
+        return UserSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
