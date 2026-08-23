@@ -77,7 +77,8 @@ class Command(BaseCommand):
             # Only create users if not skipped
             if options.get("skip_users"):
                 self.stdout.write(self.style.WARNING("Skipping mock user creation (--skip-users flag set)"))
-                users = {}
+                users = {u.username: u for u in User.objects.filter(is_active=True)}
+                self.stdout.write(self.style.SUCCESS(f"Using {len(users)} existing active users"))
             else:
                 users = self._ensure_users(data.get("MOCK_USERS", []), directorates, divisions, departments)
             
