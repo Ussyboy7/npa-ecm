@@ -35,6 +35,7 @@ pnpm-debug.log*
 
 # opencode
 .opencode/
+.superpowers/
 
 # TypeScript
 *.tsbuildinfo
