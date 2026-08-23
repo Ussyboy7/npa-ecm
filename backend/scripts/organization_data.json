@@ -770,16 +770,6 @@
       "active": true
     },
     {
-      "id": "user-gm-marine",
-      "name": "Capt. Jerome Bitrus Angyunwe",
-      "email": "gm.marine@npa.gov.ng",
-      "employeeId": "NPA011",
-      "gradeLevel": "MSS1",
-      "division": "div-marine",
-      "systemRole": "General Manager",
-      "active": true
-    },
-    {
       "id": "user-gm-csp",
       "name": "Iyawe Seyi Akinyemi",
       "email": "gm.csp@npa.gov.ng",
@@ -960,26 +950,6 @@
       "active": true
     },
     {
-      "id": "user-gm-erm",
-      "name": "Ifunanya Nwankwo",
-      "email": "gm.erm@npa.gov.ng",
-      "employeeId": "NPA030",
-      "gradeLevel": "MSS1",
-      "division": "div-erm",
-      "systemRole": "General Manager",
-      "active": true
-    },
-    {
-      "id": "user-gm-superannuation",
-      "name": "Temi Hassan",
-      "email": "gm.superannuation@npa.gov.ng",
-      "employeeId": "NPA031",
-      "gradeLevel": "MSS1",
-      "division": "div-S&I",
-      "systemRole": "General Manager",
-      "active": true
-    },
-    {
       "id": "user-gm-liaison",
       "name": "Mrs. Fatima Suleiman",
       "email": "gm.liaison@npa.gov.ng",
@@ -1020,36 +990,6 @@
       "active": true
     },
     {
-      "id": "user-gm-hydrographic",
-      "name": "Capt. Okonkwo",
-      "email": "gm.hydrographic@npa.gov.ng",
-      "employeeId": "NPA035",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "division": "div-engineering",
-      "active": true
-    },
-    {
-      "id": "user-gm-lands-assets-admin",
-      "name": "Engr. Adebayo",
-      "email": "gm.lands.assets.admin@npa.gov.ng",
-      "employeeId": "NPA036",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "division": "div-lands-assets",
-      "active": true
-    },
-    {
-      "id": "user-gm-legal-services",
-      "name": "Barr. Okafor",
-      "email": "gm.legal.services@npa.gov.ng",
-      "employeeId": "NPA037",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "division": "div-legal",
-      "active": true
-    },
-    {
       "id": "user-gm-marine-alt",
       "name": "Capt. Okafor",
       "email": "gm.marine.alt@npa.gov.ng",
@@ -1064,16 +1004,6 @@
       "name": "Mr. Segun Adeyemi",
       "email": "gm.operations@npa.gov.ng",
       "employeeId": "NPA039",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "division": "div-operations",
-      "active": true
-    },
-    {
-      "id": "user-gm-ops",
-      "name": "Mr. Lawal",
-      "email": "gm.ops@npa.gov.ng",
-      "employeeId": "NPA040",
       "gradeLevel": "MSS1",
       "systemRole": "General Manager",
       "division": "div-operations",
@@ -1133,17 +1063,6 @@
       "active": true
     },
     {
-      "id": "user-agm-marine-ops",
-      "name": "Capt. Williams",
-      "email": "agm.marine@npa.gov.ng",
-      "employeeId": "NPA043",
-      "gradeLevel": "MSS2",
-      "division": "div-marine",
-      "department": "dept-marine-ops",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
       "id": "user-agm-vessel",
       "name": "Capt. Fashola",
       "email": "agm.vessel@npa.gov.ng",
@@ -1173,28 +1092,6 @@
       "gradeLevel": "MSS2",
       "division": "div-finance",
       "department": "dept-accounts",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
-      "id": "user-agm-hr-ops",
-      "name": "Bukola Adewale",
-      "email": "agm.hr.ops@npa.gov.ng",
-      "employeeId": "NPA047",
-      "gradeLevel": "MSS2",
-      "division": "div-hr",
-      "department": "dept-hr-operations",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
-      "id": "user-agm-hr-training",
-      "name": "Mr. Adebayo",
-      "email": "agm.hr.training@npa.gov.ng",
-      "employeeId": "NPA048",
-      "gradeLevel": "MSS2",
-      "division": "div-hr",
-      "department": "dept-hr-training",
       "systemRole": "Assistant General Manager",
       "active": true
     },
@@ -1250,17 +1147,6 @@
       "gradeLevel": "MSS2",
       "division": "div-abuja",
       "department": "dept-abuja",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
-      "id": "user-agm-overseas",
-      "name": "Mrs. Nwachukwu",
-      "email": "agm.overseas@npa.gov.ng",
-      "employeeId": "NPA054",
-      "gradeLevel": "MSS2",
-      "division": "div-oversea",
-      "department": "dept-overseas",
       "systemRole": "Assistant General Manager",
       "active": true
     },
@@ -1342,17 +1228,6 @@
       "active": true
     },
     {
-      "id": "user-agm-port-ops",
-      "name": "Capt. Ibrahim",
-      "email": "agm.portops@npa.gov.ng",
-      "employeeId": "NPA062",
-      "gradeLevel": "MSS2",
-      "division": "div-marine",
-      "department": "dept-port-ops",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
       "id": "user-agm-security",
       "name": "Mr. Obasi",
       "email": "agm.security@npa.gov.ng",
@@ -1397,17 +1272,6 @@
       "active": true
     },
     {
-      "id": "user-agm-assets",
-      "name": "Mr. Adegoke",
-      "email": "agm.assets@npa.gov.ng",
-      "employeeId": "NPA067",
-      "gradeLevel": "MSS2",
-      "division": "div-lands-assets",
-      "department": "dept-assets",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
       "id": "user-agm-csp-research",
       "name": "Dr. Ogunleye",
       "email": "agm.csp.research@npa.gov.ng",
@@ -1426,28 +1290,6 @@
       "gradeLevel": "MSS2",
       "division": "div-csp",
       "department": "dept-csp-planning",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
-      "id": "user-agm-csp-imo",
-      "name": "Capt. Okoro",
-      "email": "agm.csp.imo@npa.gov.ng",
-      "employeeId": "NPA070",
-      "gradeLevel": "MSS2",
-      "division": "div-csp",
-      "department": "dept-csp-imo",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
-      "id": "user-agm-csc-media",
-      "name": "Favour Kemi",
-      "email": "agm.csc.media@npa.gov.ng",
-      "employeeId": "NPA071",
-      "gradeLevel": "MSS2",
-      "division": "div-csc",
-      "department": "dept-csc-media",
       "systemRole": "Assistant General Manager",
       "active": true
     },
@@ -1562,17 +1404,6 @@
       "active": true
     },
     {
-      "id": "user-agm-procurement",
-      "name": "Mr. Okeke",
-      "email": "agm.procurement@npa.gov.ng",
-      "employeeId": "NPA082",
-      "gradeLevel": "MSS2",
-      "division": "div-procurement",
-      "department": "dept-procurement",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
       "id": "user-agm-admin-general",
       "name": "Mrs. Lawal",
       "email": "agm.admin@npa.gov.ng",
@@ -1602,17 +1433,6 @@
       "gradeLevel": "MSS2",
       "division": "div-admin",
       "department": "dept-admin-archives",
-      "systemRole": "Assistant General Manager",
-      "active": true
-    },
-    {
-      "id": "user-agm-admin-risk",
-      "name": "Mr. Akpan",
-      "email": "agm.admin.risk@npa.gov.ng",
-      "employeeId": "NPA086",
-      "gradeLevel": "MSS2",
-      "division": "div-admin",
-      "department": "dept-admin-risk",
       "systemRole": "Assistant General Manager",
       "active": true
     },
