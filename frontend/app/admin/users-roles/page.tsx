@@ -25,6 +25,7 @@ import {
   Download,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import {
   UsersManagementTab,
   type UsersManagementTabHandle,
@@ -44,7 +45,8 @@ type AssistantsTypeFilter = "all" | "TA" | "PA";
 function UsersRolesForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { users, roles, assistantAssignments } = useOrganization();
+  const { roles, assistantAssignments } = useOrganization();
+  const { users } = useOrgUsers();
   const [activeTab, setActiveTab] = useState<string>("users");
   const [rolesSearch, setRolesSearch] = useState("");
   const [assistantsSearch, setAssistantsSearch] = useState("");

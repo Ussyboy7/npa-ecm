@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from '@/hooks/use-org-users';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
@@ -53,7 +54,8 @@ import { ErrorState } from '@/components/shared/ErrorState';
 const MySentPageContent = () => {
   const router = useRouter();
   const {currentUser} = useCurrentUser();
-  const { divisions, users: organizationUsers } = useOrganization();
+  const { divisions } = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
   const { dataVersion } = useCorrespondence();
 
   const [query, setQuery] = useState('');

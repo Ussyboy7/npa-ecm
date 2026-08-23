@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOrganization, Division } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 
 interface DivisionFormModalProps {
@@ -15,7 +16,8 @@ interface DivisionFormModalProps {
 }
 
 export const DivisionFormModal = ({ open, onOpenChange, division, defaultDirectorateId }: DivisionFormModalProps) => {
-  const { addDivision, updateDivision, users, directorates } = useOrganization();
+  const { addDivision, updateDivision, directorates } = useOrganization();
+  const { users } = useOrgUsers();
   const [formData, setFormData] = useState({
     name: '',
     code: '',

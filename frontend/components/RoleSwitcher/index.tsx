@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useRoleSwitcherSearch } from "@/hooks/use-role-switcher-search";
 import { useRoleSwitcherGroups } from "@/hooks/use-role-switcher-groups";
@@ -46,7 +47,8 @@ interface SimplifiedRoleSwitcherProps {
 }
 
 const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
-  const { directorates, divisions, departments, users: orgUsers } = useOrganization();
+  const { directorates, divisions, departments } = useOrganization();
+  const { users: orgUsers } = useOrgUsers();
   const { currentUser, isImpersonating } = useCurrentUser();
 
   const {

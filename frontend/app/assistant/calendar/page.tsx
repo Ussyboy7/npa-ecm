@@ -25,6 +25,7 @@ import { CalendarDays, MapPin, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import {
   createCalendarEvent,
@@ -41,7 +42,8 @@ function toLocalInputValue(date: Date): string {
 
 export default function AssistantCalendarPage() {
   const { currentUser } = useCurrentUser();
-  const { users, assistantAssignments } = useOrganization();
+  const { assistantAssignments } = useOrganization();
+  const { users } = useOrgUsers();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);

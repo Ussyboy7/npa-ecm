@@ -85,6 +85,7 @@ import {
 import { useToast } from "@/components/ui/sonner";
 import { toast as sonnerToast } from "@/components/ui/sonner";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 
@@ -141,7 +142,8 @@ function TemplatesHubForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { directorates, divisions, departments, users: organizationUsers, isSyncing } = useOrganization();
+  const { directorates, divisions, departments, isSyncing } = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
   const { currentUser, hydrated: userHydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const canAccessAdvancedTemplates = useMemo(() => {

@@ -52,6 +52,7 @@ import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers } from '@/lib/routing-utils';
@@ -90,7 +91,8 @@ interface TreatmentModalProps {
 const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentModalProps) => {
   const {addCorrespondence: _addCorrespondence, addMinute: _addMinute, updateCorrespondence: _updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { currentUser: activeUser } = useCurrentUser();
-  const { users, divisions, departments, offices, officeMemberships, directorates } = useOrganization();
+  const { divisions, departments, offices, officeMemberships, directorates } = useOrganization();
+  const { users } = useOrgUsers();
   
   // Form state
   const [currentUser, setCurrentUser] = useState(activeUser ?? null);

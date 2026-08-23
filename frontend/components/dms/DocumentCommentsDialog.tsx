@@ -24,6 +24,7 @@ import {
 } from '@/lib/api/dms';
 import { type User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { toast } from "@/components/ui/sonner";
 import { CheckCircle2, MessageCircle, Undo2, XCircle, Reply } from 'lucide-react';
@@ -52,7 +53,8 @@ export const DocumentCommentsDialog = ({
   const [replyText, setReplyText] = useState('');
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const { users } = useOrganization();
+  const {} = useOrganization();
+  const { users } = useOrgUsers();
 
   const userLookup = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 

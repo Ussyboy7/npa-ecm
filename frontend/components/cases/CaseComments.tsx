@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useAbortController } from "@/hooks/use-abort-controller";
 
 interface CaseCommentsProps {
@@ -39,7 +40,8 @@ interface CaseCommentsProps {
 
 export function CaseComments({ caseId }: CaseCommentsProps) {
   const { currentUser } = useCurrentUser();
-  const { users } = useOrganization();
+  const {} = useOrganization();
+  const { users } = useOrgUsers();
   const { getSignal } = useAbortController();
   const [comments, setComments] = useState<CaseComment[]>([]);
   const [loading, setLoading] = useState(true);

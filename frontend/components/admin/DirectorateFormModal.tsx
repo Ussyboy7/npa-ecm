@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOrganization, Directorate } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 
 interface DirectorateFormModalProps {
@@ -17,7 +18,8 @@ interface DirectorateFormModalProps {
 const EMPTY_VALUE = "__none";
 
 export const DirectorateFormModal = ({ open, onOpenChange, directorate }: DirectorateFormModalProps) => {
-  const { addDirectorate, updateDirectorate, users } = useOrganization();
+  const { addDirectorate, updateDirectorate } = useOrganization();
+  const { users } = useOrgUsers();
   const [formData, setFormData] = useState({
     name: '',
     code: '',

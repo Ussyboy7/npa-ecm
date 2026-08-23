@@ -12,6 +12,7 @@ import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { apiFetch } from "@/lib/api-client";
@@ -54,7 +55,8 @@ const getStatusBadgeClass = (status: Correspondence["status"]) => {
 const RegisteredCorrespondencePage = () => {
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
-  const { users, divisions } = useOrganization();
+  const { divisions } = useOrganization();
+  const { users } = useOrgUsers();
   const [items, setItems] = useState<Correspondence[]>([]);
   const [loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);

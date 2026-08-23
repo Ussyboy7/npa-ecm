@@ -7,6 +7,7 @@ import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from '@/hooks/use-org-users';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
@@ -76,7 +77,8 @@ const DocumentDetailContent = () => {
     'document_view',
     accessDenied,
   );
-  const { users: organizationUsers, divisions, departments } = useOrganization();
+  const { divisions, departments } = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
   const userLookup = useMemo(() => new Map(organizationUsers.map((user) => [user.id, user])), [organizationUsers]);
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
   const departmentLookup = useMemo(

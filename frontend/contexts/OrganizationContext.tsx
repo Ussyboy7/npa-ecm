@@ -43,6 +43,7 @@ export const OrganizationProvider: React.FC<{
   const [officeMemberships, setOfficeMemberships] = useState<OfficeMembership[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [isSyncing, setIsSyncing] = useState(false);
   const currentUser = useSyncExternalStore(subscribeToStore, getCurrentUserSnapshot, getCurrentUserSnapshot);
   const organizationRefreshPromiseRef = useRef<Promise<void> | null>(null);
@@ -120,7 +121,6 @@ export const OrganizationProvider: React.FC<{
         rolesRows,
         officesRows,
         officeMembershipsRows,
-        usersRows,
       ] = await Promise.all([
         fetchFirstPage('/organization/directorates/?ordering=name'),
         fetchFirstPage('/organization/divisions/?ordering=name'),
@@ -129,7 +129,6 @@ export const OrganizationProvider: React.FC<{
         fetchFirstPage('/organization/roles/?ordering=name'),
         fetchFirstPage('/organization/offices/?ordering=name'),
         fetchFirstPage('/organization/office-memberships/?ordering=office__name'),
-        fetchFirstPage('/accounts/users/?is_active=true&ordering=username'),
       ]);
 
       const apiDirectorates = directoratesRows.map(mapApiDirectorate);
@@ -139,13 +138,11 @@ export const OrganizationProvider: React.FC<{
       const apiRoles = rolesRows.map(mapApiRole);
       const apiOffices = officesRows.map(mapApiOffice);
       const apiOfficeMemberships = officeMembershipsRows.map(mapApiOfficeMembership);
-      const apiUsers = dedupeUsers(usersRows.map(mapApiUserToUser));
 
       const sortedDirectorates = sortByName(apiDirectorates);
       const sortedDivisions = sortByName(apiDivisions);
       const sortedDepartments = sortByName(apiDepartments);
       const sortedRoles = sortByName(apiRoles);
-      const sortedUsers = sortByName(apiUsers);
 
       setDirectorates(sortedDirectorates);
       setDivisions(sortedDivisions);
@@ -155,7 +152,6 @@ export const OrganizationProvider: React.FC<{
       setOffices(sortedOffices);
       setOfficeMemberships(apiOfficeMemberships);
       setRoles(sortedRoles);
-      setUsers(sortedUsers);
 
       updateOrganizationCache({
         directorates: sortedDirectorates,
@@ -163,11 +159,9 @@ export const OrganizationProvider: React.FC<{
         departments: sortedDepartments,
         offices: sortedOffices,
         officeMemberships: apiOfficeMemberships,
-        users: sortedUsers,
       });
 
       logInfo('Organization data loaded successfully:', {
-        users: sortedUsers.length,
         directorates: sortedDirectorates.length,
         divisions: sortedDivisions.length,
         departments: sortedDepartments.length,

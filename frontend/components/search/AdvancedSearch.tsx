@@ -29,6 +29,7 @@ import { logError } from '@/lib/client-logger';
 import { SENSITIVITY_OPTIONS } from '@/lib/constants';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { formatDate } from '@/lib/correspondence-helpers';
 import { highlightText } from '@/lib/search-highlight';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
@@ -45,7 +46,8 @@ const isUnifiedSearchResult = (value: unknown): value is UnifiedSearchResult =>
   isRecord(value) && ('documents' in value || 'correspondence' in value || 'cases' in value);
 
 export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps) => {
-  const { divisions, departments, users } = useOrganization();
+  const { divisions, departments } = useOrganization();
+  const { users } = useOrgUsers();
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<NonNullable<SearchRequest['filters']>>({});
   const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'cases' | 'all'>(

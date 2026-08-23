@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/sonner";
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
 import type { Minute, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from '@/hooks/use-org-users';
 import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
@@ -38,11 +39,11 @@ const CorrespondenceDetailContent = () => {
   const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
   const { currentUser: activeUser } = useCurrentUser();
   const {
-    users: organizationUsers,
     offices,
     officeMemberships,
     refreshOrganizationData,
   } = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
 
   // Current user's own office memberships, fetched directly (filtered by user)
   // to avoid depending on the paginated global officeMemberships list, which

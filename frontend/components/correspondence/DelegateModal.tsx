@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 import { formatDateShort } from "@/lib/datetime";
 import { 
@@ -101,7 +102,8 @@ export const DelegateModal = ({
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
-  const { assistantAssignments, users, addAssignment, divisions, departments, refreshOrganizationData, isSyncing } = useOrganization();
+  const { assistantAssignments, addAssignment, divisions, departments, refreshOrganizationData, isSyncing } = useOrganization();
+  const { users } = useOrgUsers();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');

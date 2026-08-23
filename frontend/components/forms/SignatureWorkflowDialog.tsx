@@ -12,6 +12,7 @@ import { Plus, X, Send } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { createFormSubmission, createSignatureWorkflow } from "@/lib/api/forms";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, User } from "lucide-react";
@@ -37,7 +38,8 @@ export function SignatureWorkflowDialog({
   submission,
   onWorkflowCreated,
 }: SignatureWorkflowDialogProps) {
-  const { users: organizationUsers } = useOrganization();
+  const {} = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
   const [assignments, setAssignments] = useState<SignatureAssignment[]>([]);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);

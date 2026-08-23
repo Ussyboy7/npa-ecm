@@ -61,6 +61,7 @@ import {
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from '@/hooks/use-org-users';
 import { getActivityLogs, downloadComplianceExport, type ActivityLog } from '@/lib/api/audit';
 import { PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
@@ -251,7 +252,7 @@ function AuditLogRow({
 
 const AuditTrailPage = () => {
   const { currentUser } = useCurrentUser();
-  const { users: organizationUsers } = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

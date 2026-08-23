@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logError } from "@/lib/client-logger";
 import {
@@ -51,7 +52,8 @@ function formatDate(value: string | null): string {
 }
 
 export default function ActingAppointmentsPage() {
-  const { offices, officeMemberships, users } = useOrganization();
+  const { offices, officeMemberships } = useOrganization();
+  const { users } = useOrgUsers();
   const { currentUser } = useCurrentUser();
   const [appointments, setAppointments] = useState<ActingAppointment[]>([]);
   const [requests, setRequests] = useState<ActingRequest[]>([]);

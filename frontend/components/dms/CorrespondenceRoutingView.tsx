@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch } from "@/lib/api/dms";
 import { logError } from "@/lib/client-logger";
@@ -25,7 +26,8 @@ export function CorrespondenceRoutingView({
   document,
   onComplete,
 }: CorrespondenceRoutingViewProps) {
-  const { users, directorates, divisions, offices, officeMemberships } = useOrganization();
+  const { directorates, divisions, offices, officeMemberships } = useOrganization();
+  const { users } = useOrgUsers();
   const { currentUser } = useCurrentUser();
 
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');

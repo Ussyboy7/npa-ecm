@@ -17,6 +17,7 @@ import {
   correspondenceQueueSubjectClass,
 } from "@/components/shared/registry-queue-styles";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import type { Correspondence } from "@/lib/npa-structure";
 
 export type UserOrgIds = {
@@ -117,7 +118,8 @@ type InboxCorrespondenceCardProps = {
 };
 
 function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenceCardProps) {
-  const { divisions, users: organizationUsers } = useOrganization();
+  const { divisions } = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
 
   const division = useMemo(
     () => corr.divisionId ? divisions.find((div) => div.id === corr.divisionId) : undefined,

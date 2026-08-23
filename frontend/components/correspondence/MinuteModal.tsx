@@ -65,6 +65,7 @@ import {
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
@@ -118,7 +119,8 @@ const [newTemplateName, setNewTemplateName] = useState('');
 const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
   const { currentUser: activeUser } = useCurrentUser();
-  const { assistantAssignments, users: organizationUsers, offices, officeMemberships, directorates, divisions } = useOrganization();
+  const { assistantAssignments, offices, officeMemberships, directorates, divisions } = useOrganization();
+  const { users: organizationUsers } = useOrgUsers();
   
   // Use shared signature hook (after activeUser is available)
   const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences, isLoading: isSignatureLoading } = useSignature({

@@ -24,6 +24,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { DistributionRecipient, Office, User } from "@/lib/npa-structure";
 
@@ -44,7 +45,8 @@ export const DistributionSelector = ({
   onDistributionChange,
 }: DistributionSelectorProps) => {
   const { currentUser } = useCurrentUser();
-  const {users, offices, divisions, departments: _departments, directorates } = useOrganization();
+  const { offices, divisions, departments: _departments, directorates } = useOrganization();
+  const { users } = useOrgUsers();
 
   const canCreateParallelRouting = useMemo(() => {
     if (!currentUser?.gradeLevel) return false;

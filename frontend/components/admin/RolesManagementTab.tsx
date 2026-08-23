@@ -19,6 +19,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { RoleFormModal } from "@/components/admin/RoleFormModal";
 import { RoleTableSkeleton } from "@/components/admin/RoleTableSkeleton";
 import { toast } from "@/components/ui/sonner";
@@ -62,7 +63,8 @@ export const RolesManagementTab = forwardRef<
   },
   ref,
 ) {
-  const { roles, users, refreshOrganizationData, deleteRole } = useOrganization();
+  const { roles, refreshOrganizationData, deleteRole } = useOrganization();
+  const { users } = useOrgUsers();
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
   const searchQuery = controlledSearchQuery ?? internalSearchQuery;
   const setSearchQuery = (value: string) => {

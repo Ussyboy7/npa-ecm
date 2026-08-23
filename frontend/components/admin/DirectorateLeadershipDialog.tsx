@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrganization, type Directorate } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 
@@ -33,7 +34,8 @@ export const DirectorateLeadershipDialog = ({
   onOpenChange,
   directorate,
 }: DirectorateLeadershipDialogProps) => {
-  const { users, updateDirectorate } = useOrganization();
+  const { updateDirectorate } = useOrganization();
+  const { users } = useOrgUsers();
   const [selectedLeader, setSelectedLeader] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 

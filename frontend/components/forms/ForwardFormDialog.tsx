@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Send, User, Building2, Briefcase, Search, X } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from '@/components/ui/sonner';
 import { logError } from '@/lib/client-logger';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -46,7 +47,8 @@ export function ForwardFormDialog({
   form,
   onForwarded,
 }: ForwardFormDialogProps) {
-  const { users, divisions, departments } = useOrganization();
+  const { divisions, departments } = useOrganization();
+  const { users } = useOrgUsers();
   const [forwarding, setForwarding] = useState(false);
   const [targetType, setTargetType] = useState<'user' | 'division' | 'department'>('user');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);

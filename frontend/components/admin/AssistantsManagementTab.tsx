@@ -42,6 +42,7 @@ import {
   Shield,
 } from "lucide-react";
 import { useOrganization, type AssistantAssignment } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { AssistantAssignmentModal } from "@/components/admin/AssistantAssignmentModal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
@@ -94,7 +95,8 @@ export const AssistantsManagementTab = forwardRef<
   },
   ref,
 ) {
-  const { assistantAssignments, users, deleteAssignment } = useOrganization();
+  const { assistantAssignments, deleteAssignment } = useOrganization();
+  const { users } = useOrgUsers();
   const { currentUser } = useCurrentUser();
   
   // View & filter state

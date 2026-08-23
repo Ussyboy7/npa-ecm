@@ -17,6 +17,7 @@ import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPre
 import { DocumentPreviewModal } from "@/components/correspondence/DocumentPreviewModal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import {
   getCaseById,
   updateCaseStatus,
@@ -66,7 +67,8 @@ const CaseDetailPage = () => {
   const router = useRouter();
   const caseId = params.id as string;
   const { currentUser, hydrated } = useCurrentUser();
-  const { offices, users } = useOrganization();
+  const { offices } = useOrganization();
+  const { users } = useOrgUsers();
   const { getSignal } = useAbortController();
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);

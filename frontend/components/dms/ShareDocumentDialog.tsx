@@ -29,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/api/dms";
 import type { User } from "@/lib/npa-structure";
 import { shareDocument, apiFetch, hasTokens, canShareDocument } from "@/lib/api/dms";
@@ -73,7 +74,8 @@ const ShareDocumentDialogContent = ({
   onShared,
   initialView = 'share',
 }: ShareDocumentDialogProps) => {
-  const { users, directorates, divisions, departments, offices, officeMemberships: _officeMemberships } = useOrganization();
+  const { directorates, divisions, departments, offices, officeMemberships: _officeMemberships } = useOrganization();
+  const { users } = useOrgUsers();
   const [note, setNote] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);

@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 import { getPermissionsByCategory } from "@/lib/role-permissions";
 import { usePermissionCatalog } from "@/hooks/use-permission-catalog";
@@ -36,7 +37,8 @@ export const RoleFormModal = ({
   existingRole,
   onSuccess,
 }: RoleFormModalProps) => {
-  const { users, roles, refreshOrganizationData, addRole, updateRole } = useOrganization();
+  const { roles, refreshOrganizationData, addRole, updateRole } = useOrganization();
+  const { users } = useOrgUsers();
   const { permissions: rolePermissionsCatalog, presets } = usePermissionCatalog();
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");

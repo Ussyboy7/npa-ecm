@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useOrganization, AssistantAssignment } from '@/contexts/OrganizationContext';
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 
 interface AssistantAssignmentModalProps {
@@ -47,7 +48,8 @@ const PERMISSION_PRESETS = [
 ];
 
 export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assignment }: AssistantAssignmentModalProps) => {
-  const { addAssignment, updateAssignment, users, assistantAssignments } = useOrganization();
+  const { addAssignment, updateAssignment, assistantAssignments } = useOrganization();
+  const { users } = useOrgUsers();
   const [formData, setFormData] = useState({
     assistantId: '',
     type: 'TA' as 'TA' | 'PA',
