@@ -3060,6 +3060,20 @@
       "allowExternalIntake": true,
       "allowLateralRouting": true,
       "isActive": true
+    },
+    {
+      "id": "office-div-edfa-direct",
+      "name": "EDFA Direct Reports Division Office",
+      "code": "OFF_DIV_EDFA_DIRECT",
+      "officeType": "gm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-edfa-direct",
+      "departmentId": null,
+      "parentId": "office-dir-edfa",
+      "description": "Office for EDFA Direct Reports",
+      "isActive": true,
+      "allowExternalIntake": true,
+      "allowLateralRouting": true
     }
   ],
   "OFFICE_MEMBERSHIPS": [
