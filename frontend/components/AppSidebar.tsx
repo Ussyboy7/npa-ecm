@@ -286,6 +286,8 @@ export function AppSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
+                    {visibility.showAdminDashboard && <AdminNavItem href="/admin/dashboard" icon={LayoutDashboard} label="Dashboard" isActive={isActivePath('/admin/dashboard')} isCollapsed={isCollapsed} />}
+
                     {showOrgAccessAdmin && (
                       <SidebarSubsectionLabel label="Org & access" isCollapsed={isCollapsed} />
                     )}

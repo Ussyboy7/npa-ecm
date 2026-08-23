@@ -46,6 +46,7 @@ export interface SidebarVisibility {
 
   // Administration
   showAdministration: boolean;
+  showAdminDashboard: boolean;
   showOrganizationOffices: boolean;
   showUsersRoles: boolean;
   showWorkflowSLA: boolean;
@@ -112,6 +113,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showExecutiveDashboard: false,
         showPerformanceAnalytics: false,
         showAdministration: false,
+        showAdminDashboard: false,
         showOrganizationOffices: false,
         showUsersRoles: false,
         showWorkflowSLA: false,
@@ -167,6 +169,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showExecutiveDashboard: true,
         showPerformanceAnalytics: true,
         showAdministration: true,
+        showAdminDashboard: true,
         showOrganizationOffices: true,
         showUsersRoles: true,
         showWorkflowSLA: true,
@@ -293,6 +296,9 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showIntegration = integrationOn;
     const showIntegrationHub = integrationOn;
 
+    const showAdminDashboard =
+      has("can_access_system_health") || has("can_manage_users");
+
     const showSettings = true;
     const showHelpGuides = true;
     const showHelpdeskSubmit = true;
@@ -342,6 +348,7 @@ export function useSidebarVisibility(): SidebarVisibility {
       showDivisionAnalytics,
       showCaseAnalytics,
       showAdministration,
+      showAdminDashboard,
       showOrganizationOffices,
       showUsersRoles,
       showWorkflowSLA,

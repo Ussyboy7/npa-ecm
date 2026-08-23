@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import glob
+import os
 import time
 
 from datetime import timedelta
@@ -144,6 +146,175 @@ class SystemStatusView(APIView):
                     "total": beat_tasks_total,
                 },
                 "recent_activity": ActivityLogSerializer(recent_logs, many=True).data,
+            }
+        )
+
+
+class AdminDashboardOverviewView(APIView):
+    """Admin dashboard: system health summary + online user count."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_system_health")
+
+        services, overall_healthy = _check_services()
+        degraded = [name for name, status in services.items() if status != "healthy"]
+
+        from accounts.models import User
+
+        online_cutoff = timezone.now() - timedelta(minutes=5)
+        online_users = User.objects.filter(last_activity__gte=online_cutoff).count()
+
+        return Response(
+            {
+                "status": "healthy" if overall_healthy else "degraded",
+                "online_users": online_users,
+                "services_degraded": degraded,
+                "last_updated": timezone.now().isoformat(),
+            }
+        )
+
+
+class UsersByRoleView(APIView):
+    """Admin dashboard: user counts grouped by system role."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_manage_users")
+
+        from accounts.models import User
+
+        total_users = User.objects.filter(is_active=True).count()
+
+        role_counts = (
+            User.objects.filter(is_active=True)
+            .values("system_role__id", "system_role__name")
+            .annotate(count=Count("id"))
+            .order_by("-count")
+        )
+
+        roles = []
+        for row in role_counts:
+            roles.append(
+                {
+                    "id": row["system_role__id"],
+                    "name": row["system_role__name"] or "Unassigned",
+                    "count": row["count"],
+                }
+            )
+
+        if not any(r["id"] is None for r in roles):
+            roles.append({"id": None, "name": "Unassigned", "count": 0})
+
+        return Response(
+            {
+                "roles": roles,
+                "total_users": total_users,
+            }
+        )
+
+
+def _check_backup_status() -> dict:
+    """Scan BACKUP_DIR for the most recent backup file."""
+    backup_dir = getattr(
+        settings,
+        "BACKUP_DIR",
+        os.path.join(settings.BASE_DIR, "backups", "local"),
+    )
+
+    result = {
+        "status": "missing",
+        "last_backup": None,
+        "file_size_mb": 0,
+        "age_hours": None,
+        "filename": None,
+    }
+
+    if not os.path.isdir(backup_dir):
+        return result
+
+    patterns = ["db-*.sql", "predeploy_*.sql", "*.dump"]
+    backup_files = []
+    for pattern in patterns:
+        backup_files.extend(glob.glob(os.path.join(backup_dir, pattern)))
+
+    if not backup_files:
+        return result
+
+    latest = max(backup_files, key=os.path.getmtime)
+    stat = os.stat(latest)
+    age_hours = (timezone.now().timestamp() - stat.st_mtime) / 3600
+
+    if age_hours < 24:
+        status = "healthy"
+    elif age_hours < 48:
+        status = "warning"
+    else:
+        status = "missing"
+
+    return {
+        "status": status,
+        "last_backup": timezone.datetime.fromtimestamp(
+            stat.st_mtime, tz=timezone.get_current_timezone()
+        ).isoformat(),
+        "file_size_mb": round(stat.st_size / (1024 * 1024), 2),
+        "age_hours": round(age_hours, 1),
+        "filename": os.path.basename(latest),
+    }
+
+
+class AdminDashboardAlertsView(APIView):
+    """Admin dashboard: alerts needing admin attention."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_system_health")
+
+        from analytics.models import Escalation
+        from integrations.models import IntegrationLog
+
+        now = timezone.now()
+
+        backup = _check_backup_status()
+
+        pending_escalations = Escalation.objects.filter(
+            status__in=[Escalation.Status.PENDING, Escalation.Status.SENT]
+        ).count()
+
+        integration_failures_24h = IntegrationLog.objects.filter(
+            created_at__gte=now - timedelta(hours=24),
+            status="failed",
+        ).count()
+
+        celery_beat_disabled = 0
+        try:
+            from django_celery_beat.models import PeriodicTask
+
+            celery_beat_disabled = PeriodicTask.objects.filter(enabled=False).count()
+        except Exception:
+            pass
+
+        services, _ = _check_services()
+        degraded_services = [
+            name for name, status in services.items() if status != "healthy"
+        ]
+
+        return Response(
+            {
+                "backup": backup,
+                "pending_escalations": pending_escalations,
+                "integration_failures_24h": integration_failures_24h,
+                "celery_beat_disabled": celery_beat_disabled,
+                "degraded_services": degraded_services,
             }
         )
 
