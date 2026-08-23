@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { logError } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { toast } from "@/components/ui/sonner";
 import { formatDateTime } from "@/lib/datetime";
 import { signForm } from "@/lib/api/forms";
 import { fetchUserSignature, type StoredSignature } from "@/lib/api/signatures";
-import { buildDownloadUrl } from "@/lib/correspondence-url-utils";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
@@ -23,12 +22,6 @@ interface FormSignatureDialogProps {
   signature: FormSignature;
   workflow: FormSignatureWorkflow;
   onSigned?: () => void;
-}
-
-function resolveSignatureImageSrc(signature: StoredSignature | null): string | null {
-  if (!signature?.imageData) return null;
-  if (signature.imageData.startsWith("data:")) return signature.imageData;
-  return buildDownloadUrl(signature.imageData) ?? signature.imageData;
 }
 
 export function FormSignatureDialog({
@@ -67,7 +60,7 @@ export function FormSignatureDialog({
     };
   }, [open, currentUser?.id]);
 
-  const signatureSrc = useMemo(() => resolveSignatureImageSrc(userSignature), [userSignature]);
+  const signatureSrc = userSignature?.imageData || undefined;
 
   const handleSign = async () => {
     if (!userSignature) {

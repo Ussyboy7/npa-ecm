@@ -20,8 +20,9 @@ export const SEAL_INK_MUTED = "hsl(218 65% 45%)";
 export const SEAL_PANEL_BG = "hsl(218 15% 95%)";
 export const SEAL_SIGNATURE_BG = "hsl(218 15% 97%)";
 
+/** qrcode requires hex, not hsl. */
 export const SEAL_QR = {
-  dark: SEAL_INK,
+  dark: "#163569",
   light: DOC_PAPER.background,
 } as const;
 

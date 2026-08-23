@@ -323,18 +323,28 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
       ctx.fillText("NPA", centerX, logoY);
     }
 
-    // Signature
+    // Signature — contain within the seal slot; never stretch/squash
     const sigY = centerY + size * 0.06;
-    const sigHeight = size * 0.10;
-    const sigWidth = size * 0.45;
-    
+    const maxSigWidth = size * 0.45;
+    const maxSigHeight = size * 0.12;
+
     if (signatureRef.current) {
+      const img = signatureRef.current;
+      const naturalW = img.naturalWidth || img.width || 1;
+      const naturalH = img.naturalHeight || img.height || 1;
+      const aspect = naturalW / naturalH;
+      let drawW = maxSigWidth;
+      let drawH = drawW / aspect;
+      if (drawH > maxSigHeight) {
+        drawH = maxSigHeight;
+        drawW = drawH * aspect;
+      }
       ctx.drawImage(
-        signatureRef.current,
-        centerX - sigWidth / 2,
-        sigY - sigHeight / 2,
-        sigWidth,
-        sigHeight
+        img,
+        centerX - drawW / 2,
+        sigY - drawH / 2,
+        drawW,
+        drawH
       );
     } else {
       ctx.font = `italic 700 ${size * 0.08}px "Brush Script MT", "Segoe Script", cursive`;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, type FC, type PointerEvent as ReactPointerEvent } from 'react';
-import { SIGNATURE_INK, DOC_PAPER } from '@/lib/theme-colors';
+import { SIGNATURE_INK } from '@/lib/theme-colors';
 import { Button } from '@/components/ui/button';
 import { Undo2, Trash2 } from 'lucide-react';
 
@@ -118,25 +118,38 @@ export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+    let minX = canvas.width;
+    let minY = canvas.height;
+    let maxX = 0;
+    let maxY = 0;
+    let found = false;
     for (let i = 0; i < imageData.data.length; i += 4) {
       if (imageData.data[i + 3] > 0) {
+        found = true;
         const x = (i / 4) % canvas.width;
-        const y = Math.floor((i / 4) / canvas.width);
+        const y = Math.floor(i / 4 / canvas.width);
         minX = Math.min(minX, x);
         minY = Math.min(minY, y);
         maxX = Math.max(maxX, x);
         maxY = Math.max(maxY, y);
       }
     }
+    if (!found) return;
+
     const pad = 20;
+    const sx = Math.max(0, minX - pad);
+    const sy = Math.max(0, minY - pad);
+    const ex = Math.min(canvas.width, maxX + pad + 1);
+    const ey = Math.min(canvas.height, maxY + pad + 1);
+    const sw = Math.max(1, ex - sx);
+    const sh = Math.max(1, ey - sy);
+
+    // Transparent PNG so the seal composites cleanly (no white box)
     const trimmed = document.createElement('canvas');
-    trimmed.width = maxX - minX + pad * 2;
-    trimmed.height = maxY - minY + pad * 2;
+    trimmed.width = sw;
+    trimmed.height = sh;
     const tCtx = trimmed.getContext('2d')!;
-    tCtx.fillStyle = DOC_PAPER.background;
-    tCtx.fillRect(0, 0, trimmed.width, trimmed.height);
-    tCtx.drawImage(canvas, minX - pad, minY - pad, trimmed.width, trimmed.height, 0, 0, trimmed.width, trimmed.height);
+    tCtx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
     onSave(trimmed.toDataURL('image/png'));
   }, [onSave]);
 
@@ -170,7 +183,7 @@ export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
         </Button>
         <div className="flex-1" />
         <Button size="sm" onClick={handleSave} disabled={!hasDrawn}>
-          Use this signature
+          Save signature
         </Button>
       </div>
     </div>

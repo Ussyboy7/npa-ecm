@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import csv
 import io
 
-import mimetypes
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
 from django.core.files.base import ContentFile
@@ -822,12 +821,13 @@ class ExecutiveSignatureView(APIView):
         validated_data = upload_serializer.validated_data
         signature_file = validated_data['signature_image']
 
-        # Read, process (remove white background), then recreate file
+        # Background removal re-encodes to PNG — store as .png so MIME matches bytes.
         raw_bytes = signature_file.read()
         processed_bytes = process_signature_background(raw_bytes)
         file_hash = ExecutiveSignature.compute_file_hash(processed_bytes)
-        original_name = signature_file.name
-        signature_file = ContentFile(processed_bytes, name=original_name or 'signature.png')
+        original_name = signature_file.name or "signature.png"
+        png_name = f"{original_name.rsplit('.', 1)[0]}.png"
+        signature_file = ContentFile(processed_bytes, name=png_name)
 
         # Get or create signature record
         signature, created = ExecutiveSignature.objects.get_or_create(
@@ -937,11 +937,11 @@ class SealSignatureImageView(APIView):
         if not seal.signature_used or not getattr(seal.signature_used, 'signature_image', None) or not seal.signature_used.signature_image:
             return Response({"detail": "No signature image for this seal"}, status=status.HTTP_404_NOT_FOUND)
         try:
-            f = seal.signature_used.signature_image.open('rb')
+            with seal.signature_used.signature_image.open('rb') as f:
+                data = f.read()
         except (OSError, ValueError):
             return Response({"detail": "Signature image file unavailable"}, status=status.HTTP_404_NOT_FOUND)
-        ct = mimetypes.guess_type(seal.signature_used.signature_image.name)[0] or 'image/png'
-        resp = FileResponse(f, content_type=ct, as_attachment=False)
+        resp = FileResponse(io.BytesIO(data), content_type='image/png', as_attachment=False)
         resp['Access-Control-Allow-Origin'] = '*'
         return resp
 

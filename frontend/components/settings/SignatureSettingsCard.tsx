@@ -1,83 +1,51 @@
 "use client";
-import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 
+import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 import { ALLOWED_SIGNATURE_MIME_TYPES, ACCEPT_IMAGE_SIGNATURE } from '@/lib/file-types';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { toast } from "@/components/ui/sonner";
+import { toast } from '@/components/ui/sonner';
 import {
-  AlertCircle,
-  ImageIcon,
-  Trash2,
-  Shield,
-  Eye,
-  Upload,
-  Settings2,
   Download,
   Printer,
   RotateCcw,
-  FileDown,
-  FileUp,
   CheckCircle2,
   XCircle,
   Loader2,
-  Info,
   Lock,
-  Maximize2,
-  Pen,
+  ImageIcon,
+  Info,
 } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+} from '@/components/ui/dialog';
 import { DigitalSealPreview, type DigitalSealPreviewHandle } from '@/components/seals/DigitalSealPreview';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import {
   fetchUserSignature,
   uploadUserSignature,
-  deleteUserSignatureFromBackend,
   updateSignatureSettings,
   type StoredSignature,
 } from '@/lib/api/signatures';
 import { emitSignatureUpdated } from '@/hooks/use-signature';
-import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import { logError } from '@/lib/client-logger';
 import { formatDateShort } from '@/lib/datetime';
+import { appType } from '@/lib/app-type';
+import { cn } from '@/lib/utils';
 
 const MAX_SIGNATURE_SIZE_MB = 2;
 const MAX_OFFICE_NAME_LENGTH = 100;
 const MAX_OFFICE_TITLE_LENGTH = 100;
 const MAX_PREFIX_LENGTH = 10;
 
-// Default seal settings
 const DEFAULT_SEAL_SETTINGS = {
   sealOfficeName: DEFAULT_SEAL_OFFICE_NAME,
   sealOfficeTitle: '',
@@ -90,36 +58,27 @@ export const SignatureSettingsCard = () => {
   const [signature, setSignature] = useState<StoredSignature | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upload' | 'draw' | 'preview'>('upload');
   const [show2FADialog, setShow2FADialog] = useState(false);
-  const [showExportDialog, setShowExportDialog] = useState(false);
-  const [previewSize, setPreviewSize] = useState<250 | 300 | 400>(300);
-  const [showFullPreview, setShowFullPreview] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const sealPreviewRef = useRef<DigitalSealPreviewHandle>(null);
-  
-  // Seal settings with validation
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [sealOfficeName, setSealOfficeName] = useState(DEFAULT_SEAL_OFFICE_NAME);
   const [sealOfficeTitle, setSealOfficeTitle] = useState('');
   const [sealPrefix, setSealPrefix] = useState('NPA');
   const [require2fa, setRequire2fa] = useState(true);
-  
-  // Validation states
   const [errors, setErrors] = useState<{
     officeName?: string;
     officeTitle?: string;
     prefix?: string;
     file?: string;
   }>({});
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [captureMode, setCaptureMode] = useState<'draw' | 'upload'>('draw');
 
-  // Load signature from backend
   useEffect(() => {
     const loadSignature = async () => {
       if (!currentUser?.id) return;
-      
       setIsLoading(true);
       try {
         const sig = await fetchUserSignature();
@@ -137,240 +96,132 @@ export const SignatureSettingsCard = () => {
         setIsLoading(false);
       }
     };
-    
-    loadSignature();
+    void loadSignature();
   }, [currentUser?.id]);
 
-  // Auto-generate seal office title based on user role
   useEffect(() => {
     if (!sealOfficeTitle && currentUser?.systemRole) {
       setSealOfficeTitle(`OFFICE OF THE ${currentUser.systemRole.toUpperCase()}`);
     }
   }, [currentUser?.systemRole, sealOfficeTitle]);
 
-  // Track unsaved changes
   useEffect(() => {
     if (!signature) return;
-    
-    const hasChanges = 
+    setHasUnsavedChanges(
       sealOfficeName !== (signature.sealOfficeName || DEFAULT_SEAL_SETTINGS.sealOfficeName) ||
-      sealOfficeTitle !== (signature.sealOfficeTitle || DEFAULT_SEAL_SETTINGS.sealOfficeTitle) ||
-      sealPrefix !== (signature.sealPrefix || DEFAULT_SEAL_SETTINGS.sealPrefix) ||
-      require2fa !== (signature.require2fa ?? DEFAULT_SEAL_SETTINGS.require2fa);
-    
-    setHasUnsavedChanges(hasChanges);
+        sealOfficeTitle !== (signature.sealOfficeTitle || DEFAULT_SEAL_SETTINGS.sealOfficeTitle) ||
+        sealPrefix !== (signature.sealPrefix || DEFAULT_SEAL_SETTINGS.sealPrefix) ||
+        require2fa !== (signature.require2fa ?? DEFAULT_SEAL_SETTINGS.require2fa)
+    );
   }, [signature, sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
 
-  // Validation functions
   const validateOfficeName = (value: string): string | undefined => {
-    if (!value.trim()) {
-      return 'Organization name is required';
-    }
-    if (value.length > MAX_OFFICE_NAME_LENGTH) {
-      return `Maximum ${MAX_OFFICE_NAME_LENGTH} characters allowed`;
-    }
+    if (!value.trim()) return 'Organization name is required';
+    if (value.length > MAX_OFFICE_NAME_LENGTH) return `Maximum ${MAX_OFFICE_NAME_LENGTH} characters`;
     return undefined;
   };
 
   const validateOfficeTitle = (value: string): string | undefined => {
-    if (value.length > MAX_OFFICE_TITLE_LENGTH) {
-      return `Maximum ${MAX_OFFICE_TITLE_LENGTH} characters allowed`;
-    }
+    if (value.length > MAX_OFFICE_TITLE_LENGTH) return `Maximum ${MAX_OFFICE_TITLE_LENGTH} characters`;
     return undefined;
   };
 
   const validatePrefix = (value: string): string | undefined => {
-    if (!value.trim()) {
-      return 'Serial prefix is required';
-    }
-    if (value.length > MAX_PREFIX_LENGTH) {
-      return `Maximum ${MAX_PREFIX_LENGTH} characters allowed`;
-    }
-    if (!/^[A-Z0-9-]+$/.test(value)) {
-      return 'Only uppercase letters, numbers, and hyphens allowed';
-    }
+    if (!value.trim()) return 'Serial prefix is required';
+    if (value.length > MAX_PREFIX_LENGTH) return `Maximum ${MAX_PREFIX_LENGTH} characters`;
+    if (!/^[A-Z0-9-]+$/.test(value)) return 'Use uppercase letters, numbers, and hyphens only';
     return undefined;
   };
 
-  const handleOfficeNameChange = (value: string) => {
-    setSealOfficeName(value);
-    const error = validateOfficeName(value);
-    setErrors(prev => ({ ...prev, officeName: error }));
-  };
-
-  const handleOfficeTitleChange = (value: string) => {
-    setSealOfficeTitle(value);
-    const error = validateOfficeTitle(value);
-    setErrors(prev => ({ ...prev, officeTitle: error }));
-  };
-
-  const handlePrefixChange = (value: string) => {
-    const upperValue = value.toUpperCase();
-    setSealPrefix(upperValue);
-    const error = validatePrefix(upperValue);
-    setErrors(prev => ({ ...prev, prefix: error }));
-  };
-
-  const handleSignatureUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Clear previous errors
-    setErrors(prev => ({ ...prev, file: undefined }));
-
-    // Validate file size
-    if (file.size > MAX_SIGNATURE_SIZE_MB * 1024 * 1024) {
-      const error = `File size must be ${MAX_SIGNATURE_SIZE_MB}MB or less. Current size: ${(file.size / 1024 / 1024).toFixed(2)}MB`;
-      setErrors(prev => ({ ...prev, file: error }));
-      toast.error(error);
-      return;
-    }
-
-    // Validate file type
-    if (!ALLOWED_SIGNATURE_MIME_TYPES.includes(file.type)) {
-      const error = `Invalid file type. Please upload a PNG, JPG, or SVG file. Current type: ${file.type}`;
-      setErrors(prev => ({ ...prev, file: error }));
-      toast.error(error);
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    // Simulate upload progress
-    const progressInterval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(progressInterval);
-          return 90;
-        }
-        return prev + 10;
-      });
-    }, 200);
-
-    try {
-      const uploaded = await uploadUserSignature(file, {
-        sealOfficeName,
-        sealOfficeTitle,
-        sealPrefix,
-        require2fa,
-      });
-      
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      
-      if (uploaded) {
-        setSignature(uploaded);
-        emitSignatureUpdated();
-        toast.success('Signature uploaded successfully', {
-          description: 'Your signature is now ready to use for document approvals.',
-          duration: 3000,
-        });
-        setActiveTab('preview'); // Switch to preview tab
-        setTimeout(() => setUploadProgress(0), 1000);
-      }
-    } catch (error: unknown) {
-      clearInterval(progressInterval);
-      setUploadProgress(0);
-      logError('Failed to upload signature', error);
-      
-      // Provide specific error messages
-      let errorMessage = 'Failed to upload signature. Please try again.';
-      const status =
-        typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        typeof (error as { status?: unknown }).status === 'number'
-          ? (error as { status?: number }).status
-          : undefined;
-
-      if (status === 413) {
-        errorMessage = 'File is too large. Please use a smaller image file.';
-      } else if (status === 400) {
-        errorMessage = 'Invalid file format. Please check your file and try again.';
-      } else if (error instanceof Error && error.message) {
-        errorMessage = error.message;
-      }
-      
-      setErrors(prev => ({ ...prev, file: errorMessage }));
-      toast.error(errorMessage);
-    } finally {
-      setIsUploading(false);
-      // Reset file input
-      event.target.value = '';
-    }
-  }, [sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
-
-  const handleDrawSave = useCallback(async (dataUrl: string) => {
-    try {
+  const persistSignatureFile = useCallback(
+    async (file: File) => {
       setIsUploading(true);
-      setUploadProgress(30);
+      try {
+        const uploaded = await uploadUserSignature(file, {
+          sealOfficeName,
+          sealOfficeTitle,
+          sealPrefix,
+          require2fa,
+        });
+        if (uploaded) {
+          setSignature(uploaded);
+          emitSignatureUpdated();
+          toast.success('Signature saved');
+        }
+      } catch (error: unknown) {
+        logError('Failed to save signature', error);
+        const status =
+          typeof error === 'object' &&
+          error !== null &&
+          'status' in error &&
+          typeof (error as { status?: unknown }).status === 'number'
+            ? (error as { status?: number }).status
+            : undefined;
+        let message = 'Failed to save signature';
+        if (status === 413) message = 'File is too large';
+        else if (status === 400) message = 'Invalid file format';
+        else if (error instanceof Error && error.message) message = error.message;
+        setErrors((prev) => ({ ...prev, file: message }));
+        toast.error(message);
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]
+  );
 
+  const handleSignatureUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      setErrors((prev) => ({ ...prev, file: undefined }));
+
+      if (file.size > MAX_SIGNATURE_SIZE_MB * 1024 * 1024) {
+        const message = `Max size is ${MAX_SIGNATURE_SIZE_MB}MB`;
+        setErrors((prev) => ({ ...prev, file: message }));
+        toast.error(message);
+        event.target.value = '';
+        return;
+      }
+      if (!ALLOWED_SIGNATURE_MIME_TYPES.includes(file.type)) {
+        const message = 'Use PNG, JPG, or SVG';
+        setErrors((prev) => ({ ...prev, file: message }));
+        toast.error(message);
+        event.target.value = '';
+        return;
+      }
+
+      await persistSignatureFile(file);
+      event.target.value = '';
+    },
+    [persistSignatureFile]
+  );
+
+  const handleDrawSave = useCallback(
+    async (dataUrl: string) => {
       const res = await fetch(dataUrl);
       const blob = await res.blob();
       const file = new File([blob], 'drawn-signature.png', { type: 'image/png' });
-
-      setUploadProgress(60);
-      const uploaded = await uploadUserSignature(file, {
-        sealOfficeName,
-        sealOfficeTitle,
-        sealPrefix,
-        require2fa,
-      });
-
-      setUploadProgress(100);
-      if (uploaded) {
-        setSignature(uploaded);
-        emitSignatureUpdated();
-        toast.success('Signature saved', {
-          description: 'Your drawn signature is now ready to use.',
-        });
-        setActiveTab('preview');
-        setTimeout(() => setUploadProgress(0), 1000);
-      }
-    } catch (error: unknown) {
-      setUploadProgress(0);
-      logError('Failed to save drawn signature', error);
-      toast.error('Failed to save signature. Please try again.');
-    } finally {
-      setIsUploading(false);
-    }
-  }, [sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
-
-  const handleDeleteSignature = useCallback(async () => {
-    try {
-      await deleteUserSignatureFromBackend();
-      setSignature(null);
-      emitSignatureUpdated();
-      setShowDeleteDialog(false);
-      toast.success('Signature deleted successfully', {
-        description: 'You can upload a new signature anytime.',
-      });
-    } catch (error: unknown) {
-      logError('Failed to delete signature', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete signature. Please try again.';
-      toast.error(errorMessage);
-    }
-  }, []);
+      await persistSignatureFile(file);
+    },
+    [persistSignatureFile]
+  );
 
   const handleSaveSettings = useCallback(async () => {
     if (!signature) return;
-    
-    // Validate all fields
     const officeNameError = validateOfficeName(sealOfficeName);
     const officeTitleError = validateOfficeTitle(sealOfficeTitle);
     const prefixError = validatePrefix(sealPrefix);
-    
     if (officeNameError || officeTitleError || prefixError) {
       setErrors({
         officeName: officeNameError,
         officeTitle: officeTitleError,
         prefix: prefixError,
       });
-      toast.error('Please fix validation errors before saving');
+      toast.error('Fix the highlighted fields');
       return;
     }
-    
+
     setIsSaving(true);
     try {
       const updated = await updateSignatureSettings({
@@ -379,18 +230,14 @@ export const SignatureSettingsCard = () => {
         sealPrefix,
         require2fa,
       });
-      
       if (updated) {
         setSignature(updated);
         setHasUnsavedChanges(false);
-        toast.success('Seal settings saved successfully', {
-          icon: <CheckCircle2 className="h-4 w-4" />,
-        });
+        toast.success('Seal settings saved');
       }
     } catch (error: unknown) {
       logError('Failed to save settings', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to save settings. Please try again.';
-      toast.error(errorMessage);
+      toast.error(error instanceof Error ? error.message : 'Failed to save settings');
     } finally {
       setIsSaving(false);
     }
@@ -398,757 +245,359 @@ export const SignatureSettingsCard = () => {
 
   const handleResetToDefaults = useCallback(() => {
     setSealOfficeName(DEFAULT_SEAL_SETTINGS.sealOfficeName);
-    setSealOfficeTitle(currentUser?.systemRole 
-      ? `OFFICE OF THE ${currentUser.systemRole.toUpperCase()}`
-      : DEFAULT_SEAL_SETTINGS.sealOfficeTitle);
+    setSealOfficeTitle(
+      currentUser?.systemRole
+        ? `OFFICE OF THE ${currentUser.systemRole.toUpperCase()}`
+        : DEFAULT_SEAL_SETTINGS.sealOfficeTitle
+    );
     setSealPrefix(DEFAULT_SEAL_SETTINGS.sealPrefix);
     setRequire2fa(DEFAULT_SEAL_SETTINGS.require2fa);
     setErrors({});
-    toast.success('Settings reset to defaults');
   }, [currentUser?.systemRole]);
 
-  const handleExportSettings = useCallback(() => {
-    if (!signature) return;
-    
-    const settings = {
-      sealOfficeName,
-      sealOfficeTitle,
-      sealPrefix,
-      require2fa,
-      exportedAt: new Date().toISOString(),
-      version: '1.0',
-    };
-    
-    const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `seal-settings-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    toast.success('Settings exported successfully');
-    setShowExportDialog(false);
-  }, [signature, sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
-
-  const handleImportSettings = useCallback((event: Event) => {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const settings = JSON.parse(e.target?.result as string);
-        
-        if (settings.sealOfficeName) setSealOfficeName(settings.sealOfficeName);
-        if (settings.sealOfficeTitle) setSealOfficeTitle(settings.sealOfficeTitle);
-        if (settings.sealPrefix) setSealPrefix(settings.sealPrefix);
-        if (settings.require2fa !== undefined) setRequire2fa(settings.require2fa);
-        
-        toast.success('Settings imported successfully');
-        setShowExportDialog(false);
-      } catch (error: unknown) {
-        logError('Failed to import settings', error);
-        toast.error('Invalid settings file. Please check the format and try again.');
-      }
-    };
-    reader.readAsText(file);
-    if (input) input.value = '';
+  const handleDownloadSeal = useCallback(() => {
+    if (!sealPreviewRef.current) {
+      toast.error('Seal preview not ready');
+      return;
+    }
+    sealPreviewRef.current.download();
+    toast.success('Seal downloaded');
   }, []);
 
-  const handleDownloadSeal = useCallback(() => {
-    if (sealPreviewRef.current) {
-      sealPreviewRef.current.download();
-      toast.success('Seal downloaded successfully');
-    } else {
-      // Fallback: find canvas in DOM
-      const sealCanvas = document.querySelector('canvas[class*="rounded-full"]') as HTMLCanvasElement;
-      if (!sealCanvas) {
-        toast.error('Seal preview not available');
-        return;
-      }
-      
-      const url = sealCanvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `seal-${sealPrefix}-${new Date().toISOString().split('T')[0]}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      toast.success('Seal downloaded successfully');
-    }
-  }, [sealPrefix]);
-
   const handlePrintSeal = useCallback(() => {
-    const sealCanvas = document.querySelector('canvas[class*="rounded-full"]') as HTMLCanvasElement;
-    if (!sealCanvas) {
-      toast.error('Seal preview not available');
+    const canvas = sealPreviewRef.current?.getCanvas();
+    if (!canvas) {
+      toast.error('Seal preview not ready');
       return;
     }
-    
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('Please allow popups to print the seal');
+      toast.error('Allow popups to print');
       return;
     }
-    
-    const imgData = sealCanvas.toDataURL('image/png');
+    const imgData = canvas.toDataURL('image/png');
     printWindow.document.write(`
-      <html>
-        <head>
-          <title>Seal Print</title>
-          <style>
-            body {
-              margin: 0;
-              padding: 40px;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              min-height: 100vh;
-            }
-            img {
-              max-width: 100%;
-              height: auto;
-            }
-            @media print {
-              body { padding: 0; }
-            }
-          </style>
-        </head>
-        <body>
-          <img src="${imgData}" alt="Digital Seal" />
-        </body>
-      </html>
+      <html><head><title>Seal</title>
+      <style>body{margin:0;padding:40px;display:flex;justify-content:center;align-items:center;min-height:100vh}
+      img{max-width:100%;height:auto}@media print{body{padding:0}}</style></head>
+      <body><img src="${imgData}" alt="Digital Seal" /></body></html>
     `);
     printWindow.document.close();
     printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 250);
+    setTimeout(() => printWindow.print(), 250);
   }, []);
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="flex flex-col items-center justify-center space-y-4">
-            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-            <p className="text-sm text-muted-foreground">Loading signature settings...</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center py-16 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        <span className="text-sm">Loading signature…</span>
+      </div>
     );
   }
 
+  const signatureSrc = signature?.imageData || undefined;
+  const officeTitleDisplay =
+    sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`;
+
   return (
-    <div className="space-y-6">
-        {/* Main Signature Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              Digital Signature & Executive Seal
-            </CardTitle>
-            <CardDescription>
-              Upload your signature for document approvals. Your signature will be embedded in official seals.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'upload' | 'draw' | 'preview')}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="upload" className="flex items-center gap-2">
-                  <Upload className="h-4 w-4" />
-                  Upload
-                </TabsTrigger>
-                <TabsTrigger value="draw" className="flex items-center gap-2">
-                  <Pen className="h-4 w-4" />
-                  Draw
-                </TabsTrigger>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <TabsTrigger 
-                      value="preview" 
-                      className="flex items-center gap-2" 
-                      disabled={!signature}
-                    >
-                      <Eye className="h-4 w-4" />
-                      Seal Preview
-                    </TabsTrigger>
-                  </TooltipTrigger>
-                  {!signature && (
-                    <TooltipContent>
-                      <p>Upload a signature first to preview the seal</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TabsList>
+    <div className="space-y-5">
+      <div>
+        <h2 className={appType.panelTitle}>Digital Signature & Executive Seal</h2>
+        <p className={appType.caption}>
+          Choose one way to set your signature — draw or upload. The seal updates live.
+        </p>
+      </div>
 
-              <TabsContent value="upload" className="space-y-6 mt-6">
-                {/* Upload Instructions */}
-                <div className="flex items-start gap-4 p-4 border border-dashed rounded-lg bg-muted/30">
-                  <AlertCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    <p>Supported formats: <strong>PNG, JPG, SVG</strong> • Max size: <strong>{MAX_SIGNATURE_SIZE_MB}MB</strong></p>
-                    <p>For best results, use a <strong>transparent PNG</strong> with your signature on a white background.</p>
-                    <p className="text-xs">Your signature is stored securely and encrypted at rest.</p>
-                  </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        {/* Capture */}
+        <div className="space-y-4 min-w-0">
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+            <div>
+              <p className={appType.sectionLabel}>Your signature</p>
+              <p className={appType.caption}>
+                {signatureSrc
+                  ? `Saved ${formatDateShort(signature!.uploadedAt)}`
+                  : 'Not set yet'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border doc-paper flex items-center justify-center min-h-[88px] px-4 py-3">
+              {signatureSrc ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={signatureSrc}
+                  alt="Your signature"
+                  className="max-h-16 w-auto object-contain"
+                />
+              ) : (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <ImageIcon className="h-4 w-4 opacity-50" />
+                  <span className="text-sm">No signature yet</span>
                 </div>
+              )}
+            </div>
+          </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
-                  {/* Upload Section */}
-                  <div className="space-y-4">
-                    <Label className="text-base font-medium">Upload Signature</Label>
-                    <Input
-                      type="file"
-                      accept={ACCEPT_IMAGE_SIGNATURE}
-                      onChange={handleSignatureUpload}
-                      disabled={isUploading}
-                      aria-label="Upload signature file"
-                    />
-                    
-                    {errors.file && (
-                      <div className="flex items-start gap-2 text-sm text-destructive">
-                        <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                        <span>{errors.file}</span>
-                      </div>
-                    )}
-                    
-                    {isUploading && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Uploading signature...</span>
-                        </div>
-                        <Progress value={uploadProgress} className="h-2" />
-                      </div>
-                    )}
-                  </div>
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+            <div className="flex gap-2">
+              {(['draw', 'upload'] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  variant={captureMode === mode ? 'default' : 'outline'}
+                  size="compact"
+                  className="flex-1"
+                  onClick={() => setCaptureMode(mode)}
+                >
+                  {mode === 'draw' ? 'Draw' : 'Upload'}
+                </Button>
+              ))}
+            </div>
 
-                  {/* Current Signature Preview */}
-                  <div className="space-y-4">
-                    <Label className="text-base font-medium">Current Signature</Label>
-                    {signature ? (
-                      <div className="space-y-3">
-                        <div className="p-4 border rounded-lg doc-paper flex items-center justify-center min-h-[100px]">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={
-                              signature.imageData.startsWith('data:')
-                                ? signature.imageData
-                                : (buildDownloadUrl(signature.imageData) ?? signature.imageData)
-                            }
-                            alt="Your signature"
-                            className="max-h-20 w-auto object-contain"
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Uploaded: {formatDateShort(signature.uploadedAt)}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setShowDeleteDialog(true)}
-                            aria-label="Delete signature"
-                          >
-                            <Trash2 className="h-3 w-3 mr-1" />
-                            Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-6 border-2 border-dashed rounded-lg text-center text-muted-foreground">
-                        <ImageIcon className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                        <p className="text-sm">No signature uploaded</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </TabsContent>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT_IMAGE_SIGNATURE}
+              className="hidden"
+              onChange={handleSignatureUpload}
+              disabled={isUploading}
+            />
 
-              <TabsContent value="draw" className="space-y-6 mt-6">
-                <div className="flex items-start gap-4 p-4 border border-dashed rounded-lg bg-muted/30">
-                  <Pen className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    <p>Draw your signature using your mouse or touch screen.</p>
-                    <p>Use <strong>Undo</strong> to remove the last stroke, or <strong>Clear</strong> to start over.</p>
-                  </div>
-                </div>
-                <SignaturePad onSave={handleDrawSave} />
-                {isUploading && (
-                  <div className="space-y-2">
-                    <Progress value={uploadProgress} className="h-2" />
-                    <p className="text-xs text-muted-foreground text-center">Saving signature...</p>
-                  </div>
+            {captureMode === 'draw' ? (
+              <SignaturePad onSave={handleDrawSave} />
+            ) : (
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  'w-full rounded-lg border border-dashed border-border/80 bg-background/60 px-4 py-10',
+                  'text-center transition-colors hover:bg-muted/40',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  isUploading && 'opacity-60 pointer-events-none'
                 )}
-              </TabsContent>
-
-              <TabsContent value="preview" className="space-y-6 mt-6">
-                {signature && (
-                  <div className="space-y-6">
-                    {/* Preview Controls */}
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-sm font-medium">Preview Size:</Label>
-                        <div className="flex gap-2">
-                          {[250, 300, 400].map((size) => (
-                            <Button
-                              key={size}
-                              variant={previewSize === size ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => setPreviewSize(size as 250 | 300 | 400)}
-                            >
-                              {size}px
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleDownloadSeal}
-                              aria-label="Download seal as image"
-                            >
-                              <Download className="h-4 w-4 mr-2" />
-                              Download
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Download seal as PNG image</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handlePrintSeal}
-                              aria-label="Print seal"
-                            >
-                              <Printer className="h-4 w-4 mr-2" />
-                              Print
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Print seal preview</TooltipContent>
-                        </Tooltip>
-                        <Dialog open={showFullPreview} onOpenChange={setShowFullPreview}>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" aria-label="View full preview">
-                              <Maximize2 className="h-4 w-4 mr-2" />
-                              Fullscreen
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent size="lg" height="fill">
-                            <DialogHeader>
-                              <DialogTitle>Full Seal Preview</DialogTitle>
-                              <DialogDescription>
-                                This is how your seal will appear on approved documents
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="flex justify-center p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 rounded-xl">
-                              <DigitalSealPreview
-                                officeName={sealOfficeName}
-                                officeTitle={sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`}
-                                serialPrefix={sealPrefix}
-                                signatureImage={signature?.imageData?.startsWith('data:') ? signature.imageData : (buildDownloadUrl(signature?.imageData) ?? signature?.imageData)}
-                                size={500}
-                                showQR={true}
-                              />
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-6 lg:grid-cols-2">
-                      {/* Seal Preview */}
-                      <div className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 rounded-xl border">
-                        <p className="text-sm font-medium text-muted-foreground mb-4">
-                          Live Seal Preview
-                        </p>
-                        <DigitalSealPreview
-                          ref={sealPreviewRef}
-                          officeName={sealOfficeName}
-                          officeTitle={sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`}
-                          serialPrefix={sealPrefix}
-                          signatureImage={signature?.imageData?.startsWith('data:') ? signature.imageData : (buildDownloadUrl(signature?.imageData) ?? signature?.imageData)}
-                          size={previewSize}
-                          showQR={true}
-                        />
-                        <p className="text-xs text-muted-foreground mt-4 text-center max-w-xs">
-                          This is how your seal will appear on approved documents
-                        </p>
-                      </div>
-
-                      {/* Seal Settings */}
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Settings2 className="h-5 w-5 text-muted-foreground" />
-                            <h3 className="font-medium">Seal Settings</h3>
-                          </div>
-                          {hasUnsavedChanges && (
-                            <Badge variant="outline" className="text-xs">
-                              Unsaved changes
-                            </Badge>
-                          )}
-                        </div>
-
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <Label htmlFor="sealOfficeName">
-                                Organization Name <span className="text-destructive">*</span>
-                              </Label>
-                              <span className="text-xs text-muted-foreground">
-                                {sealOfficeName.length}/{MAX_OFFICE_NAME_LENGTH}
-                              </span>
-                            </div>
-                            <Input
-                              id="sealOfficeName"
-                              value={sealOfficeName}
-                              onChange={(e) => handleOfficeNameChange(e.target.value)}
-                              placeholder={DEFAULT_SEAL_OFFICE_NAME}
-                              maxLength={MAX_OFFICE_NAME_LENGTH}
-                              aria-invalid={!!errors.officeName}
-                              aria-describedby={errors.officeName ? "officeName-error" : undefined}
-                            />
-                            {errors.officeName && (
-                              <p id="officeName-error" className="text-xs text-destructive flex items-center gap-1">
-                                <XCircle className="h-3 w-3" />
-                                {errors.officeName}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              Text displayed at the top of the seal
-                            </p>
-                          </div>
-
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <Label htmlFor="sealOfficeTitle">Office Title</Label>
-                              <span className="text-xs text-muted-foreground">
-                                {sealOfficeTitle.length}/{MAX_OFFICE_TITLE_LENGTH}
-                              </span>
-                            </div>
-                            <Input
-                              id="sealOfficeTitle"
-                              value={sealOfficeTitle}
-                              onChange={(e) => handleOfficeTitleChange(e.target.value)}
-                              placeholder={`OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`}
-                              maxLength={MAX_OFFICE_TITLE_LENGTH}
-                              aria-invalid={!!errors.officeTitle}
-                              aria-describedby={errors.officeTitle ? "officeTitle-error" : undefined}
-                            />
-                            {errors.officeTitle && (
-                              <p id="officeTitle-error" className="text-xs text-destructive flex items-center gap-1">
-                                <XCircle className="h-3 w-3" />
-                                {errors.officeTitle}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              Text displayed at the bottom of the seal
-                            </p>
-                          </div>
-
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <Label htmlFor="sealPrefix">
-                                Serial Number Prefix <span className="text-destructive">*</span>
-                              </Label>
-                              <span className="text-xs text-muted-foreground">
-                                {sealPrefix.length}/{MAX_PREFIX_LENGTH}
-                              </span>
-                            </div>
-                            <Input
-                              id="sealPrefix"
-                              value={sealPrefix}
-                              onChange={(e) => handlePrefixChange(e.target.value)}
-                              placeholder="NPA"
-                              maxLength={MAX_PREFIX_LENGTH}
-                              className="uppercase"
-                              aria-invalid={!!errors.prefix}
-                              aria-describedby={errors.prefix ? "prefix-error" : undefined}
-                            />
-                            {errors.prefix && (
-                              <p id="prefix-error" className="text-xs text-destructive flex items-center gap-1">
-                                <XCircle className="h-3 w-3" />
-                                {errors.prefix}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              Prefix for seal serial numbers (e.g., NPA-MD-XXXXXXXX)
-                            </p>
-                          </div>
-
-                          <Separator />
-
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label htmlFor="require2fa" className="flex items-center gap-2">
-                                <Lock className="h-4 w-4" />
-                                Require 2FA for Seal
-                              </Label>
-                              <p className="text-xs text-muted-foreground">
-                                Require two-factor authentication before applying seal
-                              </p>
-                            </div>
-                            <Switch
-                              id="require2fa"
-                              checked={require2fa}
-                              onCheckedChange={(checked) => {
-                                setRequire2fa(checked);
-                                if (checked) setShow2FADialog(true);
-                              }}
-                              aria-label="Require 2FA for seal"
-                            />
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button 
-                              onClick={handleSaveSettings} 
-                              className="flex-1"
-                              disabled={isSaving || !hasUnsavedChanges}
-                            >
-                              {isSaving ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Saving...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                                  Save Seal Settings
-                                </>
-                              )}
-                            </Button>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  onClick={handleResetToDefaults}
-                                  aria-label="Reset to default settings"
-                                >
-                                  <RotateCcw className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Reset to default settings</TooltipContent>
-                            </Tooltip>
-                          </div>
-
-                          <Separator />
-
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              className="flex-1"
-                              onClick={() => setShowExportDialog(true)}
-                            >
-                              <FileDown className="h-4 w-4 mr-2" />
-                              Export Settings
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="flex-1"
-                              onClick={() => {
-                                const input = document.createElement('input');
-                                input.type = 'file';
-                                input.accept = '.json';
-                                input.onchange = handleImportSettings;
-                                input.click();
-                              }}
-                            >
-                              <FileUp className="h-4 w-4 mr-2" />
-                              Import Settings
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        {/* Usage Stats Card */}
-        {signature && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Signature Usage</span>
-                <Badge variant={signature.isActive ? 'default' : 'secondary'}>
-                  {signature.isActive ? (
-                    <>
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Active
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Inactive
-                    </>
-                  )}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-muted/50 rounded-lg border">
-                  <p className="text-3xl font-bold text-primary">{signature.timesUsed || 0}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Documents Sealed</p>
-                </div>
-                <div className="text-center p-4 bg-muted/50 rounded-lg border">
-                  <p className="text-sm font-semibold">
-                    {signature.lastUsedAt 
-                      ? formatDateShort(signature.lastUsedAt) 
-                      : 'Never'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">Last Used</p>
-                </div>
-                <div className="text-center p-4 bg-muted/50 rounded-lg border">
-                  <p className="text-sm font-semibold flex items-center justify-center gap-1">
-                    {signature.require2fa ? (
-                      <>
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        Enabled
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-4 w-4 text-muted-foreground" />
-                        Disabled
-                      </>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">2FA Required</p>
-                </div>
-                <div className="text-center p-4 bg-muted/50 rounded-lg border">
-                  <p className="text-sm font-semibold">
-                    {signature.uploadedAt 
-                      ? formatDateShort(signature.uploadedAt) 
-                      : 'N/A'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">Uploaded</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Delete Confirmation Dialog */}
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Signature</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete your digital signature? You will need to upload a new signature to approve documents with official seals.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteSignature}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete Signature
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+                <ImageIcon className="h-6 w-6 mx-auto mb-2 text-muted-foreground opacity-60" />
+                <p className="text-sm font-medium text-foreground">Choose an image</p>
+                <p className={cn(appType.caption, 'mt-1')}>
+                  PNG, JPG, or SVG · max {MAX_SIGNATURE_SIZE_MB}MB
+                </p>
+              </button>
+            )}
 
-        {/* 2FA Setup Dialog */}
-        <Dialog open={show2FADialog} onOpenChange={setShow2FADialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Lock className="h-5 w-5" />
-                2FA Required for Seal
-              </DialogTitle>
-              <DialogDescription>
-                You've enabled 2FA requirement for seal application, but you don't have 2FA configured yet.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
-                <Info className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                <div className="space-y-2 text-sm">
-                  <p className="font-medium">To use 2FA-protected seals:</p>
-                  <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                    <li>Go to Settings → Security</li>
-                    <li>Enable Two-Factor Authentication</li>
-                    <li>Set up an authenticator app</li>
-                    <li>Return here to use 2FA-protected seals</li>
-                  </ol>
-                </div>
-              </div>
-              <div className="flex gap-2">
+            {errors.file && (
+              <p className="text-xs text-destructive flex items-center gap-1" role="alert">
+                <XCircle className="h-3 w-3" />
+                {errors.file}
+              </p>
+            )}
+            {isUploading && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Saving…
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Seal rail */}
+        <div className="space-y-4 min-w-0">
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className={appType.sectionLabel}>Live seal</p>
+              <div className="flex items-center gap-0.5">
                 <Button
-                  variant="outline"
-                  onClick={() => {
-                    setRequire2fa(false);
-                    setShow2FADialog(false);
-                  }}
-                  className="flex-1"
+                  type="button"
+                  variant="ghost"
+                  size="quiet"
+                  onClick={handleDownloadSeal}
+                  disabled={!signatureSrc}
+                  aria-label="Download seal"
                 >
-                  Disable 2FA Requirement
+                  <Download className="h-3.5 w-3.5" />
                 </Button>
                 <Button
-                  onClick={() => {
-                    setShow2FADialog(false);
-                    // Navigate to security settings (you can implement navigation)
-                    toast.info('Please configure 2FA in Security settings');
-                  }}
-                  className="flex-1"
+                  type="button"
+                  variant="ghost"
+                  size="quiet"
+                  onClick={handlePrintSeal}
+                  disabled={!signatureSrc}
+                  aria-label="Print seal"
                 >
-                  Go to Security Settings
+                  <Printer className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
 
-        {/* Export Settings Dialog */}
-        <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Export Seal Settings</DialogTitle>
-              <DialogDescription>
-                Export your seal configuration to a JSON file for backup or transfer.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm font-medium mb-2">Settings to export:</p>
-                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                  <li>Organization Name: {sealOfficeName}</li>
-                  <li>Office Title: {sealOfficeTitle || 'Not set'}</li>
-                  <li>Serial Prefix: {sealPrefix}</li>
-                  <li>2FA Required: {require2fa ? 'Yes' : 'No'}</li>
-                </ul>
+            <div className="flex justify-center py-2">
+              <DigitalSealPreview
+                ref={sealPreviewRef}
+                officeName={sealOfficeName}
+                officeTitle={officeTitleDisplay}
+                serialPrefix={sealPrefix}
+                signatureImage={signatureSrc}
+                size={260}
+                showQR={true}
+              />
+            </div>
+
+            {signature && (
+              <p className={cn(appType.caption, 'text-center')}>
+                Used {signature.timesUsed || 0} time{(signature.timesUsed || 0) === 1 ? '' : 's'}
+                {signature.lastUsedAt ? ` · last ${formatDateShort(signature.lastUsedAt)}` : ''}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className={appType.sectionLabel}>Seal settings</p>
+              {hasUnsavedChanges && (
+                <span className={appType.caption}>Unsaved</span>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="sealOfficeName" className="text-xs">
+                  Organization
+                </Label>
+                <Input
+                  id="sealOfficeName"
+                  value={sealOfficeName}
+                  onChange={(e) => {
+                    setSealOfficeName(e.target.value);
+                    setErrors((prev) => ({ ...prev, officeName: validateOfficeName(e.target.value) }));
+                  }}
+                  maxLength={MAX_OFFICE_NAME_LENGTH}
+                  aria-invalid={!!errors.officeName}
+                />
+                {errors.officeName && (
+                  <p className="text-xs text-destructive">{errors.officeName}</p>
+                )}
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowExportDialog(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleExportSettings}
-                  className="flex-1"
-                >
-                  <FileDown className="h-4 w-4 mr-2" />
-                  Export Settings
-                </Button>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="sealOfficeTitle" className="text-xs">
+                  Office title
+                </Label>
+                <Input
+                  id="sealOfficeTitle"
+                  value={sealOfficeTitle}
+                  onChange={(e) => {
+                    setSealOfficeTitle(e.target.value);
+                    setErrors((prev) => ({ ...prev, officeTitle: validateOfficeTitle(e.target.value) }));
+                  }}
+                  maxLength={MAX_OFFICE_TITLE_LENGTH}
+                  aria-invalid={!!errors.officeTitle}
+                />
+                {errors.officeTitle && (
+                  <p className="text-xs text-destructive">{errors.officeTitle}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="sealPrefix" className="text-xs">
+                  Serial prefix
+                </Label>
+                <Input
+                  id="sealPrefix"
+                  value={sealPrefix}
+                  onChange={(e) => {
+                    const upper = e.target.value.toUpperCase();
+                    setSealPrefix(upper);
+                    setErrors((prev) => ({ ...prev, prefix: validatePrefix(upper) }));
+                  }}
+                  maxLength={MAX_PREFIX_LENGTH}
+                  className="uppercase"
+                  aria-invalid={!!errors.prefix}
+                />
+                {errors.prefix && <p className="text-xs text-destructive">{errors.prefix}</p>}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <Label htmlFor="require2fa" className="text-xs flex items-center gap-1.5 font-normal">
+                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                  Require 2FA to seal
+                </Label>
+                <Switch
+                  id="require2fa"
+                  checked={require2fa}
+                  onCheckedChange={(checked) => {
+                    setRequire2fa(checked);
+                    if (checked) setShow2FADialog(true);
+                  }}
+                />
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                type="button"
+                size="compact"
+                className="flex-1"
+                onClick={handleSaveSettings}
+                disabled={isSaving || !signature || !hasUnsavedChanges}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    Saving
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    Save
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="quiet"
+                onClick={handleResetToDefaults}
+                aria-label="Reset seal settings"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Dialog open={show2FADialog} onOpenChange={setShow2FADialog}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              2FA for seals
+            </DialogTitle>
+            <DialogDescription>
+              Turn on authenticator 2FA under Settings → Security to protect seal application.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+            <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+            <p>You can keep this requirement on and finish 2FA setup later.</p>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="ghost"
+              size="compact"
+              onClick={() => {
+                setRequire2fa(false);
+                setShow2FADialog(false);
+              }}
+            >
+              Turn off
+            </Button>
+            <Button size="compact" onClick={() => setShow2FADialog(false)}>
+              Got it
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

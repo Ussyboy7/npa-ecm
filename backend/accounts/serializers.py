@@ -265,12 +265,13 @@ class ExecutiveSignatureSerializer(serializers.ModelSerializer):
     def get_signature_url(self, obj):
         if obj.signature_image:
             try:
-                import base64, mimetypes
-                storage_path = obj.signature_image.path
-                content_type = mimetypes.guess_type(storage_path)[0] or "image/png"
-                with open(storage_path, "rb") as f:
-                    encoded = base64.b64encode(f.read()).decode("ascii")
-                return f"data:{content_type};base64,{encoded}"
+                import base64
+
+                with obj.signature_image.open("rb") as f:
+                    data = f.read()
+                # Uploads are re-encoded as PNG; never trust the stored filename extension.
+                encoded = base64.b64encode(data).decode("ascii")
+                return f"data:image/png;base64,{encoded}"
             except Exception:
                 return None
         return None
