@@ -5,39 +5,17 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from organization.models import Role
+from organization.models import Directorate, Division, Department, Office, Role
 
 User = get_user_model()
 
-# Organizational unit UUIDs from the database
-ORG_UNITS = {
-    # Directorates
-    "MD_DIRECTORATE": "2437ecb6-31fa-4126-863a-afc3679c221b",
-    "ED_FINANCE_DIRECTORATE": "3b26f93d-1e24-4d4d-80f8-c8f861800085",
-    "ED_ENG_DIRECTORATE": "daf00574-f45d-443f-9adb-54a9afc190b5",
-    "ED_MARINE_DIRECTORATE": "57e027d4-155a-4b61-8cb0-0a8d701925fd",
-    # Divisions
-    "ICT_DIVISION": "1625c04a-2629-4c5c-b9b5-079475ddd66a",
-    "FINANCE_DEPT": "3f06e575-e2ff-4b0e-ac84-950e44edc5eb",
-    "HR_DEPT": "5439bcce-7846-4b8a-a1c4-0f0174a71cf2",
-    "ENG_DIVISION": "ff27ef41-44c2-4ef7-b6f1-257e14dbb38c",
-    "MARINE_DIVISION": "f306c907-e640-4a50-8014-aeccfc677193",
-    "ADMIN_DIVISION": "a1487a7a-043b-4742-9b02-3d64bfd1cb36",
-    "AUDIT_DIVISION": "871009ed-614b-42ed-8309-bca725519935",
-    # Departments
-    "ICT_DEPT_SYSTEMS": "ea614ca6-6751-4046-9bd6-ef9f82a254a7",
-    "ICT_DEPT_APPS": "63add8a9-2d36-4036-a489-ec26afa881d7",
-    "ICT_DEPT_SOFTWARE": "a0c840df-3898-4881-908c-4b9f8be3cb3d",
-    "ENG_DEPT_CIVIL": "01c5bbe3-f374-4962-af86-49bae9c91b9a",
-    "FINANCE_DEPT_TARIFF": "90319915-a013-4848-88f3-46e582615b39",
-    "ADMIN_DEPT": "9a4e9154-07ba-4eb2-ba04-b455813b449d",
-    "ADMIN_FACILITY_DEPT": "02300955-ed7a-4146-9b48-d20c2622aa7d",
-    "ENG_DEPT_PORTS": "23755e41-3e76-41aa-b4d4-89c6ca1dae8d",
-    "VESSEL_DEPT": "f1cba731-3924-408a-baba-c9daa79c40ab",
-    "HR_MGT_DEPT": "2cb7500f-a828-47cd-81e8-a75afaaa8408",
-    "HR_DEPT_LD": "c0abeb56-c6d6-4641-839b-3be367172c04",
-    "AUDIT_SYSTEMS_DEPT": "9d3564b8-ce41-42fc-a9d5-c06fead052b2",
-}
+
+def _resolve_id(model, name):
+    """Look up an org unit by name. Returns None if not found."""
+    if not name:
+        return None
+    obj = model.objects.filter(name=name).first()
+    return obj.id if obj else None
 
 DEV_USERS = (
     {
@@ -49,9 +27,9 @@ DEV_USERS = (
         "is_superuser": True,
         "is_staff": True,
         "grade_level": "MDCS",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": None,
-        "department_id": None,
+        "directorate_name": "Office of the Managing Director",
+        "division_name": None,
+        "department_name": None,
     },
     {
         "username": "md",
@@ -60,9 +38,9 @@ DEV_USERS = (
         "last_name": "Dantsoho",
         "role_name": "Managing Director",
         "grade_level": "MDCS",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": None,
-        "department_id": None,
+        "directorate_name": "Office of the Managing Director",
+        "division_name": None,
+        "department_name": None,
     },
     {
         "username": "edfa",
@@ -71,9 +49,9 @@ DEV_USERS = (
         "last_name": "Richard-Edet",
         "role_name": "Executive Director",
         "grade_level": "EDCS",
-        "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
-        "division_id": None,
-        "department_id": None,
+        "directorate_name": "Finance & Administration",
+        "division_name": None,
+        "department_name": None,
     },
     {
         "username": "gmict",
@@ -82,9 +60,9 @@ DEV_USERS = (
         "last_name": "Gbotolorun",
         "role_name": "General Manager",
         "grade_level": "MSS1",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": ORG_UNITS["ICT_DIVISION"],
-        "department_id": ORG_UNITS["ICT_DEPT_SYSTEMS"],
+        "directorate_name": "Office of the Managing Director",
+        "division_name": "Information & Communication Technology",
+        "department_name": "ICT Systems",
     },
     {
         "username": "agmict",
@@ -93,9 +71,9 @@ DEV_USERS = (
         "last_name": "Ejiro",
         "role_name": "Assistant General Manager",
         "grade_level": "MSS2",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": ORG_UNITS["ICT_DIVISION"],
-        "department_id": None,
+        "directorate_name": "Office of the Managing Director",
+        "division_name": "Information & Communication Technology",
+        "department_name": None,
     },
     {
         "username": "pamd",
@@ -104,11 +82,10 @@ DEV_USERS = (
         "last_name": "Nnaji",
         "role_name": "Personal Assistant",
         "grade_level": "SSS2",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": None,
-        "department_id": None,
+        "directorate_name": "Office of the Managing Director",
+        "division_name": None,
+        "department_name": None,
     },
-    # Lower-level staff roles (previously missing)
     {
         "username": "officer1",
         "email": "officer1@npa.gov.ng",
@@ -116,9 +93,9 @@ DEV_USERS = (
         "last_name": "Okafor",
         "role_name": "Officer I",
         "grade_level": "SSS3",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": ORG_UNITS["ICT_DIVISION"],
-        "department_id": ORG_UNITS["ICT_DEPT_APPS"],
+        "directorate_name": "Office of the Managing Director",
+        "division_name": "Information & Communication Technology",
+        "department_name": "ICT Applications",
     },
     {
         "username": "officer2",
@@ -127,9 +104,9 @@ DEV_USERS = (
         "last_name": "Mohammed",
         "role_name": "Officer II",
         "grade_level": "SSS4",
-        "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
-        "division_id": ORG_UNITS["FINANCE_DEPT"],
-        "department_id": ORG_UNITS["FINANCE_DEPT_TARIFF"],
+        "directorate_name": "Finance & Administration",
+        "division_name": "Finance",
+        "department_name": "Tariff & Revenue",
     },
     {
         "username": "staff1",
@@ -138,9 +115,9 @@ DEV_USERS = (
         "last_name": "Nwosu",
         "role_name": "Staff I",
         "grade_level": "JSS1",
-        "directorate_id": ORG_UNITS["ED_ENG_DIRECTORATE"],
-        "division_id": ORG_UNITS["ENG_DIVISION"],
-        "department_id": ORG_UNITS["ENG_DEPT_CIVIL"],
+        "directorate_name": "Engineering & Technical Services",
+        "division_name": "Engineering",
+        "department_name": "Civil Engineering",
     },
     {
         "username": "staff2",
@@ -149,9 +126,9 @@ DEV_USERS = (
         "last_name": "Abubakar",
         "role_name": "Staff II",
         "grade_level": "JSS2",
-        "directorate_id": ORG_UNITS["ED_MARINE_DIRECTORATE"],
-        "division_id": ORG_UNITS["MARINE_DIVISION"],
-        "department_id": ORG_UNITS["VESSEL_DEPT"],
+        "directorate_name": "Marine & Operations",
+        "division_name": "Marine",
+        "department_name": "Vessel Management",
     },
     {
         "username": "staff3",
@@ -160,11 +137,10 @@ DEV_USERS = (
         "last_name": "Eze",
         "role_name": "Staff III",
         "grade_level": "JSS3",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": ORG_UNITS["ADMIN_DIVISION"],
-        "department_id": ORG_UNITS["ADMIN_DEPT"],
+        "directorate_name": "Office of the Managing Director",
+        "division_name": "Administration",
+        "department_name": "Administration",
     },
-    # Additional Officer I/II for the previously empty roles
     {
         "username": "officer_i",
         "email": "officeri@npa.gov.ng",
@@ -172,9 +148,9 @@ DEV_USERS = (
         "last_name": "Adeyemi",
         "role_name": "Officer I",
         "grade_level": "SSS3",
-        "directorate_id": ORG_UNITS["ED_ENG_DIRECTORATE"],
-        "division_id": ORG_UNITS["ENG_DIVISION"],
-        "department_id": ORG_UNITS["ENG_DEPT_PORTS"],
+        "directorate_name": "Engineering & Technical Services",
+        "division_name": "Engineering",
+        "department_name": "Port & Marine Infrastructure",
     },
     {
         "username": "officer_ii",
@@ -183,11 +159,10 @@ DEV_USERS = (
         "last_name": "Ogunleye",
         "role_name": "Officer II",
         "grade_level": "SSS4",
-        "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
-        "division_id": ORG_UNITS["HR_DEPT"],
-        "department_id": ORG_UNITS["HR_DEPT_LD"],
+        "directorate_name": "Finance & Administration",
+        "division_name": "Human Resource Management",
+        "department_name": "Learning & Development",
     },
-    # Additional Staff I/II/III
     {
         "username": "staff_i",
         "email": "staffi@npa.gov.ng",
@@ -195,9 +170,9 @@ DEV_USERS = (
         "last_name": "Adebayo",
         "role_name": "Staff I",
         "grade_level": "JSS1",
-        "directorate_id": ORG_UNITS["ED_MARINE_DIRECTORATE"],
-        "division_id": ORG_UNITS["MARINE_DIVISION"],
-        "department_id": ORG_UNITS["VESSEL_DEPT"],
+        "directorate_name": "Marine & Operations",
+        "division_name": "Marine",
+        "department_name": "Vessel Management",
     },
     {
         "username": "staff_ii",
@@ -206,9 +181,9 @@ DEV_USERS = (
         "last_name": "Okafor",
         "role_name": "Staff II",
         "grade_level": "JSS2",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": ORG_UNITS["AUDIT_DIVISION"],
-        "department_id": ORG_UNITS["AUDIT_SYSTEMS_DEPT"],
+        "directorate_name": "Office of the Managing Director",
+        "division_name": "Internal Audit",
+        "department_name": "Audit Systems",
     },
     {
         "username": "staff_iii",
@@ -217,11 +192,10 @@ DEV_USERS = (
         "last_name": "Mohammed",
         "role_name": "Staff III",
         "grade_level": "JSS3",
-        "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
-        "division_id": ORG_UNITS["ADMIN_DIVISION"],
-        "department_id": ORG_UNITS["ADMIN_FACILITY_DEPT"],
+        "directorate_name": "Finance & Administration",
+        "division_name": "Administration",
+        "department_name": "Facility Management",
     },
-    # Assistant Manager (single user role)
     {
         "username": "asst_mgr",
         "email": "asstmgr@npa.gov.ng",
@@ -229,11 +203,10 @@ DEV_USERS = (
         "last_name": "Adesina",
         "role_name": "Assistant Manager",
         "grade_level": "SSS1",
-        "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
-        "division_id": ORG_UNITS["HR_DEPT"],
-        "department_id": ORG_UNITS["HR_MGT_DEPT"],
+        "directorate_name": "Finance & Administration",
+        "division_name": "Human Resource Management",
+        "department_name": "HR Management",
     },
-    # Manager (single user role)
     {
         "username": "mgr",
         "email": "mgr@npa.gov.ng",
@@ -241,11 +214,10 @@ DEV_USERS = (
         "last_name": "Bakare",
         "role_name": "Manager",
         "grade_level": "MSS5",
-        "directorate_id": ORG_UNITS["ED_ENG_DIRECTORATE"],
-        "division_id": ORG_UNITS["ENG_DIVISION"],
-        "department_id": ORG_UNITS["ENG_DEPT_CIVIL"],
+        "directorate_name": "Engineering & Technical Services",
+        "division_name": "Engineering",
+        "department_name": "Civil Engineering",
     },
-    # Principal Manager (single user role)
     {
         "username": "pmgr",
         "email": "pmgr@npa.gov.ng",
@@ -253,11 +225,10 @@ DEV_USERS = (
         "last_name": "Eze",
         "role_name": "Principal Manager",
         "grade_level": "MSS3",
-        "directorate_id": ORG_UNITS["ED_FINANCE_DIRECTORATE"],
-        "division_id": ORG_UNITS["FINANCE_DEPT"],
-        "department_id": ORG_UNITS["FINANCE_DEPT_TARIFF"],
+        "directorate_name": "Finance & Administration",
+        "division_name": "Finance",
+        "department_name": "Tariff & Revenue",
     },
-    # Senior Manager (2 users already, add one more for balance)
     {
         "username": "smgr2",
         "email": "smgr2@npa.gov.ng",
@@ -265,11 +236,10 @@ DEV_USERS = (
         "last_name": "Yusuf",
         "role_name": "Senior Manager",
         "grade_level": "MSS4",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": ORG_UNITS["ICT_DIVISION"],
-        "department_id": ORG_UNITS["ICT_DEPT_SYSTEMS"],
+        "directorate_name": "Office of the Managing Director",
+        "division_name": "Information & Communication Technology",
+        "department_name": "ICT Systems",
     },
-    # Senior Officer (single user)
     {
         "username": "sofficer",
         "email": "sofficer@npa.gov.ng",
@@ -277,11 +247,10 @@ DEV_USERS = (
         "last_name": "Bello",
         "role_name": "Senior Officer",
         "grade_level": "SSS2",
-        "directorate_id": ORG_UNITS["ED_ENG_DIRECTORATE"],
-        "division_id": ORG_UNITS["ENG_DIVISION"],
-        "department_id": ORG_UNITS["ENG_DEPT_CIVIL"],
+        "directorate_name": "Engineering & Technical Services",
+        "division_name": "Engineering",
+        "department_name": "Civil Engineering",
     },
-    # Secretary (2 users already, add one for MD)
     {
         "username": "sec_md",
         "email": "secmd@npa.gov.ng",
@@ -289,11 +258,10 @@ DEV_USERS = (
         "last_name": "Okafor",
         "role_name": "Secretary",
         "grade_level": "SSS2",
-        "directorate_id": ORG_UNITS["MD_DIRECTORATE"],
-        "division_id": None,
-        "department_id": None,
+        "directorate_name": "Office of the Managing Director",
+        "division_name": None,
+        "department_name": None,
     },
-    # Assistant (2 users, add one more)
     {
         "username": "asst3",
         "email": "asst3@npa.gov.ng",
@@ -301,9 +269,9 @@ DEV_USERS = (
         "last_name": "Lawal",
         "role_name": "Assistant",
         "grade_level": "JSS3",
-        "directorate_id": ORG_UNITS["ED_MARINE_DIRECTORATE"],
-        "division_id": ORG_UNITS["MARINE_DIVISION"],
-        "department_id": ORG_UNITS["VESSEL_DEPT"],
+        "directorate_name": "Marine & Operations",
+        "division_name": "Marine",
+        "department_name": "Vessel Management",
     },
 )
 
@@ -346,9 +314,13 @@ class Command(BaseCommand):
                 continue
 
             username = spec["username"]
-            directorate_id = spec.pop("directorate_id", None)
-            division_id = spec.pop("division_id", None)
-            department_id = spec.pop("department_id", None)
+            directorate_name = spec.pop("directorate_name", None)
+            division_name = spec.pop("division_name", None)
+            department_name = spec.pop("department_name", None)
+
+            directorate_id = _resolve_id(Directorate, directorate_name)
+            division_id = _resolve_id(Division, division_name)
+            department_id = _resolve_id(Department, department_name)
 
             defaults = {
                 "email": spec["email"],
