@@ -54,28 +54,27 @@ class UserActivityMiddleware:
     """
     Middleware to track user activity.
     Updates last_activity timestamp for authenticated users on each request.
+    Placed AFTER AuthenticationMiddleware, but request.user is resolved lazily,
+    so we must inspect it AFTER get_response returns.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        # Only track activity for authenticated users
-        if request.user.is_authenticated:
-            # Update last_activity asynchronously to avoid blocking
-            # Use update() to avoid triggering signals and save queries
+        response = self.get_response(request)
+        # Check AFTER the view so JWT auth has already resolved request.user
+        if getattr(request.user, "is_authenticated", False):
             try:
-                # Only update if more than 1 minute has passed since last update
-                # This reduces database writes
                 user = request.user
-                if not user.last_activity or (timezone.now() - user.last_activity).total_seconds() > 60:
-                    # Use update() for efficiency
+                if not user.last_activity or (timezone.now() - user.last_activity).total_seconds() > 30:
                     from accounts.models import User
+
                     User.objects.filter(id=user.id).update(last_activity=timezone.now())
             except (AttributeError, TypeError, ValueError):
                 pass
 
-        return self.get_response(request)
+        return response
 
 
 class SecurityHeadersMiddleware:
