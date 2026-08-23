@@ -122,25 +122,7 @@ const DelegatedInbox = () => {
 
   return (
     <>
-      {!currentUser?.id ? (
-        <QueuePageShell
-          title="Delegated to Me"
-          subtitle="Correspondence items delegated to you by executives for handling on their behalf"
-        >
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              Loading...
-            </CardContent>
-          </Card>
-        </QueuePageShell>
-      ) : !currentUser ? (
-        <QueuePageShell
-          title="Delegated to Me"
-          subtitle="Correspondence items delegated to you by executives for handling on their behalf"
-        >
-          {null}
-        </QueuePageShell>
-      ) : (
+      {!currentUser ? null : (
         <QueuePageShell
           title="Delegated to Me"
           subtitle="Correspondence items delegated to you by executives for handling on their behalf"

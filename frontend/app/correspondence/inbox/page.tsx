@@ -253,14 +253,7 @@ const CorrespondenceInboxContent = () => {
 
   return (
     <>
-      {!currentUser ? (
-        <QueuePageShell
-          title="Office Inbox"
-          subtitle="Monitor work queued in your offices and prioritize urgent escalations"
-        >
-          <LoadingState message="Loading office inbox…" />
-        </QueuePageShell>
-      ) : !hasCorrespondenceAccess ? (
+      {!currentUser ? null : !hasCorrespondenceAccess ? (
         <QueuePageShell
           title="Office Inbox"
           subtitle="Monitor work queued in your offices and prioritize urgent escalations"

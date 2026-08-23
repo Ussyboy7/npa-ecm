@@ -516,9 +516,6 @@ const CorrespondenceDetailContent = () => {
           />
         ) : (
         <div className="flex items-center justify-center h-full min-h-[50vh] p-6 animate-in fade-in duration-300">
-          {detailLoading ? (
-            <LoadingState message="Loading correspondence…" size="md" />
-          ) : (
             <EmptyState
               icon="file"
               title="Correspondence not found"
@@ -527,14 +524,9 @@ const CorrespondenceDetailContent = () => {
               onAction={() => router.push('/correspondence/inbox')}
               variant="dashed"
             />
-          )}
         </div>
         )
-      ) : !activeUser ? (
-        <div className="flex items-center justify-center h-full min-h-[40vh] p-6 animate-in fade-in duration-300">
-          <LoadingState message="Loading session…" size="md" />
-        </div>
-      ) : (
+      ) : !activeUser ? null : (
         <>
       <div className="flex flex-col min-w-0 flex-1 min-h-0 overflow-hidden">
         {/* Header - Full Width */}

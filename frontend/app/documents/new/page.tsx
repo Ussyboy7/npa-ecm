@@ -8,7 +8,7 @@ import type { DocumentRecord } from '@/lib/api/dms';
 
 export default function CreateDocumentPage() {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser } = useCurrentUser();
 
   const handleComplete = (document: DocumentRecord) => {
     router.push(`/dms/${document.id}`);
@@ -16,11 +16,7 @@ export default function CreateDocumentPage() {
 
   return (
     <>
-      {!hydrated ? (
-        <div className="container mx-auto p-4 md:p-6">
-          <p className={appType.meta}>Loading...</p>
-        </div>
-      ) : !currentUser?.id ? (
+      {!currentUser?.id ? (
         <div className="container mx-auto p-4 md:p-6">
           <p className={appType.meta}>Please log in to create documents</p>
         </div>

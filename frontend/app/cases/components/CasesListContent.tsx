@@ -375,16 +375,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
     }
   };
 
-  if (!currentUser?.id) {
-    return (
-      <QueuePageShell title={title} subtitle={description}>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
-          <span className="text-muted-foreground">Loading...</span>
-        </div>
-      </QueuePageShell>
-    );
-  }
+  if (!currentUser?.id) return null;
 
   return (
     <QueuePageShell

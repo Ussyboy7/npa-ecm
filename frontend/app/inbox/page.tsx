@@ -32,7 +32,6 @@ import { usePagination } from '@/hooks/use-pagination';
 import { useCorrespondenceQueueFilters } from '@/hooks/use-correspondence-queue-filters';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import { correspondenceQueueListStackClass } from '@/components/shared/registry-queue-styles';
@@ -384,10 +383,8 @@ const ExecutiveInbox = () => {
         </CardContent>
       </Card>
 
-      {error && <ErrorState message={error} variant="inline" />}
-
-      {loading ? (
-        <LoadingState message="Loading inbox…" />
+      {error ? (
+        <ErrorState message={error} variant="inline" />
       ) : sortedItems.length === 0 && pendingApprovals.length === 0 ? (
         <EmptyState
           icon="inbox"

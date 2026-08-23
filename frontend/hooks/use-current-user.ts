@@ -93,17 +93,6 @@ export function getLoadingSnapshot(): boolean {
   return globalUserState.loading;
 }
 
-export function seedCurrentUserFromApi(data: unknown, options?: { notify?: boolean }): void {
-  if (!isRecord(data)) return;
-  const user = mapApiUserToUser(data);
-  globalUserState.user = user;
-  globalUserState.hydrated = true;
-  globalUserState.loading = false;
-  if (options?.notify !== false) {
-    notifySubscribers();
-  }
-}
-
 export const useCurrentUser = () => {
   const organization = useContext(OrganizationContext);
   const users = useMemo(() => organization?.users ?? [], [organization?.users]);

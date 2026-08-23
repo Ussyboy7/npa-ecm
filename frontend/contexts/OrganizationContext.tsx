@@ -8,8 +8,6 @@ import { DEFAULT_CATALOG_PAGE_SIZE } from '@/lib/pagination-constants';
 import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
 import { updateOrganizationCache, resetOrgCache } from '@/lib/npa-structure';
 import type { User } from '@/lib/npa-structure';
-import type { BootstrapData } from '@/lib/server-bootstrap';
-import { parseBootstrapOrgState } from '@/lib/bootstrap-org-state';
 import type {
   Directorate, Division, Department, Office, OfficeMembership,
   AssistantAssignment, Role, OrganizationContextType,
@@ -34,87 +32,20 @@ export type {
 
 export const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
-function applyInitialData(
-  data: BootstrapData,
-  setters: {
-    setDirectorates: (v: Directorate[]) => void;
-    setDivisions: (v: Division[]) => void;
-    setDepartments: (v: Department[]) => void;
-    setAssistantAssignments: (v: AssistantAssignment[]) => void;
-    setOffices: (v: Office[]) => void;
-    setOfficeMemberships: (v: OfficeMembership[]) => void;
-    setUsers: (v: User[]) => void;
-    setRoles: (v: Role[]) => void;
-  }
-) {
-  const dirs = data.directorates.filter(isRecord).map(mapApiDirectorate);
-  const divs = data.divisions.filter(isRecord).map(mapApiDivision);
-  const depts = data.departments.filter(isRecord).map(mapApiDepartment);
-  const offs = data.offices.filter(isRecord).map(mapApiOffice);
-  const rols = data.roles.filter(isRecord).map(mapApiRole);
-  const mems = data.officeMemberships.filter(isRecord).map(mapApiOfficeMembership);
-  const usrs = dedupeUsers(data.users.filter(isRecord).map(mapApiUserToUser));
-  const dels = data.assistantAssignments.filter(isRecord).map(mapApiDelegation);
-
-  setters.setDirectorates(sortByName(dirs));
-  setters.setDivisions(sortByName(divs));
-  setters.setDepartments(sortByName(depts));
-  setters.setOffices(sortByName(offs));
-  setters.setRoles(sortByName(rols));
-  setters.setOfficeMemberships(mems);
-  setters.setUsers(sortByName(usrs));
-  setters.setAssistantAssignments(dels);
-
-  updateOrganizationCache({
-    directorates: dirs,
-    divisions: divs,
-    departments: depts,
-    offices: offs,
-    officeMemberships: mems,
-    users: usrs,
-  });
-}
-
 export const OrganizationProvider: React.FC<{
   children: ReactNode;
-  initialData?: BootstrapData | null;
-}> = ({ children, initialData }) => {
-  const bootstrapState = useMemo(() => parseBootstrapOrgState(initialData), [initialData]);
-  const [directorates, setDirectorates] = useState<Directorate[]>(bootstrapState.directorates);
-  const [divisions, setDivisions] = useState<Division[]>(bootstrapState.divisions);
-  const [departments, setDepartments] = useState<Department[]>(bootstrapState.departments);
-  const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>(
-    bootstrapState.assistantAssignments,
-  );
-  const [offices, setOffices] = useState<Office[]>(bootstrapState.offices);
-  const [officeMemberships, setOfficeMemberships] = useState<OfficeMembership[]>(
-    bootstrapState.officeMemberships,
-  );
-  const [users, setUsers] = useState<User[]>(bootstrapState.users);
-  const [roles, setRoles] = useState<Role[]>(bootstrapState.roles);
+}> = ({ children }) => {
+  const [directorates, setDirectorates] = useState<Directorate[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>([]);
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [officeMemberships, setOfficeMemberships] = useState<OfficeMembership[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [_hasSynced, setHasSynced] = useState(Boolean(initialData));
   const currentUser = useSyncExternalStore(subscribeToStore, getCurrentUserSnapshot, getCurrentUserSnapshot);
-  const appliedInitialRef = useRef(Boolean(initialData));
   const organizationRefreshPromiseRef = useRef<Promise<void> | null>(null);
-
-  useEffect(() => {
-    if (initialData && !appliedInitialRef.current) {
-      appliedInitialRef.current = true;
-      applyInitialData(initialData, {
-        setDirectorates,
-        setDivisions,
-        setDepartments,
-        setAssistantAssignments,
-        setOffices,
-        setOfficeMemberships,
-        setUsers,
-        setRoles,
-      });
-      setHasSynced(true);
-      logInfo('Organization data loaded from server bootstrap');
-    }
-  }, [initialData]);
 
   const applyDirectorateUpdate = useCallback(
     (directorate: Directorate) => {
@@ -170,7 +101,7 @@ export const OrganizationProvider: React.FC<{
     []
   );
 
-  /** Fetch all pages of a catalog/list endpoint for bootstrap caches. */
+  /** Fetch all pages of a catalog/list endpoint. */
   const fetchFirstPage = useCallback(
     async (basePath: string, pageSize = DEFAULT_CATALOG_PAGE_SIZE): Promise<Record<string, unknown>[]> => {
       const rows = await fetchAllCatalogPaginated<Record<string, unknown>>(basePath, pageSize);
@@ -235,7 +166,6 @@ export const OrganizationProvider: React.FC<{
         users: sortedUsers,
       });
 
-      setHasSynced(true);
       logInfo('Organization data loaded successfully:', {
         users: sortedUsers.length,
         directorates: sortedDirectorates.length,
@@ -272,23 +202,16 @@ export const OrganizationProvider: React.FC<{
 
   useEffect(() => {
     if (!currentUser?.id || !hasTokens()) return;
-    const hasOrgFromBootstrap = initialData && (initialData.offices?.length > 0 || initialData.directorates?.length > 0);
-    if (hasOrgFromBootstrap) return;
     void refreshOrganizationData();
-  }, [currentUser?.id, refreshOrganizationData, initialData]);
+  }, [currentUser?.id, refreshOrganizationData]);
 
   const lastUserIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!currentUser?.id || !hasTokens()) return;
-    if (initialData && lastUserIdRef.current === null) {
-      lastUserIdRef.current = currentUser.id;
-      return;
-    }
     if (lastUserIdRef.current !== currentUser.id) {
       lastUserIdRef.current = currentUser.id;
-      setHasSynced(false);
     }
-  }, [currentUser?.id, initialData]);
+  }, [currentUser?.id]);
 
   const buildDirectoratePayload = (input: Partial<CreateDirectorateInput>) =>
     cleanPayload({
@@ -670,7 +593,6 @@ export const OrganizationProvider: React.FC<{
     setOfficeMemberships([]);
     setUsers([]);
     setRoles([]);
-    setHasSynced(false);
     resetOrgCache();
   }, []);
 

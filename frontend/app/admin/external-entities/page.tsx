@@ -163,7 +163,7 @@ export default function ExternalEntitiesPage() {
     }
   };
 
-  if (!currentUser) return <LoadingState message="Loading…" />;
+  if (!currentUser) return null;
 
   if (!canManage) {
     return (

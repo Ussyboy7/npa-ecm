@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
-import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { Button } from "@/components/ui/button";
@@ -51,7 +50,7 @@ interface PendingApproval {
 
 const Dashboard = () => {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser } = useCurrentUser();
   const { divisions } = useOrganization();
   const { isSecretary } = useRoleChecks();
   const [loading, setLoading] = useState(true);
@@ -165,10 +164,6 @@ const Dashboard = () => {
     [summary.overdue, summary.dueSoon, pendingApprovals.length, myCasesCount],
   );
 
-  if (!hydrated) {
-    return <LoadingState message="Loading dashboard…" />;
-  }
-
   if (!currentUser) {
     return (
       <div className="container mx-auto p-6">
@@ -192,9 +187,7 @@ const Dashboard = () => {
     >
       {isSecretary ? <SecretaryDashboardContent /> : null}
 
-      {loading ? (
-        <LoadingState message="Loading your work queue…" />
-      ) : error ? (
+      {error ? (
         <ErrorState message={error} onRetry={() => router.refresh()} />
       ) : (
         <div className="space-y-6">

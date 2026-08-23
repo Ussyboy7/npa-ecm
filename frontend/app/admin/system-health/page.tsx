@@ -76,9 +76,7 @@ export default function SystemHealthPage() {
     if (canAccess) void load();
   }, [canAccess, load]);
 
-  if (!currentUser) {
-    return <LoadingState message="Loading system health…" />;
-  }
+  if (!currentUser) return null;
 
   if (!canAccess) {
     return (

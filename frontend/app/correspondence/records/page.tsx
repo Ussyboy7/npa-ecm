@@ -503,14 +503,7 @@ const RecordsArchiveForm = () => {
   return (
     <ErrorBoundary>
       <>
-        {!currentUser ? (
-          <QueuePageShell
-            title="Archives"
-            subtitle={`Review completed and archived correspondence in your ${getScopeLabel().toLowerCase()} scope.`}
-          >
-            <LoadingState message="Loading records…" />
-          </QueuePageShell>
-        ) : (
+        {!currentUser ? null : (
           <QueuePageShell
             title="Archives"
             subtitle={`Review completed and archived correspondence in your ${getScopeLabel().toLowerCase()} scope.`}

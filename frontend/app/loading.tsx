@@ -1,9 +1,5 @@
-import { Loader2 } from 'lucide-react';
+import AppShellSkeleton from '@/components/shared/AppShellSkeleton';
 
 export default function Loading() {
-  return (
-    <div className="flex h-screen w-screen items-center justify-center bg-background">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-    </div>
-  );
+  return <AppShellSkeleton />;
 }

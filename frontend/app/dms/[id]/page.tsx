@@ -36,7 +36,6 @@ import { useDocumentOcr } from '@/app/dms/[id]/hooks/use-document-ocr';
 import { Correspondence } from '@/lib/npa-structure';
 import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
-import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 
 const DocumentDetailContent = () => {
@@ -182,11 +181,7 @@ const DocumentDetailContent = () => {
 
   return (
     <>
-      {loading ? (
-        <div className="flex items-center justify-center h-full min-h-[50vh] p-6 animate-in fade-in duration-300 motion-reduce:animate-none">
-          <LoadingState message="Loading document…" size="md" />
-        </div>
-      ) : accessDenied ? (
+      {accessDenied ? (
         <ResourceAccessDenied
           title="Document Unavailable"
           check={accessExplanation}

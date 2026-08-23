@@ -309,14 +309,7 @@ const MySentPageContent = () => {
 
   return (
     <>
-      {!currentUser ? (
-        <QueuePageShell
-          title="My Sent"
-          subtitle="Correspondence you created and documents you've shared"
-        >
-          <LoadingState message="Loading sent items…" />
-        </QueuePageShell>
-      ) : (
+      {!currentUser ? null : (
         <QueuePageShell
           title="My Sent"
           subtitle="Correspondence you created and documents you've shared"

@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/shared/Providers';
 import { AppShell } from '@/components/AppShell';
-import { fetchBootstrap } from '@/lib/server-bootstrap';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -14,20 +13,15 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const bootstrap = await fetchBootstrap();
-
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans antialiased">
-        <Providers
-          initialOrgData={bootstrap}
-          initialSidebarCounts={bootstrap?.sidebarCounts ?? null}
-        >
+        <Providers>
           <AppShell>{children}</AppShell>
         </Providers>
       </body>

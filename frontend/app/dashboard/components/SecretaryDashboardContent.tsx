@@ -225,10 +225,6 @@ const SecretaryDashboardContent = () => {
     }
   };
 
-  if (!currentUser?.id) {
-    return <LoadingState message="Loading secretary data…" />;
-  }
-
   if (loading) {
     return <LoadingState message="Loading your workload…" />;
   }

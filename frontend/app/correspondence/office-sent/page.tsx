@@ -25,7 +25,6 @@ import {
   Search,
   Send,
   Building2,
-  Loader2,
   Download,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -271,16 +270,7 @@ const OfficeSentPage = () => {
 
   return (
     <>
-      {!currentUser ? (
-        <div className="container mx-auto p-6">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-              <p className="text-muted-foreground">Loading...</p>
-            </CardContent>
-          </Card>
-        </div>
-      ) : !hasOfficeAccess ? (
+      {!currentUser ? null : !hasOfficeAccess ? (
         <QueuePageShell
           title="Office Sent"
           subtitle="Correspondence sent from your office(s)"
