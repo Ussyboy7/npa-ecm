@@ -14,34 +14,29 @@ scrape_configs:
 
   - job_name: 'npa-ecm-backend-staging'
     static_configs:
-      - targets: ['backend_stag:8000']
+      - targets: ['backend:8000']
     scrape_interval: 30s
     metrics_path: '/api/metrics/'
-    # Use proper Host header to avoid DisallowedHost errors
-    # Prometheus will use the target hostname, but we override it
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: backend_stag:8000
-    # Set Host header to backend_stag (without port) for Django ALLOWED_HOSTS
-    # Note: Prometheus doesn't directly support custom headers in static_configs
-    # This is handled by Django's ALLOWED_HOSTS which now includes 'backend_stag'
+        replacement: backend:8000
 
   - job_name: 'npa-ecm-frontend-staging'
     static_configs:
-      - targets: ['frontend_stag:3000']
+      - targets: ['frontend:3000']
     scrape_interval: 30s
     metrics_path: '/api/metrics/'
 
   - job_name: 'postgres-staging'
     static_configs:
-      - targets: ['postgres_stag:5432']
+      - targets: ['postgres:5432']
     scrape_interval: 60s
 
   - job_name: 'redis-staging'
     static_configs:
-      - targets: ['redis_stag:6379']
+      - targets: ['redis:6379']
     scrape_interval: 30s
