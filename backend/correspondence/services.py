@@ -245,7 +245,7 @@ class CorrespondenceDocumentService:
             file_url=attachment.file_url,
             content_text=content_text,
             content_html=content_html,
-            summary=f"Original attachment: {attachment.file_name}",
+            summary="",  # Real summary via generate-summary after OCR/text extract
             uploaded_by=document.author,
             notes=f"Auto-created from correspondence attachment",
         )
@@ -535,73 +535,34 @@ class CompletionPackageService:
 
     @staticmethod
     def _build_summary_pdf(context: dict) -> bytes:
-        """Build a properly formatted PDF from context data."""
+        """Build Official Correspondence Record PDF (matches reference design)."""
         from django.utils.dateformat import format as date_format
         
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=LETTER, 
-                               rightMargin=0.75*inch, leftMargin=0.75*inch,
-                               topMargin=0.75*inch, bottomMargin=0.75*inch)
+                               rightMargin=0.65*inch, leftMargin=0.65*inch,
+                               topMargin=0.55*inch, bottomMargin=0.55*inch)
         
-        # Create styles
         styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=18,
-            textColor=colors.HexColor('#111827'),
-            spaceAfter=12,
-            alignment=TA_LEFT,
-        )
-        heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=styles['Heading2'],
-            fontSize=15,
-            textColor=colors.HexColor('#111827'),
-            spaceAfter=12,
-            spaceBefore=20,
-            alignment=TA_LEFT,
-        )
-        normal_style = ParagraphStyle(
-            'CustomNormal',
-            parent=styles['Normal'],
-            fontSize=10,
-            textColor=colors.HexColor('#0f172a'),
-            leading=14,
-            alignment=TA_LEFT,
-        )
-        meta_style = ParagraphStyle(
-            'MetaStyle',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.HexColor('#64748b'),
-            leading=12,
-            spaceAfter=6,
-        )
-        minute_header_style = ParagraphStyle(
-            'MinuteHeader',
-            parent=styles['Normal'],
-            fontSize=11,
-            textColor=colors.HexColor('#111827'),
-            fontName='Helvetica-Bold',
-            spaceAfter=4,
-        )
-        minute_meta_style = ParagraphStyle(
-            'MinuteMeta',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.HexColor('#64748b'),
-            spaceAfter=4,
-        )
-        minute_text_style = ParagraphStyle(
-            'MinuteText',
-            parent=styles['Normal'],
-            fontSize=10,
-            textColor=colors.HexColor('#0f172a'),
-            leading=14,
-            spaceAfter=8,
-            leftIndent=12,
-        )
+        # Brand colors
+        navy = colors.HexColor('#1e3a5f')
+        teal = colors.HexColor('#0e7490')
+        gold = colors.HexColor('#c5a15a')
+        slate = colors.HexColor('#64748b')
+        dark = colors.HexColor('#0f172a')
+        # Cover & section styles
+        kicker_style = ParagraphStyle('Kicker', parent=styles['Normal'], fontSize=7, textColor=teal, fontName='Helvetica-Bold', leading=9, spaceAfter=2, alignment=TA_LEFT)
+        cover_title_style = ParagraphStyle('CoverTitle', parent=styles['Heading1'], fontSize=20, textColor=navy, fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=6, leading=22)
+        cover_sub_style = ParagraphStyle('CoverSub', parent=styles['Normal'], fontSize=8, textColor=teal, fontName='Helvetica-Bold', alignment=TA_CENTER, leading=10)
+        cover_desc_style = ParagraphStyle('CoverDesc', parent=styles['Normal'], fontSize=9, textColor=slate, alignment=TA_CENTER, leading=12, spaceAfter=8)
+        badge_style = ParagraphStyle('Badge', parent=styles['Normal'], fontSize=7, textColor=navy, backColor=colors.HexColor('#f1f5f9'), borderPadding=(4,8,4), alignment=TA_CENTER)
+        section_title_style = ParagraphStyle('SectionTitle', parent=styles['Heading2'], fontSize=14, textColor=navy, fontName='Helvetica-Bold', spaceAfter=6, spaceBefore=14, leading=16)
+        heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=11, textColor=navy, fontName='Helvetica-Bold', spaceAfter=6, spaceBefore=10, leading=13, alignment=TA_LEFT)
+        normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=9, textColor=dark, leading=12, alignment=TA_LEFT)
+        meta_style = ParagraphStyle('MetaStyle', parent=styles['Normal'], fontSize=8, textColor=slate, leading=10, spaceAfter=4)
+        minute_header_style = ParagraphStyle('MinuteHeader', parent=styles['Normal'], fontSize=10, textColor=dark, fontName='Helvetica-Bold', spaceAfter=2)
+        minute_meta_style = ParagraphStyle('MinuteMeta', parent=styles['Normal'], fontSize=7, textColor=slate, spaceAfter=3)
+        minute_text_style = ParagraphStyle('MinuteText', parent=styles['Normal'], fontSize=9, textColor=dark, leading=11, spaceAfter=6, leftIndent=8)
         
         story = []
         temp_files_to_cleanup = []  # PDF preview temp files; cleaned after doc.build()

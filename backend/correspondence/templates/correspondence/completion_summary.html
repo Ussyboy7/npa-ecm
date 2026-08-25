@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Verdana, Geneva, sans-serif; color: #0f172a; font-size: 10px; line-height: 1.5; }
+  .cover { text-align: center; padding: 48px 0 32px; }
+  .badge { display: inline-block; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: #1e3a5f; background: #f1f5f9; padding: 4px 10px; border-radius: 4px; margin-bottom: 16px; }
+  .brand-title { font-size: 18px; font-weight: 800; color: #1e3a5f; letter-spacing: 0.5px; }
+  .brand-sub { font-size: 9px; font-weight: 600; color: #0e7490; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+  .gold-line { width: 72px; height: 2px; background: #c5a15a; margin: 10px auto 14px; }
+  .cover-h1 { font-size: 22px; font-weight: 800; color: #1e3a5f; margin-top: 8px; }
+  .cover-desc { font-size: 10px; color: #64748b; margin-top: 8px; max-width: 420px; margin-left: auto; margin-right: auto; }
+  .meta-row { display: flex; justify-content: center; gap: 16px; margin-top: 20px; }
+  .meta-box { background: #f1f5f9; border-radius: 8px; padding: 10px 14px; min-width: 160px; text-align: left; }
+  .meta-box-label { font-size: 8px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+  .meta-box-value { font-size: 11px; font-weight: 700; color: #1e3a5f; margin-top: 2px; word-break: break-all; }
+  .meta-box-priority { display: inline-block; font-size: 8px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; margin-top: 2px; }
+  .meta-generated { font-size: 8px; color: #94a3b8; margin-top: 10px; text-align: center; }
+  .footer-meta { display: flex; justify-content: space-between; font-size: 8px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 24px; }
+  .section { margin-top: 28px; }
+  .section-kicker { font-size: 8px; color: #0e7490; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; }
+  .section-title { font-size: 16px; font-weight: 800; color: #1e3a5f; margin-top: 2px; }
+  .card { background: #f1f5f9; border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+  .card-muted { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-top: 8px; }
+  .card-title { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .card-value { font-size: 11px; font-weight: 600; color: #0f172a; }
+  .two-col { display: flex; gap: 12px; }
+  .two-col > div { flex: 1; }
+  .at-a-glance { font-size: 8px; color: #0e7490; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-top: 14px; }
+  .package-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9px; }
+  .package-table th { background: #1e3a5f; color: #fff; text-align: left; padding: 8px 10px; font-weight: 700; }
+  .package-table td { padding: 8px 10px; border: 1px solid #e2e8f0; }
+  .package-table tr:nth-child(even) td { background: #f8fafc; }
+  .record-note { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 9px; color: #475569; margin-top: 12px; }
+  .record-note strong { color: #1e3a5f; }
+  .attachment-head { display: flex; justify-content: space-between; align-items: center; }
+  .attachment-badge { font-size: 8px; font-weight: 700; color: #1e3a5f; background: #e0f2fe; padding: 3px 8px; border-radius: 4px; }
+  .doc-preview { border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-top: 10px; text-align: center; }
+  .details-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9px; }
+  .details-table td { padding: 8px 10px; border: 1px solid #e2e8f0; vertical-align: top; }
+  .details-table td:first-child { width: 38%; background: #f8fafc; font-weight: 600; color: #334155; }
+  .minute-card { background: #f8fafc; border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+  .minute-card.treat { background: #fefce8; }
+  .minute-num { display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #1e3a5f; color: #fff; font-size: 10px; font-weight: 700; text-align: center; line-height: 22px; margin-right: 8px; }
+  .minute-num.treat { background: #a16207; }
+  .minute-by { font-size: 11px; font-weight: 700; color: #0f172a; }
+  .minute-meta { font-size: 8px; color: #64748b; margin-top: 2px; }
+  .minute-text { font-size: 9px; color: #334155; margin-top: 6px; }
+  .minute-routed { font-size: 8px; color: #64748b; margin-top: 6px; font-style: italic; }
+  .dist-empty { display: inline-block; background: #f1f5f9; border-radius: 16px; padding: 6px 12px; font-size: 9px; color: #64748b; margin-top: 8px; }
+  .page-num { text-align: center; font-size: 8px; color: #94a3b8; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="badge">Official Correspondence Record</div>
+  <div class="brand-title">NIGERIAN PORTS AUTHORITY</div>
+  <div class="brand-sub">Correspondence Management</div>
+  <div class="gold-line"></div>
+  <div class="cover-h1">Correspondence Completion Package</div>
+  <div class="cover-desc">A complete record of the correspondence, attachment, and decision trail</div>
+  <div class="meta-row">
+    <div class="meta-box">
+      <div class="meta-box-label">Reference</div>
+      <div class="meta-box-value">{{ correspondence.reference_number }}</div>
+    </div>
+    <div class="meta-box">
+      <div class="meta-box-label">Priority</div>
+      <div class="meta-box-priority">{{ correspondence.get_priority_display|default:correspondence.priority }}</div>
+    </div>
+  </div>
+  <div class="meta-generated">Generated {{ generated_at|date:"j F Y" }} · {{ correspondence.owning_office.name|default:"Managing Director Office" }}</div>
+  <div class="footer-meta">
+    <span>Owning office: {{ correspondence.owning_office.name|default:"Managing Director Office" }}</span>
+    <span>Archive level: {{ correspondence.get_archive_level_display|default:"Not specified" }}</span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-kicker">01 / Record Overview</div>
+  <div class="section-title">Completion Summary</div>
+  <div class="card">
+    <div class="card-title">Correspondence Document</div>
+    <div class="card-value" style="font-weight:400; color:#475569;">{{ document_content|safe|default:"Document content is available in the attachments below." }}</div>
+  </div>
+  <div class="two-col">
+    <div class="card-muted">
+      <div class="card-title">Subject</div>
+      <div class="card-value">{{ correspondence.subject }}</div>
+    </div>
+    <div class="card-muted">
+      <div class="card-title">Current office</div>
+      <div class="card-value">{{ correspondence.current_office.name|default:correspondence.owning_office.name }}</div>
+    </div>
+  </div>
+  <div class="at-a-glance">At a glance</div>
+  <div style="font-size:14px; font-weight:800; color:#1e3a5f;">Package contents</div>
+  <table class="package-table">
+    <tr><th>Item</th><th>Description</th><th>Status</th></tr>
+    <tr><td>01</td><td>Correspondence completion summary</td><td>Included</td></tr>
+    <tr><td>02</td><td>Original document attachment</td><td>Included</td></tr>
+    <tr><td>03</td><td>Correspondence details and minutes</td><td>Included</td></tr>
+  </table>
+  <div class="record-note"><strong>Record note</strong><br>This package consolidates the correspondence record and the supporting document for review, routing, and archival reference.</div>
+</div>
+
+<div class="section">
+  <div class="section-kicker">02 / Supporting Record</div>
+  <div class="section-title">Attachments & Documents</div>
+  {% for att in attachments %}
+  <div class="card" style="margin-top:10px;">
+    <div class="attachment-head">
+      <div style="font-size:10px; font-weight:700; color:#1e3a5f;">{{ forloop.counter|stringformat:"02d" }} &nbsp; Original Document: {{ att.file_name }}</div>
+      <span class="attachment-badge">ATTACHED</span>
+    </div>
+    <div style="font-size:8px; color:#64748b; margin-top:2px;">{{ att.file_type }} · {{ att.file_size|filesizeformat }}</div>
+  </div>
+  {% empty %}
+  <div class="card">No attachments.</div>
+  {% endfor %}
+  <div style="margin-top:10px; font-size:9px; color:#1e3a5f; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Document Image</div>
+  <div style="font-size:12px; font-weight:700; color:#1e3a5f; margin-top:2px;">Attachment preview</div>
+  <div class="doc-preview">
+    <div style="font-size:9px; color:#64748b;">First page of PDF · Original attachment preview</div>
+    <div style="margin-top:12px; border:1px solid #e2e8f0; border-radius:6px; padding:16px; background:#fff; min-height:320px; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:9px;">PDF preview image will appear here</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-kicker">03 / Routing Record</div>
+  <div class="section-title">Correspondence Details</div>
+  <table class="details-table">
+    <tr><td>Reference, [{{ correspondence.reference_number }}]</td><td>Subject, [{{ correspondence.subject }}]</td></tr>
+    <tr><td>Owning office, [{{ correspondence.owning_office.name }}]</td><td>Current office, [{{ correspondence.current_office.name }}]</td></tr>
+    <tr><td>Priority, [ {{ correspondence.get_priority_display }} ]</td><td>Archive level, [{{ correspondence.get_archive_level_display|default:"Not specified" }}]</td></tr>
+    <tr><td colspan="2">Generated, [{{ generated_at|date:"F j, Y H:i" }} · {{ generated_by.get_full_name|default:generated_by.username }}]</td></tr>
+  </table>
+
+  <div style="margin-top:16px; font-size:8px; color:#0e7490; letter-spacing:1px; text-transform:uppercase; font-weight:700;">Action Trail</div>
+  <div style="font-size:14px; font-weight:800; color:#1e3a5f;">Minutes & Decisions</div>
+  {% for minute in minutes %}
+  <div class="minute-card {% if minute.action_type == 'treat' %}treat{% endif %}">
+    <div><span class="minute-num {% if minute.action_type == 'treat' %}treat{% endif %}">{{ forloop.counter }}</span><span class="minute-by">{% if minute.action_type == 'treat' %}Treat{% else %}Minute{% endif %} by {{ minute.user.get_full_name|default:minute.user.username }}</span></div>
+    <div class="minute-meta">{{ minute.timestamp|date:"F j, Y H:i" }} · Direction: {{ minute.get_direction_display }}</div>
+    <div class="minute-text">{{ minute.minute_text|safe }}</div>
+    {% if minute.to_office %}<div class="minute-routed">Routed to: {{ minute.to_office.name }}</div>{% endif %}
+  </div>
+  {% endfor %}
+
+  <div style="margin-top:16px; font-size:8px; color:#0e7490; letter-spacing:1px; text-transform:uppercase; font-weight:700;">Recipients</div>
+  <div style="font-size:14px; font-weight:800; color:#1e3a5f;">Distribution</div>
+  {% if distribution %}
+    {% for d in distribution %}<div style="font-size:9px; margin-top:4px;">{{ d.recipient_type }}: {{ d.directorate.name|default:d.division.name|default:d.department.name|default:d.user.get_full_name }}</div>{% endfor %}
+  {% else %}
+    <div class="dist-empty">No distribution list.</div>
+  {% endif %}
+  <div style="text-align:right; font-size:8px; color:#94a3b8; margin-top:16px;">{{ correspondence.reference_number }} · Completion package &nbsp; {{ forloop.counter }}</div>
+</div>
+
+</body>
+</html>
