@@ -285,10 +285,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             user = request.user
             if not user.is_superuser:
                 from organization.permission_utils import user_has_permission
-                has_bypass = (
-                    user_has_permission(user, "can_view_all_correspondence")
-                    or user_has_permission(user, "can_view_registry")
-                )
+                # Registered is now org-scoped like Approvals: MD/Superuser see all,
+                # ED sees directorate, GM sees division, AGM/staff sees department.
+                # can_view_registry no longer bypasses scoping (only can_view_all does).
+                has_bypass = user_has_permission(user, "can_view_all_correspondence")
                 if not has_bypass:
                     parallel_ids = list(
                         Minute.objects.filter(
@@ -318,31 +318,56 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     user_department_ids.discard(None)
                     user_directorate_ids.discard(None)
 
-                    distribution_filter = Q()
-                    if user_division_ids:
-                        distribution_filter |= Q(division_id__in=user_division_ids)
-                    if user_department_ids:
-                        distribution_filter |= Q(department_id__in=user_department_ids)
-                    if user_directorate_ids:
-                        distribution_filter |= Q(directorate_id__in=user_directorate_ids)
-                    if list(user_offices):
-                        distribution_filter |= Q(office_id__in=list(user_offices))
-                    distribution_filter |= Q(user=user, recipient_type='user')
-
-                    dist_ids = []
-                    if distribution_filter:
-                        dist_ids = list(
-                            CorrespondenceDistribution.objects.filter(
-                                distribution_filter, is_active=True
-                            ).values_list('correspondence_id', flat=True).distinct()
+                    # Strict Directorate → Division → Department scoping for Registered
+                    role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+                    if role_name == "Managing Director" or getattr(user, "is_superuser", False):
+                        pass  # MD sees all (already bypassed, but keep for safety)
+                    elif getattr(user, "department_id", None):
+                        qs = qs.filter(
+                            Q(department_id=user.department_id)
+                            | Q(owning_office__department_id=user.department_id)
+                            | Q(current_office__department_id=user.department_id)
                         )
+                    elif getattr(user, "division_id", None):
+                        qs = qs.filter(
+                            Q(division_id=user.division_id)
+                            | Q(owning_office__division_id=user.division_id)
+                            | Q(current_office__division_id=user.division_id)
+                        )
+                    elif getattr(user, "directorate_id", None):
+                        qs = qs.filter(
+                            Q(owning_office__directorate_id=user.directorate_id)
+                            | Q(current_office__directorate_id=user.directorate_id)
+                            | Q(division__directorate_id=user.directorate_id)
+                        )
+                    else:
+                        # No org — fall back to office-membership / created/approver union (minimal)
+                        distribution_filter = Q()
+                        if user_division_ids:
+                            distribution_filter |= Q(division_id__in=user_division_ids)
+                        if user_department_ids:
+                            distribution_filter |= Q(department_id__in=user_department_ids)
+                        if user_directorate_ids:
+                            distribution_filter |= Q(directorate_id__in=user_directorate_ids)
+                        if list(user_offices):
+                            distribution_filter |= Q(office_id__in=list(user_offices))
+                        distribution_filter |= Q(user=user, recipient_type='user')
 
-                    base_q = Q(id__in=parallel_ids) | Q(id__in=dist_ids) | Q(created_by=user) | Q(current_approver=user)
-                    user_office_ids = list(user_offices)
-                    if user_office_ids:
-                        base_q |= Q(current_office_id__in=user_office_ids) | Q(owning_office_id__in=user_office_ids)
+                        dist_ids = []
+                        if distribution_filter:
+                            dist_ids = list(
+                                CorrespondenceDistribution.objects.filter(
+                                    distribution_filter, is_active=True
+                                ).values_list('correspondence_id', flat=True).distinct()
+                            )
 
-                    qs = qs.filter(base_q)
+                        base_q = Q(id__in=parallel_ids) | Q(id__in=dist_ids) | Q(created_by=user) | Q(current_approver=user)
+                        user_office_ids = list(user_offices)
+                        if user_office_ids:
+                            base_q |= Q(current_office_id__in=user_office_ids) | Q(owning_office_id__in=user_office_ids)
+
+                        qs = qs.filter(base_q)
+                    # For department/division/directorate cases, qs already filtered strictly above
 
         return qs
 
