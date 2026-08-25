@@ -801,6 +801,16 @@ class CompletionPackageService:
                     possible_paths = [file_path, f"correspondence_attachments/{correspondence.id}/{att.file_name}", att.file_name]
                     file_path = next((p for p in possible_paths if default_storage.exists(p)), None)
                     if file_path and default_storage.exists(file_path):
+                        # For completion package, use the original PDF without the seal's diagonal (so only COMPLETED shows)
+                        # If this attachment was auto-promoted to a DMS doc with a sealed version, prefer the first version's file
+                        try:
+                            from dms.models import Document as _DmsDoc
+                            _doc = _DmsDoc.objects.filter(versions__file_url=file_path).first() or _DmsDoc.objects.filter(title=att.file_name.replace('.pdf','')).first()
+                            if _doc and _doc.versions.count() > 1:
+                                first_v = _doc.versions.order_by('version_number').first()
+                                if first_v and first_v.file_url and default_storage.exists(first_v.file_url.split('/media/')[-1].lstrip('/')):
+                                    file_path = first_v.file_url.split('/media/')[-1].lstrip('/')
+                        except: pass
                         ft, fn = (att.file_type or '').lower(), (att.file_name or '').lower()
                         if 'image' in ft:
                             with default_storage.open(file_path, 'rb') as img_file:
