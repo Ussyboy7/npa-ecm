@@ -541,6 +541,25 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                 </SelectContent>
               </Select>
 
+              <div className="relative min-w-[140px] max-w-[200px]">
+                <Input
+                  placeholder="Tags (comma-separated)"
+                  value={(filters.tags as string[] | undefined)?.join(', ') ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (!raw.trim()) {
+                      const { tags: _omit, ...rest } = filters;
+                      setFilters(rest);
+                    } else {
+                      setFilters({ ...filters, tags: raw.split(',').map((v) => v.trim()).filter(Boolean) as unknown as typeof filters.tags });
+                    }
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                  className="h-8 text-xs"
+                  aria-label="Filter by tags"
+                />
+              </div>
+
               {Object.keys(filters).length > 0 && (
                 <Button
                   variant="ghost"
@@ -797,6 +816,25 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                     <Badge variant="outline" className="text-xs capitalize">
                                       {result.priority}
                                     </Badge>
+                                  )}
+                                  {Array.isArray(result.tags) && result.tags.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {(result.tags as string[]).slice(0, 5).map((tag: string) => (
+                                        <button
+                                          key={tag}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setFilters({ ...filters, tags: [tag] as unknown as typeof filters.tags });
+                                            setQuery(tag);
+                                            handleSearch(true);
+                                          }}
+                                          className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs hover:bg-accent"
+                                        >
+                                          #{tag}
+                                        </button>
+                                      ))}
+                                    </div>
                                   )}
                                   {(
                                     typeof result.author === 'string' ||
