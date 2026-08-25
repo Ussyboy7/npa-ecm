@@ -96,6 +96,7 @@ const CorrespondenceRegisterForm = () => {
     currentStep,
     formData,
     documentFiles,
+    linkedDocumentIds,
     flowType,
     distributions,
     ui: { assignSearch, officeSearch: _officeSearch, submitting, errors, hasDraft, mounted },
@@ -314,8 +315,8 @@ const CorrespondenceRegisterForm = () => {
   const filteredOffices = useMemo(() => membershipOffices, [membershipOffices]);
 
   const completionPercentage = useMemo(
-    () => calculateCompletionPercentage(formData, flowType, documentFiles),
-    [formData, flowType, documentFiles]
+    () => calculateCompletionPercentage(formData, flowType, documentFiles, linkedDocumentIds.length),
+    [formData, flowType, documentFiles, linkedDocumentIds]
   );
 
   const selectedOfficeName = activeOffices.find((office) => office.id === formData.owningOfficeId)?.name;
@@ -404,7 +405,7 @@ const CorrespondenceRegisterForm = () => {
 
   const goToNextStep = useCallback(() => {
     if (validateOnStepChange) {
-      const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions);
+      const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
       if (Object.keys(stepErrors).length > 0) {
         dispatch({ type: 'SET_ERRORS', payload: stepErrors });
         toast.error('Please fix the errors in the current step before proceeding');
@@ -415,7 +416,7 @@ const CorrespondenceRegisterForm = () => {
     if (currentIndex < FORM_STEPS.length - 1) {
       dispatch({ type: 'SET_STEP', payload: FORM_STEPS[currentIndex + 1].id });
     }
-  }, [currentStep, formData, flowType, documentFiles, distributions, validateOnStepChange]);
+  }, [currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds, validateOnStepChange]);
 
   const goToPrevStep = useCallback(() => {
     const currentIndex = FORM_STEPS.findIndex((s) => s.id === currentStep);
@@ -448,7 +449,7 @@ const CorrespondenceRegisterForm = () => {
       if (event) event.preventDefault();
 
       // Validate form
-      const validationErrors = validateFormData(formData, flowType, documentFiles, distributions);
+      const validationErrors = validateFormData(formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
       if (Object.keys(validationErrors).length > 0) {
         dispatch({ type: 'SET_ERRORS', payload: validationErrors });
         toast.error('Please fix the errors in the form');
@@ -517,6 +518,18 @@ const CorrespondenceRegisterForm = () => {
           );
         }
 
+        if (correspondenceId && linkedDocumentIds.length > 0) {
+          await Promise.all(
+            linkedDocumentIds.map((docId) =>
+              apiFetch('/correspondence/document-links/', {
+                method: 'POST',
+                body: JSON.stringify({ correspondence: correspondenceId, document: docId }),
+                signal,
+              }).catch((err) => logError('Failed to link document', err))
+            )
+          );
+        }
+
         await syncFromApi();
         clearDraft();
         dispatch({ type: 'SET_HAS_DRAFT', payload: false });
@@ -566,7 +579,7 @@ const CorrespondenceRegisterForm = () => {
         submittingRef.current = false;
       }
     },
-    [formData, flowType, documentFiles, distributions, fetchWithRetry, clearDraft, router, syncFromApi, editId]
+    [formData, flowType, documentFiles, distributions, linkedDocumentIds, fetchWithRetry, clearDraft, router, syncFromApi, editId]
   );
 
   // Permission check - MUST be after all hooks but before early returns
@@ -722,7 +735,7 @@ const CorrespondenceRegisterForm = () => {
                       const newStep = v as typeof currentStep;
                       if (validateOnStepChange && newStep !== currentStep) {
                         // Validate current step before switching
-                        const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions);
+                        const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
                         if (Object.keys(stepErrors).length > 0) {
                           dispatch({ type: 'SET_ERRORS', payload: stepErrors });
                           toast.error('Please fix the errors in the current step before switching tabs');
@@ -799,11 +812,13 @@ const CorrespondenceRegisterForm = () => {
                       <DocumentsStep
                         formData={formData}
                         documentFiles={documentFiles}
+                        linkedDocumentIds={linkedDocumentIds}
                         errors={errors}
                         submitting={submitting}
                         onFormDataChange={handleFormDataChange}
                         onDocumentFilesAdd={handleDocumentFilesAdd}
                         onDocumentFileRemove={handleDocumentFileRemove}
+                        onLinkedDocsChange={(ids) => dispatch({ type: 'SET_LINKED_DOCUMENTS', payload: ids })}
                         onErrorClear={handleErrorClear}
                         onPrev={goToPrevStep}
                         onSubmit={() => handleSubmit()}

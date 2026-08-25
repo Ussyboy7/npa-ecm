@@ -148,7 +148,8 @@ export const validateFormData = (
   formData: FormData,
   flowType: FlowType,
   documentFiles: File[],
-  distributions: DistributionState
+  distributions: DistributionState,
+  linkedCount: number = 0
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
 
@@ -175,8 +176,8 @@ export const validateFormData = (
     }
   }
 
-  if (!documentFiles.length) {
-    errors.documentFiles = 'Please upload at least one source document';
+  if (!documentFiles.length && linkedCount === 0) {
+    errors.documentFiles = 'Please upload or select at least one source document';
   }
 
   if (formData.senderEmail && !isValidEmail(formData.senderEmail)) {
@@ -197,7 +198,8 @@ export const validateStep = (
   formData: FormData,
   flowType: FlowType,
   documentFiles: File[],
-  distributions: DistributionState
+  distributions: DistributionState,
+  linkedCount: number = 0
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
 
@@ -242,8 +244,8 @@ export const validateStep = (
       }
       break;
     case 'documents':
-      if (!documentFiles.length) {
-        errors.documentFiles = 'Please upload at least one source document';
+      if (!documentFiles.length && linkedCount === 0) {
+        errors.documentFiles = 'Please upload or select at least one source document';
       }
       break;
   }
@@ -327,7 +329,8 @@ export const buildSubmissionFormData = (
 export const calculateCompletionPercentage = (
   formData: FormData,
   flowType: FlowType,
-  documentFiles: File[]
+  documentFiles: File[],
+  linkedCount: number = 0
 ): number => {
   let completed = 0;
   let total = 0;
@@ -350,9 +353,9 @@ export const calculateCompletionPercentage = (
     if (formData.letterDate) completed++;
   }
 
-  // Documents
+  // Documents — either upload or select from My Documents
   total += 1;
-  if (documentFiles.length > 0) completed++;
+  if (documentFiles.length > 0 || linkedCount > 0) completed++;
 
   return Math.round((completed / total) * 100);
 };

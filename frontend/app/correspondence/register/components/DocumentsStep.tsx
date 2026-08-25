@@ -17,11 +17,13 @@ import { apiFetch } from '@/lib/api-client';
 interface DocumentsStepProps {
   formData: FormData;
   documentFiles: File[];
+  linkedDocumentIds: string[];
   errors: Record<string, string>;
   submitting: boolean;
   onFormDataChange: (updates: Partial<FormData>) => void;
   onDocumentFilesAdd: (files: File[]) => void;
   onDocumentFileRemove: (index: number) => void;
+  onLinkedDocsChange: (ids: string[]) => void;
   onErrorClear: (field: string) => void;
   onPrev: () => void;
   onSubmit: () => void;
@@ -36,11 +38,13 @@ interface LinkedDoc {
 export const DocumentsStep = memo(function DocumentsStep({
   formData,
   documentFiles,
+  linkedDocumentIds,
   errors,
   submitting,
   onFormDataChange,
   onDocumentFilesAdd,
   onDocumentFileRemove,
+  onLinkedDocsChange,
   onErrorClear,
   onPrev,
   onSubmit,
@@ -50,7 +54,7 @@ export const DocumentsStep = memo(function DocumentsStep({
   const [myDocs, setMyDocs] = useState<LinkedDoc[]>([]);
   const [myDocsLoading, setMyDocsLoading] = useState(false);
   const [myDocsSearch, setMyDocsSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedIds = new Set(linkedDocumentIds);
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files) return;
@@ -223,7 +227,7 @@ export const DocumentsStep = memo(function DocumentsStep({
                 <Badge key={id} variant="secondary" className="text-xs gap-1">
                   <FileText className="h-3 w-3" />
                   {doc?.title || id.slice(0, 8)}
-                  <button type="button" onClick={() => setSelectedIds((s) => { const n = new Set(s); n.delete(id); return n; })} className="ml-1 hover:text-destructive">
+                  <button type="button" onClick={() => onLinkedDocsChange(linkedDocumentIds.filter((x) => x !== id))} className="ml-1 hover:text-destructive">
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
@@ -275,7 +279,7 @@ export const DocumentsStep = memo(function DocumentsStep({
                     <button
                       key={doc.id}
                       type="button"
-                      onClick={() => setSelectedIds((s) => { const n = new Set(s); if (selected) n.delete(doc.id); else n.add(doc.id); return n; })}
+                      onClick={() => onLinkedDocsChange(selected ? linkedDocumentIds.filter((x) => x !== doc.id) : [...linkedDocumentIds, doc.id])}
                       className={`w-full text-left p-3 flex items-center gap-3 hover:bg-muted/50 ${selected ? 'bg-primary/5' : ''}`}
                     >
                       <FileText className="h-4 w-4 text-muted-foreground shrink-0" />

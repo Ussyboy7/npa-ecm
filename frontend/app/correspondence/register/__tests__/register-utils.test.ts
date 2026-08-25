@@ -146,7 +146,7 @@ describe('validateStep', () => {
     const errors = validateStep('documents', baseFormData, 'inward', [], {
       directorates: [], divisions: [], departments: [],
     });
-    expect(errors.documentFiles).toBe('Please upload at least one source document');
+    expect(errors.documentFiles).toBe('Please upload or select at least one source document');
   });
 
   it('documents step passes with files', () => {
@@ -167,7 +167,7 @@ describe('validateFormData', () => {
     expect(errors.subject).toBe('Subject is required');
     expect(errors.assignTo).toBe('Please assign to an executive');
     expect(errors.owningOfficeId).toBe('Please select an owning office');
-    expect(errors.documentFiles).toBe('Please upload at least one source document');
+    expect(errors.documentFiles).toBe('Please upload or select at least one source document');
   });
 
   it('requires senderOrganization for inward', () => {

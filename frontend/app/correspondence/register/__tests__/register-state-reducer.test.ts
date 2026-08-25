@@ -29,6 +29,7 @@ const baseState: RegisterState = {
     hasPhysicalCopy: false,
   },
   documentFiles: [],
+  linkedDocumentIds: [],
   flowType: 'inward',
   distributions: {
     directorates: [],

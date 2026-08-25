@@ -9,6 +9,7 @@ export type RegisterState = {
   currentStep: FormStep;
   formData: FormData;
   documentFiles: File[];
+  linkedDocumentIds: string[];
   flowType: FlowType;
   distributions: DistributionState;
   ui: {
@@ -29,6 +30,7 @@ export type RegisterAction =
   | { type: 'ADD_DOCUMENT_FILES'; payload: File[] }
   | { type: 'REMOVE_DOCUMENT_FILE'; payload: number }
   | { type: 'SET_DOCUMENT_FILES'; payload: File[] }
+  | { type: 'SET_LINKED_DOCUMENTS'; payload: string[] }
   | { type: 'SET_DISTRIBUTIONS'; payload: DistributionState }
   | { type: 'UPDATE_DISTRIBUTION'; payload: { type: 'directorates' | 'divisions' | 'departments'; ids: string[] } }
   | { type: 'SET_ASSIGN_SEARCH'; payload: string }
@@ -49,6 +51,7 @@ export const createInitialState = (owningOfficeId?: string): RegisterState => {
       // Reference number will be generated on client mount to avoid hydration mismatch
     },
     documentFiles: [],
+    linkedDocumentIds: [],
     flowType: 'inward',
     distributions: {
       directorates: [],
@@ -130,6 +133,13 @@ export const registerReducer = (
     case 'SET_DOCUMENT_FILES':
       return { ...state, documentFiles: action.payload };
 
+    case 'SET_LINKED_DOCUMENTS':
+      return {
+        ...state,
+        linkedDocumentIds: action.payload,
+        ui: { ...state.ui, errors: { ...state.ui.errors, documentFiles: '' } },
+      };
+
     case 'SET_DISTRIBUTIONS':
       return { ...state, distributions: action.payload };
 
@@ -195,6 +205,7 @@ export const registerReducer = (
           owningOfficeId: action.payload?.owningOfficeId || state.formData.owningOfficeId,
         },
         documentFiles: [],
+        linkedDocumentIds: [],
         distributions: {
           directorates: [],
           divisions: [],
