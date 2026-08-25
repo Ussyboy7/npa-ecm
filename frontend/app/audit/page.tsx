@@ -488,7 +488,7 @@ const AuditTrailPage = () => {
 
   return (
     <AdminPageShell
-      title="Audit & Compliance"
+      title="Audit Trail"
       subtitle={auditSubtitle}
       icon={ScrollText}
       actions={

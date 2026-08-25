@@ -114,7 +114,7 @@ const moduleBands = [
           "Check-in and check-out tracking for registry desks—linked to correspondence where applicable.",
       },
       {
-        title: "Audit & Compliance",
+        title: "Audit Trail",
         description:
           "Activity logs, tamper-evident compliance exports, retention schedules, legal holds, and eDiscovery bundles.",
       },

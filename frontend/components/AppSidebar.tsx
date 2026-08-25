@@ -32,7 +32,7 @@ import { SidebarNavItem, AdminNavItem } from "@/components/shared/SidebarNavItem
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
-  const { currentUser } = useCurrentUser();
+  const { currentUser, hydrated } = useCurrentUser();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const { officeMemberships } = useOrganization();
@@ -53,6 +53,10 @@ export function AppSidebar() {
     permissions.canDistribute ||
     userOfficeIds.length > 0
   ), [permissions.canViewCorrespondenceRegistry, permissions.canDistribute, userOfficeIds.length]);
+
+  // Keep the sidebar canonical to the hydrated auth state. Until the current
+  // user is resolved, do not render a partial permission-based navigation.
+  if (!hydrated || !currentUser) return null;
 
   const isActivePath = (path: string) => {
     if (!mounted || !pathname) return false;
@@ -283,7 +287,7 @@ export function AppSidebar() {
                       <AdminNavItem href="/admin/records-governance" icon={Archive} label="Records & security" isActive={isActivePath('/admin/records-governance')} isCollapsed={isCollapsed} />
                     )}
                     {showAuditHub && (
-                      <AdminNavItem href="/audit" icon={ScrollText} label="Audit" isActive={isActivePath('/audit')} isCollapsed={isCollapsed} />
+                      <AdminNavItem href="/audit" icon={ScrollText} label="Audit Trail" isActive={isActivePath('/audit')} isCollapsed={isCollapsed} />
                     )}
                     {showPlatformHub && (
                       <AdminNavItem href="/admin/platform" icon={Activity} label="Platform" isActive={isActivePath('/admin/platform')} isCollapsed={isCollapsed} />
