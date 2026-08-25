@@ -72,6 +72,19 @@ export const useDraftAutoSave = (
     }
   }, []);
 
+  const isMeaningfulDraft = useCallback((d: DraftData) => {
+    const f = d.formData;
+    return Boolean(
+      (f.subject && f.subject.trim().length > 2) ||
+      (f.senderOrganization && f.senderOrganization.trim()) ||
+      (f.recipientName && f.recipientName.trim()) ||
+      f.owningOfficeId ||
+      d.directorateDistribution.length ||
+      d.divisionDistribution.length ||
+      d.departmentDistribution.length
+    );
+  }, []);
+
   const loadServerDraft = useCallback(async () => {
     try {
       const drafts = await apiFetch<{ results: ServerDraft[] }>(
@@ -85,6 +98,8 @@ export const useDraftAutoSave = (
 
       const formDataRaw = latest.form_data as Record<string, unknown>;
       const draft = formDataRaw as unknown as DraftData;
+
+      if (!isMeaningfulDraft(draft)) return;
 
       const localDraft = localStorage.getItem(REGISTER_CONSTANTS.DRAFT_KEY);
       if (localDraft) {
@@ -112,9 +127,9 @@ export const useDraftAutoSave = (
     } catch (err) {
       logError('Failed to load server draft:', err);
     }
-  }, [onDraftLoaded, onHasDraftChange]);
+  }, [onDraftLoaded, onHasDraftChange, isMeaningfulDraft]);
 
-  // Load draft on mount (localStorage first, then server)
+  // Load draft on mount (localStorage first, then server) — only if meaningful
   useEffect(() => {
     if (!mounted || hasLoadedDraftRef.current) return;
     hasLoadedDraftRef.current = true;
@@ -123,15 +138,19 @@ export const useDraftAutoSave = (
     if (savedDraft) {
       try {
         const draft = JSON.parse(savedDraft) as DraftData;
-        if (onDraftLoaded) {
-          onDraftLoaded(draft);
+        if (!isMeaningfulDraft(draft)) {
+          localStorage.removeItem(REGISTER_CONSTANTS.DRAFT_KEY);
+        } else {
+          if (onDraftLoaded) {
+            onDraftLoaded(draft);
+          }
+          if (onHasDraftChange) {
+            onHasDraftChange(true);
+          }
+          toast.info('Draft loaded', {
+            description: 'You have unsaved changes from a previous session',
+          });
         }
-        if (onHasDraftChange) {
-          onHasDraftChange(true);
-        }
-        toast.info('Draft loaded', {
-          description: 'You have unsaved changes from a previous session',
-        });
       } catch (err) {
         logError('Failed to load draft:', err);
       }
@@ -140,9 +159,9 @@ export const useDraftAutoSave = (
     void loadServerDraft();
 
     isInitialMountRef.current = false;
-  }, [mounted, onDraftLoaded, onHasDraftChange, loadServerDraft]);
+  }, [mounted, onDraftLoaded, onHasDraftChange, loadServerDraft, isMeaningfulDraft]);
 
-  // Auto-save draft to localStorage with debounce
+  // Auto-save draft to localStorage with debounce — only if meaningful
   useEffect(() => {
     if (!mounted || isInitialMountRef.current) return;
 
@@ -159,6 +178,11 @@ export const useDraftAutoSave = (
         departmentDistribution: distributions.departments,
         savedAt: new Date().toISOString(),
       };
+      if (!isMeaningfulDraft(draft)) {
+        localStorage.removeItem(REGISTER_CONSTANTS.DRAFT_KEY);
+        if (onHasDraftChange) onHasDraftChange(false);
+        return;
+      }
       localStorage.setItem(REGISTER_CONSTANTS.DRAFT_KEY, JSON.stringify(draft));
       if (onHasDraftChange) {
         onHasDraftChange(true);
