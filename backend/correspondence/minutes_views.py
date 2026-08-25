@@ -453,13 +453,23 @@ class MinuteViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="recall")
     def recall(self, request, pk=None):
         minute = self.get_object()
+        is_md_or_super = bool(
+            getattr(request.user, "is_superuser", False)
+            or (getattr(getattr(request.user, "system_role", None), "name", "") or "").lower() == "managing director"
+        )
 
-        if not minute.can_be_recalled():
-            raise ValidationError({
-                "detail": "This minute has already been recalled."
-            })
+        if not is_md_or_super and not minute.can_be_recalled():
+            # Distinguish already-recalled vs window/acknowledged/downstream
+            if minute.is_recalled:
+                raise ValidationError({"detail": "This minute has already been recalled."})
+            if minute.acknowledged_at or minute.dispatched_at:
+                raise ValidationError({"detail": "Cannot recall — already opened/dispatched by the next office."})
+            if minute.edit_window_expires_at and timezone.now() > minute.edit_window_expires_at:
+                raise ValidationError({"detail": "Recall window expired (1 hour). Only MD can recall after this."})
+            # Downstream exists
+            raise ValidationError({"detail": "Cannot recall — the next person has already acted on this. Only MD can recall with cascade."})
 
-        if minute.user_id != request.user.id:
+        if not is_md_or_super and minute.user_id != request.user.id:
             raise ValidationError({
                 "detail": "Only the original sender can recall this minute."
             })

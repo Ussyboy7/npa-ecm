@@ -783,25 +783,37 @@ class Minute(UUIDModel, TimeStampedModel):
 
     def can_be_recalled(self):
         """
-        Check if minute can still be recalled.
-        
-        A minute can be recalled if:
-        1. It hasn't been recalled already
-        
-        Note: Unlike the previous version, this allows recall even when subsequent
-        minutes exist. Those minutes will be cascaded (marked as recalled) by the
-        recall view to maintain workflow integrity.
+        Recall window: 1 hour or before the next person acts.
+        - Block if already recalled
+        - Block if acknowledged/dispatched (next office opened it)
+        - Block if 1-hour window expired
+        - Block if downstream non-recalled minute exists (next person acted)
+        MD/superuser bypass is handled in the view.
         """
         if self.is_recalled:
-            return False  # Already recalled
-        
+            return False
+        if self.acknowledged_at or self.dispatched_at:
+            return False
+        if self.edit_window_expires_at and timezone.now() > self.edit_window_expires_at:
+            return False
+        # If anyone downstream has acted (non-recalled minute after this one), block regular recall
+        if self.correspondence_id and self.timestamp:
+            from django.db.models import Q
+
+            has_downstream = type(self).objects.filter(
+                correspondence_id=self.correspondence_id,
+                timestamp__gt=self.timestamp,
+                is_recalled=False,
+            ).exists()
+            if has_downstream:
+                return False
         return True
 
     def save(self, *args, **kwargs):
         """Auto-set edit window expiration on creation."""
         if not self.pk and not self.edit_window_expires_at:
-            # Set 30-minute window from creation
-            self.edit_window_expires_at = timezone.now() + timedelta(minutes=30)
+            # Recall/edit window is 1 hour, or until next person acts
+            self.edit_window_expires_at = timezone.now() + timedelta(hours=1)
         super().save(*args, **kwargs)
     
     # Routing concept helper methods
