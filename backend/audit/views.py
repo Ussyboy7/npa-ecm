@@ -35,7 +35,7 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         return (role_name or "").strip().lower()
 
     def get_queryset(self):
-        """Return audit logs based on user permissions."""
+        """Return audit logs based on user permissions — now strictly scoped."""
         from organization.permission_utils import user_has_permission
 
         user = self.request.user
@@ -45,10 +45,22 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
             return queryset
 
         if user_has_permission(user, "can_access_audit_compliance"):
-            return queryset
+            role_name = (getattr(getattr(user, "system_role", None), "name", "") or "").lower()
+            if role_name == "managing director":
+                return queryset
+            dept_id = getattr(user, "department_id", None)
+            if dept_id:
+                return queryset.filter(Q(user__department_id=dept_id) | Q(user=user))
+            div_id = getattr(user, "division_id", None)
+            if div_id:
+                return queryset.filter(Q(user__division_id=div_id) | Q(user=user))
+            dir_id = getattr(user, "directorate_id", None)
+            if dir_id:
+                return queryset.filter(Q(user__directorate_id=dir_id) | Q(user=user))
+            return queryset.filter(user=user)
 
         if user_has_permission(user, "can_access_administration"):
-            return queryset
+            return queryset.filter(user=user)
 
         if user_has_permission(user, "can_manage_org_structure"):
             division_id = getattr(user, "division_id", None)
