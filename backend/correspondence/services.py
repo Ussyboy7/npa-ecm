@@ -542,6 +542,27 @@ class CompletionPackageService:
         doc = SimpleDocTemplate(buffer, pagesize=LETTER, 
                                rightMargin=0.65*inch, leftMargin=0.65*inch,
                                topMargin=0.55*inch, bottomMargin=0.55*inch)
+
+        # Watermark for completion package — COMPLETED · date, light, diagonal (not sealer's name)
+        from reportlab.lib.enums import TA_CENTER as _TA_CENTER
+        def _watermark(canvas, _doc):
+            canvas.saveState()
+            canvas.setFont("Helvetica", 42)
+            # light grey, very transparent
+            try:
+                canvas.setFillColor(colors.HexColor("#e2e8f0"), alpha=0.18)
+            except:
+                canvas.setFillColor(colors.HexColor("#e2e8f0"))
+            canvas.rotate(30)
+            # Use COMPLETED + date, not sealer name
+            from django.utils.dateformat import format as _fmt
+            wm_date = _fmt(generated_at, 'j F Y') if 'generated_at' in locals() else ""
+            # generated_at is defined later in story building; capture via closure after story is built,
+            # so we defer textual content to build time by using a mutable holder
+            # Instead, we will set canvas watermark text via doc watermarkText attribute set later
+            txt = getattr(doc, '_watermark_text', "COMPLETED")
+            canvas.drawCentredString(320, 80, txt)
+            canvas.restoreState()
         
         styles = getSampleStyleSheet()
         # Brand colors
@@ -946,8 +967,14 @@ class CompletionPackageService:
         
         story.append(Spacer(1, 0.15*inch))
 
-        # Build PDF (temp_files_to_cleanup must survive until after build – ReportLab reads lazily)
-        doc.build(story)
+        # Build PDF with COMPLETED watermark (light, diagonal)
+        from django.utils.dateformat import format as _fmt2
+        try:
+            wm_txt = "COMPLETED \u00b7 " + _fmt2(generated_at, 'j F Y')
+        except:
+            wm_txt = "COMPLETED"
+        doc._watermark_text = wm_txt
+        doc.build(story, onFirstPage=_watermark, onLaterPages=_watermark)
         for tmp in temp_files_to_cleanup:
             try:
                 os.unlink(tmp)
