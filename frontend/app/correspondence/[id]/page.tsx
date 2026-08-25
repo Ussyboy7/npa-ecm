@@ -5,7 +5,13 @@ import { logError, logWarn } from '@/lib/client-logger';
 import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { toast } from "@/components/ui/sonner";
-import { MessageSquare, CheckCircle, Send } from 'lucide-react';
+import { MessageSquare, CheckCircle, Send, ArrowRightLeft } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Minute, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useOrgUsers } from '@/hooks/use-org-users';
@@ -141,6 +147,47 @@ const CorrespondenceDetailContent = () => {
     'correspondence_view',
     accessDenied,
   );
+
+  const [showReassign, setShowReassign] = useState(false);
+  const [reassignOffice, setReassignOffice] = useState('');
+  const [reassignUser, setReassignUser] = useState('');
+  const [reassignReason, setReassignReason] = useState('');
+  const [reassigning, setReassigning] = useState(false);
+  const canReassign = Boolean(activeUser?.isSuperuser);
+
+  const handleReassign = async () => {
+    if (!correspondence || !reassignReason.trim()) {
+      toast.error('Reason is required');
+      return;
+    }
+    if (!reassignOffice && !reassignUser) {
+      toast.error('Select a target office or user');
+      return;
+    }
+    setReassigning(true);
+    try {
+      await apiFetch(`/correspondence/items/${correspondence.id}/reassign/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          target_office_id: reassignOffice || undefined,
+          target_user_id: reassignUser || undefined,
+          reason: reassignReason.trim(),
+        }),
+      });
+      toast.success('Correspondence reassigned');
+      setShowReassign(false);
+      setReassignOffice('');
+      setReassignUser('');
+      setReassignReason('');
+      await syncFromApi();
+      await refreshDetail();
+      await refreshMinutes();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Reassign failed');
+    } finally {
+      setReassigning(false);
+    }
+  };
 
   const { refreshMinutes, refreshDetail } = useCorrespondenceDetailData({
     id,
@@ -576,6 +623,15 @@ const CorrespondenceDetailContent = () => {
           />
         </div>
 
+        {canReassign && !isCompleted && (
+          <div className="px-4 py-2 border-b border-border/40 flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowReassign(true)}>
+              <ArrowRightLeft className="h-4 w-4 mr-2" />
+              Reassign
+            </Button>
+          </div>
+        )}
+
         <CompactStatusStrip
           status={correspondence.status}
           receivedDate={correspondence.receivedDate}
@@ -626,6 +682,48 @@ const CorrespondenceDetailContent = () => {
           />
         </div>
       </div>
+
+      <Dialog open={showReassign} onOpenChange={setShowReassign}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reassign correspondence</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Target office (optional)</Label>
+              <Select value={reassignOffice || '__none__'} onValueChange={(v) => setReassignOffice(v === '__none__' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="Select office" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {offices.filter((o) => o.isActive).slice(0, 100).map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Target user (optional)</Label>
+              <Select value={reassignUser || '__none__'} onValueChange={(v) => setReassignUser(v === '__none__' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {organizationUsers.slice(0, 100).map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.name} — {u.username}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea value={reassignReason} onChange={(e) => setReassignReason(e.target.value)} placeholder="Handover, misroute, etc." rows={3} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReassign(false)}>Cancel</Button>
+            <Button onClick={handleReassign} disabled={reassigning}>{reassigning ? 'Reassigning…' : 'Reassign'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CorrespondenceDetailModals
         correspondence={correspondence}
