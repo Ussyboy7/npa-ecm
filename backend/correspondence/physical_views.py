@@ -33,13 +33,39 @@ class LocationViewSet(viewsets.ModelViewSet):
 
 class PhysicalDocumentViewSet(viewsets.ModelViewSet):
     queryset = PhysicalDocument.objects.select_related(
-        "location", "correspondence", "checked_out_to"
+        "location", "correspondence", "checked_out_to", "correspondence__owning_office"
     )
     permission_classes = [IsAuthenticated]
     pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["status", "correspondence", "location"]
     search_fields = ["description", "tracking_number", "barcode"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not getattr(user, "is_authenticated", False):
+            return qs.none()
+        if getattr(user, "is_superuser", False):
+            return qs
+        role_name = (getattr(getattr(user, "system_role", None), "name", "") or "").lower()
+        if role_name == "managing director":
+            return qs
+        # Office-scoped: include own checked-out docs always, plus org scope
+        from django.db.models import Q
+
+        base_q = Q(checked_out_to=user)
+        if getattr(user, "department_id", None):
+            base_q |= Q(correspondence__department_id=user.department_id) | Q(correspondence__owning_office__department_id=user.department_id)
+            return qs.filter(base_q).distinct()
+        if getattr(user, "division_id", None):
+            base_q |= Q(correspondence__division_id=user.division_id) | Q(correspondence__owning_office__division_id=user.division_id)
+            return qs.filter(base_q).distinct()
+        if getattr(user, "directorate_id", None):
+            base_q |= Q(correspondence__owning_office__directorate_id=user.directorate_id) | Q(correspondence__division__directorate_id=user.directorate_id)
+            return qs.filter(base_q).distinct()
+        # No org — only own checked-out + created
+        return qs.filter(Q(checked_out_to=user) | Q(correspondence__created_by=user)).distinct()
 
     def get_serializer_class(self):
         if self.action == "retrieve":
