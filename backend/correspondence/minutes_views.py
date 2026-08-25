@@ -7,6 +7,7 @@ import traceback
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 
@@ -68,6 +69,39 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 )
             else:
                 queryset = queryset.filter(seal_applied__isnull=True)
+        # Directorate → Division → Department scoping for approvals (and sealed views).
+        # MD / Superuser see all. ED sees directorate, GM sees division, AGM/staff sees department.
+        # This makes /approvals org-scoped rather than global.
+        user = getattr(self.request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            is_super = bool(getattr(user, "is_superuser", False))
+            role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+            if is_super or role_name == "Managing Director":
+                pass
+            elif has_seal is not None and has_seal_bool:
+                # Only scope the approvals/sealed listing; keep other minute lists unscoped
+                # (inbox, pending_approvals, detail views) to avoid breaking routing flows.
+                if getattr(user, "department_id", None):
+                    queryset = queryset.filter(
+                        Q(from_office__department_id=user.department_id)
+                        | Q(correspondence__department_id=user.department_id)
+                        | Q(correspondence__owning_office__department_id=user.department_id)
+                    )
+                elif getattr(user, "division_id", None):
+                    queryset = queryset.filter(
+                        Q(from_office__division_id=user.division_id)
+                        | Q(correspondence__division_id=user.division_id)
+                        | Q(correspondence__owning_office__division_id=user.division_id)
+                    )
+                elif getattr(user, "directorate_id", None):
+                    queryset = queryset.filter(
+                        Q(from_office__directorate_id=user.directorate_id)
+                        | Q(correspondence__owning_office__directorate_id=user.directorate_id)
+                        | Q(correspondence__division__directorate_id=user.directorate_id)
+                    )
+                else:
+                    # No org assignment (test accounts) — show nothing rather than everything
+                    queryset = queryset.none()
         return queryset
 
     @action(detail=False, methods=["get"], url_path="pending-approvals")
