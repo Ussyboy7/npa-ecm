@@ -18,7 +18,7 @@ from django.utils.text import slugify
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib import colors
 import logging
@@ -565,13 +565,64 @@ class CompletionPackageService:
         minute_text_style = ParagraphStyle('MinuteText', parent=styles['Normal'], fontSize=9, textColor=dark, leading=11, spaceAfter=6, leftIndent=8)
         
         story = []
-        temp_files_to_cleanup = []  # PDF preview temp files; cleaned after doc.build()
+        temp_files_to_cleanup = []
         correspondence = context['correspondence']
         minutes = context['minutes']
         distribution = context['distribution']
         attachments = context['attachments']
         generated_at = context['generated_at']
         generated_by = context.get('generated_by')
+
+        # Helpers for new layout
+        def _cover():
+            # Badge
+            badge_tbl = Table([[Paragraph('<font color="#1e3a5f"><b>OFFICIAL CORRESPONDENCE RECORD</b></font>', ParagraphStyle('b', parent=styles['Normal'], fontSize=7, textColor=navy, alignment=TA_CENTER))]], colWidths=[3.2*inch])
+            badge_tbl.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f1f5f9')), ('ROUNDEDCORNERS', [4,4,4,4]), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('LEFTPADDING', (0,0), (-1,-1), 6), ('RIGHTPADDING', (0,0), (-1,-1), 6), ('BOTTOMPADDING', (0,0), (-1,-1), 4), ('TOPPADDING', (0,0), (-1,-1), 4)]))
+            story.append(badge_tbl)
+            story.append(Spacer(1, 0.12*inch))
+            story.append(Paragraph("NIGERIAN PORTS AUTHORITY", ParagraphStyle('bt', parent=styles['Normal'], fontSize=11, textColor=navy, fontName='Helvetica-Bold', alignment=TA_CENTER, leading=13)))
+            story.append(Paragraph("CORRESPONDENCE MANAGEMENT", ParagraphStyle('bs', parent=styles['Normal'], fontSize=7, textColor=teal, fontName='Helvetica-Bold', alignment=TA_CENTER, leading=9)))
+            # gold line
+            line_tbl = Table([['']], colWidths=[0.9*inch])
+            line_tbl.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), gold), ('LINEABOVE', (0,0), (-1,0), 0, colors.white), ('LINEBELOW', (0,0), (-1,0), 1.2, gold)]))
+            story.append(Spacer(1, 0.06*inch))
+            story.append(line_tbl)
+            story.append(Spacer(1, 0.1*inch))
+            story.append(Paragraph("Correspondence Completion Package", cover_title_style))
+            story.append(Paragraph("A complete record of the correspondence, attachment, and decision trail", cover_desc_style))
+            story.append(Spacer(1, 0.18*inch))
+            # Reference / Priority boxes
+            ref = correspondence.reference_number or "—"
+            pri = (correspondence.get_priority_display() if hasattr(correspondence, 'get_priority_display') else str(correspondence.priority)).upper() if correspondence.priority else "MEDIUM"
+            t = Table([
+                [Paragraph('<font size=7 color="#64748b">Reference</font><br/><font size=9 color="#1e3a5f"><b>%s</b></font>' % ref, normal_style),
+                 Paragraph('<font size=7 color="#64748b">Priority</font><br/><font size=7 color="#92400e" backColor="#fef3c7"><b> %s </b></font>' % pri, normal_style)]
+            ], colWidths=[2.3*inch, 1.3*inch])
+            t.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f1f5f9')), ('ROUNDEDCORNERS', [6,6,6,6]), ('BOX', (0,0), (-1,-1), 0, colors.white), ('INNERGRID', (0,0), (-1,-1), 0, colors.white), ('LEFTPADDING', (0,0), (-1,-1), 10), ('RIGHTPADDING', (0,0), (-1,-1), 10), ('TOPPADDING', (0,0), (-1,-1), 8), ('BOTTOMPADDING', (0,0), (-1,-1), 8), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('ALIGN', (0,0), (-1,-1), 'CENTER')]))
+            # Use a centered wrapper table
+            wrap = Table([[t]], colWidths=[4.5*inch])
+            wrap.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER')]))
+            story.append(wrap)
+            story.append(Spacer(1, 0.1*inch))
+            story.append(Paragraph("Generated %s · %s" % (date_format(generated_at, 'j F Y'), (correspondence.owning_office.name if getattr(correspondence, 'owning_office', None) and correspondence.owning_office else "Managing Director Office")), ParagraphStyle('gen', parent=styles['Normal'], fontSize=7, textColor=colors.HexColor('#94a3b8'), alignment=TA_CENTER)))
+            story.append(Spacer(1, 0.14*inch))
+            # footer line
+            owning = correspondence.owning_office.name if getattr(correspondence, 'owning_office', None) and correspondence.owning_office else "Managing Director Office"
+            arch = correspondence.get_archive_level_display() if hasattr(correspondence, 'get_archive_level_display') else (correspondence.archive_level or "Not specified")
+            footer = Table([[Paragraph('<font size=7 color="#64748b">Owning office: %s</font>' % owning, meta_style), Paragraph('<font size=7 color="#64748b">Archive level: %s</font>' % arch, ParagraphStyle('fm2', parent=meta_style, alignment=TA_RIGHT))]], colWidths=[3.5*inch, 3.5*inch])
+            footer.setStyle(TableStyle([('LINEABOVE', (0,0), (-1,0), 0.5, colors.HexColor('#e2e8f0')), ('TOPPADDING', (0,0), (-1,-1), 6)]))
+            story.append(footer)
+            story.append(Spacer(1, 0.18*inch))
+
+        def _section_kicker(num, title):
+            story.append(Paragraph("%s / RECORD OVERVIEW" % num if "01" in num else "%s" % num, kicker_style))
+            # Actually kicker is like 01 / RECORD OVERVIEW etc. We'll use generic
+            story.append(Paragraph(title, section_title_style))
+
+        # Build cover
+        _cover()
+        # We will continue with sections after this helper; keep story building for 01/02/03 below
+        
         
         # Helper to convert HTML to ReportLab-safe format
         def html_to_reportlab(text):
@@ -585,11 +636,50 @@ class CompletionPackageService:
             t = re.sub(r'\n\s*\n', '\n\n', t)
             return t.strip().replace('\n', '<br/>')
 
-        # Title
-        story.append(Paragraph("Correspondence Completion Summary", title_style))
-        story.append(Spacer(1, 0.28*inch))
+        # Title is now in cover, skip old title
 
-        # Document Content Section (aligned with Executive Approval document structure)
+        # 01 / RECORD OVERVIEW — Completion Summary
+        story.append(Paragraph("01 / RECORD OVERVIEW", kicker_style))
+        story.append(Paragraph("Completion Summary", section_title_style))
+        story.append(Spacer(1, 0.08*inch))
+        # Correspondence Document card
+        doc_content = context.get("document_content", "")
+        if doc_content and str(doc_content).strip():
+            story.append(Paragraph(html_to_reportlab(doc_content), normal_style))
+        else:
+            # Fallback card
+            card = Table([[Paragraph('<font size=8 color="#64748b">Correspondence Document</font><br/><font size=9>Document content is available in the attachments below.</font>', normal_style)]], colWidths=[6.8*inch])
+            card.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f1f5f9')), ('ROUNDEDCORNERS', [6,6,6,6]), ('BOX', (0,0), (-1,-1), 0, colors.white), ('LEFTPADDING', (0,0), (-1,-1), 10), ('RIGHTPADDING', (0,0), (-1,-1), 10), ('TOPPADDING', (0,0), (-1,-1), 10), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
+            story.append(card)
+        story.append(Spacer(1, 0.12*inch))
+        # Subject / Current office two-col
+        subj = correspondence.subject or "—"
+        curr_off = correspondence.current_office.name if getattr(correspondence, 'current_office', None) and correspondence.current_office else (correspondence.owning_office.name if getattr(correspondence, 'owning_office', None) and correspondence.owning_office else "—")
+        two_col = Table([
+            [Paragraph('<font size=7 color="#64748b">Subject</font><br/><font size=9><b>%s</b></font>' % subj, normal_style),
+             Paragraph('<font size=7 color="#64748b">Current office</font><br/><font size=9><b>%s</b></font>' % curr_off, normal_style)]
+        ], colWidths=[3.4*inch, 3.4*inch])
+        two_col.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8fafc')), ('ROUNDEDCORNERS', [6,6,6,6]), ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')), ('LEFTPADDING', (0,0), (-1,-1), 10), ('RIGHTPADDING', (0,0), (-1,-1), 10), ('TOPPADDING', (0,0), (-1,-1), 10), ('BOTTOMPADDING', (0,0), (-1,-1), 10), ('VALIGN', (0,0), (-1,-1), 'TOP')]))
+        story.append(two_col)
+        story.append(Spacer(1, 0.1*inch))
+        story.append(Paragraph("AT A GLANCE", ParagraphStyle('atgl', parent=kicker_style, fontSize=7)))
+        story.append(Paragraph("Package contents", ParagraphStyle('pkg', parent=section_title_style, fontSize=13)))
+        pkg = Table([
+            [Paragraph('<b>Item</b>', normal_style), Paragraph('<b>Description</b>', normal_style), Paragraph('<b>Status</b>', normal_style)],
+            [Paragraph('01', normal_style), Paragraph('Correspondence completion summary', normal_style), Paragraph('Included', normal_style)],
+            [Paragraph('02', normal_style), Paragraph('Original document attachment', normal_style), Paragraph('Included', normal_style)],
+            [Paragraph('03', normal_style), Paragraph('Correspondence details and minutes', normal_style), Paragraph('Included', normal_style)],
+        ], colWidths=[0.6*inch, 4.6*inch, 1.6*inch])
+        pkg.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), navy), ('TEXTCOLOR', (0,0), (-1,0), colors.white), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 8), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')), ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8fafc')]), ('LEFTPADDING', (0,0), (-1,-1), 6), ('RIGHTPADDING', (0,0), (-1,-1), 6), ('TOPPADDING', (0,0), (-1,-1), 6), ('BOTTOMPADDING', (0,0), (-1,-1), 6)]))
+        story.append(pkg)
+        story.append(Spacer(1, 0.1*inch))
+        note = Table([[Paragraph('<font size=7 color="#1e3a5f"><b>Record note</b></font><br/><font size=8 color="#475569">This package consolidates the correspondence record and the supporting document for review, routing, and archival reference.</font>', normal_style)]], colWidths=[6.8*inch])
+        note.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f1f5f9')), ('ROUNDEDCORNERS', [6,6,6,6]), ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')), ('LEFTPADDING', (0,0), (-1,-1), 10), ('RIGHTPADDING', (0,0), (-1,-1), 10), ('TOPPADDING', (0,0), (-1,-1), 10), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
+        story.append(note)
+        story.append(Spacer(1, 0.18*inch))
+
+        # 02 / SUPPORTING RECORD — Attachments & Documents Section (before meta - same order as Executive Approval)
+
         # Order: body_html, treatment_response, parent (Re:), linked DMS, fallback when attachments only
         has_doc = False
         if correspondence.body_html and str(correspondence.body_html).strip():
@@ -647,9 +737,11 @@ class CompletionPackageService:
             story.append(Spacer(1, 0.1*inch))
 
         # Attachments & Documents Section (before meta - same order as Executive Approval)
+        # 02 / SUPPORTING RECORD
+        story.append(Paragraph("02 / SUPPORTING RECORD", kicker_style))
+        story.append(Paragraph("Attachments & Documents", section_title_style))
+        story.append(Spacer(1, 0.08*inch))
         if attachments:
-            story.append(PageBreak() if has_doc else Spacer(1, 0.1*inch))
-            story.append(Paragraph("Attachments & Documents", heading_style))
             story.append(Spacer(1, 0.15*inch))
             from reportlab.platypus import Image as ReportLabImage
             from reportlab.lib.utils import ImageReader
@@ -752,13 +844,14 @@ class CompletionPackageService:
                 story.append(Spacer(1, 0.2*inch))
             story.append(Spacer(1, 0.15*inch))
         else:
-            story.append(PageBreak() if has_doc else Spacer(1, 0.1*inch))
-            story.append(Paragraph("Attachments & Documents", heading_style))
+            story.append(Paragraph("02 / SUPPORTING RECORD", kicker_style))
+            story.append(Paragraph("Attachments & Documents", section_title_style))
             story.append(Paragraph("No attachments were linked to this correspondence.", normal_style))
             story.append(Spacer(1, 0.2*inch))
 
-        # Correspondence Details Section
-        story.append(Paragraph("Correspondence Details", heading_style))
+        # 03 / ROUTING RECORD
+        story.append(Paragraph("03 / ROUTING RECORD", kicker_style))
+        story.append(Paragraph("Correspondence Details", section_title_style))
         
         meta_items = [
             ("Reference", correspondence.reference_number or "—"),
@@ -775,8 +868,7 @@ class CompletionPackageService:
         
         story.append(Spacer(1, 0.22*inch))
         
-        # Minutes & Decisions Section
-        story.append(Paragraph("Minutes & Decisions", heading_style))
+        story.append(Paragraph("Minutes & Decisions", section_title_style))
         
         if minutes:
             for minute in minutes:
