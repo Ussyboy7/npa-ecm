@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, FileText, User as UserIcon, Building2, Plus, Mail } from "lucide-react";
+import { Search, FileText, User as UserIcon, Building2, Plus, Mail, Send } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 import { useRouter } from "next/navigation";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { mapApiCorrespondence } from "@/lib/api/correspondence-mappers";
@@ -14,7 +15,7 @@ import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { apiFetch } from "@/lib/api-client";
-import { formatDateShort } from "@/lib/correspondence-helpers";
+import { canDispatchCorrespondence, formatDateShort } from "@/lib/correspondence-helpers";
 import { PRIORITY_VALUES } from "@/lib/constants";
 import type { Correspondence } from "@/lib/npa-structure";
 import { usePagination } from "@/hooks/use-pagination";
@@ -135,6 +136,16 @@ const RegisteredCorrespondencePage = () => {
 
   useEffect(() => {
     void loadItems();
+  }, [loadItems]);
+
+  const handleDispatch = useCallback(async (id: string) => {
+    try {
+      await apiFetch(`/correspondence/items/${id}/dispatch/`, { method: 'POST', body: JSON.stringify({}) });
+      toast.success('Dispatched');
+      void loadItems();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Dispatch failed');
+    }
   }, [loadItems]);
 
   useEffect(() => {
@@ -372,6 +383,23 @@ const RegisteredCorrespondencePage = () => {
                         </span>
                       ) : null}
                     </div>
+                    {canDispatchCorrespondence(item as unknown as Parameters<typeof canDispatchCorrespondence>[0]) && (
+                      <div className="mt-2 flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleDispatch(item.id);
+                          }}
+                          className="h-7 text-xs"
+                        >
+                          <Send className="h-3 w-3 mr-1" />
+                          Dispatch
+                        </Button>
+                      </div>
+                    )}
                   </ListRowCard>
                 </div>
               );

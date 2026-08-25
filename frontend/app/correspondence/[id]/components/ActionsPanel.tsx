@@ -520,16 +520,6 @@ export function ActionsPanel({
             </Button>
           )}
 
-          {canDispatchCorrespondence(correspondence) && (
-            <div className={mutedNoticeClass}>
-              <p className={cn(corrType.caption, "mb-2")}>Ready to dispatch (outward)</p>
-              <DispatchModal
-                correspondenceId={correspondence.id}
-                onSuccess={() => _onSyncFromApi?.()}
-              />
-            </div>
-          )}
-
           {correspondence.status === "dispatched" && isCorrespondenceOutward(correspondence) && (
             <AcknowledgeButton
               correspondenceId={correspondence.id}

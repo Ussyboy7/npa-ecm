@@ -26,12 +26,16 @@ export const isCorrespondenceOutward = (
   return correspondence.direction === 'downward';
 };
 
-/** Registry dispatch is only for completed outward items. */
+/** Registry dispatch is only for completed outward items that have a physical copy and haven't been dispatched yet. */
 export const canDispatchCorrespondence = (
-  correspondence: Pick<Correspondence, 'status' | 'isOutward' | 'direction' | 'flowType'> | null | undefined,
+  correspondence: Pick<Correspondence, 'status' | 'isOutward' | 'direction' | 'flowType' | 'hasPhysicalCopy' | 'dispatchDate'> | null | undefined,
 ): boolean => {
   if (!correspondence || correspondence.status !== 'completed') return false;
-  return isCorrespondenceOutward(correspondence);
+  if (!isCorrespondenceOutward(correspondence)) return false;
+  if ((correspondence as unknown as { hasPhysicalCopy?: boolean }).hasPhysicalCopy === false) return false;
+  // If dispatchDate already set, it's been dispatched — don't show again
+  if ((correspondence as unknown as { dispatchDate?: string | null }).dispatchDate) return false;
+  return true;
 };
 
 /** Archive after completion (inward) or after dispatch/ack (outward). */
