@@ -44,6 +44,7 @@ import { Correspondence } from '@/lib/npa-structure';
 import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingState } from '@/components/shared/LoadingState';
 
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
@@ -192,7 +193,11 @@ const DocumentDetailContent = () => {
 
   return (
     <>
-      {accessDenied ? (
+      {loading ? (
+        <div className="flex items-center justify-center h-full min-h-[50vh] p-6">
+          <LoadingState message="Loading document…" />
+        </div>
+      ) : accessDenied ? (
         <ResourceAccessDenied
           title="Document Unavailable"
           check={accessExplanation}
