@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
@@ -59,17 +58,17 @@ export function DocumentSummaryCard({ document, onSummaryGenerated, compact = fa
   }
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+    <div className="rounded-xl border border-border/60 border-border/50">
+      <div className="pb-2 pt-4 px-4 border-b border-border/60">
+<p className="text-sm font-semibold flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           AI Summary
-        </CardTitle>
-        <CardDescription className="text-xs">
+        </p>
+        <p className="text-xs">
           Extractive or LLM summary of the latest document version
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-3">
+        </p>
+      </div>
+      <div className="px-4 pb-4 space-y-3">
         {summary ? (
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{summary}</p>
         ) : (
@@ -96,7 +95,7 @@ export function DocumentSummaryCard({ document, onSummaryGenerated, compact = fa
           Requires text in the latest version. Configure OPENAI_API_KEY or ANTHROPIC_API_KEY for
           LLM summaries; otherwise an extractive summary is used.
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -31,8 +31,6 @@ import {
   Edit,
   Trash2,
   Clock,
-  AlertTriangle,
-  CheckCircle,
   Settings,
   Loader2,
   Save,
@@ -50,8 +48,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
   registryQueueStatLabelClass,
   registryQueueStatValueClass,
 } from '@/components/shared/registry-queue-styles';
@@ -88,19 +84,6 @@ const getPriorityBadgeVariant = (
       return 'secondary';
     default:
       return 'outline';
-  }
-};
-
-const priorityStatVisual = (priority: string) => {
-  switch (priority) {
-    case 'urgent':
-      return { box: 'bg-destructive/10', icon: 'text-destructive' };
-    case 'high':
-      return { box: 'bg-orange-500/10', icon: 'text-orange-600 dark:text-orange-400' };
-    case 'medium':
-      return { box: 'bg-warning/10', icon: 'text-warning' };
-    default:
-      return { box: 'bg-success/10', icon: 'text-success' };
   }
 };
 
@@ -274,15 +257,15 @@ export const SLAConfigurationTab = forwardRef<
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
               {!editingTargets ? (
-                <Button variant="outline" size="sm" onClick={() => setEditingTargets(true)}>
-                  <Edit className="h-4 w-4 mr-2" />
+                <Button variant="outline" size="compact" onClick={() => setEditingTargets(true)}>
+                  <Edit className="h-4 w-4" />
                   Edit targets
                 </Button>
               ) : (
                 <>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="compact"
                     onClick={() => {
                       setTempTargets(targets);
                       setEditingTargets(false);
@@ -290,11 +273,11 @@ export const SLAConfigurationTab = forwardRef<
                   >
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={handleSaveTargets} disabled={saving}>
+                  <Button size="compact" onClick={handleSaveTargets} disabled={saving}>
                     {saving ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Save className="h-4 w-4 mr-2" />
+                      <Save className="h-4 w-4" />
                     )}
                     Save
                   </Button>
@@ -304,24 +287,13 @@ export const SLAConfigurationTab = forwardRef<
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {(['urgent', 'high', 'medium', 'low'] as const).map((priority) => {
-              const { box, icon: iconColor } = priorityStatVisual(priority);
               const hours = editingTargets ? tempTargets[priority] : targets[priority];
-              const LeadIcon =
-                priority === 'urgent'
-                  ? AlertTriangle
-                  : priority === 'low'
-                    ? CheckCircle
-                    : Clock;
               return (
                 <div
                   key={priority}
-                  className="rounded-lg border border-border/80 bg-card p-4"
+                  className="rounded-xl border border-border/60 bg-muted/30 p-4"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className={cn(registryQueueStatIconBoxClass, box)}>
-                      <LeadIcon className={cn(registryQueueStatIconClass, iconColor)} />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2">
+                  <div className="min-w-0 space-y-2">
                       <Badge
                         variant={getPriorityBadgeVariant(priority)}
                         className={correspondenceQueueBadgeClass}
@@ -356,7 +328,6 @@ export const SLAConfigurationTab = forwardRef<
                           />
                         </div>
                       ) : null}
-                    </div>
                   </div>
                 </div>
               );
@@ -373,8 +344,8 @@ export const SLAConfigurationTab = forwardRef<
               </p>
             </div>
             {!hideAddRuleButton ? (
-              <Button size="sm" onClick={() => handleOpenDialog()} className="shrink-0">
-                <Plus className="h-4 w-4 mr-2" />
+              <Button size="compact" onClick={() => handleOpenDialog()} className="shrink-0">
+                <Plus className="h-4 w-4" />
                 Add rule
               </Button>
             ) : null}

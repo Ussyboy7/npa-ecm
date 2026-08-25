@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -277,15 +276,15 @@ export const AccessActivityCard = ({
           </Button>
         </div>
       ) : (
-      <Card className="border-border/50">
-        <CardHeader className="pb-4">
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 pb-4 px-4 pt-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <p className="text-base font-semibold flex items-center gap-2">
                 <Activity className="h-4 w-4 text-primary" />
                 Access Activity
-              </CardTitle>
-              <CardDescription className="mt-1">Recent views, downloads, and prints</CardDescription>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Recent views, downloads, and prints</p>
             </div>
             <div className="flex items-center gap-2">
               {accessLogs.length > 0 && (
@@ -327,8 +326,8 @@ export const AccessActivityCard = ({
               </DropdownMenu>
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="p-4">
           <div className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
               <div>
@@ -362,8 +361,8 @@ export const AccessActivityCard = ({
               View Activity Logs
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
       )}
 
       <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>

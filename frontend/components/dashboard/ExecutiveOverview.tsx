@@ -34,7 +34,7 @@ export const ExecutiveOverview = ({
   executiveRange,
   onRangeChange,
 }: ExecutiveOverviewProps) => (
-  <div className="space-y-3 rounded-xl border border-border/50 bg-muted/20 p-4">
+  <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="min-w-0">
         <p className={`${appType.panelTitle} flex items-center gap-2`}>

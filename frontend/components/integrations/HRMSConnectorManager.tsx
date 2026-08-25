@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
-import { Users, Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
 import {
   createHRMSConnector,
   deleteHRMSConnector,
@@ -147,25 +146,18 @@ export function HRMSConnectorManager() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              HRMS Connectors
-            </CardTitle>
-            <CardDescription>
-              Sync staff profiles and org structure from NPA HRMS; deactivate exited staff automatically
-            </CardDescription>
-          </div>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Connector
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground">
+          Sync staff profiles and org structure from NPA HRMS; deactivate exited staff automatically
+        </p>
+        <Button size="compact" onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Connector
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border/60">
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -220,7 +212,7 @@ export function HRMSConnectorManager() {
             </TableBody>
           </Table>
         )}
-      </CardContent>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="md" height="fill">
@@ -305,6 +297,6 @@ export function HRMSConnectorManager() {
           </form>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }

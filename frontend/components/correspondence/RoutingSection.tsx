@@ -5,7 +5,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -423,9 +422,8 @@ export const RoutingSection = ({
           <Label className="text-xs text-muted-foreground">
             Selected Recipient
           </Label>
-          <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-border/60 border-primary/30 bg-primary/5 p-3">
+<div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1">
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
                     <UserIcon className="h-5 w-5 text-primary" />
@@ -470,8 +468,7 @@ export const RoutingSection = ({
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+</div>
         </div>
       )}
 
@@ -481,9 +478,8 @@ export const RoutingSection = ({
           <Label className="text-xs text-muted-foreground">
             Selected Office
           </Label>
-          <Card className="border-secondary/30 bg-secondary/5">
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
+          <div className="rounded-xl border border-border/60 border-secondary/30 bg-secondary/5 p-3">
+<div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1">
                   <div className="h-10 w-10 rounded-full bg-secondary/10 flex items-center justify-center">
                     <Building2 className="h-5 w-5 text-secondary-foreground" />
@@ -511,8 +507,7 @@ export const RoutingSection = ({
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+</div>
         </div>
       )}
     </div>

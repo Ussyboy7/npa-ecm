@@ -1,7 +1,6 @@
 "use client";
 
 import { GripVertical, Edit, Trash2, Building2, Network, Users, MapPin } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -71,13 +70,12 @@ export function WorkflowStepCard({
   const Icon = selection.icon;
 
   return (
-    <Card
+    <div
       className={cn(
-        "relative group transition-all",
+        "relative group rounded-xl border border-border/60 bg-muted/20 p-3 sm:p-4 transition-all",
         isDragging && "opacity-50 shadow-lg scale-[1.02]"
       )}
     >
-      <CardContent className="p-3 sm:p-4">
         <div className="flex items-start gap-2.5 sm:gap-3">
           {/* Drag Handle */}
           <div
@@ -158,8 +156,7 @@ export function WorkflowStepCard({
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
 

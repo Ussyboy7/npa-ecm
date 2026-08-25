@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { Check, Clock, Circle, AlertTriangle, ChevronRight, Send, CheckCircle2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -273,20 +272,20 @@ export function WorkflowProgressIndicator({
   const progressPercent = steps.length > 0 ? (completedSteps / steps.length) * 100 : 0;
 
   return (
-    <Card className={cn("overflow-hidden", className)}>
-      <CardHeader className="pb-2 px-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-1.5 truncate">
+    <div className="rounded-xl border border-border/60">
+      <div className="pb-2 px-3 border-b border-border/60">
+<div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium flex items-center gap-1.5 truncate">
             <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <span className="truncate">Workflow Progress</span>
-          </CardTitle>
+          </p>
           <Badge variant="outline" className="text-[10px] flex-shrink-0">
             {flowType === 'upward' ? '↑' : flowType === 'downward' ? '↓' : '↔'}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground truncate">{workflowName}</p>
-      </CardHeader>
-      <CardContent className="pt-0 px-3 pb-3">
+      </div>
+      <div className="pt-0 px-3 pb-3">
         {/* Progress Bar */}
         <div className="mb-3">
           <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
@@ -453,8 +452,8 @@ export function WorkflowProgressIndicator({
             </div>
           );
         })()}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

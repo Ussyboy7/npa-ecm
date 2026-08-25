@@ -2,22 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileCheck, Loader2, Plus, Search, Eye, LayoutTemplate, FolderOpen } from "lucide-react";
+import { FileCheck, Loader2, Plus, Search, Eye } from "lucide-react";
 import { getFormTemplates, type FormTemplate } from "@/lib/api/forms";
 import { CreateFormDocumentDialog } from "@/components/dms/CreateFormDocumentDialog";
+import { StatStrip } from "@/components/shared/StatStrip";
 import { cn } from "@/lib/utils";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
 import { logError } from "@/lib/client-logger";
 
 const FormsTemplatesPage = () => {
@@ -128,36 +121,20 @@ const FormsTemplatesPage = () => {
             <h1 className="text-3xl font-bold">Form Templates</h1>
             <p className="text-muted-foreground mt-1">Browse organization-wide templates and start a new form.</p>
           </div>
-          <Button variant="outline" onClick={() => router.push("/dms")}>
+          <Button variant="outline" size="compact" onClick={() => router.push("/dms")}>
             Back to Documents
           </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "Total Templates", value: templates.length, icon: LayoutTemplate, bgClass: "bg-primary/10", iconClass: "text-primary" },
-            { label: "Categories", value: categories.length, icon: FolderOpen, bgClass: "bg-violet-500/10", iconClass: "text-violet-600 dark:text-violet-400" },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <StatStrip
+          items={[
+            { key: "total", label: "Total Templates", value: templates.length },
+            { key: "categories", label: "Categories", value: categories.length },
+          ]}
+        />
 
-        {/* Search + category filter bar */}
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+        <div className="rounded-xl bg-muted/30 p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -192,36 +169,36 @@ const FormsTemplatesPage = () => {
                 </button>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {loading ? (
-          <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
+            <div className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading templates...
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ) : visibleTemplates.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
+            <div className="py-12 text-center">
               <FileCheck className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
               <p className="text-sm text-muted-foreground">No templates match your filters.</p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ) : (
           <div className="space-y-3">
             {visibleTemplates.map((template) => (
-              <Card
+              <div
                 key={template.id}
-                className={`border-l-4 ${getTemplateCategoryStyle(template.category).border} hover:shadow-md transition-shadow cursor-pointer`}
+                className={cn(
+                  "rounded-xl border border-border/60 border-l-4 hover:bg-muted/20 transition-colors cursor-pointer",
+                  getTemplateCategoryStyle(template.category).border,
+                )}
                 onClick={() => handleStartFromTemplate(template)}
               >
-                <CardContent className="p-4">
+                <div className="p-4">
                   <div className="flex items-start gap-3">
-                    <div className="p-3 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-                      <FileCheck className="h-5 w-5" />
-                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -276,8 +253,8 @@ const FormsTemplatesPage = () => {
                       })()}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -302,7 +279,7 @@ const FormsTemplatesPage = () => {
                 {(previewTemplate.structure?.sections || []).length > 0 ? (
                   <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
                     {previewTemplate.structure.sections?.map((section) => (
-                      <div key={section.id} className="rounded-md border p-3 space-y-2">
+                      <div key={section.id} className="rounded-xl border border-border/60 p-3 space-y-2">
                         {!isGenericSectionTitle(previewTemplate, section.title) && (
                           <p className="text-sm font-medium">{section.title}</p>
                         )}
@@ -310,7 +287,7 @@ const FormsTemplatesPage = () => {
                           {getSectionFields(previewTemplate, section.fields)
                             .slice(0, 5)
                             .map((field) => (
-                              <div key={field.id} className="rounded-sm border p-2 flex items-center justify-between gap-2">
+                              <div key={field.id} className="rounded-lg border border-border/60 p-2 flex items-center justify-between gap-2">
                                 <div className="min-w-0">
                                   <p className="text-sm truncate">{field.label}</p>
                                   <p className="text-xs text-muted-foreground capitalize">{field.type}</p>
@@ -331,7 +308,7 @@ const FormsTemplatesPage = () => {
                 ) : (
                   <div className="max-h-[340px] overflow-y-auto pr-1 space-y-2">
                     {(previewTemplate.structure?.fields || []).map((field) => (
-                      <div key={field.id} className="rounded-md border p-2 flex items-center justify-between gap-2">
+                      <div key={field.id} className="rounded-lg border border-border/60 p-2 flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-sm truncate">{field.label}</p>
                           <p className="text-xs text-muted-foreground capitalize">{field.type}</p>
@@ -344,9 +321,10 @@ const FormsTemplatesPage = () => {
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setPreviewTemplate(null)}>Close</Button>
+              <Button variant="outline" size="compact" onClick={() => setPreviewTemplate(null)}>Close</Button>
               {previewTemplate && (
                 <Button
+                  size="compact"
                   onClick={() => {
                     const selected = previewTemplate;
                     setPreviewTemplate(null);

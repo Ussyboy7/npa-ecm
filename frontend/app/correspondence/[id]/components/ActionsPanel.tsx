@@ -4,7 +4,6 @@ import { useMemo, useCallback, useState, useEffect } from "react";
 import { logError } from "@/lib/client-logger";
 import { hasRolePermission } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   MessageSquare,
@@ -165,11 +164,9 @@ export function ActionsPanel({
 
   if (!correspondence) {
     return (
-      <Card>
-        <CardContent className="p-4">
-          <div className="text-center text-muted-foreground">Loading actions...</div>
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-border/60 p-4">
+        <div className="text-center text-muted-foreground">Loading actions...</div>
+      </div>
     );
   }
 

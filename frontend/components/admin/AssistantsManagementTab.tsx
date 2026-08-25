@@ -3,7 +3,6 @@
 import { useState, useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +29,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { 
-  Briefcase,
   Plus,
   Search,
   UserMinus,
@@ -275,13 +273,12 @@ export const AssistantsManagementTab = forwardRef<
       <div className="space-y-6">
         {!hideHeaderActions ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button 
-              onClick={() => handleAssignAssistant()} 
-              size="sm"
-              className="bg-gradient-primary"
+            <Button
+              onClick={() => handleAssignAssistant()}
+              size="compact"
               aria-label="Assign assistant"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Assign Assistant
             </Button>
             <ContextualHelp
@@ -296,13 +293,12 @@ export const AssistantsManagementTab = forwardRef<
         </div>
         ) : null}
 
-        <Card>
+        <div>
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
             {!hideViewModeTabs ? (
-            <CardHeader>
-              <div className="flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-4">
-                  <CardTitle>Assistant Assignments</CardTitle>
+                  <h3 className="text-sm font-medium">Assistant Assignments</h3>
                   <TabsList>
                     <TabsTrigger value="executives" className="flex items-center gap-2">
                       <Shield className="h-4 w-4" />
@@ -340,10 +336,9 @@ export const AssistantsManagementTab = forwardRef<
                   )}
                 </div>
                 ) : null}
-              </div>
-            </CardHeader>
+            </div>
             ) : null}
-            <CardContent className={hideViewModeTabs ? "pt-6" : undefined}>
+            <div>
 
               <TabsContent value="executives" className="space-y-4">
               {filteredExecutives.length === 0 ? (
@@ -370,29 +365,27 @@ export const AssistantsManagementTab = forwardRef<
             const canManage = canManageExecutive(executive.id);
 
             return (
-                      <Card key={executive.id} className="group">
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
-                                <Shield className="h-5 w-5 text-primary" />
+                      <div key={executive.id} className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 rounded-lg bg-muted shrink-0">
+                                <Shield className="h-4 w-4 text-muted-foreground" />
                       </div>
-                      <div>
-                                <CardTitle className="text-base">{executive.name}</CardTitle>
-                                <CardDescription className="text-xs">
+                      <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{executive.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">
                                   {executive.systemRole} • {executive.gradeLevel}
-                                </CardDescription>
+                                </p>
                               </div>
                       </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={assignments.length > 0 ? "default" : "secondary"}>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Badge variant={assignments.length > 0 ? "default" : "secondary"} className="text-xs">
                                 {assignments.length} assistant{assignments.length !== 1 ? "s" : ""}
                       </Badge>
                               {canManage && (
                     <Button 
-                                  size="icon"
+                                  size="icon-sm"
                                   variant="ghost"
-                                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => handleAssignAssistant(executive.id)}
                     >
                                   <Plus className="h-4 w-4" />
@@ -400,18 +393,16 @@ export const AssistantsManagementTab = forwardRef<
                               )}
                             </div>
                   </div>
-                </CardHeader>
-                <CardContent>
+                <div className="mt-3">
                   {assignments.length === 0 ? (
-                            <div className="text-center py-6 border border-dashed rounded-lg">
-                              <Briefcase className="h-8 w-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                              <p className="text-sm text-muted-foreground">No assistants assigned</p>
+                            <div className="rounded-lg bg-muted/30 px-3 py-4 text-center">
+                              <p className="text-xs text-muted-foreground">No assistants assigned</p>
                               {canManage && (
                                 <Button
                                   variant="link"
                                   size="sm"
                                   onClick={() => handleAssignAssistant(executive.id)}
-                                  className="mt-1"
+                                  className="mt-1 h-auto p-0 text-xs"
                                 >
                                   Assign first assistant
                                 </Button>
@@ -473,8 +464,8 @@ export const AssistantsManagementTab = forwardRef<
                       })}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             );
           })}
                 </div>
@@ -492,7 +483,7 @@ export const AssistantsManagementTab = forwardRef<
                       </p>
                     </div>
                   ) : (
-                    <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto rounded-xl border border-border/60">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -575,9 +566,9 @@ export const AssistantsManagementTab = forwardRef<
                     </div>
                   )}
               </TabsContent>
-            </CardContent>
+            </div>
           </Tabs>
-        </Card>
+        </div>
       </div>
 
         {/* Assignment Modal */}

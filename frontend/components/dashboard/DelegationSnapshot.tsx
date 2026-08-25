@@ -1,12 +1,11 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Users } from 'lucide-react';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueListStackClass,
 } from '@/components/shared/registry-queue-styles';
+import { appType } from '@/lib/app-type';
 
 interface DelegationMember {
   userId: string;
@@ -26,17 +25,14 @@ interface DelegationSnapshotProps {
 }
 
 export const DelegationSnapshot = ({ delegationSnapshot }: DelegationSnapshotProps) => (
-  <Card>
-    <CardHeader>
-      <CardTitle className="flex items-center gap-2">
-        <Users className="h-5 w-5 text-primary" />
-        Delegation
-      </CardTitle>
-      <p className="text-sm text-muted-foreground">
+  <div className="rounded-xl border border-border/60">
+    <div className="border-b border-border/60 px-4 py-3">
+      <h2 className={appType.panelTitle}>Delegation</h2>
+      <p className={appType.caption}>
         Principals, secretariat, and acting assignments by office.
       </p>
-    </CardHeader>
-    <CardContent className="space-y-2">
+    </div>
+    <div className="space-y-2 p-4">
       {delegationSnapshot.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No delegation snapshot for your offices.
@@ -46,7 +42,7 @@ export const DelegationSnapshot = ({ delegationSnapshot }: DelegationSnapshotPro
           {delegationSnapshot.map((entry) => (
             <div
               key={entry.officeId}
-              className="rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/40"
+              className="rounded-xl border border-border/60 bg-muted/20 p-3 transition-colors hover:bg-muted/40"
             >
               <p className="text-sm font-semibold">{entry.officeName}</p>
               <p className="text-xs text-muted-foreground">
@@ -68,6 +64,6 @@ export const DelegationSnapshot = ({ delegationSnapshot }: DelegationSnapshotPro
           ))}
         </div>
       )}
-    </CardContent>
-  </Card>
+    </div>
+  </div>
 );

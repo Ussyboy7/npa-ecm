@@ -3,7 +3,6 @@
 import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback } from 'react';
 import { logError } from '@/lib/client-logger';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -47,6 +46,7 @@ import {
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueLeadingBoxClass,
@@ -56,11 +56,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
 } from '@/components/shared/registry-queue-styles';
 import {
   Tooltip,
@@ -323,67 +318,32 @@ export const EscalationRulesTab = forwardRef<
     <ClientErrorBoundary>
       <div className="space-y-8">
         {!hideActivityOverview ? (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Activity overview</CardTitle>
-            <CardDescription>
-              Snapshot of automation health. Pending items need acknowledgement or resolution.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                {
-                  label: 'Active rules',
-                  value: activeRules.length,
-                  sub: `${inactiveRules.length} inactive`,
-                  icon: Power,
-                  box: 'bg-success/10',
-                  iconClass: 'text-success',
-                },
-                {
-                  label: 'Pending escalations',
-                  value: summary?.pending ?? 0,
-                  sub: `${summary?.active ?? 0} total active`,
-                  icon: AlertTriangle,
-                  box: 'bg-warning/10',
-                  iconClass: 'text-warning',
-                },
-                {
-                  label: 'Triggered this week',
-                  value: summary?.triggeredThisWeek ?? 0,
-                  sub: 'Rule firings',
-                  icon: Bell,
-                  box: 'bg-primary/10',
-                  iconClass: 'text-primary',
-                },
-                {
-                  label: 'Resolved today',
-                  value: summary?.resolvedToday ?? 0,
-                  sub: 'Issues closed',
-                  icon: CheckCircle,
-                  box: 'bg-success/10',
-                  iconClass: 'text-success',
-                },
-              ].map(({ label, value, sub, icon: Icon, box, iconClass }) => (
-                <Card key={label}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn(registryQueueStatIconBoxClass, box)}>
-                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{label}</p>
-                        <p className={registryQueueStatValueClass}>{value}</p>
-                        <p className="text-xs text-muted-foreground">{sub}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <StatStrip
+          items={[
+            {
+              key: 'active',
+              label: 'Active rules',
+              value: activeRules.length,
+              hint: `${inactiveRules.length} inactive`,
+            },
+            {
+              key: 'pending',
+              label: 'Pending escalations',
+              value: summary?.pending ?? 0,
+              hint: `${summary?.active ?? 0} total active`,
+            },
+            {
+              key: 'triggered',
+              label: 'Triggered this week',
+              value: summary?.triggeredThisWeek ?? 0,
+            },
+            {
+              key: 'resolved',
+              label: 'Resolved today',
+              value: summary?.resolvedToday ?? 0,
+            },
+          ]}
+        />
         ) : null}
 
         <section className="space-y-4">
@@ -395,8 +355,8 @@ export const EscalationRulesTab = forwardRef<
               </p>
             </div>
             {!hideAddRuleButton ? (
-              <Button size="sm" onClick={() => handleOpenDialog()} className="shrink-0">
-                <Plus className="h-4 w-4 mr-2" />
+              <Button size="compact" onClick={() => handleOpenDialog()} className="shrink-0">
+                <Plus className="h-4 w-4" />
                 Add rule
               </Button>
             ) : null}

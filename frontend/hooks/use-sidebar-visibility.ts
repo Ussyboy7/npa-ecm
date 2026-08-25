@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useCurrentUser } from './use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from './use-role-checks';
-import { useScopeChecks } from './use-scope-checks';
 
 
 export interface SidebarVisibility {
@@ -19,8 +18,8 @@ export interface SidebarVisibility {
   showRegisteredCorrespondence: boolean;
   showOfficeSent: boolean;
 
-  // Case Management
-  showMyCases: boolean;
+    // Case queues (My / Office / All) — section flag still gates them
+    showMyCases: boolean;
   showOfficeCases: boolean;
   showAllCases: boolean;
   showCreateCase: boolean;
@@ -79,7 +78,6 @@ export function useSidebarVisibility(): SidebarVisibility {
   const { currentUser } = useCurrentUser();
   const { officeMemberships, assistantAssignments, roles, offices } = useOrganization();
   const roleChecks = useRoleChecks();
-  const scopeChecks = useScopeChecks();
 
   return useMemo(() => {
     if (!currentUser) {
@@ -199,10 +197,17 @@ export function useSidebarVisibility(): SidebarVisibility {
     const section = (sidebarKey: string, defaultOn: boolean) =>
       sidebarKey in perms ? Boolean(perms[sidebarKey]) : defaultOn;
 
+    const QUEUE_ROLES = new Set(['principal', 'acting', 'secretariat']);
     const userOfficeIds = officeMemberships
       .filter((m) => m.userId === currentUser.id && m.isActive)
       .map((m) => m.officeId);
     const hasOfficeMembership = userOfficeIds.length > 0;
+    const hasOfficeQueueRole = officeMemberships.some(
+      (m) =>
+        m.userId === currentUser.id &&
+        m.isActive &&
+        QUEUE_ROLES.has(String(m.assignmentRole || '').toLowerCase()),
+    );
     const hasExecutiveAssignment =
       roleChecks.isSecretary &&
       assistantAssignments.some((a) => String(a.assistantId) === String(currentUser.id));
@@ -233,8 +238,8 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showExecutiveApprovals =
       has("can_access_approvals") || (roleChecks.isSecretary && hasExecutiveAssignment);
 
-    const showOfficeInbox = registryOn && hasOfficeMembership;
-    const showOfficeSent = registryOn && hasOfficeMembership;
+    const showOfficeInbox = registryOn && hasOfficeQueueRole;
+    const showOfficeSent = registryOn && hasOfficeQueueRole;
     const showRegisterCorrespondence =
       registryOn &&
       has("can_register_correspondence") &&
@@ -244,14 +249,10 @@ export function useSidebarVisibility(): SidebarVisibility {
       (has("can_view_registry") || has("can_view_all_correspondence") || has("can_register_correspondence"));
 
     const showMyCases = casesOn;
-    const showOfficeCases = casesOn && hasOfficeMembership;
+    const showOfficeCases = casesOn && hasOfficeQueueRole;
     const showCreateCase = casesOn;
     const showCaseTemplates = casesOn;
-    const showAllCases =
-      casesOn &&
-      (scopeChecks.caseScope !== "personal" ||
-        (roleChecks.isSecretary && hasExecutiveAssignment) ||
-        has("can_view_all_correspondence"));
+    const showAllCases = casesOn && has("can_view_all_correspondence");
 
     const showSearchDocuments = documentsOn && has("can_access_document_management");
     const showContentCapture = documentsOn && has("can_access_document_management");
@@ -284,7 +285,8 @@ export function useSidebarVisibility(): SidebarVisibility {
       adminOn && (has("can_manage_users") || has("can_manage_roles"));
     const showWorkflowSLA = adminOn && has("can_manage_org_structure");
     const showRecordsGovernance = adminOn && has("can_access_records_governance");
-    const showTemplates = adminOn && has("can_access_administration");
+    const showTemplates =
+      (adminOn && has("can_access_administration")) || casesOn;
     const showAuditCompliance = adminOn && has("can_access_audit_compliance");
     const showAuditForms = adminOn && has("can_access_audit_compliance");
     const showSystemHealth = has("can_access_system_health");
@@ -372,7 +374,6 @@ export function useSidebarVisibility(): SidebarVisibility {
     officeMemberships,
     assistantAssignments,
     roleChecks,
-    scopeChecks,
     roles,
     offices,
   ]);

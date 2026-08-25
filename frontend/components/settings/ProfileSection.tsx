@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { TabsContent } from '@/components/ui/tabs';
 import { Loader2, Camera, Save, Briefcase, Building2 } from 'lucide-react';
+import { appType } from '@/lib/app-type';
 
 interface ProfileSectionProps {
   profile: { firstName: string; lastName: string; email: string; phone: string; bio: string; jobTitle: string };
@@ -43,14 +43,14 @@ export function ProfileSection({
 }: ProfileSectionProps) {
   return (
     <TabsContent value="profile" className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Information</CardTitle>
-          <CardDescription>
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 px-4 py-3">
+          <h2 className={appType.panelTitle}>Profile Information</h2>
+          <p className={appType.caption}>
             Update your personal information and profile photo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+          </p>
+        </div>
+        <div className="space-y-6 p-4">
           <div className="flex items-center gap-6">
             <div className="relative">
               <Avatar className="h-24 w-24">
@@ -182,7 +182,7 @@ export function ProfileSection({
             <p className="text-xs text-muted-foreground">Contact your administrator to update organization details.</p>
           </div>
 
-          <Button onClick={onSave} disabled={isSavingProfile}>
+          <Button size="sm" onClick={onSave} disabled={isSavingProfile}>
             {isSavingProfile ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -195,8 +195,8 @@ export function ProfileSection({
               </>
             )}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </TabsContent>
   );
 }

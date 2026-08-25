@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
 import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -16,13 +15,33 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, BookOpen, RefreshCw, LogOut, LogIn, MapPin, User as UserIcon, History, Plus, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
+import {
+  Search,
+  BookOpen,
+  RefreshCw,
+  LogOut,
+  LogIn,
+  MapPin,
+  User as UserIcon,
+  History,
+  Plus,
+  Trash2,
+  RotateCcw,
+  AlertTriangle,
+  MoreVertical,
+} from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
 import { unwrapResults } from '@/lib/type-utils';
 import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
@@ -35,10 +54,19 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { RegistryTabList } from '@/components/registry/RegistryTabList';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
 } from '@/components/shared/registry-queue-styles';
 import { cn } from '@/lib/utils';
 import { formatDateShort, formatDateTime } from '@/lib/datetime';
@@ -293,28 +321,81 @@ function PhysicalDocumentsForm() {
   const statusBadge = (status: string) => {
     switch (status) {
       case 'checked_out':
-        return <Badge variant="destructive" className="whitespace-nowrap">Checked Out</Badge>;
+        return <Badge variant="destructive" className={correspondenceQueueBadgeClass}>Checked Out</Badge>;
       case 'filed':
-        return <Badge variant="default" className="bg-success/10 text-success border-success/20 whitespace-nowrap">Filed</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              correspondenceQueueBadgeClass,
+              'border-emerald-700/40 bg-emerald-50 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-950 dark:text-emerald-100',
+            )}
+          >
+            Filed
+          </Badge>
+        );
       case 'archived':
-        return <Badge variant="default" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 whitespace-nowrap">Archived</Badge>;
+        return <Badge variant="secondary" className={correspondenceQueueBadgeClass}>Archived</Badge>;
       case 'destroyed':
-        return <Badge variant="outline" className="whitespace-nowrap">Destroyed</Badge>;
+        return <Badge variant="outline" className={correspondenceQueueBadgeClass}>Destroyed</Badge>;
       case 'missing':
-        return <Badge variant="outline" className="text-destructive border-destructive/30 whitespace-nowrap">Missing</Badge>;
+        return <Badge variant="destructive" className={correspondenceQueueBadgeClass}>Missing</Badge>;
       default:
-        return <Badge variant="outline" className="whitespace-nowrap">{status}</Badge>;
+        return <Badge variant="outline" className={correspondenceQueueBadgeClass}>{status}</Badge>;
     }
   };
+
+  const pageStats = useMemo(() => {
+    let filed = 0;
+    let checkedOut = 0;
+    let other = 0;
+    for (const doc of documents) {
+      if (doc.status === 'filed') filed += 1;
+      else if (doc.status === 'checked_out') checkedOut += 1;
+      else other += 1;
+    }
+    return { filed, checkedOut, other };
+  }, [documents]);
 
   return (
     <>
       <QueuePageShell
-        title="Physical Documents"
+        title="Physical"
         subtitle="Track physical document locations, check-outs, and returns"
+        tabs={<RegistryTabList />}
+        actions={(
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="compact">
+                  <MoreVertical className="h-4 w-4" />
+                  More
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => { fetchDocuments(); fetchLocations(); }}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="compact" onClick={() => setRegisterOpen(true)}>
+              <Plus className="h-4 w-4" /> Register
+            </Button>
+          </>
+        )}
+        stats={(
+          <StatStrip
+            items={[
+              { key: 'total', label: 'Total', value: count },
+              { key: 'filed', label: 'Filed', value: pageStats.filed },
+              { key: 'out', label: 'Checked out', value: pageStats.checkedOut },
+            ]}
+          />
+        )}
       >
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+        <div className="rounded-xl bg-muted/30 p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -322,6 +403,7 @@ function PhysicalDocumentsForm() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-8 pl-8 text-xs"
+                aria-label="Search physical documents"
               />
             </div>
             <Select value={selectedLocation} onValueChange={setSelectedLocation}>
@@ -335,159 +417,145 @@ function PhysicalDocumentsForm() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={() => setRegisterOpen(true)}>
-              <Plus className="h-3 w-3 mr-1" /> Register
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { fetchDocuments(); fetchLocations(); }}>
-              <RefreshCw className="h-3 w-3 mr-1" /> Refresh
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <div>
-          <h2 className="text-lg font-semibold mb-3">All Physical Documents</h2>
+        <div aria-live="polite">
           {loading ? (
-            <div className="rounded-lg border bg-card p-6">
-              <LoadingState message="Loading documents..." />
-            </div>
+            <LoadingState message="Loading documents…" />
           ) : error ? (
-            <div className="rounded-lg border bg-card p-6">
-              <ErrorState message={error} variant="inline" onRetry={fetchDocuments} retryLabel="Retry" />
-            </div>
+            <ErrorState message={error} variant="inline" onRetry={fetchDocuments} retryLabel="Retry" />
           ) : documents.length === 0 ? (
-            <div className="rounded-lg border bg-card p-6">
-              <EmptyState
-                icon={<BookOpen className="h-12 w-12 text-muted-foreground" />}
-                title="No physical documents found"
-                message={debouncedSearch ? 'Try adjusting your search.' : 'No documents in this location.'}
-              />
-            </div>
+            <EmptyState
+              icon={<BookOpen className={registryQueueEmptyIconClass} />}
+              title="No physical documents found"
+              message={debouncedSearch ? 'Try adjusting your search.' : 'Register a physical copy to start tracking.'}
+            />
           ) : (
-            <div className={correspondenceQueueListStackClass}>
-              {documents.map((doc) => (
-                <ListRowCard
-                  key={doc.id}
-                  density="compact"
-                  leading={(
-                    <div className={cn(correspondenceQueueLeadingBoxClass, "bg-blue-500/10")}>
-                      <BookOpen className={cn(correspondenceQueueLeadingIconClass, "text-blue-600 dark:text-blue-400")} />
-                    </div>
-                  )}
-                  actions={
-                    <div className="flex flex-col gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs justify-start text-muted-foreground"
-                        onClick={() => handleViewHistory(doc)}
-                      >
-                        <History className="h-3 w-3 mr-1" /> History
-                      </Button>
-                      {doc.status === 'filed' && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => { setCheckOutDoc(doc); setCheckOutOpen(true); }}
-                          >
-                            <LogOut className="h-3 w-3 mr-1" /> Check Out
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => handleUpdateStatus(doc, 'archived')}
-                          >
-                            <RotateCcw className="h-3 w-3 mr-1" /> Archive
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive"
-                            onClick={() => handleUpdateStatus(doc, 'destroyed')}
-                          >
-                            <Trash2 className="h-3 w-3 mr-1" /> Destroy
-                          </Button>
-                        </>
+            <div className={correspondenceQueueListStackClass} role="list">
+              {documents.map((doc) => {
+                const assigneeName = doc.checked_out_to
+                  ? (doc.checked_out_to.name
+                    || `${doc.checked_out_to.first_name || ''} ${doc.checked_out_to.last_name || ''}`.trim()
+                    || 'Unknown')
+                  : null;
+                const primaryAction =
+                  doc.status === 'filed' ? (
+                    <Button
+                      size="compact"
+                      variant="outline"
+                      onClick={() => { setCheckOutDoc(doc); setCheckOutOpen(true); }}
+                    >
+                      <LogOut className="h-4 w-4" /> Check Out
+                    </Button>
+                  ) : doc.status === 'checked_out' ? (
+                    <Button size="compact" onClick={() => void handleCheckIn(doc)}>
+                      <LogIn className="h-4 w-4" /> Check In
+                    </Button>
+                  ) : doc.status === 'missing' ? (
+                    <Button size="compact" variant="outline" onClick={() => void handleUpdateStatus(doc, 'filed')}>
+                      <RotateCcw className="h-4 w-4" /> Recovered
+                    </Button>
+                  ) : null;
+
+                return (
+                  <div key={doc.id} role="listitem">
+                    <ListRowCard
+                      density="compact"
+                      leading={(
+                        <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-primary/10')}>
+                          <BookOpen className={cn(correspondenceQueueLeadingIconClass, 'text-primary')} />
+                        </div>
                       )}
-                      {doc.status === 'checked_out' && (
-                        <>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => handleCheckIn(doc)}
-                          >
-                            <LogIn className="h-3 w-3 mr-1" /> Check In
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive"
-                            onClick={() => handleUpdateStatus(doc, 'missing')}
-                          >
-                            <AlertTriangle className="h-3 w-3 mr-1" /> Mark Missing
-                          </Button>
-                        </>
+                      actions={(
+                        <div className="flex items-center gap-1.5">
+                          {primaryAction}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon-sm" aria-label="More actions">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => void handleViewHistory(doc)}>
+                                <History className="h-4 w-4 mr-2" /> History
+                              </DropdownMenuItem>
+                              {doc.status === 'filed' ? (
+                                <>
+                                  <DropdownMenuItem onClick={() => void handleUpdateStatus(doc, 'archived')}>
+                                    <RotateCcw className="h-4 w-4 mr-2" /> Archive
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => void handleUpdateStatus(doc, 'destroyed')}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" /> Destroy
+                                  </DropdownMenuItem>
+                                </>
+                              ) : null}
+                              {doc.status === 'checked_out' ? (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => void handleUpdateStatus(doc, 'missing')}
+                                >
+                                  <AlertTriangle className="h-4 w-4 mr-2" /> Mark Missing
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       )}
-                      {doc.status === 'missing' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => handleUpdateStatus(doc, 'filed')}
-                        >
-                          <RotateCcw className="h-3 w-3 mr-1" /> Recovered
-                        </Button>
-                      )}
-                    </div>
-                  }
-                >
-                  <div className="flex items-start justify-between gap-3 mb-1">
-                    {statusBadge(doc.status)}
-                    <div className="flex gap-2 shrink-0">
-                      {doc.checked_out_at && (
-                        <span className="text-[11px] tabular-nums text-muted-foreground">
-                          {formatDateShort(doc.checked_out_at)}
+                    >
+                      <h4 className={correspondenceQueueSubjectClass}>
+                        {doc.description || doc.tracking_number}
+                      </h4>
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                          {statusBadge(doc.status)}
+                          <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                            {doc.tracking_number}
+                          </Badge>
+                        </div>
+                        {doc.checked_out_at ? (
+                          <span className={correspondenceQueueDateClass}>{formatDateShort(doc.checked_out_at)}</span>
+                        ) : null}
+                      </div>
+                      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                        {doc.correspondence_ref && doc.correspondence ? (
+                          <Link
+                            href={`/correspondence/${doc.correspondence}`}
+                            className={cn(correspondenceQueueMetaItemClass, 'text-primary hover:underline')}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <BookOpen className={correspondenceQueueMetaIconClass} />
+                            <span className="truncate">{doc.correspondence_ref}</span>
+                          </Link>
+                        ) : doc.correspondence_ref ? (
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <BookOpen className={correspondenceQueueMetaIconClass} />
+                            <span className="truncate">{doc.correspondence_ref}</span>
+                          </span>
+                        ) : null}
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <MapPin className={correspondenceQueueMetaIconClass} />
+                          <span className="truncate">{doc.location_name || '—'}</span>
                         </span>
-                      )}
-                    </div>
+                        {assigneeName ? (
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <UserIcon className={correspondenceQueueMetaIconClass} />
+                            <span className="truncate">{assigneeName}</span>
+                          </span>
+                        ) : null}
+                        {doc.expected_return_at ? (
+                          <span className={cn(correspondenceQueueMetaItemClass, 'text-amber-600')}>
+                            Due {formatDateShort(doc.expected_return_at)}
+                          </span>
+                        ) : null}
+                      </div>
+                    </ListRowCard>
                   </div>
-                  <h3 className="text-sm font-semibold leading-snug text-foreground line-clamp-1">
-                    {doc.description || doc.tracking_number}
-                  </h3>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-muted-foreground leading-tight">
-                    {doc.correspondence_ref && doc.correspondence ? (
-                      <Link
-                        href={`/correspondence/${doc.correspondence}`}
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                      >
-                        {doc.correspondence_ref}
-                      </Link>
-                    ) : doc.correspondence_ref ? (
-                      <span className="inline-flex items-center gap-1">
-                        {doc.correspondence_ref}
-                      </span>
-                    ) : null}
-                    <span className="inline-flex items-center gap-1">
-                      <MapPin className="h-3 w-3 shrink-0 opacity-80" />
-                      {doc.location_name || '—'}
-                    </span>
-                    {doc.checked_out_to && (
-                      <span className="inline-flex items-center gap-1">
-                        <UserIcon className="h-3 w-3 shrink-0 opacity-80" />
-                        {doc.checked_out_to.name || `${doc.checked_out_to.first_name || ''} ${doc.checked_out_to.last_name || ''}`.trim() || 'Unknown'}
-                      </span>
-                    )}
-                    {doc.expected_return_at && (
-                      <span className="inline-flex items-center gap-1 text-amber-600">
-                        Due {formatDateShort(doc.expected_return_at)}
-                      </span>
-                    )}
-                  </div>
-                </ListRowCard>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

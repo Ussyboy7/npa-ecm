@@ -335,7 +335,7 @@ const NewCasePage = () => {
                     <DropdownMenuSeparator />
                   </>
                 )}
-                <DropdownMenuItem onClick={() => router.push('/cases/templates')}>
+                <DropdownMenuItem onClick={() => router.push('/admin/templates-hub?tab=cases')}>
                   <FileText className="h-4 w-4 mr-2" />
                   Use Template
                 </DropdownMenuItem>

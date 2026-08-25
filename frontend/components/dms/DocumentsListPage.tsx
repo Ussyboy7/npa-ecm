@@ -5,7 +5,6 @@ import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,11 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput, CheckCircle2 } from 'lucide-react';
+import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput, CheckCircle2, Scan } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { useSidebarVisibility } from '@/hooks/use-sidebar-visibility';
 import { queryDocumentsExtended, type DocumentRecord } from '@/lib/api/dms';
 import { listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
 import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';
+import { CaptureJobsPanel } from '@/components/capture/CaptureJobsPanel';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import { usePagination } from '@/hooks/use-pagination';
@@ -56,6 +57,7 @@ import { cn } from '@/lib/utils';
 
 function MyDocumentsForm() {
   const { currentUser } = useCurrentUser();
+  const visibility = useSidebarVisibility();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
@@ -63,7 +65,8 @@ function MyDocumentsForm() {
     tabFromUrl === 'pending-signatures' ||
     tabFromUrl === 'signed-by-me' ||
     tabFromUrl === 'shared' ||
-    tabFromUrl === 'my-documents'
+    tabFromUrl === 'my-documents' ||
+    (tabFromUrl === 'capture' && visibility.showContentCapture)
       ? tabFromUrl
       : 'my-documents';
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -104,11 +107,14 @@ function MyDocumentsForm() {
       tab === 'pending-signatures' ||
       tab === 'signed-by-me' ||
       tab === 'shared' ||
-      tab === 'my-documents'
+      tab === 'my-documents' ||
+      (tab === 'capture' && visibility.showContentCapture)
     ) {
       setActiveTab(tab);
+    } else if (tab === 'capture' && !visibility.showContentCapture) {
+      setActiveTab('my-documents');
     }
-  }, [searchParams]);
+  }, [searchParams, visibility.showContentCapture]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -165,6 +171,7 @@ function MyDocumentsForm() {
   // Load documents based on scope
   useEffect(() => {
     if (!currentUser?.id) return;
+    if (activeTab === 'capture' || activeTab === 'pending-signatures' || activeTab === 'signed-by-me') return;
 
     const requestId = ++documentsRequestRef.current;
     const loadDocuments = async () => {
@@ -335,13 +342,18 @@ function MyDocumentsForm() {
       ) : (
         <QueuePageShell
           title="My Documents"
-          subtitle="Create, manage, and find your documents"
+          subtitle={
+            activeTab === 'capture'
+              ? 'Scan, batch upload, and track OCR processing jobs'
+              : 'Create, manage, and find your documents'
+          }
           actions={(
             <>
+              {activeTab !== 'capture' ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" /> Create
+                  <Button size="compact">
+                    <Plus className="h-4 w-4" /> Create
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -355,14 +367,28 @@ function MyDocumentsForm() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              ) : null}
               <ContextualHelp
                 title="Managing your documents"
                 description="Switch scope, then narrow the list with search and filters."
-                steps={['Use tabs to switch between My Documents, Shared, Pending Signatures, and Signed by Me.', 'Search by title, reference, description, file text, or tags.', 'Use Status/Type filters to find items faster.']}
+                steps={
+                  visibility.showContentCapture
+                    ? [
+                        'Use tabs for My Documents, Shared, signatures, or Capture (scan/OCR jobs).',
+                        'Search by title, reference, description, file text, or tags.',
+                        'Use Status/Type filters to find items faster.',
+                      ]
+                    : [
+                        'Use tabs to switch between My Documents, Shared, Pending Signatures, and Signed by Me.',
+                        'Search by title, reference, description, file text, or tags.',
+                        'Use Status/Type filters to find items faster.',
+                      ]
+                }
               />
             </>
           )}
-          stats={(
+          stats={
+            activeTab === 'capture' ? undefined : (
             <StatStrip
               items={[
                 { key: 'total', label: 'Total', value: stats.total },
@@ -371,11 +397,12 @@ function MyDocumentsForm() {
                 { key: 'archived', label: 'Archived', value: stats.archived },
               ]}
             />
-          )}
+            )
+          }
         >
-        {/* Search + filters bar */}
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+        {activeTab !== 'capture' ? (
+        <div className="rounded-xl bg-muted/30 p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -428,10 +455,10 @@ function MyDocumentsForm() {
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+        ) : null}
 
-        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="my-documents" className="text-xs px-2.5 py-1">My Documents</TabsTrigger>
@@ -452,6 +479,12 @@ function MyDocumentsForm() {
                 </Badge>
               )}
             </TabsTrigger>
+            {visibility.showContentCapture ? (
+              <TabsTrigger value="capture" className="text-xs px-2.5 py-1">
+                <Scan className="mr-1 h-3.5 w-3.5" />
+                Capture
+              </TabsTrigger>
+            ) : null}
           </TabsList>
           <TabsContent value="my-documents" className="mt-6">
             <DocumentList documents={documents} loading={loading} error={error} emptyMessage="You haven't created any documents yet." />
@@ -465,17 +498,21 @@ function MyDocumentsForm() {
           <TabsContent value="signed-by-me" className="mt-6">
             <SignedByMeList forms={signedForms} loading={signedLoading} />
           </TabsContent>
+          {visibility.showContentCapture ? (
+            <TabsContent value="capture" className="mt-6">
+              <CaptureJobsPanel />
+            </TabsContent>
+          ) : null}
         </Tabs>
 
-        {/* Pagination */}
-        {count > 0 && (
+        {count > 0 && activeTab !== 'capture' && activeTab !== 'pending-signatures' && activeTab !== 'signed-by-me' ? (
           <PaginationControls
             pagination={pagination}
             showPageSizeSelector={true}
             showGoToPage={true}
             className="border-t border-border/60 pt-4"
           />
-        )}
+        ) : null}
         </QueuePageShell>
       )}
 

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { Mail, Inbox, Plus, Edit, Trash2, Loader2 } from "lucide-react";
+import { Inbox, Plus, Edit, Trash2, Loader2 } from "lucide-react";
 import {
   createEmailConnector,
   deleteEmailConnector,
@@ -159,23 +158,18 @@ export function EmailConnectorManager() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5" />
-              Email Connectors
-            </CardTitle>
-            <CardDescription>Configure SMTP/IMAP gateways for outbound and inbound mail</CardDescription>
-          </div>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Connector
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground">
+          Configure SMTP/IMAP gateways for outbound and inbound mail
+        </p>
+        <Button size="compact" onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Connector
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border/60">
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -236,7 +230,7 @@ export function EmailConnectorManager() {
             </TableBody>
           </Table>
         )}
-      </CardContent>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="md" height="fill">
@@ -321,6 +315,6 @@ export function EmailConnectorManager() {
           </form>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }

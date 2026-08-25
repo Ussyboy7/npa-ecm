@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -275,14 +274,11 @@ const OfficeSentPage = () => {
           title="Office Sent"
           subtitle="Correspondence sent from your office(s)"
         >
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <p className="text-muted-foreground">
-                You are not a member of any office. Office Sent is only available to office members.
-              </p>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={<Building2 className={registryQueueEmptyIconClass} />}
+            title="No office membership"
+            message="You are not a member of any office. Office Sent is only available to office members."
+          />
         </QueuePageShell>
       ) : (
         <ErrorBoundary>
@@ -293,12 +289,12 @@ const OfficeSentPage = () => {
               <>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="compact"
                   onClick={handleExport}
                   disabled={exporting || items.length === 0 || loading}
                   aria-label="Export to CSV"
                 >
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="h-4 w-4" />
                   {exporting ? 'Exporting...' : 'Export'}
                 </Button>
                 <ContextualHelp
@@ -323,10 +319,9 @@ const OfficeSentPage = () => {
               />
             )}
           >
-            <Card>
-              <CardContent className="p-2">
+            <div className="rounded-xl bg-muted/30 p-2">
                 <div className="md:hidden mb-2">
-                  <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="w-full justify-between">
+                  <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="h-8 w-full justify-between text-xs">
                     <span className="flex items-center"><Search className="h-3.5 w-3.5 mr-2" /> Filters</span>
                     {activeFilterCount > 0 && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">{activeFilterCount}</span>}
                   </Button>
@@ -380,8 +375,7 @@ const OfficeSentPage = () => {
                   <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>
                 )}
                 </div>
-              </CardContent>
-            </Card>
+            </div>
 
             <div aria-live="polite">
             {loading ? (

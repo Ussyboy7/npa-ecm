@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +31,7 @@ import {
 } from 'lucide-react';
 import { toast } from "@/components/ui/sonner";
 import { LoginMFASection } from '@/components/settings/LoginMFASection';
+import { appType } from '@/lib/app-type';
 
 interface SecuritySectionProps {
   twoFactorEnabled: boolean;
@@ -91,18 +91,18 @@ export function SecuritySection({
 }: SecuritySectionProps) {
   return (
     <TabsContent value="security" className="space-y-4">
-      {/* 2FA Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
+      {/* 2FA */}
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 px-4 py-3">
+          <h2 className={`${appType.panelTitle} flex items-center gap-2`}>
+            <Shield className="h-4 w-4" />
             Two-Factor Authentication
-          </CardTitle>
-          <CardDescription>
+          </h2>
+          <p className={appType.caption}>
             Add an extra layer of security to your account. Choose between authenticator app or email verification.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </p>
+        </div>
+        <div className="space-y-4 p-4">
           {isLoading2FAStatus ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -228,24 +228,24 @@ export function SecuritySection({
               )}
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Password Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-          <CardDescription>
+      {/* Password */}
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 px-4 py-3">
+          <h2 className={appType.panelTitle}>Change Password</h2>
+          <p className={appType.caption}>
             Use a strong password with at least 8 characters, including uppercase, lowercase, and numbers.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={() => onPasswordDialogChange(true)}>
+          </p>
+        </div>
+        <div className="p-4">
+          <Button size="sm" onClick={() => onPasswordDialogChange(true)}>
             <Lock className="h-4 w-4 mr-2" />
             Change Password
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* 2FA Setup Dialog */}
       <Dialog open={showSetup2FA} onOpenChange={onSetup2FADialogChange}>

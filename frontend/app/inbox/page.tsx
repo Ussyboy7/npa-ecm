@@ -5,7 +5,6 @@ import { fetchSLATargets, DEFAULT_SLA_TARGETS } from '@/lib/sla-client';
 import { logError } from '@/lib/client-logger';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -311,7 +310,7 @@ const ExecutiveInbox = () => {
 
       {(canManageActingAppointments) && (
         <a
-          href="/admin/acting-appointments"
+          href="/admin/organization/acting"
           className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
         >
           <UserCheck className="h-4 w-4" />
@@ -335,8 +334,8 @@ const ExecutiveInbox = () => {
         </a>
       )}
 
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 p-2" role="search" aria-label="Inbox filters">
+      <div className="rounded-xl bg-muted/30 p-2" role="search" aria-label="Inbox filters">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-0 flex-1 basis-[12rem] max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
             <Input
@@ -380,8 +379,8 @@ const ExecutiveInbox = () => {
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {error ? (
         <ErrorState message={error} variant="inline" />

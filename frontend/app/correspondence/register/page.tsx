@@ -6,7 +6,6 @@ import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense
 import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -664,40 +663,36 @@ const CorrespondenceRegisterForm = () => {
 
             {/* Form Steps */}
             {loadingCorrespondence ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-                  <p className="text-muted-foreground">Loading correspondence...</p>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border border-border/60 py-12 text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="text-muted-foreground">Loading correspondence...</p>
+              </div>
             ) : loadError ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-                  <h3 className="text-lg font-semibold mb-2">Failed to Load Correspondence</h3>
-                  <p className="text-muted-foreground mb-2">{loadError}</p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    The correspondence may have been deleted or you may not have permission to edit it.
-                  </p>
-                  <div className="flex gap-2 justify-center">
-                    <Button variant="outline" onClick={() => router.push('/correspondence/my-sent')}>
-                      <ArrowLeft className="h-4 w-4 mr-2" />
-                      Back to Sent
-                    </Button>
-                    <Button variant="outline" onClick={() => {
-                      setLoadError(null);
-                      void loadCorrespondenceForEdit();
-                    }}>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Retry
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border border-border/60 py-12 text-center">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+                <h3 className="text-lg font-semibold mb-2">Failed to Load Correspondence</h3>
+                <p className="text-muted-foreground mb-2">{loadError}</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  The correspondence may have been deleted or you may not have permission to edit it.
+                </p>
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" size="sm" onClick={() => router.push('/correspondence/my-sent')}>
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to Sent
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setLoadError(null);
+                    void loadCorrespondenceForEdit();
+                  }}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                </div>
+              </div>
             ) : (
               <form onSubmit={handleSubmit}>
-                <Card className="border-border/60 shadow-none">
-                  <CardHeader className="pb-3 space-y-2">
+                <div className="rounded-xl border border-border/60">
+                  <div className="border-b border-border/60 px-4 py-3 space-y-2">
                     <div className="flex items-center justify-between gap-3">
                       <h2 className={appType.panelTitle}>
                         {editId ? 'Edit Correspondence' : 'Registration Details'}
@@ -707,8 +702,8 @@ const CorrespondenceRegisterForm = () => {
                       </span>
                     </div>
                     <Progress value={completionPercentage} className="h-1" />
-                  </CardHeader>
-                  <CardContent className="space-y-5">
+                  </div>
+                  <div className="space-y-5 p-4">
                   <Tabs 
                     data-step-tabs
                     value={currentStep} 
@@ -804,8 +799,8 @@ const CorrespondenceRegisterForm = () => {
                       />
                     </TabsContent>
                   </Tabs>
-                </CardContent>
-              </Card>
+                  </div>
+                </div>
             </form>
             )}
           </div>

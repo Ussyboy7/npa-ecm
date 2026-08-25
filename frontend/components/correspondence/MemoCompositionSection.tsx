@@ -2,7 +2,6 @@
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, CheckCircle, FileText, Save } from 'lucide-react';
@@ -163,9 +162,8 @@ export const MemoCompositionSection = ({
 
         {/* Suggested Covering Note */}
         {showSuggestedNote && hasFiles && !memoContent.trim() && (
-          <Card className="bg-info/5 border-info/30">
-            <CardContent className="p-3">
-              <div className="flex items-start gap-3">
+          <div className="rounded-xl border border-border/60 bg-info/5 border-info/30 p-3">
+<div className="flex items-start gap-3">
                 <AlertCircle className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
                 <div className="flex-1 space-y-2">
                   <p className="text-sm text-foreground">
@@ -185,8 +183,7 @@ export const MemoCompositionSection = ({
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+</div>
         )}
 
         <RichTextEditor

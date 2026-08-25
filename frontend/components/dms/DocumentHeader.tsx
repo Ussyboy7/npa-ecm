@@ -195,7 +195,7 @@ export const DocumentHeader = ({
           <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
             <Button
               size="sm"
-              className="bg-gradient-primary hover:opacity-90 transition-opacity motion-reduce:transition-none"
+              className="transition-opacity motion-reduce:transition-none"
               onClick={onShare}
               disabled={!canShare}
               title={canShare ? "Share document" : "Sharing blocked by DRM policy"}

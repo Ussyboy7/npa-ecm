@@ -6,27 +6,16 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-import {
-  registryQueueSearchStatsShellContentClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
+import { StatStrip } from "@/components/shared/StatStrip";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users,
   Search,
-  Building2,
-  Shield,
   X,
   ArrowUpDown,
   ArrowUp,
@@ -631,8 +620,8 @@ export const UsersManagementTab = forwardRef<
   };
 
   const usersFilterBar = (
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 p-2">
+      <div className="rounded-xl bg-muted/30 p-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!hideSearchInput ? (
           <div className="relative min-w-[200px] flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -838,11 +827,10 @@ export const UsersManagementTab = forwardRef<
                 setSelectedUser(null);
                 setEditOpen(true);
               }}
-              size="sm"
-              className="bg-gradient-primary"
+              size="compact"
               aria-label="Create new user"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Create User
             </Button>
             <ContextualHelp
@@ -856,8 +844,8 @@ export const UsersManagementTab = forwardRef<
             />
           </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
   );
 
   const renderedFilterBar = filterPortalTarget
@@ -871,8 +859,7 @@ export const UsersManagementTab = forwardRef<
       <div className="space-y-6">
         {renderedFilterBar}
         {selectedUserIds.size > 0 ? (
-          <Card>
-            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/30 p-2">
               <Badge variant="secondary">
                 {selectedUserIds.size} selected
               </Badge>
@@ -949,49 +936,30 @@ export const UsersManagementTab = forwardRef<
               >
                 Clear
               </Button>
-            </CardContent>
-          </Card>
+          </div>
         ) : null}
 
         {!omitStats ? (
-        <Card>
-          <CardContent className={registryQueueSearchStatsShellContentClass}>
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            { label: 'Total Users', value: totalCount, icon: Users, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Management Level', icon: Shield, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'Divisions Covered', icon: Building2, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>
-                      {value ?? (
-                        label === 'Management Level'
-                          ? mappedUsers.filter((user) => ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel)).length
-                          : Array.from(new Set(mappedUsers.map((user) => user.division).filter(Boolean))).length
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-          </CardContent>
-        </Card>
+          <StatStrip
+            items={[
+              { key: "total", label: "Total Users", value: totalCount },
+              {
+                key: "mgmt",
+                label: "Management Level",
+                value: mappedUsers.filter((user) =>
+                  ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel),
+                ).length,
+              },
+              {
+                key: "divisions",
+                label: "Divisions Covered",
+                value: new Set(mappedUsers.map((user) => user.division).filter(Boolean)).size,
+              },
+            ]}
+          />
         ) : null}
 
-      <Card>
-        <CardHeader className="py-2">
-          <CardTitle className="text-sm">User Directory</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
+      <div className="overflow-x-auto rounded-xl border border-border/60">
           {loading && mappedUsers.length === 0 ? (
             <UserTableSkeleton rows={pageSize} />
           ) : (
@@ -1319,8 +1287,7 @@ export const UsersManagementTab = forwardRef<
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       <UserEditDialog
         open={editOpen}

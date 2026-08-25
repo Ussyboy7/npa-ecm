@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -220,30 +219,28 @@ export default function AdminPage() {
     >
       <div className="space-y-6">
         {/* System Summary Bar */}
-        <Card className="bg-gradient-to-r from-muted/40 to-muted/20 border-border">
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span className="text-sm font-medium text-green-700 dark:text-green-400">System Status: Operational</span>
-              </div>
-              <div className="hidden h-4 w-px bg-border sm:block" />
-              <div className="flex items-center gap-2">
-                <span className="relative inline-flex h-2 w-2">
-                  <span className="absolute inset-0 rounded-full bg-green-400 opacity-75 animate-ping" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-                </span>
-                <button
-                  onClick={() => void openOnlineModal()}
-                  className="text-sm text-foreground transition-colors hover:text-foreground/80"
-                >
-                  {onlineNow} online now
-                  <span className="text-muted-foreground"> ({presenceWindowLabel})</span>
-                </button>
-              </div>
+        <div className="rounded-xl bg-muted/30 border border-border/40 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-400">System Status: Operational</span>
             </div>
-          </CardContent>
-        </Card>
+            <div className="hidden h-4 w-px bg-border sm:block" />
+            <div className="flex items-center gap-2">
+              <span className="relative inline-flex h-2 w-2">
+                <span className="absolute inset-0 rounded-full bg-green-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+              </span>
+              <button
+                onClick={() => void openOnlineModal()}
+                className="text-sm text-foreground transition-colors hover:text-foreground/80"
+              >
+                {onlineNow} online now
+                <span className="text-muted-foreground"> ({presenceWindowLabel})</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6">
@@ -251,18 +248,16 @@ export default function AdminPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Users by Role */}
             {visibility.showUsersRoles && usersByRole && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Users by Role</CardTitle>
-                    <Link href="/admin/users-roles">
-                      <Button variant="ghost" size="sm">
-                        View All
-                      </Button>
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent>
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="flex items-center justify-between pb-3">
+                  <h2 className="text-lg font-semibold">Users by Role</h2>
+                  <Link href="/admin/users-roles">
+                    <Button variant="ghost" size="sm">
+                      View All
+                    </Button>
+                  </Link>
+                </div>
+                <div>
                   <div className="grid grid-cols-2 gap-4">
                     {usersByRole.roles
                       .filter((r) => r.name !== "Unassigned")
@@ -288,18 +283,18 @@ export default function AdminPage() {
                   <div className="mt-3 text-xs text-muted-foreground">
                     Total: {usersByRole.total_users} users
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {/* System Alerts */}
             {visibility.showSystemHealth && alerts && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">System Alerts</CardTitle>
-                  <CardDescription>Backups, escalations, and items needing attention</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="pb-3">
+                  <h2 className="text-lg font-semibold">System Alerts</h2>
+                  <p className="text-sm text-muted-foreground">Backups, escalations, and items needing attention</p>
+                </div>
+                <div className="space-y-3">
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/5 border border-green-500/10">
                     <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
                     <div className="flex-1">
@@ -343,8 +338,8 @@ export default function AdminPage() {
                       <Badge variant="destructive">Integrations</Badge>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
           </div>
 
@@ -352,19 +347,19 @@ export default function AdminPage() {
           <div className="space-y-6">
             {/* Infrastructure */}
             {visibility.showSystemHealth && metrics && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Infrastructure</CardTitle>
-                    <Link href="/admin/system-health">
-                      <Button variant="ghost" size="sm">
-                        Details
-                      </Button>
-                    </Link>
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="flex items-center justify-between pb-3">
+                  <div>
+                    <h2 className="text-lg font-semibold">Infrastructure</h2>
+                    <p className="text-sm text-muted-foreground">Process uptime, database, and disk volume</p>
                   </div>
-                  <CardDescription>Process uptime, database, and disk volume</CardDescription>
-                </CardHeader>
-                <CardContent>
+                  <Link href="/admin/platform/health">
+                    <Button variant="ghost" size="sm">
+                      Details
+                    </Button>
+                  </Link>
+                </div>
+                <div>
                   <div className="space-y-3">
                     {metrics.systemHealth.map((system) => {
                       const IconComp =
@@ -411,18 +406,18 @@ export default function AdminPage() {
                       );
                     })}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {/* Backups */}
             {visibility.showSystemHealth && backupStatus && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Backups</CardTitle>
-                  <CardDescription>Latest snapshot found on disk</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="pb-3">
+                  <h2 className="text-lg font-semibold">Backups</h2>
+                  <p className="text-sm text-muted-foreground">Latest snapshot found on disk</p>
+                </div>
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Status</span>
                     <Badge
@@ -466,18 +461,18 @@ export default function AdminPage() {
                       Download latest ({backupStatus.file_size_mb} MB)
                     </Button>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {/* Performance */}
             {visibility.showSystemHealth && metrics && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Performance</CardTitle>
-                  <CardDescription>Rolling 5-minute API window and uploaded file footprint</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="pb-3">
+                  <h2 className="text-lg font-semibold">Performance</h2>
+                  <p className="text-sm text-muted-foreground">Rolling 5-minute API window and uploaded file footprint</p>
+                </div>
+                <div className="space-y-4">
                   <PerfRow
                     label="Response time"
                     value={responseTimeValue}
@@ -499,16 +494,14 @@ export default function AdminPage() {
                     value={`${metrics.performance.mediaStorageGb} GB`}
                     hint="Files in MEDIA_ROOT"
                   />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {/* Quick Actions */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+              <h2 className="text-lg font-semibold pb-3">Quick Actions</h2>
+              <div>
                 <div className="grid grid-cols-2 gap-2">
                   {visibility.showUsersRoles && (
                     <Link href="/admin/users-roles">
@@ -533,7 +526,7 @@ export default function AdminPage() {
                     </Link>
                   )}
                   {visibility.showSystemHealth && (
-                    <Link href="/admin/system-health">
+                    <Link href="/admin/platform/health">
                       <Button
                         variant="outline"
                         className="w-full h-auto py-3 flex flex-col items-center gap-1"
@@ -555,7 +548,7 @@ export default function AdminPage() {
                     </Link>
                   )}
                   {visibility.showIntegrationHub && (
-                    <Link href="/integrations">
+                    <Link href="/admin/platform/integrations">
                       <Button
                         variant="outline"
                         className="w-full h-auto py-3 flex flex-col items-center gap-1"
@@ -597,8 +590,8 @@ export default function AdminPage() {
                     </Button>
                   </Link>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </div>
       </div>

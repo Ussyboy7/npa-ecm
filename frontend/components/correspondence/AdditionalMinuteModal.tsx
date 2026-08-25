@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from "@/components/ui/sonner";
@@ -211,9 +210,8 @@ export const AdditionalMinuteModal = ({
                 </SelectContent>
               </Select>
               {selectedMinute && (
-                <Card className="mt-2">
-                  <CardContent className="p-3">
-                    <div className="space-y-2">
+                <div className="rounded-xl border border-border/60 mt-2 p-3">
+<div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-foreground">
                           {selectedMinute.userName || 'Unknown'}
@@ -226,8 +224,7 @@ export const AdditionalMinuteModal = ({
                         {selectedMinute.minuteText}
                       </p>
                     </div>
-                  </CardContent>
-                </Card>
+</div>
               )}
             </div>
 

@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -580,13 +579,13 @@ function ApprovalsForm() {
   return (
     <>
       <QueuePageShell
-        title="Executive Approvals"
+        title="Approvals"
         subtitle="Track and verify approvals with digital executive seals"
         actions={(
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <MoreVertical className="h-4 w-4 mr-2" />
+              <Button variant="outline" size="compact">
+                <MoreVertical className="h-4 w-4" />
                 More
               </Button>
             </DropdownMenuTrigger>
@@ -614,8 +613,8 @@ function ApprovalsForm() {
         )}
       >
         {/* Inline filter bar */}
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+        <div className="rounded-xl bg-muted/30 p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search approvals..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
@@ -648,8 +647,8 @@ function ApprovalsForm() {
               </SelectContent>
             </Select>
             {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
-          </CardContent>
-        </Card>
+          </div>
+      </div>
 
         {loading && !refreshing ? (
           <LoadingState message="Loading executive approvals…" />

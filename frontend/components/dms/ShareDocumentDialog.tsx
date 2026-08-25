@@ -39,7 +39,6 @@ import { Input } from "@/components/ui/input";
 import { Search, Users, Building2, Users2, AlertTriangle, Loader2, X, FileText, Trash2, History, CheckCircle2, ArrowLeft, Shield, Mail, Send } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent } from "@/components/ui/card";
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { getActivityLogsForObject, type ActivityLog } from "@/lib/api/audit";
 import { filterUsersBySearch } from "@/lib/routing-utils";
@@ -1006,9 +1005,8 @@ const ShareDocumentDialogContent = ({
         {document && (
           <div className="space-y-6 px-4 sm:px-6 py-4">
             {/* Document Summary - Like Minute Modal */}
-            <Card className="bg-muted/50">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
+<div className="flex items-start gap-3">
                   <FileText className="h-5 w-5 text-primary mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm mb-1">{document.title}</p>
@@ -1034,8 +1032,7 @@ const ShareDocumentDialogContent = ({
                     )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+</div>
 
             {/* Share Form (always rendered so footer submit button works on review step) */}
             <form id="share-form" onSubmit={handleSubmit}>
@@ -1057,9 +1054,8 @@ const ShareDocumentDialogContent = ({
                   <span className="text-sm font-medium">Review & Confirm</span>
                 </div>
 
-                <Card>
-                  <CardContent className="p-4 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="rounded-xl border border-border/60 p-4 space-y-4">
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground">Access Level</p>
                         <Badge variant="outline" className="capitalize">{accessLevel}</Badge>
@@ -1104,8 +1100,7 @@ const ShareDocumentDialogContent = ({
                         <p className="text-sm p-3 bg-muted/30 rounded-md">{note}</p>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+</div>
               </div>
             ) : (
               /* Main Form Fields */
@@ -1218,9 +1213,8 @@ const ShareDocumentDialogContent = ({
                 <>
                   {showPermissionsView ? (
                     /* Permissions View - Card-based like Minute Modal */
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-4">
+                    <div className="rounded-xl border border-border/60 p-4">
+<div className="flex items-center justify-between mb-4">
                           <Label className="text-sm font-semibold">Document Permissions</Label>
                           <Button
                             type="button"
@@ -1260,9 +1254,8 @@ const ShareDocumentDialogContent = ({
                               }).filter(Boolean);
                               
                               return (
-                                <Card key={perm.id} className="bg-muted/30">
-                                  <CardContent className="p-4 space-y-3">
-                                    <div className="flex items-start justify-between gap-3">
+                                <div key={perm.id} className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+<div className="flex items-start justify-between gap-3">
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-2">
                                           <Badge variant="outline" className="capitalize">
@@ -1342,19 +1335,16 @@ const ShareDocumentDialogContent = ({
                                         </Button>
                                       </div>
                                     </div>
-                                  </CardContent>
-                                </Card>
+</div>
                               );
                             })}
                           </div>
                         )}
-                      </CardContent>
-                    </Card>
+</div>
                   ) : showHistoryView ? (
                     /* History View - Card-based like Minute Modal */
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-4">
+                    <div className="rounded-xl border border-border/60 p-4">
+<div className="flex items-center justify-between mb-4">
                           <Label className="text-sm font-semibold">Share History</Label>
                           <Button
                             type="button"
@@ -1374,9 +1364,8 @@ const ShareDocumentDialogContent = ({
                             </div>
                           ) : shareHistory.length > 0 ? (
                             shareHistory.map((log) => (
-                              <Card key={log.id} className="bg-background">
-                                <CardContent className="p-3 space-y-1">
-                                  <div className="flex items-start justify-between gap-2">
+                              <div key={log.id} className="rounded-xl border border-border/60 bg-background p-3 space-y-1">
+<div className="flex items-start justify-between gap-2">
                                     <p className="text-sm font-medium flex-1">{log.description}</p>
                                     <Badge variant={log.success ? "secondary" : "destructive"} className="text-[10px]">
                                       {log.success ? "Success" : "Failed"}
@@ -1385,8 +1374,7 @@ const ShareDocumentDialogContent = ({
                                   <p className="text-xs text-muted-foreground">
                                     {log.userName || log.userEmail || 'System'} • {formatDateTime(log.timestamp)}
                                   </p>
-                                </CardContent>
-                              </Card>
+</div>
                             ))
                           ) : (
                             <div className="py-8 text-center text-muted-foreground">
@@ -1396,8 +1384,7 @@ const ShareDocumentDialogContent = ({
                             </div>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
+</div>
                   ) : (
                     /* Main Share View - Card-based like Minute Modal */
                     <div className="space-y-4">
@@ -1409,9 +1396,8 @@ const ShareDocumentDialogContent = ({
                             {totalSelected > 0 ? `${totalSelected} selected` : '0 recipients'}
                           </Badge>
                         </div>
-                        <Card className="bg-muted/30">
-                          <CardContent className="p-4 space-y-4">
-                            <div className="flex gap-2">
+                        <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-4">
+<div className="flex gap-2">
                               <Button
                                 type="button"
                                 variant={correspondenceRouteType === 'person' ? 'default' : 'ghost'}
@@ -1589,8 +1575,7 @@ const ShareDocumentDialogContent = ({
                                 </p>
                               </div>
                             )}
-                          </CardContent>
-                        </Card>
+</div>
                       </div>
                     </div>
                   )}

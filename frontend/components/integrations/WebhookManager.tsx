@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from "@/components/ui/sonner";
-import { Webhook, Plus, Edit, Trash2, TestTube } from 'lucide-react';
+import { Plus, Edit, Trash2, TestTube } from 'lucide-react';
 import {
   getWebhooks,
   createWebhook,
@@ -161,25 +160,18 @@ export const WebhookManager = () => {
   ];
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Webhook className="h-5 w-5" />
-              Webhooks
-            </CardTitle>
-            <CardDescription>
-              Configure webhooks to receive notifications from external systems
-            </CardDescription>
-          </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={handleNew}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Webhook
-              </Button>
-            </DialogTrigger>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground">
+          Configure webhooks to receive notifications from external systems
+        </p>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="compact" onClick={handleNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Webhook
+            </Button>
+          </DialogTrigger>
             <DialogContent size="lg" height="fill">
               <DialogHeader>
                 <DialogTitle>
@@ -308,10 +300,10 @@ export const WebhookManager = () => {
                 </div>
               </form>
             </DialogContent>
-          </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent>
+        </Dialog>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border/60">
         {loading ? (
           <div className="text-center py-8 text-muted-foreground">Loading webhooks...</div>
         ) : webhooks.length === 0 ? (
@@ -389,8 +381,8 @@ export const WebhookManager = () => {
             </TableBody>
           </Table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 

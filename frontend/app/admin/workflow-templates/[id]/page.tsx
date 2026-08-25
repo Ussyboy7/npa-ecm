@@ -2,7 +2,6 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -211,13 +210,13 @@ function WorkflowTemplateEditorPageContent() {
                   </p>
                 </div>
               </div>
-              <Button 
-                onClick={handleSave} 
+              <Button
+                onClick={handleSave}
                 disabled={saving}
-                size="lg"
+                size="compact"
                 className="shrink-0"
               >
-                <Save className="h-4 w-4 mr-2" />
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {saving ? "Saving..." : isNew || isClone ? "Create Template" : "Save Changes"}
               </Button>
             </div>
@@ -225,32 +224,30 @@ function WorkflowTemplateEditorPageContent() {
 
           {/* Main Content Grid */}
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Template Form */}
-            <Card className="lg:sticky lg:top-6 lg:self-start">
-              <CardHeader>
-                <CardTitle>Template Details</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
+            <div className="rounded-xl border border-border/60 lg:sticky lg:top-6 lg:self-start">
+              <div className="border-b border-border/60 px-4 py-3">
+                <h2 className="text-sm font-medium">Template Details</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Configure the basic information for this workflow template
                 </p>
-              </CardHeader>
-              <CardContent>
+              </div>
+              <div className="p-4">
                 <WorkflowTemplateForm
                   template={template}
                   onChange={setFormData}
                   errors={errors}
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Steps Builder */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Workflow Steps</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
+            <div className="rounded-xl border border-border/60">
+              <div className="border-b border-border/60 px-4 py-3">
+                <h2 className="text-sm font-medium">Workflow Steps</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Define the sequence of approval steps for this workflow
                 </p>
-              </CardHeader>
-              <CardContent>
+              </div>
+              <div className="p-4">
                 {template?.id ? (
                   <WorkflowStepsBuilder
                     templateId={template.id}
@@ -265,31 +262,31 @@ function WorkflowTemplateEditorPageContent() {
                         : "Loading template..."}
                     </div>
                     {isNew || isClone ? (
-                      <Button 
-                        onClick={handleSave} 
+                      <Button
+                        onClick={handleSave}
                         disabled={saving}
                         variant="outline"
+                        size="compact"
                       >
-                        <Save className="h-4 w-4 mr-2" />
+                        <Save className="h-4 w-4" />
                         Save Template to Continue
                       </Button>
                     ) : null}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
-          {/* Workflow Preview Section */}
           {template && template.steps.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Workflow Preview</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
+            <div className="rounded-xl border border-border/60">
+              <div className="border-b border-border/60 px-4 py-3">
+                <h2 className="text-sm font-medium">Workflow Preview</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Visual overview of the complete workflow sequence
                 </p>
-              </CardHeader>
-              <CardContent>
+              </div>
+              <div className="p-4">
                 <div className="space-y-3">
                   {template.steps
                     .sort((a, b) => a.order - b.order)
@@ -297,13 +294,13 @@ function WorkflowTemplateEditorPageContent() {
                       const isLast = index === template.steps.length - 1;
                       return (
                         <div key={step.id} className="relative">
-                          <div className="flex items-start gap-4 p-4 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
-                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
+                          <div className="flex items-start gap-4 rounded-lg border border-border/60 bg-muted/20 p-4">
+                            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
                               {step.order}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-base mb-1">{step.title}</div>
-                              <div className="text-sm text-muted-foreground space-y-1">
+                            <div className="min-w-0 flex-1">
+                              <div className="mb-1 text-base font-semibold">{step.title}</div>
+                              <div className="space-y-1 text-sm text-muted-foreground">
                                 <div>
                                   {step.office
                                     ? "Specific Office"
@@ -316,14 +313,14 @@ function WorkflowTemplateEditorPageContent() {
                                     : "No selection"}
                                 </div>
                                 {(step.required_role || step.required_grade_level) && (
-                                  <div className="flex flex-wrap gap-2 mt-2">
+                                  <div className="mt-2 flex flex-wrap gap-2">
                                     {step.required_role && (
-                                      <span className="text-xs px-2 py-1 bg-secondary rounded">
+                                      <span className="rounded bg-secondary px-2 py-1 text-xs">
                                         Role: {step.required_role}
                                       </span>
                                     )}
                                     {step.required_grade_level && (
-                                      <span className="text-xs px-2 py-1 bg-secondary rounded">
+                                      <span className="rounded bg-secondary px-2 py-1 text-xs">
                                         Grade: {step.required_grade_level}
                                       </span>
                                     )}
@@ -333,16 +330,16 @@ function WorkflowTemplateEditorPageContent() {
                             </div>
                           </div>
                           {!isLast && (
-                            <div className="flex justify-center -my-1">
-                              <div className="w-0.5 h-6 bg-border"></div>
+                            <div className="-my-1 flex justify-center">
+                              <div className="h-6 w-0.5 bg-border"></div>
                             </div>
                           )}
                         </div>
                       );
                     })}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
       </div>
       )}

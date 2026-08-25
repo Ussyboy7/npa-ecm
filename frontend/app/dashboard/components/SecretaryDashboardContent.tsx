@@ -2,19 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
-  registryQueueSearchStatsShellContentClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
   correspondenceQueueLeadingBoxClass,
@@ -26,15 +20,12 @@ import {
   correspondenceQueueSubjectClass,
 } from '@/components/shared/registry-queue-styles';
 import { cn } from '@/lib/utils';
+import { appType } from '@/lib/app-type';
 import {
   UserCheck,
   Mail,
   FileText,
-  CheckCircle,
   CheckCircle2,
-  Clock,
-  AlertCircle,
-  Users,
   Activity,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -231,42 +222,41 @@ const SecretaryDashboardContent = () => {
 
   const statsItems = [
     {
+      key: 'total',
       label: 'Total items',
       value: metrics.totalCorrespondence,
-      description: 'Correspondence handled',
-      icon: FileText,
+      hint: 'Correspondence handled',
     },
     {
+      key: 'pending',
       label: 'Pending actions',
       value: metrics.pendingActions,
-      description: 'Requires attention',
-      icon: Clock,
+      hint: 'Requires attention',
     },
     {
+      key: 'urgent',
       label: 'Urgent items',
       value: metrics.urgentItems,
-      description: 'High priority',
-      icon: AlertCircle,
+      hint: 'High priority',
     },
     {
+      key: 'completed',
       label: 'Completed today',
       value: metrics.completedToday,
-      description: 'Items resolved today',
-      icon: CheckCircle,
+      hint: 'Items resolved today',
     },
   ];
 
   return (
     <div className="space-y-6">
-
-      <Card>
-        <CardHeader className="pb-2">
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 px-4 py-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle className="text-lg">Secretary workload</CardTitle>
-              <CardDescription>
+              <h2 className={appType.panelTitle}>Secretary workload</h2>
+              <p className={appType.caption}>
                 From your executive support inbox and today&apos;s completions.
-              </CardDescription>
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => router.push('/inbox?tab=executive-support')}>
@@ -280,44 +270,21 @@ const SecretaryDashboardContent = () => {
               </Button>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className={registryQueueSearchStatsShellContentClass}>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {statsItems.map((stat, index) => {
-              const Icon = stat.icon;
-              return (
-                <Card key={index}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn(registryQueueStatIconBoxClass, 'bg-muted/60')}>
-                        <Icon className={cn(registryQueueStatIconClass, 'text-muted-foreground')} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{stat.label}</p>
-                        <p className={registryQueueStatValueClass}>{stat.value}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{stat.description}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="p-4">
+          <StatStrip items={statsItems} />
+        </div>
+      </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              Executives supported
-            </CardTitle>
-            <CardDescription>
+        <div className="rounded-xl border border-border/60">
+          <div className="border-b border-border/60 px-4 py-3">
+            <h2 className={appType.panelTitle}>Executives supported</h2>
+            <p className={appType.caption}>
               Executives you have acted on behalf of.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </div>
+          <div className="p-4">
             {executives.length === 0 ? (
               <EmptyState
                 icon="inbox"
@@ -361,20 +328,17 @@ const SecretaryDashboardContent = () => {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              Recent activities
-            </CardTitle>
-            <CardDescription>
+        <div className="rounded-xl border border-border/60">
+          <div className="border-b border-border/60 px-4 py-3">
+            <h2 className={appType.panelTitle}>Recent activities</h2>
+            <p className={appType.caption}>
               Your recent correspondence, cases, and form activity.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </div>
+          <div className="p-4">
             {recentActivities.length === 0 ? (
               <EmptyState
                 icon="file"
@@ -425,12 +389,11 @@ const SecretaryDashboardContent = () => {
                 })}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default SecretaryDashboardContent;
-

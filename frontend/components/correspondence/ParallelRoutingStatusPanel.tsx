@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import { AlertTriangle, Bell, CheckCircle2, GitBranch, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -104,27 +103,25 @@ export function ParallelRoutingStatusPanel({
 
   if (loading) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-4 flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading parallel routing status...
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-dashed border-border/60 py-4 px-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading parallel routing status...
+      </div>
     );
   }
 
   if (branches.length === 0) return null;
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+    <div className="rounded-xl border border-border/60">
+      <div className="border-b border-border/60 px-4 py-3 pb-2">
+        <p className="text-sm font-semibold flex items-center gap-2">
           <GitBranch className="h-4 w-4" />
           Parallel Routing
-        </CardTitle>
-        <CardDescription>Per-branch response status and non-response actions</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">Per-branch response status and non-response actions</p>
+      </div>
+      <div className="space-y-3 p-4">
         <div className="space-y-2 rounded-md border border-border/70 p-3">
           <div className="flex items-center justify-between gap-2 text-sm">
             <span className="font-medium">
@@ -204,7 +201,7 @@ export function ParallelRoutingStatusPanel({
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

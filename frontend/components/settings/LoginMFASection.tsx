@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +9,7 @@ import { apiFetch } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
 import { Loader2, Shield } from "lucide-react";
 import Image from "next/image";
+import { appType } from "@/lib/app-type";
 
 type LoginMFAStatus = {
   mfa_enabled: boolean;
@@ -107,26 +107,24 @@ export function LoginMFASection() {
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="py-8 flex justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
+      <div className="rounded-xl border border-border/60 py-8 flex justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Shield className="h-5 w-5" />
+    <div className="rounded-xl border border-border/60">
+      <div className="border-b border-border/60 px-4 py-3">
+        <h2 className={`${appType.panelTitle} flex items-center gap-2`}>
+          <Shield className="h-4 w-4" />
           Login Multi-Factor Authentication
-        </CardTitle>
-        <CardDescription>
+        </h2>
+        <p className={appType.caption}>
           Require a verification code after your password when signing in (separate from executive seal 2FA).
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+      <div className="space-y-4 p-4">
         <div className="flex items-center justify-between rounded-lg border p-4">
           <div>
             <p className="font-medium">Login MFA</p>
@@ -153,7 +151,7 @@ export function LoginMFASection() {
             <p className="text-sm font-medium">Authenticator app</p>
             {!status.totp_confirmed ? (
               <>
-                <Button type="button" variant="outline" onClick={handleSetupTotp} disabled={busy}>
+                <Button type="button" variant="outline" size="sm" onClick={handleSetupTotp} disabled={busy}>
                   Set up authenticator
                 </Button>
                 {qrCode && (
@@ -170,7 +168,7 @@ export function LoginMFASection() {
                         onChange={(e) => setVerifyCode(e.target.value)}
                         placeholder="6-digit code"
                       />
-                      <Button type="button" onClick={handleVerifyTotp} disabled={busy}>
+                      <Button type="button" size="sm" onClick={handleVerifyTotp} disabled={busy}>
                         Confirm authenticator
                       </Button>
                     </div>
@@ -182,7 +180,7 @@ export function LoginMFASection() {
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

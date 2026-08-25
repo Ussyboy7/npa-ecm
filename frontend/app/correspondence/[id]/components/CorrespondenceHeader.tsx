@@ -312,7 +312,7 @@ export const CorrespondenceHeader = ({
           {onOpenPrimaryAction && (
             <Button
               size="sm"
-              className="bg-gradient-primary hover:opacity-90 transition-opacity motion-reduce:transition-none"
+              className="transition-opacity motion-reduce:transition-none"
               onClick={onOpenPrimaryAction}
               disabled={primaryActionDisabled}
             >

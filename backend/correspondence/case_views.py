@@ -84,9 +84,25 @@ class CaseViewSet(viewsets.ModelViewSet):
         is_secretary = role_name.lower() == "secretary"
         is_superuser = getattr(user, "is_superuser", False) or role_name.lower() == "super admin"
 
-        scope = self.request.query_params.get("scope", "personal")
+        from organization.office_access import get_office_queue_office_ids
+        from organization.org_scope import user_can_view_all_correspondence
 
-        if scope == "organization" or (is_superuser and scope == "all"):
+        scope = self.request.query_params.get("scope", "personal")
+        can_view_all = user_can_view_all_correspondence(user)
+        queue_office_ids = get_office_queue_office_ids(user)
+        org_wide_scopes = {
+            "organization",
+            "directorate",
+            "division",
+            "department",
+            "all",
+        }
+
+        # All Cases / org-wide scopes: superuser or can_view_all_correspondence only
+        if scope in org_wide_scopes and not can_view_all and not is_superuser:
+            scope = "my" if scope == "all" else "office"
+
+        if scope == "organization" or (can_view_all and scope == "all"):
             pass
         elif scope == "directorate":
             if user.directorate_id:
@@ -103,6 +119,8 @@ class CaseViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(
                     Q(division_id__in=division_ids) | Q(id__in=case_ids_from_correspondence)
                 )
+            else:
+                queryset = queryset.none()
         elif scope == "division":
             if user.division_id:
                 division_correspondence_ids = Correspondence.objects.filter(
@@ -114,6 +132,8 @@ class CaseViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(
                     Q(division_id=user.division_id) | Q(id__in=case_ids_from_correspondence)
                 )
+            else:
+                queryset = queryset.none()
         elif scope == "department":
             if user.department_id:
                 department_correspondence_ids = Correspondence.objects.filter(
@@ -125,43 +145,27 @@ class CaseViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(
                     Q(department_id=user.department_id) | Q(id__in=case_ids_from_correspondence)
                 )
+            else:
+                queryset = queryset.none()
         elif scope == "office":
-            from organization.models import OfficeMembership
-            user_office_ids = OfficeMembership.objects.filter(
-                user=user,
-                is_active=True
-            ).values_list('office_id', flat=True)
-            if user_office_ids:
+            if queue_office_ids:
                 queryset = queryset.filter(
-                    Q(owning_office_id__in=user_office_ids) |
-                    Q(current_office_id__in=user_office_ids)
+                    Q(owning_office_id__in=queue_office_ids) |
+                    Q(current_office_id__in=queue_office_ids)
                 )
             else:
                 queryset = queryset.none()
         elif scope == "my":
             queryset = queryset.filter(assigned_to=user)
-        elif scope == "all":
-            from organization.models import OfficeMembership
-            user_office_ids = OfficeMembership.objects.filter(
-                user=user,
-                is_active=True
-            ).values_list('office_id', flat=True)
-            queryset = queryset.filter(
-                Q(assigned_to=user)
-                | Q(owning_office_id__in=user_office_ids)
-                | Q(current_office_id__in=user_office_ids)
-            )
         else:
-            from organization.models import OfficeMembership
-            user_office_ids = OfficeMembership.objects.filter(
-                user=user,
-                is_active=True
-            ).values_list('office_id', flat=True)
-            queryset = queryset.filter(
-                Q(assigned_to=user)
-                | Q(owning_office_id__in=user_office_ids)
-                | Q(current_office_id__in=user_office_ids)
-            )
+            # personal / default: assigned + queue-role offices
+            personal_q = Q(assigned_to=user)
+            if queue_office_ids:
+                personal_q |= (
+                    Q(owning_office_id__in=queue_office_ids)
+                    | Q(current_office_id__in=queue_office_ids)
+                )
+            queryset = queryset.filter(personal_q)
 
         executive_id = self.request.query_params.get("executive")
         if is_secretary and executive_id:

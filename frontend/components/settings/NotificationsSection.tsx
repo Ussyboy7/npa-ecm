@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -24,6 +23,7 @@ import {
   Save,
 } from 'lucide-react';
 import { type NotificationPreferences as NotificationPreferencesType } from '@/lib/api/notifications';
+import { appType } from '@/lib/app-type';
 
 interface NotificationsSectionProps {
   notificationPrefs: NotificationPreferencesType | null;
@@ -44,14 +44,14 @@ export function NotificationsSection({
 }: NotificationsSectionProps) {
   return (
     <TabsContent value="notifications" className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Notification Preferences</CardTitle>
-          <CardDescription>
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 px-4 py-3">
+          <h2 className={appType.panelTitle}>Notification Preferences</h2>
+          <p className={appType.caption}>
             Choose how you want to be notified about correspondence, approvals, and system updates.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+          </p>
+        </div>
+        <div className="space-y-6 p-4">
           {isLoadingNotifications ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -303,7 +303,7 @@ export function NotificationsSection({
 
               <Separator />
 
-              <Button onClick={onSave} disabled={isSavingNotifications}>
+              <Button size="sm" onClick={onSave} disabled={isSavingNotifications}>
                 {isSavingNotifications ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -318,8 +318,8 @@ export function NotificationsSection({
               </Button>
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </TabsContent>
   );
 }

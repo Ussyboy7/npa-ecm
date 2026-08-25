@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +33,7 @@ import {
   type CalendarEvent,
 } from "@/lib/calendar-api";
 import { logError } from "@/lib/client-logger";
+import { appType } from "@/lib/app-type";
 
 function toLocalInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -143,11 +143,11 @@ export default function AssistantCalendarPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <CalendarDays className="h-6 w-6 text-primary" />
+          <h1 className={`${appType.pageTitleList} flex items-center gap-2`}>
+            <CalendarDays className="h-5 w-5 text-primary" />
             PA Calendar
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className={appType.pageSubtitle}>
             Schedule meetings and reminders for executives you support.
           </p>
         </div>
@@ -164,30 +164,28 @@ export default function AssistantCalendarPage() {
       </div>
 
       {executiveOptions.length > 1 && (
-        <Card>
-          <CardContent className="pt-6">
-            <Label className="text-xs text-muted-foreground">Executive</Label>
-            <Select value={selectedExecutive} onValueChange={setSelectedExecutive}>
-              <SelectTrigger className="mt-1 max-w-sm">
-                <SelectValue placeholder="Select executive" />
-              </SelectTrigger>
-              <SelectContent>
-                {executiveOptions.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl bg-muted/30 p-2">
+          <Label className="text-xs text-muted-foreground px-1">Executive</Label>
+          <Select value={selectedExecutive} onValueChange={setSelectedExecutive}>
+            <SelectTrigger className="mt-1 max-w-sm h-8 text-xs">
+              <SelectValue placeholder="Select executive" />
+            </SelectTrigger>
+            <SelectContent>
+              {executiveOptions.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Upcoming events (60 days)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 px-4 py-3">
+          <h2 className={appType.panelTitle}>Upcoming events (60 days)</h2>
+        </div>
+        <div className="space-y-3 p-4">
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading events…</p>
           ) : events.length === 0 ? (
@@ -234,8 +232,8 @@ export default function AssistantCalendarPage() {
               </div>
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -310,7 +308,7 @@ export default function AssistantCalendarPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => void handleCreate()}>Save event</Button>
+            <Button size="sm" onClick={() => void handleCreate()}>Save event</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

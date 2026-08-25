@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InboxCorrespondenceCard } from './components/InboxCorrespondenceCard';
@@ -258,7 +257,11 @@ const CorrespondenceInboxContent = () => {
           title="Office Inbox"
           subtitle="Monitor work queued in your offices and prioritize urgent escalations"
         >
-          <Card><CardContent className="py-12 text-center"><p className="text-lg font-semibold">No office inbox available</p><p className="text-sm text-muted-foreground mt-2">This persona does not have registry or routing permissions. Redirecting you to your personal inbox…</p></CardContent></Card>
+          <EmptyState
+            icon={<Inbox className={registryQueueEmptyIconClass} />}
+            title="No office inbox available"
+            message="This persona does not have registry or routing permissions. Redirecting you to your personal inbox…"
+          />
         </QueuePageShell>
       ) : (
         <QueuePageShell
@@ -266,8 +269,8 @@ const CorrespondenceInboxContent = () => {
           subtitle="Monitor work queued in your offices and prioritize urgent escalations"
           actions={(
             <>
-              <Button size="sm" onClick={() => router.push('/correspondence/register')}>
-                <Mail className="h-4 w-4 mr-2" /> Register New
+              <Button size="compact" onClick={() => router.push('/correspondence/register')}>
+                <Mail className="h-4 w-4" /> Register New
               </Button>
               <ContextualHelp
                 title="How to triage correspondence"
@@ -287,11 +290,10 @@ const CorrespondenceInboxContent = () => {
             />
           )}
         >
-        {/* Search + filters bar */}
-        <Card>
-          <CardContent className="p-2">
+        {/* Search + filters — muted strip, not a card */}
+        <div className="rounded-xl bg-muted/30 p-2">
             <div className="md:hidden mb-2">
-              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="w-full justify-between">
+              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="h-8 w-full justify-between text-xs">
                 <span className="flex items-center"><Search className="h-3.5 w-3.5 mr-2" /> Filters</span>
                 {activeFilterCount > 0 && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">{activeFilterCount}</span>}
               </Button>
@@ -337,7 +339,9 @@ const CorrespondenceInboxContent = () => {
               </SelectContent>
             </Select>
             <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
-            <Button variant={assignedOnly?'default':'outline'} size="sm" onClick={()=>setAssignedOnly(!assignedOnly)} className="h-8 text-xs"><UserIcon className="h-3.5 w-3.5 mr-1" /> Assigned</Button>
+            <Button variant={assignedOnly ? 'default' : 'outline'} size="sm" onClick={() => setAssignedOnly(!assignedOnly)} className="h-8 text-xs">
+              <UserIcon className="h-3.5 w-3.5" /> Assigned
+            </Button>
             <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
               <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Sort by"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -350,8 +354,7 @@ const CorrespondenceInboxContent = () => {
             </Select>
             {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
             </div>
-          </CardContent>
-        </Card>
+        </div>
 
         <div aria-live="polite">
         {error && <ErrorState message={error} variant="inline" />}
@@ -377,7 +380,6 @@ const CorrespondenceInboxContent = () => {
         )}
         </div>
 
-        {/* Pagination */}
         {count > 0 && (
           <PaginationControls
             pagination={pagination}

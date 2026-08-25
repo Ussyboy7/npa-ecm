@@ -5,7 +5,6 @@ import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -511,8 +510,8 @@ const RecordsArchiveForm = () => {
             actions={(
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <MoreVertical className="h-4 w-4 mr-2" />
+                  <Button variant="outline" size="compact">
+                    <MoreVertical className="h-4 w-4" />
                     More
                   </Button>
                 </DropdownMenuTrigger>
@@ -540,10 +539,9 @@ const RecordsArchiveForm = () => {
             )}
           >
         {/* Inline filter bar */}
-        <Card>
-          <CardContent className="p-2">
+        <div className="rounded-xl bg-muted/30 p-2">
             <div className="md:hidden mb-2">
-              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="w-full justify-between">
+              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="h-8 w-full justify-between text-xs">
                 <span className="flex items-center"><Search className="h-3.5 w-3.5 mr-2" /> Filters</span>
                 {hasActiveFilters && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">1</span>}
               </Button>
@@ -626,8 +624,7 @@ const RecordsArchiveForm = () => {
 
             {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
             </div>
-          </CardContent>
-        </Card>
+        </div>
 
         <div aria-live="polite">
         {loading && !refreshing ? (

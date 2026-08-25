@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Check, Clock, GitBranch, ArrowUp, ArrowDown, Users, Mail } from 'lucide-react';
@@ -140,14 +139,14 @@ export function RoutingPanel({
               onRefresh={onSyncFromApi}
             />
             {correspondence.distribution && correspondence.distribution.length > 0 && (
-              <Card className="border-border/60">
-                <CardHeader className="p-3 pb-0">
-                  <CardTitle className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+              <div className="rounded-xl border border-border/60">
+                <div className="border-b border-border/60 p-3 pb-0">
+                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                     <Mail className="h-3 w-3" />
                     Distribution (CC)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 space-y-1.5">
+                  </p>
+                </div>
+                <div className="space-y-1.5 p-3">
                   {correspondence.distribution
                     .filter((d) => d.is_active !== false)
                     .map((recipient) => (
@@ -176,8 +175,8 @@ export function RoutingPanel({
                         </div>
                       </div>
                     ))}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
           </div>
         </ScrollArea>
@@ -280,20 +279,20 @@ function RoutingHistoryCard({
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3 px-3">
+    <div className="rounded-xl border border-border/60">
+      <div className="border-b border-border/60 px-3 py-3 pb-3">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+          <p className="text-sm font-medium flex items-center gap-1.5">
             <GitBranch className="h-4 w-4 text-muted-foreground" />
             Routing History
-          </CardTitle>
+          </p>
           <Badge variant="outline" className="text-[10px] flex items-center gap-1">
             <DirectionIcon className="h-3 w-3" />
             {directionLabel}
           </Badge>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0 px-3 pb-3">
+      </div>
+      <div className="px-3 pb-3 pt-0">
         <div className="relative">
           {/* Connecting line */}
           <div className="absolute left-[15px] top-[20px] bottom-[20px] w-0.5 bg-muted" />
@@ -386,7 +385,7 @@ function RoutingHistoryCard({
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

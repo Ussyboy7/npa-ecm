@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -12,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Activity, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { getIntegrationLogs, type IntegrationLog } from "@/lib/api/integrations";
 import { logError } from "@/lib/client-logger";
 import { toast } from "@/components/ui/sonner";
@@ -51,44 +50,40 @@ export function IntegrationLogsViewer() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Integration Logs
-            </CardTitle>
-            <CardDescription>Recent webhook, email, ERP, and HRMS activity (last 100 entries)</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Select value={logType} onValueChange={setLogType}>
-              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Type" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
-                <SelectItem value="webhook">Webhook</SelectItem>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="erp">ERP</SelectItem>
-                <SelectItem value="hrms">HRMS</SelectItem>
-                <SelectItem value="sso">SSO</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All status</SelectItem>
-                <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="icon" onClick={() => void load()} aria-label="Refresh logs">
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </div>
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Recent webhook, email, ERP, and HRMS activity (last 100 entries)
+      </p>
+
+      <div className="rounded-xl bg-muted/30 p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={logType} onValueChange={setLogType}>
+            <SelectTrigger className="w-[130px]"><SelectValue placeholder="Type" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="webhook">Webhook</SelectItem>
+              <SelectItem value="email">Email</SelectItem>
+              <SelectItem value="erp">ERP</SelectItem>
+              <SelectItem value="hrms">HRMS</SelectItem>
+              <SelectItem value="sso">SSO</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All status</SelectItem>
+              <SelectItem value="success">Success</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="icon" onClick={() => void load()} aria-label="Refresh logs">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border/60">
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -127,7 +122,7 @@ export function IntegrationLogsViewer() {
             </TableBody>
           </Table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

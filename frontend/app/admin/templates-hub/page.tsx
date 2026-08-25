@@ -5,9 +5,8 @@ import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +88,8 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { CaseTemplatesPanel, CASE_TEMPLATE_TYPE_FILTERS } from "@/components/cases/CaseTemplatesPanel";
+import { getCaseTemplates } from "@/lib/api/cases";
 
 // Scope configuration
 const scopeOptions: { value: TemplateScope; label: string }[] = [
@@ -99,7 +100,7 @@ const scopeOptions: { value: TemplateScope; label: string }[] = [
   { value: "user", label: "Personal" },
 ];
 
-type HubTab = "documents" | "minutes" | "workflows" | "forms";
+type HubTab = "documents" | "minutes" | "workflows" | "forms" | "cases";
 
 type WorkflowGroupKey = "upward" | "downward" | "special";
 
@@ -157,17 +158,23 @@ function TemplatesHubForm() {
   }, [currentUser, permissions.canAccessAdministration, permissions.canManageOrgStructure]);
   const allowedTabs = useMemo<HubTab[]>(
     () => (canAccessAdvancedTemplates
-      ? ["documents", "minutes", "workflows", "forms"]
-      : ["documents", "minutes"]),
+      ? ["documents", "minutes", "cases", "workflows", "forms"]
+      : ["documents", "minutes", "cases"]),
     [canAccessAdvancedTemplates],
   );
 
-  // Main tab state (overridable via ?tab=documents|workflows|forms)
+  // Main tab state (overridable via ?tab=documents|minutes|cases|workflows|forms)
   const [activeTab, setActiveTab] = useState<HubTab>("documents");
 
   useEffect(() => {
     const raw = searchParams.get("tab");
-    if (raw === "documents" || raw === "minutes" || raw === "workflows" || raw === "forms") {
+    if (
+      raw === "documents" ||
+      raw === "minutes" ||
+      raw === "cases" ||
+      raw === "workflows" ||
+      raw === "forms"
+    ) {
       if (allowedTabs.includes(raw)) {
         setActiveTab(raw);
       } else {
@@ -223,6 +230,11 @@ function TemplatesHubForm() {
   const [showWorkflowDeleteConfirm, setShowWorkflowDeleteConfirm] = useState(false);
   const [workflowToDelete, setWorkflowToDelete] = useState<{ id: string; name: string } | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  // ============ CASE TEMPLATES STATE ============
+  const [caseSearch, setCaseSearch] = useState("");
+  const [caseTypeFilter, setCaseTypeFilter] = useState("all");
+  const [caseTemplateCount, setCaseTemplateCount] = useState(0);
 
   // Form creation dialog
   const [showFormCreate, setShowFormCreate] = useState(false);
@@ -404,6 +416,23 @@ function TemplatesHubForm() {
       toast({ title: "Error", description: "Failed to delete template. Please try again.", variant: "destructive" });
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getCaseTemplates();
+        if (!cancelled) {
+          setCaseTemplateCount(Array.isArray(data) ? data.filter((t) => t.is_active).length : 0);
+        }
+      } catch {
+        if (!cancelled) setCaseTemplateCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ============ WORKFLOW TEMPLATES LOGIC ============
   const loadWorkflowTemplates = async () => {
@@ -656,8 +685,11 @@ function TemplatesHubForm() {
     if (activeTab === "minutes") {
       return "Pick a scope, then select or create a minute template.";
     }
+    if (activeTab === "cases") {
+      return "Start a case from a pre-configured template.";
+    }
     if (!canAccessAdvancedTemplates) {
-      return "Manage document and minute templates for your scope. Workflow and form templates are managed by executives.";
+      return "Manage document, minute, and case templates for your scope. Workflow and form templates are managed by executives.";
     }
     return "Pick a scope, then select or create a document template.";
   }, [activeTab, canAccessAdvancedTemplates]);
@@ -668,7 +700,7 @@ function TemplatesHubForm() {
     if (activeTab === "workflows") {
       return (
         <>
-          <Button size="sm" className="bg-gradient-primary" onClick={() => router.push("/admin/workflow-templates/new")}>
+          <Button size="compact" onClick={() => router.push("/admin/workflow-templates/new")}>
             <Plus className="h-4 w-4 mr-2" />
             Create workflow
           </Button>
@@ -687,7 +719,7 @@ function TemplatesHubForm() {
     if (activeTab === "forms") {
       return (
         <>
-          <Button size="sm" className="bg-gradient-primary" onClick={() => setShowFormCreate(true)}>
+          <Button size="compact" onClick={() => setShowFormCreate(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create form
           </Button>
@@ -703,9 +735,22 @@ function TemplatesHubForm() {
         </>
       );
     }
+    if (activeTab === "cases") {
+      return (
+        <ContextualHelp
+          title="Case templates"
+          description="Pre-configured case types you can start from in one step."
+          steps={[
+            "Filter by case type or search by name.",
+            "Click Create on a template to open a new case.",
+            "You can also create a blank case from My Workspace.",
+          ]}
+        />
+      );
+    }
     return (
       <>
-        <Button size="sm" className="bg-gradient-primary" onClick={handleCreateNewDocTemplate}>
+        <Button size="compact" onClick={handleCreateNewDocTemplate}>
           <Plus className="h-4 w-4 mr-2" />
           {docMinuteCtaLabel}
         </Button>
@@ -774,8 +819,7 @@ function TemplatesHubForm() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button
-              size="sm"
-              className="bg-gradient-primary"
+              size="compact"
               onClick={() => {
                 const id = workflowPreview.id;
                 setWorkflowPreviewId(null);
@@ -893,8 +937,7 @@ function TemplatesHubForm() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button
-              size="sm"
-              className="bg-gradient-primary"
+              size="compact"
               onClick={() => {
                 const id = formPreview.id;
                 setFormPreviewId(null);
@@ -914,9 +957,8 @@ function TemplatesHubForm() {
     const createLabel = isMinute ? "New minute template" : "New document template";
     return (
       <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border border-border/60 p-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-3 pb-2">
               <div className="space-y-2">
                 <Label>Scope Level</Label>
                 <Select value={activeScope} onValueChange={(v) => setActiveScope(v as TemplateScope)}>
@@ -946,8 +988,7 @@ function TemplatesHubForm() {
                 </div>
               ) : null}
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          <div className="space-y-4">
             {filteredScopedTemplates.length === 0 ? (
               <EmptyState
                 icon={isMinute ? <MessageSquare className={registryQueueEmptyIconClass} /> : <FileEdit className={registryQueueEmptyIconClass} />}
@@ -980,7 +1021,7 @@ function TemplatesHubForm() {
                   >
                     <h4 className={correspondenceQueueSubjectClass}>{template.title}</h4>
                     {template.description ? (
-                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
+                      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{template.description}</p>
                     ) : null}
                   </ListRowCard>
                 ))}
@@ -1044,8 +1085,8 @@ function TemplatesHubForm() {
                 </div>
               </DialogContent>
             </Dialog>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1062,16 +1103,31 @@ function TemplatesHubForm() {
         </div>
       ) : (
         <ClientErrorBoundary>
+          <Tabs value={activeTab} onValueChange={handleHubTabChange}>
           <AdminPageShell
             title="Template Hub"
             subtitle={tabSubtitle}
             icon={LayoutTemplate}
             actions={headerActions}
+            tabs={
+              <TabsList>
+                <TabsTrigger value="documents" className="text-xs px-2.5 py-1">Documents</TabsTrigger>
+                <TabsTrigger value="minutes" className="text-xs px-2.5 py-1">Minutes</TabsTrigger>
+                <TabsTrigger value="cases" className="text-xs px-2.5 py-1">Cases</TabsTrigger>
+                {canAccessAdvancedTemplates ? (
+                  <>
+                    <TabsTrigger value="workflows" className="text-xs px-2.5 py-1">Workflows</TabsTrigger>
+                    <TabsTrigger value="forms" className="text-xs px-2.5 py-1">Forms</TabsTrigger>
+                  </>
+                ) : null}
+              </TabsList>
+            }
           >
           <StatStrip
             items={[
               { key: "documents", label: "Documents · all scopes", value: documentCount },
               { key: "minutes", label: "Minutes · all scopes", value: minuteCount },
+              { key: "cases", label: "Cases", value: caseTemplateCount },
               ...(canAccessAdvancedTemplates
                 ? [
                     { key: "workflows", label: "Workflows", value: workflowStats.total },
@@ -1081,9 +1137,9 @@ function TemplatesHubForm() {
             ]}
           />
 
-          {(activeTab === "workflows" || activeTab === "forms" || activeTab === "documents" || activeTab === "minutes") ? (
-            <Card>
-              <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          {(activeTab === "workflows" || activeTab === "forms" || activeTab === "documents" || activeTab === "minutes" || activeTab === "cases") ? (
+            <div className="rounded-xl bg-muted/30 p-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[200px] flex-1 max-w-sm">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -1092,18 +1148,23 @@ function TemplatesHubForm() {
                         ? "Search workflows…"
                         : activeTab === "forms"
                           ? "Search form templates…"
-                          : "Search templates by title or description…"
+                          : activeTab === "cases"
+                            ? "Search case templates…"
+                            : "Search templates by title or description…"
                     }
                     value={
                       activeTab === "workflows"
                         ? workflowSearch
                         : activeTab === "forms"
                           ? formSearch
-                          : templateListSearch
+                          : activeTab === "cases"
+                            ? caseSearch
+                            : templateListSearch
                     }
                     onChange={(e) => {
                       if (activeTab === "workflows") setWorkflowSearch(e.target.value);
                       else if (activeTab === "forms") setFormSearch(e.target.value);
+                      else if (activeTab === "cases") setCaseSearch(e.target.value);
                       else setTemplateListSearch(e.target.value);
                     }}
                     className="h-8 pl-8 text-xs"
@@ -1121,23 +1182,23 @@ function TemplatesHubForm() {
                     </SelectContent>
                   </Select>
                 ) : null}
-              </CardContent>
-            </Card>
+                {activeTab === "cases" ? (
+                  <Select value={caseTypeFilter} onValueChange={setCaseTypeFilter}>
+                    <SelectTrigger className="h-8 w-[140px] text-xs">
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CASE_TEMPLATE_TYPE_FILTERS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+              </div>
+            </div>
           ) : null}
 
-          <Tabs value={activeTab} onValueChange={handleHubTabChange}>
-            <TabsList>
-              <TabsTrigger value="documents" className="text-xs px-2.5 py-1">Documents</TabsTrigger>
-              <TabsTrigger value="minutes" className="text-xs px-2.5 py-1">Minutes</TabsTrigger>
-              {canAccessAdvancedTemplates ? (
-                <>
-                  <TabsTrigger value="workflows" className="text-xs px-2.5 py-1">Workflows</TabsTrigger>
-                  <TabsTrigger value="forms" className="text-xs px-2.5 py-1">Forms</TabsTrigger>
-                </>
-              ) : null}
-            </TabsList>
-
-            <TabsContent value="documents" className="mt-6 focus-visible:outline-none">
+            <TabsContent value="documents" className="mt-2 focus-visible:outline-none">
               {renderDocumentMinutePanel("document")}
             </TabsContent>
 
@@ -1145,9 +1206,12 @@ function TemplatesHubForm() {
               {renderDocumentMinutePanel("minute")}
             </TabsContent>
 
+            <TabsContent value="cases" className="mt-6 focus-visible:outline-none">
+              <CaseTemplatesPanel searchQuery={caseSearch} typeFilter={caseTypeFilter} />
+            </TabsContent>
+
                         <TabsContent value="workflows" className="mt-6 focus-visible:outline-none">
-            <Card>
-                <CardContent className="space-y-4 pt-6">
+            <div className="rounded-xl border border-border/60 p-4 space-y-4">
                   {workflowLoading ? (
                     <LoadingState message="Loading workflow templates…" />
                   ) : filteredWorkflowTemplates.length === 0 ? (
@@ -1233,16 +1297,20 @@ function TemplatesHubForm() {
                                     )}
                                   >
                                     <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
-                                    {chain ? (
-                                      <p className="mt-0.5 text-xs font-medium text-foreground/80">{chain}</p>
+                                    {(chain || template.description) ? (
+                                      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                                        {chain || template.description}
+                                      </p>
                                     ) : null}
-                                    {template.description ? (
-                                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
-                                    ) : null}
-                                    <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
+                                    <div className={correspondenceQueueMetaRowClass}>
                                       <span className={correspondenceQueueMetaItemClass}>
                                         <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
                                           {template.steps.length} steps
+                                        </Badge>
+                                      </span>
+                                      <span className={correspondenceQueueMetaItemClass}>
+                                        <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                                          {template.applies_to === "correspondence" ? "Correspondence" : "Document"}
                                         </Badge>
                                       </span>
                                       {!template.is_active ? (
@@ -1262,13 +1330,11 @@ function TemplatesHubForm() {
                       })}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+            </div>
             </TabsContent>
 
             <TabsContent value="forms" className="mt-6 focus-visible:outline-none">
-              <Card>
-                <CardContent className="space-y-4 pt-6">
+              <div className="rounded-xl border border-border/60 p-4 space-y-4">
                   {formLoading ? (
                     <LoadingState message="Loading form templates…" />
                   ) : filteredFormTemplates.length === 0 ? (
@@ -1295,8 +1361,6 @@ function TemplatesHubForm() {
                     <div className={correspondenceQueueListStackClass}>
                       {filteredFormTemplates.map((template) => {
                         const styles = getFormCategoryStyles(template.category);
-                        const sectionCount = template.structure?.sections?.length || 0;
-                        const signatureCount = template.structure?.signatures?.roles?.length || 0;
                         return (
                           <ListRowCard
                             key={template.id}
@@ -1349,15 +1413,12 @@ function TemplatesHubForm() {
                             )}
                           >
                             <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
-                            {signatureCount > 0 ? (
-                              <p className="mt-0.5 text-xs font-medium text-foreground/80">
-                                {(template.structure?.signatures?.roles ?? []).map((role) => role.label).join(" → ")}
+                            {template.description ? (
+                              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                                {template.description}
                               </p>
                             ) : null}
-                            {template.description ? (
-                              <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
-                            ) : null}
-                            <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
+                            <div className={correspondenceQueueMetaRowClass}>
                               <span className={correspondenceQueueMetaItemClass}>
                                 <Badge
                                   variant="outline"
@@ -1371,20 +1432,6 @@ function TemplatesHubForm() {
                                   {template.structure?.fields?.length || 0} fields
                                 </Badge>
                               </span>
-                              {sectionCount > 0 ? (
-                                <span className={correspondenceQueueMetaItemClass}>
-                                  <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
-                                    {sectionCount} sections
-                                  </Badge>
-                                </span>
-                              ) : null}
-                              {signatureCount > 0 ? (
-                                <span className={correspondenceQueueMetaItemClass}>
-                                  <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
-                                    {signatureCount} sign-offs
-                                  </Badge>
-                                </span>
-                              ) : null}
                               {!template.is_active ? (
                                 <span className={correspondenceQueueMetaItemClass}>
                                   <Badge variant="outline" className={correspondenceQueueBadgeClass}>
@@ -1398,11 +1445,10 @@ function TemplatesHubForm() {
                       })}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </div>
             </TabsContent>
-          </Tabs>
           </AdminPageShell>
+          </Tabs>
 
         {renderWorkflowPreviewPanel()}
         {renderFormPreviewPanel()}

@@ -2,15 +2,12 @@
 
 import { useMemo, useState, forwardRef, useImperativeHandle } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Button } from "@/components/ui/button";
 import {
   Shield,
-  Search,
   Plus,
   Edit,
   Trash2,
@@ -158,13 +155,12 @@ export const RolesManagementTab = forwardRef<
       <div className="space-y-6">
         {!hideHeaderActions ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button 
-              onClick={handleCreateRole} 
-              size="sm"
-              className="bg-gradient-primary"
+            <Button
+              onClick={handleCreateRole}
+              size="compact"
               aria-label="Create new role"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Create Role
             </Button>
             <ContextualHelp
@@ -179,61 +175,32 @@ export const RolesManagementTab = forwardRef<
         </div>
         ) : null}
 
-        <Card>
-          {!hideCardHeader ? (
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>System Roles</CardTitle>
-              {!hideInlineSearch ? (
-              <div className="relative w-64">
-                <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search roles..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8"
-                  aria-label="Search roles"
-                />
-              </div>
-              ) : null}
-            </div>
-          </CardHeader>
-          ) : null}
-          <CardContent className={hideCardHeader ? "pt-6" : undefined}>
+        <div className="overflow-x-auto rounded-xl border border-border/60">
             {roles.length === 0 ? (
-              <RoleTableSkeleton rows={5} />
+              <div className="p-4"><RoleTableSkeleton rows={5} /></div>
             ) : filteredRoles.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="p-4 rounded-full bg-muted/50">
-                    <Shield className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-semibold text-foreground">No roles found</h3>
+              <div className="text-center py-12 px-4">
+                <div className="flex flex-col items-center gap-3">
+                  <Shield className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <h3 className="text-base font-medium">No roles found</h3>
                     <p className="text-sm text-muted-foreground max-w-md mx-auto">
                       {searchQuery
-                        ? 'Try adjusting your search to find what you\'re looking for. You can also clear the search to see all roles.'
-                        : 'Get started by creating your first role. Roles define user permissions and access levels across the organization.'}
+                        ? 'Try adjusting your search, or clear it to see all roles.'
+                        : 'Create a role to define permissions for groups of users.'}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 mt-4">
-                    <Button
-                      onClick={handleCreateRole}
-                      aria-label="Create new role"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button size="compact" onClick={handleCreateRole} aria-label="Create new role">
+                      <Plus className="h-4 w-4" />
                       Create Role
                     </Button>
-                    {searchQuery && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setSearchQuery('')}
-                        aria-label="Clear search"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Clear Search
+                    {searchQuery ? (
+                      <Button variant="outline" size="compact" onClick={() => setSearchQuery('')} aria-label="Clear search">
+                        <X className="h-4 w-4" />
+                        Clear
                       </Button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -250,10 +217,9 @@ export const RolesManagementTab = forwardRef<
                 </TableHeader>
                 <TableBody>
                   {filteredRoles.map((role) => {
-                    // Use user_count from API, which is stored as role.userCount
                     const userCount = role.userCount ?? 0;
                     return (
-                      <TableRow key={role.id} className="hover:bg-muted/50 cursor-pointer">
+                      <TableRow key={role.id} className="hover:bg-muted/50">
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Shield className="h-4 w-4 text-primary" />
@@ -299,25 +265,24 @@ export const RolesManagementTab = forwardRef<
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1">
                             <Button
                               variant="ghost"
-                              size="sm"
+                              size="icon-sm"
                               onClick={() => handleEditRole(role)}
-                              className="h-8 w-8 p-0"
                               aria-label={`Edit role ${role.name}`}
                             >
                               <Edit className="h-4 w-4" aria-hidden="true" />
                             </Button>
                             <Button
                               variant="ghost"
-                              size="sm"
+                              size="icon-sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteClick(role);
                               }}
                               disabled={isDeleting === role.id}
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              className="text-destructive hover:text-destructive"
                               aria-label={`Delete role ${role.name}`}
                             >
                               {isDeleting === role.id ? (
@@ -334,8 +299,7 @@ export const RolesManagementTab = forwardRef<
                 </TableBody>
               </Table>
             )}
-          </CardContent>
-        </Card>
+        </div>
 
         <RoleFormModal
           open={formOpen}
@@ -352,7 +316,7 @@ export const RolesManagementTab = forwardRef<
             <AlertDialogHeader>
               <AlertDialogTitle>
                 {roleToDelete && (roleToDelete.userCount ?? 0) > 0
-                  ? "⚠️ Warning: Role is assigned to users"
+                  ? "Warning: Role is assigned to users"
                   : "Delete Role"}
               </AlertDialogTitle>
               <AlertDialogDescription>

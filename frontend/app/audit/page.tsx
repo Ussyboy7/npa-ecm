@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +11,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { ListRowCard } from '@/components/shared/ListRowCard';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
@@ -22,11 +22,6 @@ import {
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
 } from '@/components/shared/registry-queue-styles';
 import { cn } from '@/lib/utils';
 import {
@@ -54,7 +49,6 @@ import {
   FileText,
   ScrollText,
   Download,
-  RefreshCw,
   MoreVertical,
   ShieldCheck,
 } from 'lucide-react';
@@ -510,16 +504,12 @@ const AuditTrailPage = () => {
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <MoreVertical className="mr-2 h-4 w-4" />
+              <Button variant="outline" size="compact">
+                <MoreVertical className="h-4 w-4" />
                 More
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => void fetchLogs()} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || logs.length === 0}>
                 <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
                 {exporting ? 'Exporting...' : 'Export CSV'}
@@ -536,55 +526,17 @@ const AuditTrailPage = () => {
         </>
       }
     >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {[
-                {
-                  label: 'Total Events',
-                  value: summary.total,
-                  icon: Activity,
-                  bgClass: 'bg-primary/10',
-                  iconClass: 'text-primary',
-                },
-                {
-                  label: 'User Logins',
-                  value: summary.logins,
-                  icon: UserIcon,
-                  bgClass: 'bg-info/10',
-                  iconClass: 'text-info',
-                },
-                {
-                  label: 'Errors & Failures',
-                  value: summary.errors,
-                  icon: AlertCircle,
-                  bgClass: 'bg-destructive/10',
-                  iconClass: 'text-destructive',
-                },
-                {
-                  label: 'System Actions',
-                  value: summary.actions,
-                  icon: Shield,
-                  bgClass: 'bg-success/10',
-                  iconClass: 'text-success',
-                },
-              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                <Card key={label}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{label}</p>
-                        <p className={registryQueueStatValueClass}>{value}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-        </div>
+        <StatStrip
+          items={[
+            { key: 'total', label: 'Total Events', value: summary.total },
+            { key: 'logins', label: 'User Logins', value: summary.logins },
+            { key: 'errors', label: 'Errors & Failures', value: summary.errors },
+            { key: 'actions', label: 'System Actions', value: summary.actions },
+          ]}
+        />
 
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+        <div className="rounded-xl bg-muted/30 p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search by user, action, description, object…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
@@ -633,8 +585,8 @@ const AuditTrailPage = () => {
               </SelectContent>
             </Select>
             {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {error ? (
           <ErrorState

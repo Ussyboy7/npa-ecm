@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -460,26 +459,22 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center py-8">
+      <div className="rounded-xl border border-border/60 p-6">
+<div className="text-center py-8">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Loading form...</p>
           </div>
-        </CardContent>
-      </Card>
+</div>
     );
   }
 
   if (!formDoc || !template) {
     return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center py-8 text-muted-foreground">
+      <div className="rounded-xl border border-border/60 p-6">
+<div className="text-center py-8 text-muted-foreground">
             Form document or template not found
           </div>
-        </CardContent>
-      </Card>
+</div>
     );
   }
 
@@ -513,16 +508,16 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
   return (
     <div className="space-y-4">
       {/* Compact Header with Status and Actions */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-3">
+      <div className="rounded-xl border border-border/60">
+      <div className="pb-2 border-b border-border/60">
+<div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <div className="flex items-start gap-2.5 mb-1.5">
                 <FileText className="h-4 w-4 text-primary mt-0.5" />
                 <div className="min-w-0">
-                  <CardTitle className="text-base leading-tight truncate">{formDoc.document.title}</CardTitle>
+                  <p className="text-base leading-tight truncate">{formDoc.document.title}</p>
                   {template && (
-                    <CardDescription className="mt-0.5 text-xs truncate">{template.name}</CardDescription>
+                    <p className="mt-0.5 text-xs truncate text-muted-foreground">{template.name}</p>
                   )}
                 </div>
               </div>
@@ -550,9 +545,9 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               </Badge>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+      </div>
+      <div className="pt-0">
+<div className="flex items-center justify-end gap-1.5 flex-wrap">
             <Button 
               onClick={handleSave} 
               disabled={saving || formDoc.status === "completed"}
@@ -637,13 +632,13 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+      </div>
+    </div>
 
       {/* Tabbed Interface */}
-      <Card>
+      <div className="rounded-xl border border-border/60">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <CardHeader className="pb-3">
+          <div className="border-b border-border/60 pb-3">
             <TabsList className="grid w-full grid-cols-4 gap-1">
               <TabsTrigger value="form" className="flex items-center gap-1.5 text-xs sm:text-sm">
                 <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -682,9 +677,9 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                 Timeline
               </TabsTrigger>
             </TabsList>
-          </CardHeader>
+          </div>
 
-          <CardContent className="pt-6">
+          <div className="pt-6">
             {/* Form Fields Tab */}
             <TabsContent value="form" className="mt-0 space-y-4">
               <div className="max-h-[calc(100vh-400px)] min-h-[500px] overflow-y-auto overflow-x-hidden pr-2">
@@ -708,9 +703,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     <Badge variant="outline">{pendingSignatures.length} pending</Badge>
                   </div>
                   {pendingSignatures.map((signature) => (
-                    <Card key={signature.id} className="border-l-4 border-l-yellow-500">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-3">
+                    <div className="rounded-xl border border-border/60 border-l-4 border-l-yellow-500 p-4">
+<div className="flex items-center justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
                             <p className="mt-0.5 text-xs text-muted-foreground">{signature.field_label}</p>
@@ -724,8 +718,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                             Sign Now
                           </Button>
                         </div>
-                      </CardContent>
-                    </Card>
+</div>
                   ))}
                 </div>
               ) : workflow && allSignatures.length > 0 && workflowPendingCount === 0 ? (
@@ -734,9 +727,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     <div className="space-y-2">
                       <h3 className="text-sm font-semibold">You signed</h3>
                       {mySignedSignatures.map((signature) => (
-                        <Card key={signature.id} className="border-l-4 border-l-green-500">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between gap-3">
+                        <div className="rounded-xl border border-border/60 border-l-4 border-l-green-500 p-4">
+<div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
                                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -746,8 +738,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                               </div>
                               <Badge className="shrink-0">Signed</Badge>
                             </div>
-                          </CardContent>
-                        </Card>
+</div>
                       ))}
                     </div>
                   )}
@@ -775,9 +766,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     <div className="space-y-2">
                       <h3 className="text-sm font-semibold">You signed</h3>
                       {mySignedSignatures.map((signature) => (
-                        <Card key={signature.id} className="border-l-4 border-l-green-500">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between gap-3">
+                        <div className="rounded-xl border border-border/60 border-l-4 border-l-green-500 p-4">
+<div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
                                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -787,8 +777,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                               </div>
                               <Badge className="shrink-0">Signed</Badge>
                             </div>
-                          </CardContent>
-                        </Card>
+</div>
                       ))}
                     </div>
                   )}
@@ -799,9 +788,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                         {workflowPendingCount} outstanding
                       </Badge>
                     </div>
-                    <Card>
-                      <CardContent className="space-y-2 p-4">
-                        <p className="text-sm text-muted-foreground">
+                    <div className="rounded-xl border border-border/60 space-y-2 p-4">
+<p className="text-sm text-muted-foreground">
                           Your part is done. Waiting on:
                         </p>
                         <ul className="space-y-1.5">
@@ -821,8 +809,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                           <Clock className="h-4 w-4" />
                           View Timeline
                         </Button>
-                      </CardContent>
-                    </Card>
+</div>
                   </div>
                 </div>
               ) : (
@@ -855,9 +842,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               <div className="space-y-4">
                 {/* Generated PDF Section */}
                 {generatedPdf && (
-                  <Card className="border-l-4 border-l-green-500">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
+                  <div className="rounded-xl border border-border/60 border-l-4 border-l-green-500 p-4">
+<div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           <FileText className="h-5 w-5 text-green-600 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -899,8 +885,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                           )}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
+</div>
                 )}
 
                 <div className="flex items-center justify-between">
@@ -1009,8 +994,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                 ) : (
                   <div className="space-y-2">
                     {supportingDocuments.map((doc) => (
-                      <Card key={doc.id} className="p-3">
-                        <div className="flex items-center justify-between">
+                      <div key={doc.id} className="rounded-xl border border-border/60 p-3">
+<div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <Paperclip className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                             <div className="flex-1 min-w-0">
@@ -1048,7 +1033,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                             )}
                           </div>
                         </div>
-                      </Card>
+</div>
                     ))}
                   </div>
                 )}
@@ -1066,20 +1051,17 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                       <h3 className="text-base font-semibold">Completion Details</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
+                      <div className="rounded-xl border border-border/60 p-4">
+<div className="space-y-2">
                             <p className="text-xs text-muted-foreground">Form Status</p>
                             <div className="flex items-center gap-2">
                               <StatusIcon className="h-4 w-4" />
                               <p className="text-sm font-medium">{statusBadge.label}</p>
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
+</div>
+                      <div className="rounded-xl border border-border/60 p-4">
+<div className="space-y-2">
                             <p className="text-xs text-muted-foreground">Form Completion</p>
                             <div className="flex items-center gap-2">
                               <Progress value={completionPercentage} className="flex-1 h-2" />
@@ -1089,11 +1071,9 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                               {filledRequiredFields.length} of {requiredFields.length} required editable fields
                             </p>
                           </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
+</div>
+                      <div className="rounded-xl border border-border/60 p-4">
+<div className="space-y-2">
                             <p className="text-xs text-muted-foreground">Signature Progress</p>
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-medium">
@@ -1105,19 +1085,16 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                               className="h-2" 
                             />
                           </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
+</div>
+                      <div className="rounded-xl border border-border/60 p-4">
+<div className="space-y-2">
                             <p className="text-xs text-muted-foreground">Supporting Documents</p>
                             <p className="text-sm font-medium">
                               {supportingDocuments.length} document{supportingDocuments.length !== 1 ? 's' : ''}
                               {generatedPdf && ' + 1 PDF'}
                             </p>
                           </div>
-                        </CardContent>
-                      </Card>
+</div>
                     </div>
                   </div>
 
@@ -1153,9 +1130,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                   <Clock className="h-4 w-4 text-white" />
                                 )}
                               </span>
-                              <Card className={`ml-2 ${isPending ? "border-l-4 border-l-yellow-500" : isSigned ? "border-l-4 border-l-green-500" : ""}`}>
-                                <CardContent className="p-4">
-                                  <div className="flex items-start justify-between gap-3">
+                              <div className="rounded-xl border border-border/60 p-4">
+<div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0 flex-1 space-y-2">
                                       <div className="flex flex-wrap items-center gap-2">
                                         <h4 className="text-sm font-semibold">{assignee}</h4>
@@ -1221,8 +1197,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                       </span>
                                     )}
                                   </div>
-                                </CardContent>
-                              </Card>
+</div>
                             </li>
                           );
                         })}
@@ -1247,9 +1222,9 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                 </div>
               )}
             </TabsContent>
-          </CardContent>
+          </div>
         </Tabs>
-      </Card>
+      </div>
 
       {/* Signature Workflow Dialog */}
       {showSignatureWorkflow && formDoc && template && (

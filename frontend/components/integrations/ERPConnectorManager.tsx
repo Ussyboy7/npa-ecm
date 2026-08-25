@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { Database, Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, RefreshCw } from "lucide-react";
 import {
   createERPConnector,
   deleteERPConnector,
@@ -148,23 +147,18 @@ export function ERPConnectorManager() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              ERP Connectors
-            </CardTitle>
-            <CardDescription>Link Oracle, SAP, or custom ERP APIs for document sync</CardDescription>
-          </div>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Connector
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground">
+          Link Oracle, SAP, or custom ERP APIs for document sync
+        </p>
+        <Button size="compact" onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Connector
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border/60">
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -217,7 +211,7 @@ export function ERPConnectorManager() {
             </TableBody>
           </Table>
         )}
-      </CardContent>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="md" height="fill">
@@ -280,6 +274,6 @@ export function ERPConnectorManager() {
           </form>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }

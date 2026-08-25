@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { appType } from "@/lib/app-type";
 import {
@@ -169,20 +168,20 @@ export default function FormTemplateEditorPage() {
               </p>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={saving} size="lg" className="shrink-0">
-            <Save className="h-4 w-4 mr-2" />
+          <Button onClick={handleSave} disabled={saving} size="compact" className="shrink-0">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {saving ? "Saving..." : isNew ? "Create Template" : "Save Changes"}
           </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Template Details</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
+        <div className="rounded-xl border border-border/60">
+          <div className="border-b border-border/60 px-4 py-3">
+            <h2 className="text-sm font-medium">Template Details</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Configure the basic information for this form template
             </p>
-          </CardHeader>
-          <CardContent className="space-y-6">
+          </div>
+          <div className="space-y-6 p-4">
             <div className="space-y-2">
               <Label htmlFor="name">
                 Template Name <span className="text-destructive">*</span>
@@ -268,17 +267,17 @@ export default function FormTemplateEditorPage() {
                 }
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Form Structure</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
+        <div className="rounded-xl border border-border/60">
+          <div className="border-b border-border/60 px-4 py-3">
+            <h2 className="text-sm font-medium">Form Structure</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Define the fields and structure for this form template
             </p>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-4">
             <FormBuilder
               fields={formData.structure?.fields || []}
               onChange={(fields) =>
@@ -288,8 +287,8 @@ export default function FormTemplateEditorPage() {
                 }))
               }
             />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
           </>
       )}
       </div>

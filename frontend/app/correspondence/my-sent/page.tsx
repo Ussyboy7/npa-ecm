@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -316,9 +315,9 @@ const MySentPageContent = () => {
           title="My Sent"
           subtitle="Correspondence you created and documents you've shared"
           actions={(
-            <Button size="sm" asChild>
+            <Button size="compact" asChild>
               <Link href="/correspondence/register">
-                <Mail className="h-4 w-4 mr-2" />Register New
+                <Mail className="h-4 w-4" />Register New
               </Link>
             </Button>
           )}
@@ -333,8 +332,8 @@ const MySentPageContent = () => {
           )}
         >
         {/* Inline Filter Bar */}
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+        <div className="rounded-xl bg-muted/30 p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search by subject, reference, sender..." value={query} onChange={(e) => setQuery(e.target.value)} className="h-8 pl-8 text-xs" />
@@ -361,8 +360,8 @@ const MySentPageContent = () => {
               </SelectContent>
             </Select>
             {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
-          </CardContent>
-        </Card>
+          </div>
+      </div>
 
         {error && <ErrorState message={error} variant="inline" />}
 

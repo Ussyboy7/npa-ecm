@@ -2,7 +2,6 @@
 
 import { Info, Shield, FileText } from "lucide-react";
 import { VerifyForm } from "@/components/verify/VerifyForm";
-import { Card, CardContent } from "@/components/ui/card";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { PublicPortalShell } from "@/components/shared/PublicPortalShell";
 
@@ -14,9 +13,9 @@ export default function VerifyPage() {
         subtitle="Confirm document authenticity by checking an executive seal serial number."
       >
         <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardContent className="space-y-6 p-6 sm:p-8">
-              <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+          <div className="rounded-xl border border-border/60 lg:col-span-2">
+            <div className="space-y-6 p-6 sm:p-8">
+              <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-4">
                 <Shield className="mt-0.5 h-5 w-5 text-primary" />
                 <div className="space-y-1">
                   <h2 className="text-base font-semibold">Enter a seal serial number</h2>
@@ -26,11 +25,11 @@ export default function VerifyPage() {
                 </div>
               </div>
               <VerifyForm showLabel />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="space-y-4 p-6">
+          <div className="rounded-xl border border-border/60">
+            <div className="space-y-4 p-6">
               <h3 className="flex items-center gap-2 text-sm font-semibold">
                 <FileText className="h-4 w-4 text-primary" />
                 How it works
@@ -40,12 +39,12 @@ export default function VerifyPage() {
                 <li>Review the verification status and seal details returned.</li>
                 <li>Use the result to validate authenticity before processing.</li>
               </ol>
-              <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div className="flex items-start gap-2 rounded-xl bg-muted/30 p-3 text-xs text-muted-foreground">
                 <Info className="mt-0.5 h-4 w-4 text-primary" />
                 <p>Example format: NPA-YYYYMMDD-XXXXXXXX.</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </QueuePageShell>
     </PublicPortalShell>

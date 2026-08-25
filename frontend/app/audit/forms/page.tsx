@@ -3,19 +3,27 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
-import { AdminPageShell } from "@/components/shared/AdminPageShell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QueuePageShell } from "@/components/shared/QueuePageShell";
+import { ListRowCard } from "@/components/shared/ListRowCard";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Separator } from "@/components/ui/separator";
-import { FileText, ClipboardCheck, Plus, ArrowRight } from "lucide-react";
+import { FileText, ClipboardCheck, Plus } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { logError } from "@/lib/client-logger";
 import type { FormTemplate, FormSubmission } from "@/lib/types/forms";
+import {
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+} from "@/components/shared/registry-queue-styles";
 
 interface SubmissionRow {
   id: string;
@@ -105,8 +113,8 @@ export default function AuditFormsPage() {
       setTemplates(templatesList);
       setSubmissions(submissionsList);
     } catch (err) {
-      logError("Failed to load audit forms", err);
-      setError("Failed to load audit forms. Please try again.");
+      logError("Failed to load forms", err);
+      setError("Failed to load forms. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -141,13 +149,12 @@ export default function AuditFormsPage() {
   );
 
   return (
-    <AdminPageShell
-      title="Audit Forms"
-      subtitle="Complete audit checklists, monitoring reports, and certification forms."
-      icon={ClipboardCheck}
+    <QueuePageShell
+      title="Forms"
+      subtitle="Office forms, checklists, and submissions."
     >
       {loading ? (
-        <LoadingState message="Loading audit forms..." />
+        <LoadingState message="Loading forms…" />
       ) : error ? (
         <EmptyState
           icon="file"
@@ -158,103 +165,110 @@ export default function AuditFormsPage() {
         />
       ) : (
         <>
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-3">
             {auditTemplates.map((template) => {
               const meta = TEMPLATE_META[template.slug] || {
                 title: template.name,
                 description: template.description || "",
               };
               return (
-                <Card key={template.id} className="flex flex-col">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-base">{meta.title}</CardTitle>
-                      <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <div
+                  key={template.id}
+                  className="flex flex-col rounded-xl border border-border/60 bg-muted/20 p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-medium">{meta.title}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {meta.description}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {meta.description}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="mt-auto pt-0">
-                    <Button
-                      className="w-full"
-                      onClick={() => handleStartNew(template.id)}
-                      disabled={creating === template.id}
-                    >
-                      {creating === template.id ? (
-                        "Creating..."
-                      ) : (
-                        <>
-                          <Plus className="mr-2 h-4 w-4" />
-                          Start New
-                        </>
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
+                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
+                  <Button
+                    size="compact"
+                    className="mt-4 w-full"
+                    onClick={() => handleStartNew(template.id)}
+                    disabled={creating === template.id}
+                  >
+                    {creating === template.id ? (
+                      "Creating..."
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        Start New
+                      </>
+                    )}
+                  </Button>
+                </div>
               );
             })}
           </div>
 
-          <Separator className="my-6" />
+          <Separator className="my-2" />
 
           <div>
-            <h2 className="mb-4 text-lg font-semibold">Recent Submissions</h2>
+            <h2 className="mb-3 text-sm font-medium text-muted-foreground">Recent Submissions</h2>
             {submissions.length === 0 ? (
               <EmptyState
                 icon="inbox"
                 title="No submissions yet"
-                message="Start a new audit form above to create your first submission."
+                message="Start a form above to create your first submission."
               />
             ) : (
-              <div className="space-y-2">
+              <div className="overflow-x-auto rounded-xl border border-border/60">
+                <div className={correspondenceQueueListStackClass} role="list">
                 {submissions.map((sub) => {
                   const status = inferStatus(sub);
                   return (
-                    <Card
-                      key={sub.id}
-                      className="cursor-pointer transition-colors hover:bg-accent/50"
-                      onClick={() => router.push(`/audit/forms/${sub.id}`)}
-                    >
-                      <CardContent className="flex items-center justify-between p-4">
-                        <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">
-                              {sub.template_name}
-                            </span>
-                            <Badge
-                              variant={getBadgeVariant(status)}
-                              className={cn(
-                                status === "Completed" && "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800",
-                              )}
-                            >
-                              {status}
-                            </Badge>
+                    <div key={sub.id} role="listitem">
+                      <ListRowCard
+                        density="compact"
+                        href={`/audit/forms/${sub.id}`}
+                        leading={
+                          <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
+                            <ClipboardCheck className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
                           </div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            {sub.submitted_by_name && (
-                              <span>By: {sub.submitted_by_name}</span>
+                        }
+                      >
+                        <h4 className={correspondenceQueueSubjectClass}>{sub.template_name}</h4>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          <Badge
+                            variant={getBadgeVariant(status)}
+                            className={cn(
+                              "h-5 px-1.5 text-[10px]",
+                              status === "Completed" &&
+                                "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800",
                             )}
-                            <span>
-                              Created: {formatDateTime(sub.createdAt)}
-                            </span>
-                            {sub.submitted_at && (
-                              <span>
-                                Submitted: {formatDateTime(sub.submitted_at)}
-                              </span>
-                            )}
-                          </div>
+                          >
+                            {status}
+                          </Badge>
                         </div>
-                        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      </CardContent>
-                    </Card>
+                        <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
+                          {sub.submitted_by_name ? (
+                            <span className={correspondenceQueueMetaItemClass}>
+                              By: {sub.submitted_by_name}
+                            </span>
+                          ) : null}
+                          <span className={correspondenceQueueMetaItemClass}>
+                            Created: {formatDateTime(sub.createdAt)}
+                          </span>
+                          {sub.submitted_at ? (
+                            <span className={correspondenceQueueMetaItemClass}>
+                              Submitted: {formatDateTime(sub.submitted_at)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </ListRowCard>
+                    </div>
                   );
                 })}
+                </div>
               </div>
             )}
           </div>
         </>
       )}
-    </AdminPageShell>
+    </QueuePageShell>
   );
 }

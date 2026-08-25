@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { OrganizationTabList } from "@/components/admin/OrganizationTabList";
 import {
   Building2,
   ChevronRight,
@@ -81,6 +82,14 @@ interface DeactivateTarget {
 }
 
 const OrganizationStructurePage = () => {
+  return (
+    <Suspense fallback={<div className="container mx-auto p-6"><LoadingState message="Loading organization…" /></div>}>
+      <OrganizationStructureContent />
+    </Suspense>
+  );
+};
+
+const OrganizationStructureContent = () => {
   const {
     directorates,
     divisions,
@@ -97,7 +106,15 @@ const OrganizationStructurePage = () => {
 
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<OrganizationTab>("structure");
+  const searchParams = useSearchParams();
+  const tabFromUrl = (searchParams.get("tab") || "structure") as OrganizationTab;
+  const [activeTab, setActiveTab] = useState<OrganizationTab>(tabFromUrl);
+  useEffect(() => {
+    const next = (searchParams.get("tab") || "structure") as OrganizationTab;
+    if (["structure", "offices", "memberships", "locations"].includes(next)) {
+      setActiveTab(next);
+    }
+  }, [searchParams]);
   
   // Expanded state for tree nodes
   const [expandedDirectorates, setExpandedDirectorates] = useState<Set<string>>(new Set());
@@ -494,31 +511,34 @@ const OrganizationStructurePage = () => {
           </div>
         ) : (
         <AdminPageShell
-          title="Organization & Offices"
+          title="Organization"
           subtitle={tabSubtitle}
           icon={FolderTree}
+          tabs={<OrganizationTabList />}
           actions={
-            <>
-              <Button onClick={handleCreateDirectorate} className="bg-gradient-primary">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Directorate
-              </Button>
-              <ContextualHelp
-                title="Organization Structure"
-                description="Manage the organization hierarchy from directorate down to department."
-                steps={[
-                  "Expand directorates to see divisions and departments.",
-                  "Use inline actions to add, edit, or deactivate units.",
-                  "Keep leadership assignments current as structures change.",
-                ]}
-              />
-            </>
+            activeTab === "structure" ? (
+              <>
+                <Button size="compact" onClick={handleCreateDirectorate}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Directorate
+                </Button>
+                <ContextualHelp
+                  title="Organization Structure"
+                  description="Manage the organization hierarchy from directorate down to department."
+                  steps={[
+                    "Expand directorates to see divisions and departments.",
+                    "Use inline actions to add, edit, or deactivate units.",
+                    "Keep leadership assignments current as structures change.",
+                  ]}
+                />
+              </>
+            ) : null
           }
         >
           <StatStrip items={orgStatItems} />
 
-          <Card>
-            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          <div className="rounded-xl bg-muted/30 p-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-[200px] flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -538,26 +558,17 @@ const OrganizationStructurePage = () => {
                   </Button>
                 </>
               ) : null}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as OrganizationTab)}>
-            <TabsList>
-              <TabsTrigger value="structure" className="text-xs px-2.5 py-1">Structure</TabsTrigger>
-              <TabsTrigger value="offices" className="text-xs px-2.5 py-1">Offices</TabsTrigger>
-              <TabsTrigger value="memberships" className="text-xs px-2.5 py-1">Memberships</TabsTrigger>
-              <TabsTrigger value="locations" className="text-xs px-2.5 py-1">Locations</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="structure" className="mt-6 focus-visible:outline-none">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FolderTree className="h-5 w-5 text-primary" />
-                Organization Hierarchy
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+            <TabsContent value="structure" className="mt-2 focus-visible:outline-none">
+          <div className="rounded-xl border border-border/60 p-4">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+              <FolderTree className="h-5 w-5 text-primary" />
+              Organization Hierarchy
+            </h3>
+            <div>
               {!mounted ? (
                 <div className="py-8 text-center text-muted-foreground">Loading...</div>
               ) : filteredData.directorates.length === 0 ? (
@@ -852,13 +863,12 @@ const OrganizationStructurePage = () => {
                     })}
                   </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
             </TabsContent>
 
             <TabsContent value="offices" className="mt-6 focus-visible:outline-none">
-              <Card>
-                <CardContent className="pt-6">
+              <div className="rounded-xl border border-border/60 p-4">
                   {filteredOffices.length === 0 ? (
                     <EmptyState
                       icon={<Building2 className={registryQueueEmptyIconClass} />}
@@ -927,13 +937,11 @@ const OrganizationStructurePage = () => {
                       ))}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </div>
             </TabsContent>
 
             <TabsContent value="memberships" className="mt-6 focus-visible:outline-none">
-              <Card>
-                <CardContent className="pt-6">
+              <div className="rounded-xl border border-border/60 p-4">
                   {filteredMemberships.length === 0 ? (
                     <EmptyState
                       icon={<Users className={registryQueueEmptyIconClass} />}
@@ -968,24 +976,22 @@ const OrganizationStructurePage = () => {
                       })}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </div>
             </TabsContent>
 
             <TabsContent value="locations" className="mt-6 focus-visible:outline-none">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <MapPin className="h-5 w-5 text-primary" />
-                      Physical Locations
-                    </span>
-                    <Dialog open={locationFormOpen} onOpenChange={(open) => { setLocationFormOpen(open); if (!open) { setEditingLocation(null); setLocationForm({ building: "", floor: "", room: "", description: "" }); } }}>
-                      <DialogTrigger asChild>
-                        <Button size="sm" onClick={() => { setEditingLocation(null); setLocationForm({ building: "", floor: "", room: "", description: "" }); }}>
-                          <Plus className="h-4 w-4 mr-2" /> Add Location
-                        </Button>
-                      </DialogTrigger>
+              <div className="rounded-xl border border-border/60 p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold">
+                    <MapPin className="h-5 w-5 text-primary" />
+                    Physical Locations
+                  </h3>
+                  <Dialog open={locationFormOpen} onOpenChange={(open) => { setLocationFormOpen(open); if (!open) { setEditingLocation(null); setLocationForm({ building: "", floor: "", room: "", description: "" }); } }}>
+                    <DialogTrigger asChild>
+                      <Button size="compact" onClick={() => { setEditingLocation(null); setLocationForm({ building: "", floor: "", room: "", description: "" }); }}>
+                        <Plus className="h-4 w-4 mr-2" /> Add Location
+                      </Button>
+                    </DialogTrigger>
                       <DialogContent size="sm">
                         <DialogHeader>
                           <DialogTitle>{editingLocation ? "Edit Location" : "New Location"}</DialogTitle>
@@ -1015,9 +1021,8 @@ const OrganizationStructurePage = () => {
                         </div>
                       </DialogContent>
                     </Dialog>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div>
                   {locations.length === 0 ? (
                     <EmptyState
                       icon={<MapPin className={registryQueueEmptyIconClass} />}
@@ -1074,8 +1079,8 @@ const OrganizationStructurePage = () => {
                       ))}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
 
           </Tabs>

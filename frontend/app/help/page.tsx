@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import DOMPurify from "dompurify";
 import { Building2, CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users, RefreshCw, AlertCircle } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -262,7 +261,7 @@ export default function HelpAndGuidePage() {
               checklists and feature breakdowns to FAQs and support contacts.
             </p>
           </div>
-          <Button variant="default" size="lg" onClick={handleLaunchDashboard} disabled={isNavigating}>
+          <Button variant="default" size="compact" onClick={handleLaunchDashboard} disabled={isNavigating}>
             <CheckCircle2 className="mr-2 h-5 w-5" />
             {isNavigating ? "Launching..." : "Launch Dashboard"}
           </Button>
@@ -270,16 +269,16 @@ export default function HelpAndGuidePage() {
 
         <section className="grid gap-4 md:grid-cols-2">
           {quickStartSteps.map((step, index) => (
-            <Card key={step.title} className="border-border/60 bg-background/60">
-              <CardHeader>
-                <CardTitle className="text-base font-semibold">
+            <div key={step.title} className="rounded-xl border border-border/60">
+              <div className="px-4 py-3 border-b border-border/60">
+                <h3 className="text-base font-semibold">
                   Step {index + 1}. {step.title}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                </h3>
+              </div>
+              <div className="p-4">
                 <p className="text-sm text-muted-foreground">{step.detail}</p>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </section>
 
@@ -293,46 +292,44 @@ export default function HelpAndGuidePage() {
           {loadingGuides ? (
             <div className="grid gap-4 md:grid-cols-2">
               {Array.from({ length: 4 }).map((_, index) => (
-                <Card key={index} className="border-border/60 bg-background/60 shadow-sm">
-                  <CardHeader>
+                <div key={index} className="rounded-xl border border-border/60">
+                  <div className="space-y-2 px-4 py-3 border-b border-border/60">
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-3 w-24" />
-                  </CardHeader>
-                  <CardContent className="space-y-3">
+                  </div>
+                  <div className="space-y-3 p-4">
                     <Skeleton className="h-3 w-full" />
                     <Skeleton className="h-3 w-5/6" />
                     <Skeleton className="h-3 w-2/3" />
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
           ) : guides.length === 0 ? (
-            <Card className="border-border/60 bg-background/60 shadow-sm">
-              <CardContent className="py-10 text-center space-y-4">
-                {guidesError ? (
-                  <>
-                    <AlertCircle className="h-8 w-8 mx-auto text-destructive" aria-hidden="true" />
-                    <p className="text-sm text-muted-foreground">{guidesError}</p>
-                    <Button variant="outline" size="sm" onClick={loadGuides} aria-label="Retry loading help guides">
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Retry
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <HelpCircle className="h-8 w-8 mx-auto text-muted-foreground opacity-50" aria-hidden="true" />
-                    <p className="text-sm text-muted-foreground">No help guides have been published yet.</p>
-                    <p className="text-xs text-muted-foreground">
-                      Check back later or{" "}
-                      <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}?subject=Help Guide Request`} className="text-primary hover:underline">
-                        contact the programme office
-                      </Link>{" "}
-                      to request specific guides.
-                    </p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-border/60 py-10 px-4 text-center space-y-4">
+              {guidesError ? (
+                <>
+                  <AlertCircle className="h-8 w-8 mx-auto text-destructive" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground">{guidesError}</p>
+                  <Button variant="outline" size="sm" onClick={loadGuides} aria-label="Retry loading help guides">
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Retry
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <HelpCircle className="h-8 w-8 mx-auto text-muted-foreground opacity-50" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground">No help guides have been published yet.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Check back later or{" "}
+                    <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}?subject=Help Guide Request`} className="text-primary hover:underline">
+                      contact the programme office
+                    </Link>{" "}
+                    to request specific guides.
+                  </p>
+                </>
+              )}
+            </div>
           ) : (
             <div className="space-y-6">
               {categorizedGuides.map(({ category, entries }) => (
@@ -342,14 +339,14 @@ export default function HelpAndGuidePage() {
                   </h3>
                   <div className="grid gap-4 md:grid-cols-2">
                     {entries.map((guide) => (
-                      <Card key={guide.id} className="border-border/60 bg-background/60 shadow-sm">
-                        <CardHeader className="space-y-2">
-                          <CardTitle className="text-base font-semibold">{guide.title}</CardTitle>
+                      <div key={guide.id} className="rounded-xl border border-border/60">
+                        <div className="space-y-2 px-4 py-3 border-b border-border/60">
+                          <h3 className="text-base font-semibold">{guide.title}</h3>
                           {guide.summary && (
-                            <CardDescription>{guide.summary}</CardDescription>
+                            <p className="text-sm text-muted-foreground">{guide.summary}</p>
                           )}
-                        </CardHeader>
-                        <CardContent className="space-y-3 text-sm text-muted-foreground">
+                        </div>
+                        <div className="space-y-3 p-4 text-sm text-muted-foreground">
                           <div dangerouslySetInnerHTML={{ __html: sanitizeContent(guide.content) }} />
                           {guide.tags && guide.tags.length > 0 && (
                             <div className="flex flex-wrap gap-2 pt-2" role="list" aria-label="Tags">
@@ -360,8 +357,8 @@ export default function HelpAndGuidePage() {
                               ))}
                             </div>
                           )}
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -378,27 +375,23 @@ export default function HelpAndGuidePage() {
             </p>
           </div>
           {loadingFaqs ? (
-            <Card className="border-border/60 bg-background/60 shadow-sm">
-              <CardContent className="py-10 space-y-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="space-y-2">
-                    <Skeleton className="h-5 w-full" />
-                    <Skeleton className="h-4 w-3/4" />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-border/60 py-10 px-4 space-y-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="space-y-2">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              ))}
+            </div>
           ) : faqsError ? (
-            <Card className="border-border/60 bg-background/60 shadow-sm">
-              <CardContent className="py-10 text-center space-y-4">
-                <AlertCircle className="h-8 w-8 mx-auto text-destructive" aria-hidden="true" />
-                <p className="text-sm text-muted-foreground">{faqsError}</p>
-                <Button variant="outline" size="sm" onClick={loadFaqs} aria-label="Retry loading FAQs">
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Retry
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-border/60 py-10 px-4 text-center space-y-4">
+              <AlertCircle className="h-8 w-8 mx-auto text-destructive" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">{faqsError}</p>
+              <Button variant="outline" size="sm" onClick={loadFaqs} aria-label="Retry loading FAQs">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </div>
           ) : (
             <Accordion type="single" collapsible className="w-full" aria-label="Frequently Asked Questions">
               {faqsToRender.map((item) => {
@@ -427,13 +420,13 @@ export default function HelpAndGuidePage() {
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {supportResources.map((resource) => (
-              <Card key={resource.title} className="border-border/60 bg-background/70">
-                <CardHeader className="space-y-2">
-                  <CardTitle className="text-base font-semibold">{resource.title}</CardTitle>
-                  <CardDescription>{resource.description}</CardDescription>
-                </CardHeader>
-                <CardContent>{resource.action}</CardContent>
-              </Card>
+              <div key={resource.title} className="rounded-xl border border-border/60">
+                <div className="space-y-2 px-4 py-3 border-b border-border/60">
+                  <h3 className="text-base font-semibold">{resource.title}</h3>
+                  <p className="text-sm text-muted-foreground">{resource.description}</p>
+                </div>
+                <div className="p-4">{resource.action}</div>
+              </div>
             ))}
           </div>
         </section>

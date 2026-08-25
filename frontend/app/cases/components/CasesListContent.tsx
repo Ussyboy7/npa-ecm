@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAbortController } from "@/hooks/use-abort-controller";
 import { useRouter } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -385,27 +384,27 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         <>
           <Button 
             variant="outline" 
-            size="sm" 
+            size="compact" 
             onClick={handleExport}
             disabled={exporting || cases.length === 0}
             aria-label="Export to CSV"
           >
             {exporting ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Exporting...
+                <Loader2 className="h-4 w-4 animate-spin" /> Exporting...
               </>
             ) : (
               <>
-                <Download className="h-4 w-4 mr-2" /> Export
+                <Download className="h-4 w-4" /> Export
               </>
             )}
           </Button>
           <Button 
-            size="sm" 
+            size="compact" 
             onClick={() => router.push("/cases/new")}
             aria-label="Create new case"
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             New Case
           </Button>
           <ContextualHelp
@@ -424,8 +423,8 @@ export function CasesListContent({ scope, title, description }: CasesListContent
       )}
     >
       {/* Inline Filter Bar */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 p-2">
+      <div className="rounded-xl bg-muted/30 p-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Search cases..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
@@ -492,8 +491,8 @@ export function CasesListContent({ scope, title, description }: CasesListContent
             </SelectContent>
           </Select>
           {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {loading ? (
         <LoadingState message="Loading cases…" />

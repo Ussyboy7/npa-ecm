@@ -5,7 +5,6 @@ import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -113,14 +112,13 @@ function WorkflowSLAForm() {
   const headerActions = (
     <>
       <Button
-        size="sm"
-        className="bg-gradient-primary"
+        size="compact"
         onClick={() => {
           if (activeTab === "sla") slaRef.current?.openAddRule();
           else escalationRef.current?.openAddRule();
         }}
       >
-        <Plus className="h-4 w-4 mr-2" />
+        <Plus className="h-4 w-4" />
         {activeTab === "sla" ? "Add SLA rule" : "Add escalation rule"}
       </Button>
       <ContextualHelp
@@ -145,16 +143,23 @@ function WorkflowSLAForm() {
 
   return (
     <ClientErrorBoundary>
-      <AdminPageShell
-        title="Workflow & SLA"
-        subtitle={subtitle}
-        icon={Target}
-        actions={headerActions}
-      >
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <AdminPageShell
+          title="Workflow & SLA"
+          subtitle={subtitle}
+          icon={Target}
+          actions={headerActions}
+          tabs={
+            <TabsList>
+              <TabsTrigger value="sla" className="text-xs px-2.5 py-1">SLA targets</TabsTrigger>
+              <TabsTrigger value="escalation" className="text-xs px-2.5 py-1">Escalations</TabsTrigger>
+            </TabsList>
+          }
+        >
         <StatStrip items={statItems} />
 
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+        <div className="rounded-xl bg-muted/30 p-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -168,16 +173,10 @@ function WorkflowSLAForm() {
                 className="h-8 pl-8 text-xs"
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList>
-            <TabsTrigger value="sla" className="text-xs px-2.5 py-1">SLA targets</TabsTrigger>
-            <TabsTrigger value="escalation" className="text-xs px-2.5 py-1">Escalations</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="sla" className="mt-6 focus-visible:outline-none">
+          <TabsContent value="sla" className="mt-2 focus-visible:outline-none">
             <SLAConfigurationTab
               ref={slaRef}
               searchQuery={searchQuery}
@@ -186,7 +185,7 @@ function WorkflowSLAForm() {
             />
           </TabsContent>
 
-          <TabsContent value="escalation" className="mt-6 focus-visible:outline-none">
+          <TabsContent value="escalation" className="mt-2 focus-visible:outline-none">
             <EscalationRulesTab
               ref={escalationRef}
               searchQuery={searchQuery}
@@ -195,8 +194,8 @@ function WorkflowSLAForm() {
               onDataChange={loadPageStats}
             />
           </TabsContent>
-        </Tabs>
-      </AdminPageShell>
+        </AdminPageShell>
+      </Tabs>
     </ClientErrorBoundary>
   );
 }

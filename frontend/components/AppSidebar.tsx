@@ -9,11 +9,9 @@ import {
   FileText, Settings, ChevronDown,
   ChevronLeft, ChevronRight, Mail, Send, Archive, UserCog,
   HelpCircle, Shield, FolderTree, LayoutTemplate, Target,
-  UserCheck,
-  FilePlus, ScrollText, Search, Webhook, FileCheck,
-  Briefcase, PackageCheck, Scan, ListTodo, Bell, Activity, Building2, BarChart3, MapPin,
+  UserCheck, ScrollText, Search, FileCheck, ClipboardCheck,
+  Briefcase, PackageCheck, Bell, Activity, BarChart3,
   LifeBuoy,
-  Database,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarHeader, SidebarGroup,
@@ -30,15 +28,6 @@ import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { useHomePath } from "@/hooks/use-home-path";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { SidebarNavItem, AdminNavItem } from "@/components/shared/SidebarNavItem";
-
-function SidebarSubsectionLabel({ label, isCollapsed }: { label: string; isCollapsed: boolean }) {
-  if (isCollapsed) return null;
-  return (
-    <h3 className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-      {label}
-    </h3>
-  );
-}
 
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
@@ -73,28 +62,42 @@ export function AppSidebar() {
     if (path === '/inbox') return pathname === '/inbox';
     if (path === '/verify') return pathname.startsWith('/verify');
     if (path === '/admin') return pathname === '/admin';
-    if (path === '/admin/organization') return pathname === '/admin/organization' || pathname.startsWith('/admin/acting-appointments');
-    if (path === '/admin/acting-appointments') return pathname === '/admin/acting-appointments';
+    if (path === '/admin/organization') {
+      return pathname === '/admin/organization' || pathname.startsWith('/admin/organization/');
+    }
+    if (path === '/admin/records-governance') {
+      return pathname === '/admin/records-governance' || pathname.startsWith('/admin/records-governance/');
+    }
+    if (path === '/audit') {
+      return pathname === '/audit';
+    }
+    if (path === '/audit/forms') {
+      return pathname === '/audit/forms' || pathname.startsWith('/audit/forms/');
+    }
+    if (path === '/admin/platform') {
+      return pathname === '/admin/platform' || pathname.startsWith('/admin/platform/');
+    }
     if (path === '/admin/users-roles') return ['/admin/users-roles', '/admin/users', '/admin/roles', '/admin/assistants'].includes(pathname);
     if (path === '/admin/workflow-sla') return ['/admin/workflow-sla', '/admin/sla-config', '/admin/escalation-rules'].includes(pathname);
-    if (path === '/admin/records-governance') return pathname === '/admin/records-governance';
     if (path === '/foia') return pathname === '/foia' || pathname.startsWith('/foia/');
     return pathname === path || pathname.startsWith(path + '/');
   };
 
   const isCollapsed = state === "collapsed";
-  const showCasesSection =
-    visibility.showMyCases || visibility.showOfficeCases || visibility.showAllCases;
-  const showOrgAccessAdmin =
-    visibility.showOrganizationOffices ||
-    visibility.showUsersRoles ||
-    visibility.showExternalEntities;
-  const showPolicyAdmin =
-    visibility.showWorkflowSLA ||
-    visibility.showRecordsGovernance ||
-    visibility.showDrmPolicies ||
-    visibility.showAuditCompliance;
-  const showOperationsAdmin =
+  const showRegistrySection =
+    visibility.showOfficeInbox ||
+    visibility.showRegisteredCorrespondence ||
+    visibility.showPhysicalRecords ||
+    visibility.showOfficeSent ||
+    visibility.showOfficeCases ||
+    visibility.showAllCases ||
+    visibility.showRecordsArchives;
+  const showOrganizationHub =
+    visibility.showOrganizationOffices || visibility.showExternalEntities;
+  const showRecordsSecurityHub =
+    visibility.showRecordsGovernance || visibility.showDrmPolicies;
+  const showAuditHub = visibility.showAuditCompliance;
+  const showPlatformHub =
     visibility.showSystemHealth ||
     visibility.showHelpdeskQueue ||
     visibility.showLegacyImport ||
@@ -137,9 +140,11 @@ export function AppSidebar() {
               {visibility.showMyInbox && (
                 <SidebarNavItem href="/inbox" icon={Mail} label="My Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/inbox')} badge={counts.myInbox} badgeVariant="destructive" description="Correspondence assigned to you" />
               )}
-              <SidebarNavItem href="/acting" icon={UserCheck} label="Acting Capacity" isCollapsed={isCollapsed} isActive={isActivePath('/acting')} description="Appoint or request office seat succession" />
               {visibility.showMySent && (
                 <SidebarNavItem href="/correspondence/my-sent" icon={Send} label="My Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/my-sent')} badge={counts.mySent} badgeVariant="secondary" />
+              )}
+              {visibility.showMyCases && (
+                <SidebarNavItem href="/cases/my" icon={Briefcase} label="My Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/my')} badge={counts.myCases} badgeVariant="secondary" description="Cases assigned to you" />
               )}
               {visibility.showDocumentsList && (
                 <SidebarNavItem
@@ -153,11 +158,18 @@ export function AppSidebar() {
                   description="Documents, pending signatures, and forms you signed"
                 />
               )}
-              {visibility.showNewDocument && (
-                <SidebarNavItem href="/dms/new" icon={FilePlus} label="New Document" isCollapsed={isCollapsed} isActive={isActivePath('/dms/new')} />
+              {visibility.showAuditForms && (
+                <SidebarNavItem
+                  href="/audit/forms"
+                  icon={ClipboardCheck}
+                  label="Forms"
+                  isCollapsed={isCollapsed}
+                  isActive={isActivePath('/audit/forms')}
+                  description="Office forms, checklists, and submissions"
+                />
               )}
               {visibility.showExecutiveApprovals && (
-                <SidebarNavItem href="/approvals" icon={FileCheck} label="Executive Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals')} badge={counts.executiveApprovals} badgeVariant="secondary" description="Sealed executive approvals" />
+                <SidebarNavItem href="/approvals" icon={FileCheck} label="Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals')} badge={counts.executiveApprovals} badgeVariant="secondary" description="Sealed executive approvals" />
               )}
               {visibility.showNotifications && (
                 <SidebarNavItem href="/notifications" icon={Bell} label="Notifications" isCollapsed={isCollapsed} isActive={isActivePath('/notifications')} />
@@ -167,7 +179,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {/* Registry */}
-        {(visibility.showOfficeInbox || visibility.showRegisterCorrespondence || visibility.showRegisteredCorrespondence || visibility.showOfficeSent || visibility.showRecordsArchives || visibility.showPhysicalRecords) && (
+        {showRegistrySection && (
           <SidebarGroup>
             <SidebarGroupLabel asChild>
               <h2>Registry</h2>
@@ -180,45 +192,30 @@ export function AppSidebar() {
                 {visibility.showOfficeSent && (
                   <SidebarNavItem href="/correspondence/office-sent" icon={PackageCheck} label="Office Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/office-sent')} badge={counts.officeSent} badgeVariant="secondary" description="Correspondence sent from your office" />
                 )}
-                {visibility.showRegisterCorrespondence && (
-                  <SidebarNavItem href="/correspondence/register" icon={FilePlus} label="Register Correspondence" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/register')} badge={counts.drafts} badgeVariant="secondary" description={counts.drafts > 0 ? `${counts.drafts} saved draft${counts.drafts === 1 ? '' : 's'}` : 'Register new correspondence'} />
+                {visibility.showOfficeCases && (
+                  <SidebarNavItem href="/cases/office" icon={Briefcase} label="Office Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/office')} badge={counts.officeCases} badgeVariant="secondary" description="Cases for your office seat" />
                 )}
-                {visibility.showRegisteredCorrespondence && (
-                  <SidebarNavItem href="/correspondence/registered" icon={Archive} label="Registered Correspondence" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/registered')} />
+                {visibility.showAllCases && (
+                  <SidebarNavItem href="/cases/all" icon={Briefcase} label="All Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/all')} badge={counts.allCases} badgeVariant="secondary" description="Organisation-wide case oversight" />
+                )}
+                {(visibility.showRegisteredCorrespondence || visibility.showPhysicalRecords) && (
+                  <SidebarNavItem
+                    href={
+                      visibility.showRegisteredCorrespondence
+                        ? "/correspondence/registered"
+                        : "/physical-documents"
+                    }
+                    icon={Archive}
+                    label={visibility.showRegisteredCorrespondence ? "Registered" : "Physical"}
+                    isCollapsed={isCollapsed}
+                    isActive={
+                      isActivePath('/correspondence/registered') || isActivePath('/physical-documents')
+                    }
+                    description="Registry of registered correspondence and physical check-in/out"
+                  />
                 )}
                 {visibility.showRecordsArchives && (
                   <SidebarNavItem href="/correspondence/records" icon={Archive} label="Archives" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/records')} />
-                )}
-                {visibility.showPhysicalRecords && (
-                  <SidebarNavItem href="/physical-documents" icon={MapPin} label="Physical Documents" isCollapsed={isCollapsed} isActive={isActivePath('/physical-documents')} description="Track physical document check-in/out" />
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Cases */}
-        {showCasesSection && (
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <h2>Cases</h2>
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {visibility.showMyCases && (
-                  <SidebarNavItem href="/cases/my" icon={Briefcase} label="My Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/my')} badge={counts.myCases} badgeVariant="secondary" description="Cases assigned to you" />
-                )}
-                {visibility.showOfficeCases && (
-                  <SidebarNavItem href="/cases/office" icon={Briefcase} label="Office Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/office')} badge={counts.officeCases} badgeVariant="secondary" description="Cases assigned to your office" />
-                )}
-                {visibility.showAllCases && (
-                  <SidebarNavItem href="/cases/all" icon={Briefcase} label="All Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/all')} badge={counts.allCases} badgeVariant="secondary" description="All cases in your scope" />
-                )}
-                {visibility.showCreateCase && (
-                  <SidebarNavItem href="/cases/new" icon={FilePlus} label="Create Case" isCollapsed={isCollapsed} isActive={isActivePath('/cases/new')} description="Start a new case" />
-                )}
-                {visibility.showCaseTemplates && (
-                  <SidebarNavItem href="/cases/templates" icon={LayoutTemplate} label="Case Templates" isCollapsed={isCollapsed} isActive={isActivePath('/cases/templates')} description="Create cases from templates" />
                 )}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -231,46 +228,26 @@ export function AppSidebar() {
             <h2>Tools</h2>
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarNavItem href="/search" icon={Search} label="Search" isCollapsed={isCollapsed} isActive={isActivePath('/search')} description="Find documents, correspondence, and cases" />
-              {visibility.showContentCapture && (
-                <SidebarNavItem href="/capture" icon={Scan} label="Content Capture" isCollapsed={isCollapsed} isActive={isActivePath('/capture')} description="Scan, batch upload, and OCR processing" />
-              )}
-              {visibility.showFOIA && (
-                <SidebarNavItem href="/foia" icon={ScrollText} label="FOIA Requests" isCollapsed={isCollapsed} isActive={isActivePath('/foia')} description="Freedom of Information Act requests" />
-              )}
-              <SidebarNavItem href="/verify" icon={Shield} label="Verify Seal" isCollapsed={isCollapsed} isActive={isActivePath('/verify')} description="Verify digital executive seals" />
-              {visibility.showTemplates && (
-                <SidebarNavItem href="/admin/templates-hub" icon={LayoutTemplate} label="Template Hub" isCollapsed={isCollapsed} isActive={isActivePath('/admin/templates-hub')} description="Document and form templates" />
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Analytics & Reports */}
-        {visibility.showAnalyticsReports && (
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <h2>Analytics & Reports</h2>
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
               <SidebarMenu>
-                {visibility.showExecutiveDashboard && (
-                  <SidebarNavItem href="/analytics/executive" icon={Target} label="Executive Dashboard" isCollapsed={isCollapsed} isActive={isActivePath('/analytics/executive')} />
+                <SidebarNavItem href="/search" icon={Search} label="Search" isCollapsed={isCollapsed} isActive={isActivePath('/search')} description="Find documents, correspondence, and cases" />
+                <SidebarNavItem href="/acting" icon={UserCheck} label="Acting" isCollapsed={isCollapsed} isActive={isActivePath('/acting')} description="Appoint or request office seat succession" />
+                {visibility.showFOIA && (
+                  <SidebarNavItem href="/foia" icon={ScrollText} label="FOIA" isCollapsed={isCollapsed} isActive={isActivePath('/foia')} description="Freedom of Information Act requests" />
                 )}
-                {visibility.showPerformanceAnalytics && (
-                  <SidebarNavItem href="/analytics/performance" icon={BarChart3} label="Performance Analytics" isCollapsed={isCollapsed} isActive={isActivePath('/analytics/performance')} />
-                )}
-                {visibility.showDivisionAnalytics && (
-                  <SidebarNavItem href="/analytics/divisions" icon={BarChart3} label="Division & Port Analytics" isCollapsed={isCollapsed} isActive={isActivePath('/analytics/divisions')} />
-                )}
-                {visibility.showCaseAnalytics && (
-                  <SidebarNavItem href="/analytics/cases" icon={BarChart3} label="Case Analytics" isCollapsed={isCollapsed} isActive={isActivePath('/analytics/cases')} />
+                <SidebarNavItem href="/verify" icon={Shield} label="Verify" isCollapsed={isCollapsed} isActive={isActivePath('/verify')} description="Verify digital executive seals" />
+                {visibility.showAnalyticsReports && (
+                  <SidebarNavItem
+                    href="/analytics"
+                    icon={BarChart3}
+                    label="Analytics"
+                    isCollapsed={isCollapsed}
+                    isActive={pathname.startsWith('/analytics')}
+                    description="Executive, performance, division, and case analytics"
+                  />
                 )}
               </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         {/* Administration */}
         {visibility.showAdministration && (
@@ -287,32 +264,30 @@ export function AppSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {visibility.showAdminDashboard && <AdminNavItem href="/admin" icon={LayoutDashboard} label="Dashboard" isActive={isActivePath('/admin')} isCollapsed={isCollapsed} />}
-
-                    {showOrgAccessAdmin && (
-                      <SidebarSubsectionLabel label="Org & access" isCollapsed={isCollapsed} />
+                    {visibility.showAdminDashboard && (
+                      <AdminNavItem href="/admin" icon={LayoutDashboard} label="Dashboard" isActive={isActivePath('/admin')} isCollapsed={isCollapsed} />
                     )}
-                    {visibility.showOrganizationOffices && <AdminNavItem href="/admin/organization" icon={FolderTree} label="Organization & Offices" isActive={isActivePath('/admin/organization')} isCollapsed={isCollapsed} />}
-                    {visibility.showOrganizationOffices && <AdminNavItem href="/admin/acting-appointments" icon={UserCheck} label="Acting Appointments" isActive={isActivePath('/admin/acting-appointments')} isCollapsed={isCollapsed} />}
-                    {visibility.showUsersRoles && <AdminNavItem href="/admin/users-roles" icon={UserCog} label="Users & Roles" isActive={isActivePath('/admin/users-roles')} isCollapsed={isCollapsed} />}
-                    {visibility.showExternalEntities && <AdminNavItem href="/admin/external-entities" icon={Building2} label="External Entities" isActive={isActivePath('/admin/external-entities')} isCollapsed={isCollapsed} />}
-
-                    {showPolicyAdmin && (
-                      <SidebarSubsectionLabel label="Policy & compliance" isCollapsed={isCollapsed} />
+                    {showOrganizationHub && (
+                      <AdminNavItem href="/admin/organization" icon={FolderTree} label="Organization" isActive={isActivePath('/admin/organization')} isCollapsed={isCollapsed} />
                     )}
-                    {visibility.showWorkflowSLA && <AdminNavItem href="/admin/workflow-sla" icon={Target} label="Workflow & SLA" isActive={isActivePath('/admin/workflow-sla')} isCollapsed={isCollapsed} />}
-                    {visibility.showRecordsGovernance && <AdminNavItem href="/admin/records-governance" icon={Archive} label="Records Governance" isActive={isActivePath('/admin/records-governance')} isCollapsed={isCollapsed} />}
-                    {visibility.showDrmPolicies && <AdminNavItem href="/admin/drm-policies" icon={Shield} label="DRM Policies" isActive={isActivePath('/admin/drm-policies')} isCollapsed={isCollapsed} />}
-                    {visibility.showAuditCompliance && <AdminNavItem href="/audit" icon={ScrollText} label="Audit & Compliance" isActive={isActivePath('/audit')} isCollapsed={isCollapsed} />}
-                    {visibility.showAuditForms && <AdminNavItem href="/audit/forms" icon={FileCheck} label="Audit Forms" isActive={isActivePath('/audit/forms')} isCollapsed={isCollapsed} />}
-
-                    {showOperationsAdmin && (
-                      <SidebarSubsectionLabel label="Operations" isCollapsed={isCollapsed} />
+                    {visibility.showUsersRoles && (
+                      <AdminNavItem href="/admin/users-roles" icon={UserCog} label="Users & Roles" isActive={isActivePath('/admin/users-roles')} isCollapsed={isCollapsed} />
                     )}
-                    {visibility.showSystemHealth && <AdminNavItem href="/admin/system-health" icon={Activity} label="System Health" isActive={isActivePath('/admin/system-health')} isCollapsed={isCollapsed} />}
-                    {visibility.showHelpdeskQueue && <AdminNavItem href="/admin/helpdesk" icon={LifeBuoy} label="Support Queue" isActive={isActivePath('/admin/helpdesk')} isCollapsed={isCollapsed} />}
-                    {visibility.showLegacyImport && <AdminNavItem href="/admin/legacy-import" icon={Database} label="Legacy Import" isActive={isActivePath('/admin/legacy-import')} isCollapsed={isCollapsed} />}
-                    {visibility.showIntegrationHub && <AdminNavItem href="/integrations" icon={Webhook} label="Integration Hub" isActive={isActivePath('/integrations')} isCollapsed={isCollapsed} />}
+                    {visibility.showWorkflowSLA && (
+                      <AdminNavItem href="/admin/workflow-sla" icon={Target} label="Workflow & SLA" isActive={isActivePath('/admin/workflow-sla')} isCollapsed={isCollapsed} />
+                    )}
+                    {visibility.showTemplates && (
+                      <AdminNavItem href="/admin/templates-hub" icon={LayoutTemplate} label="Templates" isActive={isActivePath('/admin/templates-hub')} isCollapsed={isCollapsed} />
+                    )}
+                    {showRecordsSecurityHub && (
+                      <AdminNavItem href="/admin/records-governance" icon={Archive} label="Records & security" isActive={isActivePath('/admin/records-governance')} isCollapsed={isCollapsed} />
+                    )}
+                    {showAuditHub && (
+                      <AdminNavItem href="/audit" icon={ScrollText} label="Audit" isActive={isActivePath('/audit')} isCollapsed={isCollapsed} />
+                    )}
+                    {showPlatformHub && (
+                      <AdminNavItem href="/admin/platform" icon={Activity} label="Platform" isActive={isActivePath('/admin/platform')} isCollapsed={isCollapsed} />
+                    )}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </CollapsibleContent>

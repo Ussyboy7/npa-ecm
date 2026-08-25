@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { UserCheck, Plus, Ban, Flag } from "lucide-react";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -241,174 +239,171 @@ export default function ActingSelfServicePage() {
 
   return (
     <QueuePageShell
-      title="Acting capacity"
+      title="Acting"
       subtitle="Appoint someone to hold your seat while you are away, or request Super Admin help when a seat holder is unreachable."
+      actions={
+        <>
+          {principalOffices.length > 0 ? (
+            <Dialog
+              open={appointOpen}
+              onOpenChange={(open) => {
+                setAppointOpen(open);
+                if (!open) resetForms();
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button size="compact">
+                  <Plus className="h-4 w-4" />
+                  Appoint acting
+                </Button>
+              </DialogTrigger>
+              <DialogContent size="md">
+                <DialogHeader>
+                  <DialogTitle>Appoint acting for your seat</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label>Your office</Label>
+                    <Select value={officeId} onValueChange={setOfficeId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select office" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {principalOffices.map((m) => (
+                          <SelectItem key={String(m.officeId)} value={String(m.officeId)}>
+                            {m.officeName || officeLabel(String(m.officeId))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Acting officer</Label>
+                    <Select
+                      value={actingUserId}
+                      onValueChange={setActingUserId}
+                      disabled={!officeId || candidates.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select colleague" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {candidates.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                            {c.gradeLevel ? ` (${c.gradeLevel})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Ends on (optional)</Label>
+                    <Input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Reason</Label>
+                    <Textarea
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Leave, assignment…"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setAppointOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={() => void handleAppoint()} disabled={submitting} size="compact">
+                    {submitting ? "Appointing…" : "Appoint"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {memberOffices.length > 0 ? (
+            <Dialog
+              open={requestOpen}
+              onOpenChange={(open) => {
+                setRequestOpen(open);
+                if (!open) resetForms();
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button variant="outline" size="compact">
+                  <Flag className="h-4 w-4" />
+                  Request acting
+                </Button>
+              </DialogTrigger>
+              <DialogContent size="md">
+                <DialogHeader>
+                  <DialogTitle>Request acting appointment</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground">
+                  Use this when the seat holder is unreachable. Super Admin will review and appoint.
+                </p>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label>Office</Label>
+                    <Select value={officeId} onValueChange={setOfficeId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select office" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {memberOffices.map((m) => (
+                          <SelectItem key={String(m.officeId)} value={String(m.officeId)}>
+                            {m.officeName || officeLabel(String(m.officeId))}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Suggested acting officer (optional)</Label>
+                    <Select
+                      value={suggestedId || "none"}
+                      onValueChange={(v) => setSuggestedId(v === "none" ? "" : v)}
+                      disabled={!officeId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Optional suggestion" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No suggestion</SelectItem>
+                        {candidates.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Reason</Label>
+                    <Textarea
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Seat holder unreachable, leave without handover, backlog…"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setRequestOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={() => void handleRequest()} disabled={submitting} size="compact">
+                    {submitting ? "Sending…" : "Send to Super Admin"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </>
+      }
     >
-      <div className="flex flex-wrap gap-2">
-        {principalOffices.length > 0 && (
-          <Dialog
-            open={appointOpen}
-            onOpenChange={(open) => {
-              setAppointOpen(open);
-              if (!open) resetForms();
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Appoint acting officer
-              </Button>
-            </DialogTrigger>
-            <DialogContent size="md">
-              <DialogHeader>
-                <DialogTitle>Appoint acting for your seat</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-2">
-                  <Label>Your office</Label>
-                  <Select value={officeId} onValueChange={setOfficeId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select office" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {principalOffices.map((m) => (
-                        <SelectItem key={String(m.officeId)} value={String(m.officeId)}>
-                          {m.officeName || officeLabel(String(m.officeId))}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Acting officer</Label>
-                  <Select
-                    value={actingUserId}
-                    onValueChange={setActingUserId}
-                    disabled={!officeId || candidates.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select colleague" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {candidates.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                          {c.gradeLevel ? ` (${c.gradeLevel})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Ends on (optional)</Label>
-                  <Input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Reason</Label>
-                  <Textarea
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Leave, assignment…"
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setAppointOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => void handleAppoint()} disabled={submitting}>
-                  {submitting ? "Appointing…" : "Appoint"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {memberOffices.length > 0 && (
-          <Dialog
-            open={requestOpen}
-            onOpenChange={(open) => {
-              setRequestOpen(open);
-              if (!open) resetForms();
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Flag className="mr-2 h-4 w-4" />
-                Request acting appointment
-              </Button>
-            </DialogTrigger>
-            <DialogContent size="md">
-              <DialogHeader>
-                <DialogTitle>Request acting appointment</DialogTitle>
-              </DialogHeader>
-              <p className="text-sm text-muted-foreground">
-                Use this when the seat holder is unreachable. Super Admin will review and appoint.
-              </p>
-              <div className="space-y-4 py-2">
-                <div className="space-y-2">
-                  <Label>Office</Label>
-                  <Select value={officeId} onValueChange={setOfficeId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select office" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {memberOffices.map((m) => (
-                        <SelectItem key={String(m.officeId)} value={String(m.officeId)}>
-                          {m.officeName || officeLabel(String(m.officeId))}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Suggested acting officer (optional)</Label>
-                  <Select
-                    value={suggestedId || "none"}
-                    onValueChange={(v) => setSuggestedId(v === "none" ? "" : v)}
-                    disabled={!officeId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Optional suggestion" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No suggestion</SelectItem>
-                      {candidates.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Reason</Label>
-                  <Textarea
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Seat holder unreachable, leave without handover, backlog…"
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setRequestOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => void handleRequest()} disabled={submitting}>
-                  {submitting ? "Sending…" : "Send to Super Admin"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-
-        <Button variant="ghost" asChild>
-          <Link href="/admin/acting-appointments">Admin view</Link>
-        </Button>
-      </div>
-
       {loading ? (
         <LoadingState message="Loading acting appointments…" />
       ) : (
@@ -428,35 +423,35 @@ export default function ActingSelfServicePage() {
             ) : (
               <>
                 {asActing.map((appt) => (
-                  <Card key={`acting-${appt.id}`}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="flex items-center gap-2 text-base">
+                  <div key={`acting-${appt.id}`} className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                    <div className="pb-2">
+                      <p className="flex items-center gap-2 text-base font-semibold">
                         <UserCheck className="h-4 w-4" />
                         You are acting as {appt.principalName}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm text-muted-foreground">
+                      </p>
+                    </div>
+                    <div className="space-y-2 text-sm text-muted-foreground">
                       <p>
                         {appt.officeName} · until {formatDate(appt.endsAt)} ·{" "}
                         {appt.itemsTransferred} items transferred
                       </p>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 ))}
                 {asPrincipal.map((appt) => (
-                  <Card key={`principal-${appt.id}`}>
-                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                  <div key={`principal-${appt.id}`} className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                    <div className="flex flex-row items-start justify-between space-y-0 pb-2">
                       <div>
-                        <CardTitle className="text-base">
+                        <p className="text-base font-semibold">
                           {appt.actingUserName} is acting for you
-                        </CardTitle>
+                        </p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {appt.officeName} · until {formatDate(appt.endsAt)}
                         </p>
                       </div>
                       <Badge>Active</Badge>
-                    </CardHeader>
-                    <CardContent>
+                    </div>
+                    <div>
                       <Button
                         variant="outline"
                         size="sm"
@@ -466,8 +461,8 @@ export default function ActingSelfServicePage() {
                         <Ban className="mr-2 h-3.5 w-3.5" />
                         {endingId === appt.id ? "Ending…" : "End & reclaim seat"}
                       </Button>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 ))}
               </>
             )}
@@ -482,10 +477,10 @@ export default function ActingSelfServicePage() {
               />
             ) : (
               myRequests.map((req) => (
-                <Card key={req.id}>
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                <div key={req.id} className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                  <div className="flex flex-row items-start justify-between space-y-0 pb-2">
                     <div>
-                      <CardTitle className="text-base">{req.officeName}</CardTitle>
+                      <p className="text-base font-semibold">{req.officeName}</p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         For {req.principalName} · by {req.requestedByName}
                       </p>
@@ -493,8 +488,8 @@ export default function ActingSelfServicePage() {
                     <Badge variant={req.status === "pending" ? "default" : "secondary"}>
                       {req.status}
                     </Badge>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">
+                  </div>
+                  <div className="text-sm text-muted-foreground">
                     <p>{req.reason}</p>
                     <p className="mt-2">
                       {req.pendingItemCount} open seat item(s)
@@ -502,8 +497,8 @@ export default function ActingSelfServicePage() {
                         ? ` · suggested ${req.suggestedActingUserName}`
                         : ""}
                     </p>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))
             )}
           </TabsContent>

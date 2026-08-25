@@ -23,7 +23,6 @@ import type { Minute } from '@/lib/npa-structure';
 import { Input } from '@/components/ui/input';
 
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { toast } from "@/components/ui/sonner";
 import { formatDateShort, formatDateTime } from "@/lib/datetime";
@@ -1342,9 +1341,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         <div className="flex-1 min-h-0 overflow-y-auto pr-4">
           <div className="space-y-6 py-2">
           {/* Document Summary */}
-          <Card className="bg-muted/50">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
+          <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
+<div className="flex items-start gap-3">
                 <FileText className="h-5 w-5 text-primary mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm mb-1">{correspondence.subject}</p>
@@ -1375,17 +1373,15 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                   })()}
                 </div>
               </div>
-            </CardContent>
-          </Card>
+</div>
 
           {/* Previous Minute */}
           {previousMinute && previousUser && (
             <>
               <div>
                 <Label className="text-sm font-semibold mb-2 block">Previous Minute</Label>
-                <Card className="bg-background">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
+                <div className="rounded-xl border border-border/60 bg-background p-4">
+<div className="flex items-start gap-3">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold">
                         {previousUser.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                       </div>
@@ -1402,8 +1398,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                         </p>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+</div>
               </div>
               <Separator />
             </>
@@ -1666,9 +1661,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
           {/* Preview */}
           {minuteText && (forwardTo || targetOfficeId) && (
-            <Card className="bg-muted/30 border-accent/20">
-              <CardContent className="p-4">
-                <Label className="text-sm font-semibold mb-2 block">Preview</Label>
+            <div className="rounded-xl border border-border/60 bg-muted/30 border-accent/20 p-4">
+<Label className="text-sm font-semibold mb-2 block">Preview</Label>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2">
                     <Badge variant={(isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection)) === 'downward' ? 'default' : 'secondary'}>
@@ -1730,8 +1724,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+</div>
           )}
           </div>
         </div>

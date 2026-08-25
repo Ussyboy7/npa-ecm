@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -299,26 +298,26 @@ export function DocumentVersionsPanel({
   }
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-3">
+    <div className="rounded-xl border border-border/60">
+      <div className="border-b border-border/60 px-4 py-3 pb-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <p className="text-sm font-semibold flex items-center gap-2">
               <Layers className="h-4 w-4 text-primary" />
               Version history
-            </CardTitle>
-            <CardDescription className="text-xs mt-0.5">Upload, OCR, and manage versions</CardDescription>
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Upload, OCR, and manage versions</p>
           </div>
           {addButton}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-2 max-h-[360px] overflow-y-auto pr-1">{versionList}</CardContent>
+      </div>
+      <div className="space-y-2 max-h-[360px] overflow-y-auto p-4 pr-1">{versionList}</div>
       <DocumentVersionDiffDialog
         open={diffOpen}
         onOpenChange={setDiffOpen}
         diff={versionDiff}
         loading={diffLoading}
       />
-    </Card>
+    </div>
   );
 }

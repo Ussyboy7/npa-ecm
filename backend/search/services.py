@@ -63,113 +63,17 @@ class SearchService:
 
     @staticmethod
     def _apply_correspondence_visibility_filters(queryset: QuerySet, user: Any) -> QuerySet:
-        """
-        Apply visibility filters for correspondence search based on user permissions.
-        
-        Users can see correspondence if:
-        - They are a superuser
-        - They created the correspondence
-        - They are a member of the owning office
-        - They are in the distribution list
-        - They have been assigned as a user in the correspondence flow
-        
-        Args:
-            queryset: Correspondence queryset to filter
-            user: User to check permissions for
-            
-        Returns:
-            Filtered queryset
-        """
-        if not user or not user.is_authenticated:
-            return queryset.none()
-        
-        if user.is_superuser:
-            return queryset.distinct()
-        
-        from correspondence.models import CorrespondenceDistribution, Minute
-        from organization.models import OfficeMembership
-        
-        visibility_filter = Q(created_by=user)
-        
-        # Get user's office memberships
-        user_office_ids = OfficeMembership.objects.filter(
-            user=user,
-            is_active=True
-        ).values_list('office_id', flat=True)
-        
-        # User can see correspondence in their offices
-        if user_office_ids:
-            visibility_filter |= Q(owning_office_id__in=user_office_ids)
-            visibility_filter |= Q(current_office_id__in=user_office_ids)
-        
-        # User can see correspondence where they are in distribution
-        user_distributions = CorrespondenceDistribution.objects.filter(
-            user=user
-        ).values_list('correspondence_id', flat=True).distinct()
-        
-        if user_distributions:
-            visibility_filter |= Q(id__in=user_distributions)
-        
-        # User can see correspondence where they have been added as to_user in minutes
-        user_minute_correspondence = Minute.objects.filter(
-            to_user=user
-        ).values_list('correspondence_id', flat=True).distinct()
-        
-        if user_minute_correspondence:
-            visibility_filter |= Q(id__in=user_minute_correspondence)
-        
-        # Filter out deleted correspondence
-        visibility_filter &= Q(is_deleted=False)
-        
-        return queryset.filter(visibility_filter).distinct()
+        """Apply org-boundary visibility for correspondence search (same as Archives)."""
+        from organization.org_scope import apply_correspondence_org_scope
+
+        return apply_correspondence_org_scope(queryset, user)
 
     @staticmethod
     def _apply_case_visibility_filters(queryset: QuerySet, user: Any) -> QuerySet:
-        """
-        Apply visibility filters for case search based on user permissions.
-        
-        Users can see cases if:
-        - They are a superuser
-        - They created the case
-        - They are assigned to the case
-        - They are a member of the owning division/department
-        
-        Args:
-            queryset: Case queryset to filter
-            user: User to check permissions for
-            
-        Returns:
-            Filtered queryset
-        """
-        if not user or not user.is_authenticated:
-            return queryset.none()
-        
-        if user.is_superuser:
-            return queryset.distinct()
-        
-        from correspondence.models import Case
-        from organization.models import OfficeMembership
-        
-        visibility_filter = Q(created_by=user) | Q(assigned_to=user)
-        
-        # User can see cases in their division
-        if user.division_id:
-            visibility_filter |= Q(division_id=user.division_id)
-        
-        # User can see cases in their department
-        if user.department_id:
-            visibility_filter |= Q(department_id=user.department_id)
-        
-        # User can see cases in offices they're members of
-        user_office_ids = OfficeMembership.objects.filter(
-            user=user,
-            is_active=True
-        ).values_list('office_id', flat=True)
-        
-        if user_office_ids:
-            visibility_filter |= Q(owning_office_id__in=user_office_ids)
-        
-        return queryset.filter(visibility_filter).distinct()
+        """Apply org-boundary visibility for case search."""
+        from organization.org_scope import apply_case_org_scope
+
+        return apply_case_org_scope(queryset, user)
 
     @staticmethod
     def extract_snippet(text: str, query: str, context: int = 100, max_length: int = 200) -> str:

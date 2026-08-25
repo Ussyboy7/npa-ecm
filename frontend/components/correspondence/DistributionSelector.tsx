@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -318,9 +317,8 @@ export const DistributionSelector = ({
           <Label className="text-xs text-muted-foreground">
             {lastAdded.type === "office" ? "Selected Office" : "Selected Recipient"}
           </Label>
-          <Card className={lastAdded.type === "office" ? "border-secondary/30 bg-secondary/5" : "border-primary/30 bg-primary/5"}>
-            <CardContent className="p-3">
-              <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-border/60 p-3">
+<div className="flex items-center gap-3">
                 <div className={lastAdded.type === "office" ? "h-10 w-10 rounded-full bg-secondary/10 flex items-center justify-center" : "h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"}>
                   {lastAdded.type === "office" ? <Building2 className="h-5 w-5 text-secondary-foreground" /> : <UserIcon className="h-5 w-5 text-primary" />}
                 </div>
@@ -335,8 +333,7 @@ export const DistributionSelector = ({
                   {lastAdded.type === "office" ? "Office" : "Person"}
                 </Badge>
               </div>
-            </CardContent>
-          </Card>
+</div>
         </div>
       )}
 
@@ -345,9 +342,8 @@ export const DistributionSelector = ({
           <Label className="text-xs text-muted-foreground">Selected Recipients ({selectedDistribution.length})</Label>
           <div className="space-y-2">
             {selectedDistribution.map((recipient, index) => (
-              <Card key={`${recipientKey(recipient)}-${index}`} className="border-border">
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between">
+              <div className="rounded-xl border border-border/60 border-border p-3">
+<div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {recipient.type === "user" ? <UserIcon className="h-4 w-4 text-primary" /> : <Building2 className="h-4 w-4 text-primary" />}
                       <div>
@@ -368,19 +364,16 @@ export const DistributionSelector = ({
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+</div>
             ))}
           </div>
         </div>
       )}
 
       {selectedDistribution.length === 0 && (
-        <Card className="border-dashed">
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">No distribution recipients added yet.</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-border/60 border-dashed p-4 text-center">
+<p className="text-sm text-muted-foreground">No distribution recipients added yet.</p>
+</div>
       )}
     </div>
   );

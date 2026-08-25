@@ -1,11 +1,11 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { AlertTriangle, CheckCircle, Building2, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDateShort } from '@/lib/correspondence-helpers';
+import { appType } from '@/lib/app-type';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
@@ -43,21 +43,16 @@ interface EscalationsApprovalsProps {
 }
 
 export const EscalationsApprovals = ({ escalations, approvals, portfolioLoading }: EscalationsApprovalsProps) => (
-  <Card>
-    <CardHeader>
-      <CardTitle className="flex items-center gap-2">
-        <AlertTriangle className="h-5 w-5 text-amber-500" />
-        Escalations & approvals
-      </CardTitle>
-      <p className="text-sm text-muted-foreground">
+  <div className="rounded-xl border border-border/60">
+    <div className="border-b border-border/60 px-4 py-3">
+      <h2 className={appType.panelTitle}>Escalations & approvals</h2>
+      <p className={appType.caption}>
         Act on these before scanning the wider combined inbox.
       </p>
-    </CardHeader>
-    <CardContent className="space-y-5">
+    </div>
+    <div className="space-y-5 p-4">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Escalations
-        </p>
+        <p className={appType.sectionLabel}>Escalations</p>
         {escalations.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {portfolioLoading ? 'Loading…' : 'No escalations in your offices.'}
@@ -100,9 +95,7 @@ export const EscalationsApprovals = ({ escalations, approvals, portfolioLoading 
         )}
       </div>
       <div className="space-y-2 border-t border-border/60 pt-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Awaiting executive approval
-        </p>
+        <p className={appType.sectionLabel}>Awaiting executive approval</p>
         {approvals.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nothing pending your seal or approval.
@@ -144,6 +137,6 @@ export const EscalationsApprovals = ({ escalations, approvals, portfolioLoading 
           </div>
         )}
       </div>
-    </CardContent>
-  </Card>
+    </div>
+  </div>
 );

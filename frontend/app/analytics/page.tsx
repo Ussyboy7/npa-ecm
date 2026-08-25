@@ -1,34 +1,31 @@
 "use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useCurrentUser } from '@/hooks/use-current-user';
-import { useUserPermissions } from '@/hooks/use-user-permissions';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 
-/**
- * Redirect /analytics to appropriate default page
- * Analytics are now separate pages instead of tabs
- */
+/** Analytics hub lands on the first tab the user can access. */
 export default function AnalyticsPage() {
   const router = useRouter();
-  const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const permissions = useUserPermissions(currentUser ?? undefined);
+  const visibility = useSidebarVisibility();
 
   useEffect(() => {
-    if (!currentUser?.id) return;
-    
-    // Default to performance analytics if user has access, otherwise executive dashboard
-    if (permissions.canAccessAnalytics) {
-      router.replace('/analytics/performance');
-    } else if (permissions.canAccessExecutiveDashboard) {
-      router.replace('/analytics/executive');
-    } else if (permissions.canAccessReports) {
-      router.replace('/analytics/reports');
-    } else {
-      router.replace('/analytics/cases');
+    if (visibility.showExecutiveDashboard) {
+      router.replace("/analytics/executive");
+      return;
     }
-  }, [currentUser?.id, permissions, router]);
+    if (visibility.showPerformanceAnalytics) {
+      router.replace("/analytics/performance");
+      return;
+    }
+    if (visibility.showDivisionAnalytics) {
+      router.replace("/analytics/divisions");
+      return;
+    }
+    if (visibility.showCaseAnalytics) {
+      router.replace("/analytics/cases");
+    }
+  }, [router, visibility]);
 
   return null;
 }
-

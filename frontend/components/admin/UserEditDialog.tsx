@@ -828,7 +828,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   <div>
                     <h3 className="text-sm font-semibold mb-1">Office Memberships</h3>
                     <p className="text-xs text-muted-foreground">
-                      Office Inbox/Sent and Office Cases visibility depends on having an active office membership.
+                      Office Inbox/Sent and Office Cases appear for principal, acting, or secretariat seats on an office.
                     </p>
                   </div>
                   <Button

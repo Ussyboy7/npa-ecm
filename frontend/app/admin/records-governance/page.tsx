@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RecordsSecurityTabList } from "@/components/admin/RecordsSecurityTabList";
+import { StatStrip } from "@/components/shared/StatStrip";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -34,12 +35,8 @@ import {
 } from "@/components/ui/select";
 import {
   Archive,
-  Shield,
   Trash2,
-  Clock,
   Plus,
-  RefreshCw,
-  Scale,
   Download,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
@@ -63,13 +60,6 @@ import {
   type RecordsSummary,
   type RetentionSchedule,
 } from "@/lib/records-api";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
 
 function statusBadge(status: DisposalRequest["status"]) {
   const variants: Record<DisposalRequest["status"], string> = {
@@ -82,6 +72,15 @@ function statusBadge(status: DisposalRequest["status"]) {
 }
 
 function RecordsGovernanceContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab = searchParams.get("tab") || "overview";
+  useEffect(() => {
+    if (activeTab === "drm") {
+      router.replace("/admin/records-governance/drm");
+    }
+  }, [activeTab, router]);
+
   const [summary, setSummary] = useState<RecordsSummary | null>(null);
   const [schedules, setSchedules] = useState<RetentionSchedule[]>([]);
   const [holds, setHolds] = useState<LegalHold[]>([]);
@@ -195,86 +194,65 @@ function RecordsGovernanceContent() {
     }
   };
 
-  const statCards = [
+  const statItems = [
     {
+      key: "schedules",
       label: "Retention schedules",
       value: summary?.active_retention_schedules ?? 0,
-      icon: Clock,
     },
     {
+      key: "holds",
       label: "Active legal holds",
       value: summary?.active_legal_holds ?? 0,
-      icon: Shield,
     },
     {
+      key: "onHold",
       label: "On legal hold",
       value: summary?.correspondence_on_legal_hold ?? 0,
-      icon: Scale,
     },
     {
+      key: "due",
       label: "Due for disposal",
       value: summary?.correspondence_due_for_disposal ?? 0,
-      icon: Trash2,
     },
   ];
 
   return (
     <>
       <AdminPageShell
-        title="Records Governance"
-        subtitle="Retention schedules, legal holds, and secure disposal workflows for archived correspondence."
+        title="Records & security"
+        subtitle="Retention, legal holds, disposal, and document rights (DRM)."
         icon={Archive}
+        tabs={<RecordsSecurityTabList />}
         actions={
-          <Button variant="outline" size="sm" onClick={() => void loadAll()} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+          activeTab === "retention" ? (
+            <Button size="compact" onClick={() => setScheduleDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New schedule
+            </Button>
+          ) : activeTab === "holds" ? (
+            <Button size="compact" onClick={() => setHoldDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New hold
+            </Button>
+          ) : null
         }
       >
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="retention">Retention</TabsTrigger>
-            <TabsTrigger value="holds">Legal Holds</TabsTrigger>
-            <TabsTrigger value="disposal">Disposal</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-6 pt-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {statCards.map((card) => (
-                <Card key={card.label}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className={registryQueueStatIconBoxClass}>
-                      <card.icon className={registryQueueStatIconClass} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>{card.label}</p>
-                      <p className={registryQueueStatValueClass}>{card.value}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+          {activeTab === "overview" ? (
+          <div className="space-y-5">
+            <StatStrip items={statItems} />
+            <div className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">Archived records</p>
+              {summary?.archived_correspondence ?? 0} archived correspondence items not yet
+              disposed. {summary?.pending_disposal_requests ?? 0} disposal request(s) awaiting
+              review.
             </div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Archived records</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {summary?.archived_correspondence ?? 0} archived correspondence items not yet
-                disposed. {summary?.pending_disposal_requests ?? 0} disposal request(s) awaiting
-                review.
-              </CardContent>
-            </Card>
-          </TabsContent>
+          </div>
+          ) : null}
 
-          <TabsContent value="retention" className="space-y-4 pt-4">
-            <div className="flex justify-end">
-              <Button onClick={() => setScheduleDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New schedule
-              </Button>
-            </div>
-            <Card>
+          {activeTab === "retention" ? (
+          <div className="space-y-4">
+            <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -309,17 +287,13 @@ function RecordsGovernanceContent() {
                   )}
                 </TableBody>
               </Table>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="holds" className="space-y-4 pt-4">
-            <div className="flex justify-end">
-              <Button onClick={() => setHoldDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New legal hold
-              </Button>
             </div>
-            <Card>
+          </div>
+          ) : null}
+
+          {activeTab === "holds" ? (
+          <div className="space-y-4">
+            <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -404,16 +378,18 @@ function RecordsGovernanceContent() {
                   )}
                 </TableBody>
               </Table>
-            </Card>
-          </TabsContent>
+            </div>
+          </div>
+          ) : null}
 
-          <TabsContent value="disposal" className="space-y-4 pt-4">
+          {activeTab === "disposal" ? (
+          <div className="space-y-4">
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => void handleGenerateDue()}>
+              <Button variant="outline" size="compact" onClick={() => void handleGenerateDue()}>
                 Generate due requests
               </Button>
             </div>
-            <Card>
+            <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -481,9 +457,9 @@ function RecordsGovernanceContent() {
                   )}
                 </TableBody>
               </Table>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            </div>
+          </div>
+          ) : null}
       </AdminPageShell>
 
     <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>

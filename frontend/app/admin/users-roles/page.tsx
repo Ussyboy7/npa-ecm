@@ -5,7 +5,6 @@ import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -126,8 +125,8 @@ function UsersRolesForm() {
     if (activeTab === "roles") {
       return (
         <>
-          <Button size="sm" className="bg-gradient-primary" onClick={() => rolesRef.current?.openCreateRole()}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button size="compact" onClick={() => rolesRef.current?.openCreateRole()}>
+            <Plus className="h-4 w-4" />
             Create Role
           </Button>
           <ContextualHelp
@@ -145,8 +144,8 @@ function UsersRolesForm() {
     if (activeTab === "assistants") {
       return (
         <>
-          <Button size="sm" className="bg-gradient-primary" onClick={() => assistantsRef.current?.openAssignAssistant()}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button size="compact" onClick={() => assistantsRef.current?.openAssignAssistant()}>
+            <Plus className="h-4 w-4" />
             Assign Assistant
           </Button>
           <ContextualHelp
@@ -163,12 +162,12 @@ function UsersRolesForm() {
     }
     return (
       <>
-        <Button variant="outline" size="sm" onClick={() => usersRef.current?.exportUsers()}>
-          <Download className="h-4 w-4 mr-2" />
+        <Button variant="outline" size="compact" onClick={() => usersRef.current?.exportUsers()}>
+          <Download className="h-4 w-4" />
           Export CSV
         </Button>
-        <Button size="sm" className="bg-gradient-primary" onClick={() => usersRef.current?.openCreateUser()}>
-          <Plus className="h-4 w-4 mr-2" />
+        <Button size="compact" onClick={() => usersRef.current?.openCreateUser()}>
+          <Plus className="h-4 w-4" />
           Create User
         </Button>
         <ContextualHelp
@@ -186,14 +185,28 @@ function UsersRolesForm() {
 
   return (
     <ClientErrorBoundary>
-      <AdminPageShell title="Users & Roles" subtitle={tabSubtitle} icon={UserCog} actions={headerActions}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <AdminPageShell
+          title="Users & Roles"
+          subtitle={tabSubtitle}
+          icon={UserCog}
+          actions={headerActions}
+          tabs={
+            <TabsList>
+              <TabsTrigger value="users" className="text-xs px-2.5 py-1">Users</TabsTrigger>
+              <TabsTrigger value="roles" className="text-xs px-2.5 py-1">Roles</TabsTrigger>
+              <TabsTrigger value="matrix" className="text-xs px-2.5 py-1">Matrix</TabsTrigger>
+              <TabsTrigger value="assistants" className="text-xs px-2.5 py-1">Assistants</TabsTrigger>
+            </TabsList>
+          }
+        >
         <StatStrip items={statItems} />
 
         {activeTab === "users" ? (
           <div id="users-roles-filter-slot" />
         ) : activeTab === "matrix" ? null : (
-          <Card>
-            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          <div className="rounded-xl bg-muted/30 p-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-[200px] flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -240,19 +253,11 @@ function UsersRolesForm() {
                   </div>
                 </>
               ) : null}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList>
-            <TabsTrigger value="users" className="text-xs px-2.5 py-1">Users</TabsTrigger>
-            <TabsTrigger value="roles" className="text-xs px-2.5 py-1">Roles</TabsTrigger>
-            <TabsTrigger value="matrix" className="text-xs px-2.5 py-1">Matrix</TabsTrigger>
-            <TabsTrigger value="assistants" className="text-xs px-2.5 py-1">Assistants</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="users" className="mt-6 focus-visible:outline-none">
+        <TabsContent value="users" className="mt-2 focus-visible:outline-none">
             <Suspense
               fallback={
                 <div className="flex items-center justify-center py-12">
@@ -301,8 +306,8 @@ function UsersRolesForm() {
               hideViewModeTabs
             />
           </TabsContent>
-        </Tabs>
-      </AdminPageShell>
+        </AdminPageShell>
+      </Tabs>
     </ClientErrorBoundary>
   );
 }

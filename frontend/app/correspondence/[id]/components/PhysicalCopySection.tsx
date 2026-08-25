@@ -1,6 +1,5 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { FileText, MapPin, User, Calendar } from 'lucide-react';
 import { formatDateShort } from '@/lib/datetime';
@@ -30,14 +29,14 @@ export function PhysicalCopySection({ documents }: PhysicalCopySectionProps) {
   if (!documents || documents.length === 0) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
+    <div className="rounded-xl border border-border/60">
+      <div className="border-b border-border/60 px-4 py-3">
+        <h3 className="flex items-center gap-2 text-lg font-semibold">
           <FileText className="h-5 w-5" />
           Physical Copies
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </h3>
+      </div>
+      <div className="space-y-3 p-4">
         {documents.map((doc) => (
           <div key={doc.id} className="flex flex-col gap-1 rounded-lg border p-3">
             <div className="flex items-center justify-between">
@@ -64,7 +63,7 @@ export function PhysicalCopySection({ documents }: PhysicalCopySectionProps) {
             </div>
           </div>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

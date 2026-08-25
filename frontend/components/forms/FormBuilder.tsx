@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, GripVertical, X } from "lucide-react";
 import type { FormField, FormFieldType } from "@/lib/types/forms";
@@ -70,8 +69,7 @@ function SortableFieldCard({
 
   return (
     <div ref={setNodeRef} style={style} className={isDragging ? "opacity-50" : ""}>
-      <Card>
-        <CardContent className="p-4">
+      <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
           <div className="flex items-start gap-3">
             <div
               {...attributes}
@@ -110,8 +108,7 @@ function SortableFieldCard({
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -251,8 +248,8 @@ export function FormBuilder({ fields, onChange }: FormBuilderProps) {
             Define the fields for this form. Drag to reorder.
           </p>
         </div>
-        <Button onClick={handleAddField} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
+        <Button onClick={handleAddField} size="compact">
+          <Plus className="h-4 w-4" />
           Add Field
         </Button>
       </div>
@@ -262,8 +259,8 @@ export function FormBuilder({ fields, onChange }: FormBuilderProps) {
           <p className="text-sm text-muted-foreground mb-4">
             No fields defined. Add your first field to get started.
           </p>
-          <Button onClick={handleAddField} variant="outline" size="sm">
-            <Plus className="h-4 w-4 mr-2" />
+          <Button onClick={handleAddField} variant="outline" size="compact">
+            <Plus className="h-4 w-4" />
             Add First Field
           </Button>
         </div>

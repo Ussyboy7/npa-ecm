@@ -8,7 +8,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Send, User, AlertCircle, Users, Paperclip, Eye } from 'lucide-react';
@@ -71,9 +70,8 @@ export const ConfirmationDialog = ({
 
         <div className="space-y-4">
           {/* Action Summary */}
-          <Card className="bg-muted/30">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-start gap-2">
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+<div className="flex items-start gap-2">
                 <User className="h-4 w-4 text-primary mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">From</p>
@@ -157,20 +155,17 @@ export const ConfirmationDialog = ({
                   </div>
                 </>
               )}
-            </CardContent>
-          </Card>
+</div>
 
           {/* Content Preview */}
           <div>
             <p className="text-sm font-semibold mb-2">Content Preview</p>
-            <Card>
-              <CardContent className="p-4">
-                <div
+            <div className="rounded-xl border border-border/60 p-4">
+<div
                   className="prose prose-sm dark:prose-invert max-w-none max-h-80 overflow-y-auto"
                   dangerouslySetInnerHTML={{ __html: data.content }}
                 />
-              </CardContent>
-            </Card>
+</div>
           </div>
 
           {data.fileAttachments && data.fileAttachments.length > 0 && (

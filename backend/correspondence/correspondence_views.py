@@ -30,9 +30,7 @@ from rest_framework.response import Response
 from audit.models import ActivityLog
 from audit.services import AuditService
 from common.grade_utils import (
-    DEPARTMENT_GRADES,
     DIRECTORATE_GRADES,
-    DIVISION_GRADES,
     LEADERSHIP_GRADES,
     get_grade_level,
 )
@@ -40,6 +38,8 @@ from common.pagination import StandardPageNumberPagination
 from notifications.models import Notification
 from notifications.services import NotificationService
 from organization.models import Office, OfficeMembership
+from organization.office_access import get_office_queue_office_ids
+from organization.org_scope import user_can_view_all_correspondence
 from dms.models import DocumentVersion, Document
 
 from .models import (
@@ -1597,7 +1597,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if cached_result is not None:
             return Response(cached_result)
 
-        office_ids = self._get_user_office_ids(user)
+        office_ids = get_office_queue_office_ids(user)
 
         base_filter = Q(is_deleted=False) & ~Q(status=Correspondence.Status.COMPLETED)
 
@@ -1610,66 +1610,20 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             unread_inbox_count = Correspondence.objects.filter(
                 base_filter
             ).annotate(is_read=Exists(unread_inbox_subquery)).filter(is_read=False).count()
+        elif not office_ids:
+            office_inbox_count = 0
+            unread_inbox_count = 0
         else:
-            parallel_subquery = Minute.objects.filter(
-                to_user=user,
-                is_parallel_branch=True,
-                correspondence__workflow_state='parallel',
-                correspondence_id=OuterRef('id'),
-                is_recalled=False
-            )
-
-            user_offices = OfficeMembership.objects.filter(
-                user=user, is_active=True
-            ).select_related('office').values_list('office', flat=True)
-
-            user_office_objs = Office.objects.filter(id__in=user_offices)
-            user_division_ids = list(user_office_objs.values_list('division_id', flat=True).distinct())
-            user_department_ids = list(user_office_objs.values_list('department_id', flat=True).distinct())
-            user_directorate_ids = list(user_office_objs.values_list('directorate_id', flat=True).distinct())
-
-            if hasattr(user, 'division_id') and user.division_id:
-                user_division_ids.append(user.division_id)
-            if hasattr(user, 'department_id') and user.department_id:
-                user_department_ids.append(user.department_id)
-            if hasattr(user, 'directorate_id') and user.directorate_id:
-                user_directorate_ids.append(user.directorate_id)
-
-            user_division_ids = [x for x in user_division_ids if x]
-            user_department_ids = [x for x in user_department_ids if x]
-            user_directorate_ids = [x for x in user_directorate_ids if x]
-
-            has_distribution_filter = False
-            distribution_filter = Q()
-            if user_division_ids:
-                distribution_filter |= Q(division_id__in=user_division_ids)
-                has_distribution_filter = True
-            if user_department_ids:
-                distribution_filter |= Q(department_id__in=user_department_ids)
-                has_distribution_filter = True
-            if user_directorate_ids:
-                distribution_filter |= Q(directorate_id__in=user_directorate_ids)
-                has_distribution_filter = True
-            user_office_id_list = list(user_offices)
-            if user_office_id_list:
-                distribution_filter |= Q(office_id__in=user_office_id_list)
-                has_distribution_filter = True
-            distribution_filter |= Q(user=user, recipient_type='user')
-            has_distribution_filter = True
-
-            office_filter = Exists(parallel_subquery)
-            if has_distribution_filter:
-                distribution_subquery = CorrespondenceDistribution.objects.filter(
-                    distribution_filter,
-                    correspondence_id=OuterRef('id'),
-                    is_active=True
+            # Office Inbox = items at queue-role offices only (not personal parallel/CC)
+            office_filter = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
+            inbox_exclude_sent = (
+                Q(
+                    owning_office_id__in=office_ids,
+                    status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS],
+                    current_office__isnull=False,
                 )
-                office_filter |= Exists(distribution_subquery)
-            if office_ids:
-                office_filter |= Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
-
-            # Exclude from inbox what has already left the office (counts as Office Sent)
-            inbox_exclude_sent = Q(owning_office_id__in=office_ids, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office_id__in=office_ids) if office_ids else Q(pk__in=[])
+                & ~Q(current_office_id__in=office_ids)
+            )
             office_inbox_count = Correspondence.objects.filter(
                 base_filter & office_filter
             ).exclude(inbox_exclude_sent).count()
@@ -1829,50 +1783,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
             ).count()
 
-        # Match /cases/all scope selection used by the frontend
-        grade = getattr(user, "grade_level", "") or ""
-        if user.is_superuser or grade == "MDCS":
+        # All Cases nav: only superuser / can_view_all_correspondence
+        if user_can_view_all_correspondence(user):
             all_cases_count = case_base.count()
-        elif grade == "EDCS" and getattr(user, "directorate_id", None):
-            from organization.models import Division
-            division_ids = Division.objects.filter(
-                directorate_id=user.directorate_id
-            ).values_list("id", flat=True)
-            directorate_correspondence_ids = Correspondence.objects.filter(
-                division_id__in=division_ids
-            ).values_list("id", flat=True)
-            case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
-                correspondence_id__in=directorate_correspondence_ids
-            ).values_list("case_id", flat=True).distinct()
-            all_cases_count = case_base.filter(
-                Q(division_id__in=division_ids) | Q(id__in=case_ids_from_correspondence)
-            ).count()
-        elif grade == "MSS1" and getattr(user, "division_id", None):
-            division_correspondence_ids = Correspondence.objects.filter(
-                division_id=user.division_id
-            ).values_list("id", flat=True)
-            case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
-                correspondence_id__in=division_correspondence_ids
-            ).values_list("case_id", flat=True).distinct()
-            all_cases_count = case_base.filter(
-                Q(division_id=user.division_id) | Q(id__in=case_ids_from_correspondence)
-            ).count()
-        elif grade == "MSS2" and getattr(user, "department_id", None):
-            department_correspondence_ids = Correspondence.objects.filter(
-                department_id=user.department_id
-            ).values_list("id", flat=True)
-            case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
-                correspondence_id__in=department_correspondence_ids
-            ).values_list("case_id", flat=True).distinct()
-            all_cases_count = case_base.filter(
-                Q(department_id=user.department_id) | Q(id__in=case_ids_from_correspondence)
-            ).count()
         else:
-            # Personal / default: same as Cases "all" fallback (my + office)
-            all_cases_filter = Q(assigned_to=user)
-            if office_ids:
-                all_cases_filter |= Q(owning_office_id__in=office_ids) | Q(current_office_id__in=office_ids)
-            all_cases_count = case_base.filter(all_cases_filter).count()
+            all_cases_count = 0
 
         # Match /approvals page (sealed approve minutes with valid seal)
         executive_approvals_count = Minute.objects.filter(
@@ -1936,12 +1851,25 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     def office_inbox(self, request):
         user = request.user
         requested_offices = request.query_params.getlist("office")
-        office_ids = [office_id for office_id in requested_offices if office_id and office_id.lower() != "all"]
+        requested_ids = [office_id for office_id in requested_offices if office_id and office_id.lower() != "all"]
 
-        if not office_ids:
-            office_ids = self._get_user_office_ids(user)
-
+        queue_office_ids = get_office_queue_office_ids(user)
         can_view_all = bool(getattr(user, "is_superuser", False))
+
+        if requested_ids:
+            if can_view_all:
+                office_ids = requested_ids
+            else:
+                allowed = {str(oid) for oid in queue_office_ids}
+                office_ids = [oid for oid in requested_ids if str(oid) in allowed]
+                if not office_ids:
+                    return Response(
+                        {"detail": "You don't have access to the requested office(s)."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+        else:
+            office_ids = queue_office_ids
+
         include_all_offices = (
             can_view_all
             and (
@@ -1952,63 +1880,22 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
         if include_all_offices:
             queryset = self.base_queryset.filter(is_deleted=False).exclude(status=Correspondence.Status.COMPLETED)
+        elif not office_ids:
+            queryset = self.base_queryset.none()
         else:
-            parallel_correspondence_ids = Minute.objects.filter(
-                to_user=user,
-                is_parallel_branch=True,
-                correspondence__workflow_state='parallel',
-                is_recalled=False
-            ).values_list('correspondence_id', flat=True).distinct()
-
-            user_offices = OfficeMembership.objects.filter(
-                user=user, is_active=True
-            ).select_related('office').values_list('office', flat=True)
-
-            user_office_objs = Office.objects.filter(id__in=user_offices)
-            user_division_ids = set(user_office_objs.values_list('division_id', flat=True))
-            user_department_ids = set(user_office_objs.values_list('department_id', flat=True))
-            user_directorate_ids = set(user_office_objs.values_list('directorate_id', flat=True))
-
-            if hasattr(user, 'division_id') and user.division_id:
-                user_division_ids.add(user.division_id)
-            if hasattr(user, 'department_id') and user.department_id:
-                user_department_ids.add(user.department_id)
-            if hasattr(user, 'directorate_id') and user.directorate_id:
-                user_directorate_ids.add(user.directorate_id)
-
-            user_division_ids.discard(None)
-            user_department_ids.discard(None)
-            user_directorate_ids.discard(None)
-
-            user_office_id_list = list(user_offices)
-            distribution_filter = Q()
-            if user_division_ids:
-                distribution_filter |= Q(division_id__in=user_division_ids)
-            if user_department_ids:
-                distribution_filter |= Q(department_id__in=user_department_ids)
-            if user_directorate_ids:
-                distribution_filter |= Q(directorate_id__in=user_directorate_ids)
-            if user_office_id_list:
-                distribution_filter |= Q(office_id__in=user_office_id_list)
-            distribution_filter |= Q(user=user, recipient_type='user')
-
-            distribution_correspondence_ids = []
-            if distribution_filter:
-                distribution_correspondence_ids = CorrespondenceDistribution.objects.filter(
-                    distribution_filter,
-                    is_active=True
-                ).values_list('correspondence_id', flat=True).distinct()
-
-            base_q = Q(id__in=parallel_correspondence_ids) | Q(id__in=distribution_correspondence_ids)
-            if office_ids:
-                base_q |= Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
-
-            queryset = self.base_queryset.filter(is_deleted=False).filter(base_q).exclude(status=Correspondence.Status.COMPLETED)
-            # Don't show in inbox what has already left the office (now in Office Sent)
-            if office_ids:
-                queryset = queryset.exclude(
-                    Q(owning_office_id__in=office_ids, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office_id__in=office_ids)
+            # Seat tray only — personal parallel/CC stays in My Inbox
+            base_q = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
+            queryset = self.base_queryset.filter(is_deleted=False).filter(base_q).exclude(
+                status=Correspondence.Status.COMPLETED
+            )
+            queryset = queryset.exclude(
+                Q(
+                    owning_office_id__in=office_ids,
+                    status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS],
+                    current_office__isnull=False,
                 )
+                & ~Q(current_office_id__in=office_ids)
+            )
 
         statuses = request.query_params.getlist("status")
         if statuses:
@@ -2485,25 +2372,23 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     def office_sent(self, request):
         user = request.user
         requested_offices = request.query_params.getlist("office")
-        office_ids = [office_id for office_id in requested_offices if office_id and office_id.lower() != "all"]
+        requested_ids = [office_id for office_id in requested_offices if office_id and office_id.lower() != "all"]
 
-        if not office_ids:
-            office_ids = self._get_user_office_ids(user)
+        queue_office_ids = get_office_queue_office_ids(user)
 
-        if office_ids:
-            user_office_ids = list(
-                OfficeMembership.objects.filter(
-                    user=user,
-                    is_active=True,
-                    office_id__in=office_ids,
-                ).values_list("office_id", flat=True)
-            )
-            if not user_office_ids and not user.is_superuser:
-                return Response(
-                    {"detail": "You don't have access to the requested office(s)."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            scope_office_ids = user_office_ids if user_office_ids else office_ids
+        if requested_ids:
+            if user.is_superuser:
+                scope_office_ids = requested_ids
+            else:
+                allowed = {str(oid) for oid in queue_office_ids}
+                scope_office_ids = [oid for oid in requested_ids if str(oid) in allowed]
+                if not scope_office_ids:
+                    return Response(
+                        {"detail": "You don't have access to the requested office(s)."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+        elif queue_office_ids:
+            scope_office_ids = queue_office_ids
         elif user.is_superuser:
             scope_office_ids = []
         else:
@@ -2760,41 +2645,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             is_deleted=False,
             status__in=[Correspondence.Status.COMPLETED, Correspondence.Status.ARCHIVED],
         )
+        from organization.org_scope import apply_correspondence_org_scope
 
-        grade = (user.grade_level or "").upper()
-        is_superuser = getattr(user, "is_superuser", False)
-
-        user_directorate_id = getattr(user, "directorate_id", None)
-        user_division_id = getattr(user, "division_id", None)
-        user_department_id = getattr(user, "department_id", None)
-        user_office_ids = self._get_user_office_ids(user)
-
-        if is_superuser:
-            pass
-        elif grade in DIRECTORATE_GRADES and user_directorate_id:
-            queryset = queryset.filter(
-                Q(division__directorate_id=user_directorate_id) |
-                Q(department__division__directorate_id=user_directorate_id)
-            )
-        elif grade in DIVISION_GRADES and user_division_id:
-            queryset = queryset.filter(
-                Q(division_id=user_division_id) |
-                Q(department__division_id=user_division_id)
-            )
-        elif grade in DEPARTMENT_GRADES and user_department_id:
-            queryset = queryset.filter(department_id=user_department_id)
-        else:
-            filters = Q()
-            if user_office_ids:
-                filters |= Q(owning_office_id__in=user_office_ids) | Q(current_office_id__in=user_office_ids)
-            if user_department_id:
-                filters |= Q(department_id=user_department_id)
-            if user_division_id:
-                filters |= Q(division_id=user_division_id)
-            if filters:
-                queryset = queryset.filter(filters)
-            else:
-                queryset = queryset.none()
+        queryset = apply_correspondence_org_scope(queryset, user)
 
         directorate_ids = request.query_params.getlist("directorate")
         if directorate_ids and "all" not in [d.lower() for d in directorate_ids]:

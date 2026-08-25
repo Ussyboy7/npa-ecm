@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { toast } from "@/components/ui/sonner";
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -141,47 +140,43 @@ const DelegatedInbox = () => {
           )}
         >
         {/* Search */}
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by subject, reference, or delegator..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        <div className="rounded-xl bg-muted/30 p-2" role="search" aria-label="Delegated inbox filters">
+          <div className="relative max-w-xl">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by subject, reference, or delegator..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
         </div>
 
         {error && (
-          <Card>
-            <CardContent className="py-4 text-sm text-destructive">
-              {error}
-            </CardContent>
-          </Card>
+          <div className="rounded-xl border border-border/60 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
         )}
 
         {loading ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-              <p className="text-sm text-muted-foreground">Loading delegated items...</p>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl border border-border/60 py-12 text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-sm text-muted-foreground">Loading delegated items...</p>
+          </div>
         ) : filteredItems.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Users2 className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-muted-foreground mb-2">No delegated items</p>
-              <p className="text-xs text-muted-foreground">
-                {searchQuery
-                  ? 'No items match your search criteria'
-                  : 'No executives have delegated correspondence to you yet.'
-                }
-              </p>
-              <Button variant="outline" size="sm" onClick={() => router.push('/inbox')} className="mt-4">
-                Go to My Inbox
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl border border-border/60 text-center py-12 px-4">
+            <Users2 className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+            <p className="text-muted-foreground mb-2">No delegated items</p>
+            <p className="text-xs text-muted-foreground">
+              {searchQuery
+                ? 'No items match your search criteria'
+                : 'No executives have delegated correspondence to you yet.'
+              }
+            </p>
+            <Button variant="outline" size="sm" onClick={() => router.push('/inbox')} className="mt-4">
+              Go to My Inbox
+            </Button>
+          </div>
         ) : (
           <div className={correspondenceQueueListStackClass}>
             {filteredItems.map((item) => (

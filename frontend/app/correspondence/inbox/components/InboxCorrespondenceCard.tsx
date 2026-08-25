@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ListRowCard } from "@/components/shared/ListRowCard";
 import { Mail, User as UserIcon, ArrowDown, ArrowUp, Clock, AlertCircle, Building2, Copy } from "lucide-react";
+import { getCorrespondenceStatusBadge, getPriorityBadgeVariant } from "@/lib/status-badge";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { cn } from "@/lib/utils";
 import {
@@ -34,16 +35,6 @@ const SLA_THRESHOLDS: Record<string, number> = {
   low: 14,
   default: 10,
 };
-
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "pending": return "text-warning bg-warning/10";
-    case "in-progress": return "text-info bg-info/10";
-    case "completed": return "text-success bg-success/10";
-    case "archived": return "text-muted-foreground bg-muted";
-    default: return "text-foreground bg-muted";
-  }
-}
 
 function isOverdue(item: Correspondence): boolean {
   if (!item.receivedDate) return false;
@@ -93,16 +84,6 @@ function getPurposeLabel(purpose?: string): string {
   }
 }
 
-function getPriorityColor(priority: string): "destructive" | "default" | "secondary" | "outline" {
-  switch (priority) {
-    case "urgent": return "destructive";
-    case "high": return "default";
-    case "medium": return "secondary";
-    case "low": return "outline";
-    default: return "secondary";
-  }
-}
-
 function getPurposeColor(purpose?: string): string {
   switch (purpose) {
     case "action": return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800";
@@ -133,6 +114,7 @@ function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenc
   const daysPending = useMemo(() => calculateDaysPending(corr), [corr]);
   const daysPendingColor = daysPending > 5 ? "destructive" : daysPending > 2 ? "default" : "secondary";
   const ccInfo = useMemo(() => getCCInfo(corr, userOrgIds), [corr, userOrgIds]);
+  const statusBadge = getCorrespondenceStatusBadge(corr.status);
 
   const cardClassName = !corr.isRead ? "bg-blue-50/50 dark:bg-blue-950/10" : undefined;
 
@@ -185,7 +167,7 @@ function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenc
               {getPurposeLabel(ccInfo.purpose)}
             </Badge>
           )}
-          <Badge variant={getPriorityColor(corr.priority)} className={correspondenceQueueBadgeClass}>
+          <Badge variant={getPriorityBadgeVariant(corr.priority)} className={correspondenceQueueBadgeClass}>
             {corr.priority.toUpperCase()}
           </Badge>
           <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, "gap-0.5")}>
@@ -195,8 +177,8 @@ function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenc
               <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
             )}
           </Badge>
-          <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, getStatusColor(corr.status))}>
-            {corr.status.replace("-", " ")}
+          <Badge variant={statusBadge.variant} className={cn(correspondenceQueueBadgeClass, statusBadge.className)}>
+            {statusBadge.label}
           </Badge>
           {overdue && (
             <Badge variant="destructive" className={correspondenceQueueBadgeClass}>

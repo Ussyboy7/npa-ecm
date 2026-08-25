@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,11 +51,11 @@ export default function HelpdeskPage() {
           Submit a support ticket for ECM issues. Tier-1 responds within 4 business hours.
         </p>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">New ticket</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <div className="rounded-xl border border-border/60">
+        <div className="px-4 py-3 border-b border-border/60">
+          <h2 className="text-base font-semibold">New ticket</h2>
+        </div>
+        <div className="space-y-3 p-4">
           <div>
             <Label htmlFor="ticket-subject">Subject</Label>
             <Input id="ticket-subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
@@ -83,11 +82,11 @@ export default function HelpdeskPage() {
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-          <Button onClick={() => void handleSubmit()} disabled={submitting}>
+          <Button size="compact" onClick={() => void handleSubmit()} disabled={submitting}>
             {submitting ? "Submitting…" : "Submit ticket"}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -1033,9 +1032,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         <div className="overflow-y-auto flex-1 min-h-0 pr-4">
           <div className="space-y-6 py-2">
             {/* Original Correspondence Card */}
-            <Card className="bg-muted/50">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
+<div className="flex items-start gap-3">
                   <FileText className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <p className="font-semibold text-sm mb-1 break-words">
@@ -1063,8 +1061,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                     {correspondence.priority}
                   </Badge>
                 </div>
-              </CardContent>
-            </Card>
+</div>
 
             {/* Acting on Behalf Of */}
             {behalfOfOptions.length > 0 && (
@@ -1093,9 +1090,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                   </SelectContent>
                 </Select>
                 {actingFor && (
-                  <Card className="bg-info/5 border-info/20">
-                    <CardContent className="p-3">
-                      <div className="space-y-1">
+                  <div className="rounded-xl border border-border/60 bg-info/5 border-info/20 p-3">
+<div className="space-y-1">
                         <p className="text-xs flex items-center gap-2">
                           <AlertCircle className="h-4 w-4 text-info" />
                           <strong>Acting on behalf of:</strong> {actingFor.name}
@@ -1104,8 +1100,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                           {actingFor.systemRole} • {behalfOfOptions.find(o => o.id === actingFor.id)?.relationship || 'Supervisor'}
                         </p>
                       </div>
-                    </CardContent>
-                  </Card>
+</div>
                 )}
               </div>
             )}
@@ -1179,9 +1174,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                   const selectedDoc = documents.find(d => d.id === selectedDocumentId);
                   if (!selectedDoc) return null;
                   return (
-                    <Card className="border-primary/30 bg-primary/5 overflow-hidden mb-2">
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between gap-2 min-w-0">
+                    <div className="rounded-xl border border-border/60 border-primary/30 bg-primary/5 overflow-hidden mb-2 p-3">
+<div className="flex items-center justify-between gap-2 min-w-0">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                               <FileText className="h-5 w-5 text-primary" />
@@ -1208,8 +1202,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
-                      </CardContent>
-                    </Card>
+</div>
                   );
                 })()}
                 

@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -600,10 +599,10 @@ export default function AuditFormFillPage() {
   };
 
   return (
-    <div className="container mxax-w-4xl mx-auto space-y-6 p-6">
+    <div className="container max-w-4xl mx-auto space-y-6 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/audit/forms")}>
+          <Button variant="ghost" size="compact" onClick={() => router.push("/audit/forms")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
@@ -618,7 +617,7 @@ export default function AuditFormFillPage() {
         <div className="flex flex-wrap gap-2">
           {submission.is_draft && (
             <>
-              <Button variant="outline" onClick={handleSaveDraft} disabled={saving}>
+              <Button variant="outline" size="compact" onClick={handleSaveDraft} disabled={saving}>
                 {saving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -626,7 +625,7 @@ export default function AuditFormFillPage() {
                 )}
                 {saving ? "Saving..." : "Save Draft"}
               </Button>
-              <Button onClick={handleSubmit} disabled={submitting}>
+              <Button size="compact" onClick={handleSubmit} disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -636,7 +635,7 @@ export default function AuditFormFillPage() {
               </Button>
             </>
           )}
-          <Button variant="secondary" onClick={handleGeneratePdf} disabled={generatingPdf}>
+          <Button variant="secondary" size="compact" onClick={handleGeneratePdf} disabled={generatingPdf}>
             {generatingPdf ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -650,167 +649,171 @@ export default function AuditFormFillPage() {
       <Separator />
 
       {unsectionedFields.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Form Fields</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <div className="rounded-xl border border-border/60">
+          <div className="border-b border-border/60 px-4 py-3">
+            <h2 className="text-sm font-medium">Form Fields</h2>
+          </div>
+          <div className="space-y-6 p-4">
             {unsectionedFields.map((field) => (
               <div key={field.id}>{renderField(field)}</div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {sections.map((section) => {
         const sectionFields = fields.filter((f) => section.fields.includes(f.id));
         if (sectionFields.length === 0) return null;
         return (
-          <Card key={section.id}>
-            <CardHeader>
-              <CardTitle className="text-lg">{section.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <div key={section.id} className="rounded-xl border border-border/60">
+            <div className="border-b border-border/60 px-4 py-3">
+              <h2 className="text-sm font-medium">{section.title}</h2>
+            </div>
+            <div className="space-y-6 p-4">
               {sectionFields.map((field) => (
                 <div key={field.id}>{renderField(field)}</div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         );
       })}
 
       {(workflow || signatures.length > 0) && (
         <>
           <Separator />
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <UserCheck className="h-5 w-5" />
+          <div className="rounded-xl border border-border/60">
+            <div className="border-b border-border/60 px-4 py-3">
+              <h2 className="text-sm font-medium flex items-center gap-2">
+                <UserCheck className="h-4 w-4" />
                 Signatures
-              </CardTitle>
+              </h2>
               {workflow && (
-                <p className="text-sm text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Mode: {workflow.routing_mode === "sequential" ? "Sequential" : "Parallel"} &middot;
                   Status: <Badge variant={getSignatureStatusVariant(workflow.status)}>{workflow.status}</Badge>
                   &middot; {workflow.completed_signatures_count}/{workflow.total_steps} completed
                 </p>
               )}
-            </CardHeader>
-            <CardContent className="space-y-4">
+            </div>
+            <div className="space-y-4 p-4">
               {signatures.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No signatures configured.</p>
               ) : (
                 signatures.map((sig) => (
-                  <Card key={sig.id} className={cn("border", sig.status === "signed" && "border-green-200 bg-green-50/30 dark:bg-green-950/10")}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{sig.field_label || sig.field_name}</span>
-                            <Badge variant={getSignatureStatusVariant(sig.status)}>
-                              {sig.status}
-                            </Badge>
-                          </div>
-                          {sig.signer_name && (
-                            <p className="text-sm text-muted-foreground">
-                              Signed by: {sig.signer_name}
-                              {sig.signer_designation && ` (${sig.signer_designation})`}
-                            </p>
-                          )}
-                          {sig.signed_at && (
-                            <p className="text-xs text-muted-foreground">
-                              Signed: {formatDateTime(sig.signed_at)}
-                            </p>
-                          )}
-                          {sig.assigned_to_office_name && (
-                            <p className="text-xs text-muted-foreground">
-                              Office: {sig.assigned_to_office_name}
-                            </p>
-                          )}
-                          {sig.notes && (
-                            <p className="text-xs text-muted-foreground">Notes: {sig.notes}</p>
-                          )}
+                  <div
+                    key={sig.id}
+                    className={cn(
+                      "rounded-xl border border-border/60 bg-muted/20 p-4",
+                      sig.status === "signed" && "border-green-200/60 bg-green-50/20 dark:bg-green-950/10",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{sig.field_label || sig.field_name}</span>
+                          <Badge variant={getSignatureStatusVariant(sig.status)}>
+                            {sig.status}
+                          </Badge>
                         </div>
-                        {sig.status === "signed" && sig.signature_file_url && (
-                          <Button variant="outline" size="sm" asChild>
-                            <a href={sig.signature_file_url} target="_blank" rel="noopener noreferrer">
-                              <Eye className="mr-1 h-3.5 w-3.5" />
-                              View
-                            </a>
-                          </Button>
+                        {sig.signer_name && (
+                          <p className="text-sm text-muted-foreground">
+                            Signed by: {sig.signer_name}
+                            {sig.signer_designation && ` (${sig.signer_designation})`}
+                          </p>
+                        )}
+                        {sig.signed_at && (
+                          <p className="text-xs text-muted-foreground">
+                            Signed: {formatDateTime(sig.signed_at)}
+                          </p>
+                        )}
+                        {sig.assigned_to_office_name && (
+                          <p className="text-xs text-muted-foreground">
+                            Office: {sig.assigned_to_office_name}
+                          </p>
+                        )}
+                        {sig.notes && (
+                          <p className="text-xs text-muted-foreground">Notes: {sig.notes}</p>
                         )}
                       </div>
-
-                      {sig.status === "pending" && canSign(sig) && (
-                        <div className="mt-4 space-y-3 rounded-md border bg-muted/20 p-4">
-                          <p className="text-sm font-medium">Sign this document</p>
-                          <div className="grid gap-3 sm:grid-cols-3">
-                            <div className="space-y-1.5">
-                              <Label htmlFor={`sign-name-${sig.id}`} className="text-xs">Full Name</Label>
-                              <Input
-                                id={`sign-name-${sig.id}`}
-                                value={signFormData[sig.id]?.signer_name ?? ""}
-                                onChange={(e) =>
-                                  setSignFormData((prev) => ({
-                                    ...prev,
-                                    [sig.id]: { ...prev[sig.id] || { signer_name: "", signer_pn: "", signer_designation: "" }, signer_name: e.target.value },
-                                  }))
-                                }
-                                placeholder="e.g., Dr. John Doe"
-                                className="h-9 text-sm"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor={`sign-pn-${sig.id}`} className="text-xs">PN / Staff ID</Label>
-                              <Input
-                                id={`sign-pn-${sig.id}`}
-                                value={signFormData[sig.id]?.signer_pn ?? ""}
-                                onChange={(e) =>
-                                  setSignFormData((prev) => ({
-                                    ...prev,
-                                    [sig.id]: { ...prev[sig.id] || { signer_name: "", signer_pn: "", signer_designation: "" }, signer_pn: e.target.value },
-                                  }))
-                                }
-                                placeholder="e.g., PN12345"
-                                className="h-9 text-sm"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor={`sign-desig-${sig.id}`} className="text-xs">Designation</Label>
-                              <Input
-                                id={`sign-desig-${sig.id}`}
-                                value={signFormData[sig.id]?.signer_designation ?? ""}
-                                onChange={(e) =>
-                                  setSignFormData((prev) => ({
-                                    ...prev,
-                                    [sig.id]: { ...prev[sig.id] || { signer_name: "", signer_pn: "", signer_designation: "" }, signer_designation: e.target.value },
-                                  }))
-                                }
-                                placeholder="e.g., Chief Audit Officer"
-                                className="h-9 text-sm"
-                              />
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleSign(sig)}
-                            disabled={signingId === sig.id}
-                          >
-                            {signingId === sig.id ? (
-                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Pencil className="mr-2 h-3.5 w-3.5" />
-                            )}
-                            {signingId === sig.id ? "Signing..." : "Sign"}
-                          </Button>
-                        </div>
+                      {sig.status === "signed" && sig.signature_file_url && (
+                        <Button variant="outline" size="compact" asChild>
+                          <a href={sig.signature_file_url} target="_blank" rel="noopener noreferrer">
+                            <Eye className="mr-1 h-3.5 w-3.5" />
+                            View
+                          </a>
+                        </Button>
                       )}
-                    </CardContent>
-                  </Card>
+                    </div>
+
+                    {sig.status === "pending" && canSign(sig) && (
+                      <div className="mt-4 space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+                        <p className="text-sm font-medium">Sign this document</p>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`sign-name-${sig.id}`} className="text-xs">Full Name</Label>
+                            <Input
+                              id={`sign-name-${sig.id}`}
+                              value={signFormData[sig.id]?.signer_name ?? ""}
+                              onChange={(e) =>
+                                setSignFormData((prev) => ({
+                                  ...prev,
+                                  [sig.id]: { ...prev[sig.id] || { signer_name: "", signer_pn: "", signer_designation: "" }, signer_name: e.target.value },
+                                }))
+                              }
+                              placeholder="e.g., Dr. John Doe"
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`sign-pn-${sig.id}`} className="text-xs">PN / Staff ID</Label>
+                            <Input
+                              id={`sign-pn-${sig.id}`}
+                              value={signFormData[sig.id]?.signer_pn ?? ""}
+                              onChange={(e) =>
+                                setSignFormData((prev) => ({
+                                  ...prev,
+                                  [sig.id]: { ...prev[sig.id] || { signer_name: "", signer_pn: "", signer_designation: "" }, signer_pn: e.target.value },
+                                }))
+                              }
+                              placeholder="e.g., PN12345"
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={`sign-desig-${sig.id}`} className="text-xs">Designation</Label>
+                            <Input
+                              id={`sign-desig-${sig.id}`}
+                              value={signFormData[sig.id]?.signer_designation ?? ""}
+                              onChange={(e) =>
+                                setSignFormData((prev) => ({
+                                  ...prev,
+                                  [sig.id]: { ...prev[sig.id] || { signer_name: "", signer_pn: "", signer_designation: "" }, signer_designation: e.target.value },
+                                }))
+                              }
+                              placeholder="e.g., Chief Audit Officer"
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          size="compact"
+                          onClick={() => handleSign(sig)}
+                          disabled={signingId === sig.id}
+                        >
+                          {signingId === sig.id ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Pencil className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          {signingId === sig.id ? "Signing..." : "Sign"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </>
       )}
     </div>

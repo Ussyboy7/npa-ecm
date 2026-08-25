@@ -1,10 +1,10 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { TabsContent } from '@/components/ui/tabs';
 import { Sun, Moon, Monitor } from 'lucide-react';
+import { appType } from '@/lib/app-type';
 
 interface AppearanceSectionProps {
   theme: string | undefined;
@@ -14,14 +14,14 @@ interface AppearanceSectionProps {
 export function AppearanceSection({ theme, onThemeChange }: AppearanceSectionProps) {
   return (
     <TabsContent value="appearance" className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Theme</CardTitle>
-          <CardDescription>
+      <div className="rounded-xl border border-border/60">
+        <div className="border-b border-border/60 px-4 py-3">
+          <h2 className={appType.panelTitle}>Theme</h2>
+          <p className={appType.caption}>
             Light and Dark apply to every page in NPA ECM. Choose System to follow your device.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </p>
+        </div>
+        <div className="space-y-4 p-4">
           <div className="space-y-3">
             <Label>Color mode</Label>
             <div className="grid grid-cols-3 gap-4">
@@ -54,8 +54,8 @@ export function AppearanceSection({ theme, onThemeChange }: AppearanceSectionPro
               Document previews and the compose editor stay on white paper in both modes so memos remain print-accurate.
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </TabsContent>
   );
 }
