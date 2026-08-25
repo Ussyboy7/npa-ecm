@@ -562,7 +562,11 @@ const CorrespondenceDetailContent = () => {
   return (
     <>
       {!correspondence ? (
-        accessDenied ? (
+        detailLoading ? (
+          <div className="flex items-center justify-center h-full min-h-[50vh] p-6">
+            <LoadingState message="Loading correspondence…" />
+          </div>
+        ) : accessDenied ? (
           <ResourceAccessDenied
             title="Correspondence Unavailable"
             check={accessExplanation}
