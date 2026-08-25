@@ -60,6 +60,15 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
             return queryset.filter(user=user)
 
         if user_has_permission(user, "can_access_administration"):
+            dept_id = getattr(user, "department_id", None)
+            if dept_id:
+                return queryset.filter(Q(user__department_id=dept_id) | Q(user=user))
+            div_id = getattr(user, "division_id", None)
+            if div_id:
+                return queryset.filter(Q(user__division_id=div_id) | Q(user=user))
+            dir_id = getattr(user, "directorate_id", None)
+            if dir_id:
+                return queryset.filter(Q(user__directorate_id=dir_id) | Q(user=user))
             return queryset.filter(user=user)
 
         if user_has_permission(user, "can_manage_org_structure"):
