@@ -95,6 +95,7 @@ class Command(BaseCommand):
                 self._ensure_physical_tracking(users, correspondence_items, documents)
                 self._ensure_drm_policies()
                 self._ensure_case_templates(users)
+                self._ensure_correspondence_templates()
                 self._ensure_audit_form_templates()
                 self._ensure_project_cases(users, divisions, departments, offices)
             else:
@@ -2828,6 +2829,108 @@ class Command(BaseCommand):
                 },
             )
             self.stdout.write(f"  {'Created' if created else 'Already exists'}: {obj.name}")
+
+    def _ensure_correspondence_templates(self):
+        """Ensure NPA memo templates are Verdana 22/18/16, table, no box, spread."""
+        self.stdout.write(self.style.MIGRATE_HEADING("Ensuring correspondence templates"))
+        from correspondence.models import CorrespondenceTemplate
+
+        dept_html = """<section style="font-family: Verdana, Geneva, sans-serif; line-height: 1.5; color: #000; max-width: 800px; margin: 0 auto; padding: 24px 16px;">
+  <header style="text-align: center; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</h1>
+    <h2 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; text-transform: uppercase; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</h2>
+    <h3 style="margin: 4px 0 0; font-size: 16px; font-weight: bold; font-family: Verdana, Geneva, sans-serif;">{{department.name}}</h3>
+    <h4 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; font-family: Verdana, Geneva, sans-serif;">Departmental Memorandum</h4>
+  </header>
+  <section style="margin-bottom: 24px;">
+    <table style="width: 100%; border: none; border-collapse: collapse; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
+      <tr>
+        <td style="padding: 4px 0; width: 50%; border: none;"><strong>To:</strong> {{recipient.name}}</td>
+        <td style="padding: 4px 0; width: 50%; text-align: right; border: none;"><strong>Date:</strong> {{date.today}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px 0; border: none;"><strong>From:</strong> {{sender.name}}</td>
+        <td style="padding: 4px 0; text-align: right; word-break: break-word; border: none;"><strong>Ref.:</strong> {{document.reference}}</td>
+      </tr>
+    </table>
+  </section>
+  <section style="margin-bottom: 24px;">
+    <p style="font-size: 14px; font-family: Verdana, Geneva, sans-serif;"><strong>RE: {{document.title}}</strong></p>
+  </section>
+  <section style="margin-bottom: 32px; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
+    <p><strong>- [SUBTITLE]</strong></p>
+    <p>[Insert body content here]</p>
+  </section>
+</section>"""
+        dept_text = """NIGERIAN PORTS AUTHORITY
+{{division.name}}
+{{department.name}}
+Departmental Memorandum
+
+To: {{recipient.name}}\t\tDate: {{date.today}}
+From: {{sender.name}}\t\tRef.: {{document.reference}}
+
+RE: {{document.title}}
+
+- [SUBTITLE]
+[Insert body content here]"""
+
+        internal_html = """<section style="font-family: Verdana, Geneva, sans-serif; line-height: 1.5; color: #000; max-width: 800px; margin: 0 auto; padding: 24px 16px;">
+  <header style="text-align: center; margin-bottom: 32px;">
+    <h1 style="margin: 0; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</h1>
+    <h2 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; text-transform: uppercase; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</h2>
+    <h3 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; font-family: Verdana, Geneva, sans-serif;">Internal Memorandum</h3>
+  </header>
+  <section style="margin-bottom: 24px;">
+    <table style="width: 100%; border: none; border-collapse: collapse; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
+      <tr>
+        <td style="padding: 4px 0; width: 50%; border: none;"><strong>To:</strong> {{recipient.name}}</td>
+        <td style="padding: 4px 0; width: 50%; text-align: right; border: none;"><strong>Date:</strong> {{date.today}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px 0; border: none;"><strong>From:</strong> {{sender.name}}</td>
+        <td style="padding: 4px 0; text-align: right; word-break: break-word; border: none;"><strong>Ref.:</strong> {{document.reference}}</td>
+      </tr>
+    </table>
+  </section>
+  <section style="margin-bottom: 24px;">
+    <p style="font-size: 14px; font-family: Verdana, Geneva, sans-serif;"><strong>RE: {{document.title}}</strong></p>
+  </section>
+  <section style="margin-bottom: 32px; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
+    <p><strong>- [SUBTITLE]</strong></p>
+    <p>[Insert body content here]</p>
+  </section>
+</section>"""
+        internal_text = """NIGERIAN PORTS AUTHORITY
+{{division.name}}
+Internal Memorandum
+
+To: {{recipient.name}}\t\tDate: {{date.today}}
+From: {{sender.name}}\t\tRef.: {{document.reference}}
+
+RE: {{document.title}}
+
+- [SUBTITLE]
+[Insert body content here]"""
+
+        for title, html, text in [
+            ("NPA Departmental Memorandum", dept_html, dept_text),
+            ("NPA Internal Memorandum", internal_html, internal_text),
+        ]:
+            obj, created = CorrespondenceTemplate.objects.update_or_create(
+                title=title,
+                scope="organization",
+                scope_id=None,
+                template_type="document",
+                defaults={
+                    "description": "Standard template for inter-departmental correspondence within NPA divisions." if "Departmental" in title else "Standard template for internal correspondence within NPA divisions.",
+                    "content_html": html,
+                    "content_text": text,
+                    "is_active": True,
+                    "is_default": title == "NPA Departmental Memorandum",
+                },
+            )
+            self.stdout.write(f"  {'Created' if created else 'Updated'}: {title}")
 
     def _ensure_audit_form_templates(self):
         """Ensure the three NPA Internal Audit Division form templates."""
