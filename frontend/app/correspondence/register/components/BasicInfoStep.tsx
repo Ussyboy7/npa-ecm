@@ -105,10 +105,10 @@ export const BasicInfoStep = memo(function BasicInfoStep({
             id="referenceNumber"
             value={formData.referenceNumber}
             onChange={(e) => onFormDataChange({ referenceNumber: e.target.value })}
-            placeholder="Auto-generated on save (e.g., HQ/AGM/ICT/SA&DM/001)"
+            placeholder="e.g., HQ/AGM/ICT/SA&DM/001"
             className="flex-1"
           />
-          <p className="text-xs text-muted-foreground">Leave blank to auto-generate as HQ/&lt;tier&gt;/&lt;division&gt;/&lt;dept&gt;/001 based on the registering office.</p>
+          <p className="text-xs text-muted-foreground">Auto-generated and editable — sequence won't be reused.</p>
         </div>
 
         <div className="space-y-2">

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from uuid import UUID
 from datetime import timedelta, datetime
 
@@ -91,6 +92,40 @@ from .services import (
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
+_CLIENT_REFERENCE_PATTERN = re.compile(r"^NPA/REG/\d{4}/[A-F0-9]{8}$", re.IGNORECASE)
+_REFERENCE_LOCATION_CODE = os.getenv("NPA_REFERENCE_LOCATION_CODE", "HQ").strip().upper() or "HQ"
+
+
+def _reference_segment(value, fallback: str) -> str:
+    """Normalize one organizational reference segment without punctuation loss."""
+    raw_value = getattr(value, "code", None) or getattr(value, "name", None) or fallback
+    return re.sub(r"[^A-Za-z0-9&]+", "", str(raw_value)).upper() or fallback
+
+
+def _reference_path(owning_office, division, department) -> str:
+    """Build the official location/tier/division/department reference path."""
+    office_type = str(getattr(owning_office, "office_type", "") or "").lower()
+    tier = {
+        "md": "MD",
+        "ed": "ED",
+        "gm": "GM",
+        "agm": "AGM",
+    }.get(office_type, _reference_segment(owning_office, "REG"))
+    return "/".join(
+        (
+            _REFERENCE_LOCATION_CODE,
+            tier,
+            _reference_segment(getattr(owning_office, "division", None) or division, "DIV"),
+            _reference_segment(getattr(owning_office, "department", None) or department, "DEPT"),
+        )
+    )
+
+
+def _is_client_generated_reference(value: str | None) -> bool:
+    """Identify the old browser placeholder so the server can canonicalize it."""
+    return bool(value and _CLIENT_REFERENCE_PATTERN.fullmatch(value.strip()))
 
 
 def _sla_overdue_filter() -> Q:
@@ -362,38 +397,41 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         validated_data = serializer.validated_data
         creator = validated_data.get("created_by") or request.user
         priority = validated_data.get("priority") or Correspondence.Priority.MEDIUM
+        owning_office = validated_data.get("owning_office") or self._get_user_primary_office(request.user)
+        current_office = validated_data.get("current_office") or owning_office
+        supplied_reference = (validated_data.get("reference_number") or "").strip()
 
-        if not validated_data.get("reference_number"):
+        # The old browser flow supplied NPA/REG/YYYY/XXXXXXXX. Canonicalize that
+        # placeholder on the server so references identify the owning office,
+        # not the creator's username or whichever client generated the record.
+        if not supplied_reference or _is_client_generated_reference(supplied_reference):
             today = timezone.now().date()
+            reference_path = _reference_path(
+                owning_office,
+                validated_data.get("division"),
+                validated_data.get("department"),
+            )
             base_count = Correspondence.all_objects.filter(
-                created_at__date=today
+                reference_number__startswith=f"{reference_path}/"
             ).count()
 
-            max_retries = 100
             reference_number = None
-            for attempt in range(max_retries):
-                count = base_count + attempt + 1
-                candidate = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{count:04d}"
-
+            for attempt in range(100):
+                candidate = f"{reference_path}/{base_count + attempt + 1:03d}"
                 if not Correspondence.all_objects.filter(reference_number=candidate).exists():
                     reference_number = candidate
                     break
 
             if not reference_number:
                 import uuid
-                reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:4].upper()}"
+                reference_number = f"{reference_stem}/{uuid.uuid4().hex[:8].upper()}"
         else:
-            reference_number = validated_data["reference_number"]
+            reference_number = supplied_reference
             existing = Correspondence.all_objects.filter(reference_number=reference_number).first()
-            if existing:
-                if not existing.is_deleted:
-                    raise ValidationError({
-                        'reference_number': f'A correspondence with reference number "{reference_number}" already exists. Please use a different reference number, or edit the existing correspondence to add your file.'
-                    })
-                reference_number = validated_data["reference_number"]
-
-        owning_office = validated_data.get("owning_office") or self._get_user_primary_office(request.user)
-        current_office = validated_data.get("current_office") or owning_office
+            if existing and not existing.is_deleted:
+                raise ValidationError({
+                    'reference_number': f'A correspondence with reference number "{reference_number}" already exists. Please use a different reference number, or edit the existing correspondence to add your file.'
+                })
 
         max_save_retries = 5
         correspondence = None
@@ -420,16 +458,24 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 )
                 if is_ref_error:
                     if save_attempt < max_save_retries - 1:
-                        today = timezone.now().date()
-                        base_count = Correspondence.all_objects.filter(
-                            created_at__date=today
-                        ).count()
-                        count = base_count + save_attempt + 2
-                        reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{count:04d}"
+                        reference_path = _reference_path(
+                            owning_office,
+                            validated_data.get("division"),
+                            validated_data.get("department"),
+                        )
+                        count = Correspondence.all_objects.filter(
+                            reference_number__startswith=f"{reference_path}/"
+                        ).count() + 1
+                        reference_number = f"{reference_path}/{count:03d}"
                         continue
                     else:
                         import uuid
-                        reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:4].upper()}"
+                        reference_path = _reference_path(
+                            owning_office,
+                            validated_data.get("division"),
+                            validated_data.get("department"),
+                        )
+                        reference_number = f"{reference_path}/{uuid.uuid4().hex[:8].upper()}"
                         continue
                 else:
                     raise
@@ -1569,6 +1615,40 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=False, methods=["get"], url_path="reference-preview")
+    def reference_preview(self, request):
+        owning_office_id = request.query_params.get("owning_office")
+        division_id = request.query_params.get("division")
+        department_id = request.query_params.get("department")
+        owning_office = None
+        if owning_office_id:
+            owning_office = Office.objects.filter(id=owning_office_id).first()
+        if not owning_office:
+            owning_office = self._get_user_primary_office(request.user)
+        division = None
+        department = None
+        if division_id:
+            from organization.models import Division
+
+            division = Division.objects.filter(id=division_id).first()
+        if department_id:
+            from organization.models import Department
+
+            department = Department.objects.filter(id=department_id).first()
+        reference_path = _reference_path(owning_office, division, department)
+        base_count = Correspondence.all_objects.filter(reference_number__startswith=f"{reference_path}/").count()
+        candidate = None
+        for attempt in range(100):
+            cand = f"{reference_path}/{base_count + attempt + 1:03d}"
+            if not Correspondence.all_objects.filter(reference_number=cand).exists():
+                candidate = cand
+                break
+        if not candidate:
+            import uuid
+
+            candidate = f"{reference_path}/{uuid.uuid4().hex[:8].upper()}"
+        return Response({"reference_number": candidate, "reference_path": reference_path})
 
     @action(detail=False, methods=["get"], url_path="sidebar-counts")
     def sidebar_counts(self, request):

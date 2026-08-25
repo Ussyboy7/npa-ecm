@@ -205,6 +205,27 @@ const CorrespondenceRegisterForm = () => {
     dispatch({ type: 'SET_MOUNTED', payload: true });
   }, []);
 
+  // Auto-fetch visible HQ preview when registering office changes (editable, sequence won't be reused)
+  const lastPreviewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mounted || editId || !formData.owningOfficeId) return;
+    const currentRef = formData.referenceNumber;
+    if (currentRef && currentRef !== lastPreviewRef.current) return; // manual edit — don't clobber
+    const params = new URLSearchParams({ owning_office: formData.owningOfficeId });
+    if (formData.divisionId) params.set("division", formData.divisionId);
+    apiFetch<{ reference_number: string }>(`/correspondence/items/reference-preview/?${params.toString()}`)
+      .then((res) => {
+        const raw = res as unknown as { reference_number?: string } | string;
+        const preview = typeof raw === "string" ? raw : raw.reference_number;
+        if (typeof preview === "string" && preview) {
+          lastPreviewRef.current = preview;
+          dispatch({ type: "UPDATE_FORM_DATA", payload: { referenceNumber: preview } });
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only on office change; referenceNumber read via currentRef snapshot
+  }, [mounted, editId, formData.owningOfficeId, formData.divisionId]);
+
   // Draft auto-save hook - memoize callbacks to prevent infinite loops
   const handleDraftLoaded = useCallback((draft: { flowType?: FlowType; formData?: FormData; directorateDistribution?: string[]; divisionDistribution?: string[]; departmentDistribution?: string[] }) => {
     // Load draft data
