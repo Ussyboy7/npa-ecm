@@ -547,10 +547,10 @@ class CompletionPackageService:
         from reportlab.lib.enums import TA_CENTER as _TA_CENTER
         def _watermark(canvas, _doc):
             canvas.saveState()
-            canvas.setFont("Helvetica", 42)
+            canvas.setFont("Helvetica-Bold", 36)
             # light grey, very transparent
             try:
-                canvas.setFillColor(colors.HexColor("#e2e8f0"), alpha=0.18)
+                canvas.setFillColor(colors.HexColor("#94a3b8"), alpha=0.28)
             except:
                 canvas.setFillColor(colors.HexColor("#e2e8f0"))
             canvas.rotate(30)
@@ -560,7 +560,7 @@ class CompletionPackageService:
             # generated_at is defined later in story building; capture via closure after story is built,
             # so we defer textual content to build time by using a mutable holder
             # Instead, we will set canvas watermark text via doc watermarkText attribute set later
-            txt = getattr(doc, '_watermark_text', "COMPLETED")
+            txt = getattr(doc, '_watermark_text', "COMPLETED \u00b7 " + _fmt(generated_at, 'j F Y') if 'generated_at' in dir() else "COMPLETED")
             canvas.drawCentredString(320, 80, txt)
             canvas.restoreState()
         
@@ -970,7 +970,7 @@ class CompletionPackageService:
         # Build PDF with COMPLETED watermark (light, diagonal)
         from django.utils.dateformat import format as _fmt2
         try:
-            wm_txt = "COMPLETED \u00b7 " + _fmt2(generated_at, 'j F Y')
+            wm_txt = "COMPLETED \u00b7 " + _fmt2(generated_at, 'Y-m-d H:i') + " UTC"
         except:
             wm_txt = "COMPLETED"
         doc._watermark_text = wm_txt
