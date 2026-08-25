@@ -2,7 +2,7 @@
  * State reducer for Register Correspondence form
  */
 
-import { FormData, FlowType, DistributionState, createInitialFormData, generateReferenceNumber } from './register-utils';
+import { FormData, FlowType, DistributionState, createInitialFormData } from './register-utils';
 import { FormStep } from './register-constants';
 
 export type RegisterState = {
@@ -191,7 +191,7 @@ export const registerReducer = (
         currentStep: 'basics',
         formData: {
           ...newFormData,
-          referenceNumber: generateReferenceNumber(),
+          referenceNumber: "",
           owningOfficeId: action.payload?.owningOfficeId || state.formData.owningOfficeId,
         },
         documentFiles: [],

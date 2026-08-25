@@ -43,7 +43,6 @@ import {
   buildSubmissionFormData,
   calculateCompletionPercentage,
   createDistributionEntries,
-  generateReferenceNumber,
 } from './register-utils';
 import { registerReducer, createInitialState } from './register-state-reducer';
 import { useDraftAutoSave } from './use-draft-auto-save';
@@ -201,18 +200,9 @@ const CorrespondenceRegisterForm = () => {
     void loadCorrespondenceForEdit();
   }, [editId, mounted, currentUser?.id, loadCorrespondenceForEdit]);
 
-  // Set mounted on client and generate reference number
+  // Set mounted on client — reference is server-generated as HQ/<tier>/<division>/<dept>/seq
   useEffect(() => {
     dispatch({ type: 'SET_MOUNTED', payload: true });
-    // Generate reference number on client to avoid hydration mismatch
-    // Only if not in edit mode (edit mode will have existing reference number)
-    if (!editId && !formData.referenceNumber) {
-      dispatch({
-        type: 'UPDATE_FORM_DATA',
-        payload: { referenceNumber: generateReferenceNumber() },
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only run once on mount
   }, []);
 
   // Draft auto-save hook - memoize callbacks to prevent infinite loops

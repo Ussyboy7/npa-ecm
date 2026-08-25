@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, RefreshCcw, Clock, HelpCircle, FileText } from 'lucide-react';
+import { ArrowRight, Clock, HelpCircle, FileText } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { FormData, FlowType, generateReferenceNumber } from '../register-utils';
+import { FormData, FlowType } from '../register-utils';
 import { PRIORITY_OPTIONS, DOCUMENT_TYPE_OPTIONS } from '../register-constants';
 import { fetchSLATargets, DEFAULT_SLA_TARGETS, type SLATargets } from '@/lib/sla-client';
 
@@ -101,23 +101,14 @@ export const BasicInfoStep = memo(function BasicInfoStep({
 
         <div className="space-y-2">
           <Label htmlFor="referenceNumber">Reference Number</Label>
-          <div className="flex gap-2">
-            <Input
-              id="referenceNumber"
-              value={formData.referenceNumber}
-              onChange={(e) => onFormDataChange({ referenceNumber: e.target.value })}
-              className="flex-1"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => onFormDataChange({ referenceNumber: generateReferenceNumber() })}
-              aria-label="Generate new reference number"
-            >
-              <RefreshCcw className="h-4 w-4" />
-            </Button>
-          </div>
+          <Input
+            id="referenceNumber"
+            value={formData.referenceNumber}
+            onChange={(e) => onFormDataChange({ referenceNumber: e.target.value })}
+            placeholder="Auto-generated on save (e.g., HQ/AGM/ICT/SA&DM/001)"
+            className="flex-1"
+          />
+          <p className="text-xs text-muted-foreground">Leave blank to auto-generate as HQ/&lt;tier&gt;/&lt;division&gt;/&lt;dept&gt;/001 based on the registering office.</p>
         </div>
 
         <div className="space-y-2">

@@ -79,13 +79,10 @@ export const detectCorrespondenceSource = (
 };
 
 /**
- * Generate a reference number for correspondence
+ * Reference is server-generated as HQ/<tier>/<division>/<dept>/<seq> e.g. HQ/AGM/ICT/SA&DM/001.
+ * Client leaves this empty so the server canonicalizes; preview shows the expected format.
  */
-export const generateReferenceNumber = (): string => {
-  const uuid = generateUUID();
-  const shortId = uuid.replace(/-/g, '').slice(0, 8).toUpperCase();
-  return `NPA/REG/${new Date().getFullYear()}/${shortId}`;
-};
+export const generateReferenceNumber = (): string => "";
 
 /**
  * Create initial form data

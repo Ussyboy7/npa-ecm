@@ -19,15 +19,9 @@ import {
 } from '../register-utils';
 
 describe('generateReferenceNumber', () => {
-  it('returns string matching NPA/REG/YYYY/XXXXXXXX pattern', () => {
+  it('returns empty string — server generates HQ/<tier>/<division>/<dept>/<seq>', () => {
     const ref = generateReferenceNumber();
-    expect(ref).toMatch(/^NPA\/REG\/\d{4}\/[A-F0-9]{8}$/);
-  });
-
-  it('uses current year', () => {
-    const ref = generateReferenceNumber();
-    const year = new Date().getFullYear();
-    expect(ref).toContain(String(year));
+    expect(ref).toBe("");
   });
 });
 
