@@ -52,17 +52,14 @@ export const TopBar = () => {
     return () => clearInterval(timer);
   }, [mounted]);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     setRoleSwitcherOpen(false);
     setShowImpersonationBanner(false);
-    await logout();
+    logout();
     setAuthenticated(false);
-    // Use hard navigation to fully reset client state and avoid transient render errors.
-    if (typeof window !== 'undefined') {
-      window.location.assign('/login');
-      return;
-    }
-    router.push('/login');
+    // Hard navigate immediately — logout() already cleared tokens and fires
+    // best-effort blacklist in the background, so never leave a blank state.
+    window.location.assign('/login');
   };
 
   // Handle Escape key to close the role switcher panel

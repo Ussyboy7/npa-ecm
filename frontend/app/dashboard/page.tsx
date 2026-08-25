@@ -164,26 +164,17 @@ const Dashboard = () => {
     [summary.overdue, summary.dueSoon, pendingApprovals.length, myCasesCount],
   );
 
-  if (!currentUser) {
-    return (
-      <div className="container mx-auto p-6">
-        <h1 className="sr-only">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Use the Role Switcher in Settings to choose a user context after signing in.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <QueuePageShell
       title="Dashboard"
       subtitle={subtitle}
-      actions={(
-        <Badge variant="secondary" className="px-3 py-1.5 font-mono text-xs">
-          {currentUser.employeeId}
-        </Badge>
-      )}
+      actions={
+        currentUser?.employeeId ? (
+          <Badge variant="secondary" className="px-3 py-1.5 font-mono text-xs">
+            {currentUser.employeeId}
+          </Badge>
+        ) : undefined
+      }
     >
       {isSecretary ? <SecretaryDashboardContent /> : null}
 

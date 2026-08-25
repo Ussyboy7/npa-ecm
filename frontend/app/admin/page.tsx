@@ -91,7 +91,7 @@ function PerfRow({
 }
 
 export default function AdminPage() {
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser } = useCurrentUser();
   const visibility = useSidebarVisibility();
 
   const [loading, setLoading] = useState(true);
@@ -108,7 +108,7 @@ export default function AdminPage() {
   const inFlightRef = useRef(false);
 
   const loadData = useCallback(async () => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser) return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     try {
@@ -130,7 +130,7 @@ export default function AdminPage() {
       if (isMountedRef.current) setLoading(false);
       inFlightRef.current = false;
     }
-  }, [hydrated, currentUser, visibility]);
+  }, [currentUser, visibility]);
 
   const loadLive = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -196,8 +196,6 @@ export default function AdminPage() {
       : `last ${Math.round(presenceWindow / 60)} min`;
 
   const backupStatus = metrics?.backup;
-
-  if (!hydrated || !currentUser) return null;
 
   const backupHealthy = backupStatus?.status === "healthy";
   const backupWarning = backupStatus?.status === "warning";
