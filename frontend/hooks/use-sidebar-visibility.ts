@@ -287,7 +287,7 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showRecordsGovernance = adminOn && has("can_access_records_governance");
     const showTemplates =
       (adminOn && has("can_access_administration")) || casesOn;
-    const showAuditCompliance = adminOn && has("can_access_audit_compliance");
+    const showAuditCompliance = (adminOn && has("can_access_audit_compliance")) || hasOfficeMembership;
     const showAuditForms = adminOn && has("can_access_audit_compliance");
     const showSystemHealth = has("can_access_system_health");
     const showDrmPolicies = has("can_manage_drm_policies");

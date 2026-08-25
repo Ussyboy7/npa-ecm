@@ -77,6 +77,28 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
                 return queryset.filter(Q(user__division_id=division_id) | Q(user=user))
             return queryset.filter(user=user)
 
+        # All with offices (AGM, staff, etc.) — scoped to office's org unit, not just own
+        from organization.models import OfficeMembership
+
+        if OfficeMembership.objects.filter(user=user, is_active=True).exists():
+            # Use user's direct org if set, else fall back to office membership org
+            dept_id = getattr(user, "department_id", None)
+            if dept_id:
+                return queryset.filter(Q(user__department_id=dept_id) | Q(user=user))
+            div_id = getattr(user, "division_id", None)
+            if div_id:
+                return queryset.filter(Q(user__division_id=div_id) | Q(user=user))
+            # Try office's division/department
+            membership = OfficeMembership.objects.filter(user=user, is_active=True).select_related("office").first()
+            if membership and membership.office:
+                if membership.office.department_id:
+                    return queryset.filter(Q(user__department_id=membership.office.department_id) | Q(user=user))
+                if membership.office.division_id:
+                    return queryset.filter(Q(user__division_id=membership.office.division_id) | Q(user=user))
+                if membership.office.directorate_id:
+                    return queryset.filter(Q(user__directorate_id=membership.office.directorate_id) | Q(user=user))
+            return queryset.filter(user=user)
+
         # Regular users: own logs, or case-scoped when requested
         object_type = self.request.query_params.get("object_type")
         object_id = self.request.query_params.get("object_id")
