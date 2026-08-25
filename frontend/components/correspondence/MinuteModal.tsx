@@ -78,7 +78,7 @@ interface MinuteModalProps {
   correspondence: Correspondence;
   isOpen: boolean;
   onClose: () => void;
-  direction: 'downward' | 'upward';
+  direction: 'downward' | 'upward' | 'lateral';
 }
 
 const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: initialDirection }: MinuteModalProps) => {
@@ -96,7 +96,7 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [draftId, setDraftId] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<DistributionRecipient[]>([]);
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
-  const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward'>(initialDirection);
+  const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward' | 'lateral'>(initialDirection);
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
   const [officeSearchQuery, setOfficeSearchQuery] = useState('');
@@ -1780,7 +1780,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               : (offices.find(o => o.id === targetOfficeId)?.name + ' (Office)' || ''),
             actionType,
             content: minuteText,
-            direction: isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection),
+            direction: (isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection)) as any,
             distribution: distribution.length > 0 ? distribution
               .filter((r) => r.type !== 'user') // Filter out user types for ConfirmationDialog
               .map((recipient) => {

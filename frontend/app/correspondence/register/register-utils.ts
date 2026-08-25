@@ -31,7 +31,7 @@ export type FormData = {
   hasPhysicalCopy: boolean;
 };
 
-export type FlowType = 'inward' | 'outward';
+export type FlowType = 'inward' | 'outward' | 'lateral';
 
 export type DistributionState = {
   directorates: string[];
@@ -302,7 +302,7 @@ export const buildSubmissionFormData = (
     source = detected === 'ambiguous' ? 'internal' : detected;
   }
   
-  const direction = flowType === 'inward' ? 'upward' : 'downward';
+  const direction = flowType === 'inward' ? 'upward' : flowType === 'lateral' ? 'lateral' : 'downward';
   form.append('current_approver_id', formData.assignTo);
   form.append('document_type', formData.documentType);
   if (formData.tags) {

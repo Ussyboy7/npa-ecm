@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Check, Clock, GitBranch, ArrowUp, ArrowDown, Users, Mail } from 'lucide-react';
+import { Check, Clock, GitBranch, ArrowUp, ArrowDown, ArrowRightLeft, Users, Mail } from 'lucide-react';
 import type { Correspondence, Minute, Office, OfficeMembership, User } from '@/lib/npa-structure';
 import { ActionsPanel } from './ActionsPanel';
 import { MinuteThreadPanel } from './MinuteThreadPanel';
@@ -263,8 +263,8 @@ function RoutingHistoryCard({
 
   const originRole = createdByUser?.systemRole || (createdByUser?.gradeLevel ? GRADE_NAMES[createdByUser.gradeLevel] : undefined);
 
-  const DirectionIcon = correspondence.direction === 'upward' ? ArrowUp : ArrowDown;
-  const directionLabel = correspondence.direction === 'upward' ? 'Upward' : 'Downward';
+  const DirectionIcon = correspondence.direction === 'lateral' ? ArrowRightLeft : correspondence.direction === 'upward' ? ArrowUp : ArrowDown;
+  const directionLabel = correspondence.direction === 'lateral' ? 'Lateral' : correspondence.direction === 'upward' ? 'Upward' : 'Downward';
 
   const sortedMinutes = [...minutes]
     .filter((m) => !m.isRecalled)

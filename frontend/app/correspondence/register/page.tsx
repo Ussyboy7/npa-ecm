@@ -163,8 +163,8 @@ const CorrespondenceRegisterForm = () => {
 
       // Set flow type
       if (corr.direction) {
-        const flowType = corr.direction === 'downward' ? 'outward' : 'inward';
-        dispatch({ type: 'SET_FLOW_TYPE', payload: flowType });
+        const flowType = corr.direction === 'lateral' ? 'lateral' : corr.direction === 'downward' ? 'outward' : 'inward';
+        dispatch({ type: 'SET_FLOW_TYPE', payload: flowType as FlowType });
       }
 
       // Load distributions if available (note: mapped field is 'distribution', not 'distributions')
@@ -312,7 +312,13 @@ const CorrespondenceRegisterForm = () => {
     return activeOffices.filter((office) => membershipOfficeIds.has(office.id));
   }, [activeOffices, userOfficeMemberships, isSuperAdmin]);
 
-  const filteredOffices = useMemo(() => membershipOffices, [membershipOffices]);
+  const filteredOffices = useMemo(() => {
+    if (flowType !== 'lateral') return membershipOffices;
+    const myOffice = activeOffices.find((o) => o.id === formData.owningOfficeId) || (membershipOffices[0] as typeof activeOffices[0] | undefined);
+    const tier = (myOffice as { officeType?: string } | undefined)?.officeType?.toLowerCase();
+    if (!tier) return membershipOffices;
+    return membershipOffices.filter((o) => (o as { officeType?: string }).officeType?.toLowerCase() === tier);
+  }, [membershipOffices, flowType, formData.owningOfficeId, activeOffices]);
 
   const completionPercentage = useMemo(
     () => calculateCompletionPercentage(formData, flowType, documentFiles, linkedDocumentIds.length),

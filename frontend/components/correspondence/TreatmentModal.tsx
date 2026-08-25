@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ConfirmationDialog } from './ConfirmationDialog';
-import { generateId, generateReferenceNumber, getNextStepNumber, formatDateForAPI } from '@/lib/correspondence-helpers';
+import { generateId, getNextStepNumber, formatDateForAPI } from '@/lib/correspondence-helpers';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
 import type { Correspondence, User } from '@/lib/npa-structure';
 import { GRADE_LEVELS } from '@/lib/npa-structure';
@@ -808,7 +808,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
       // Create new response correspondence with body_html and attachments
       const responseFormData = new FormData();
-      responseFormData.append('reference_number', generateReferenceNumber(division?.code || 'NPA'));
+      // Let the backend generate the canonical office-based reference.
       responseFormData.append('subject', memoSubject.trim());
       responseFormData.append('document_title', memoSubject.trim());
 
@@ -1485,7 +1485,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           content: memoContent.replace(/\s*(?:color|background|background-color)\s*:\s*[^;"']+;?\s*/gi, ''),
           fileAttachments: uploadedFiles.map(f => ({ name: f.name, size: f.size, url: f.preview || URL.createObjectURL(f.file) })),
           onBehalfOf: actingFor?.name,
-          direction: correspondence.direction,
+          direction: correspondence.direction as any,
         }}
         disabled={isSubmitting}
       />

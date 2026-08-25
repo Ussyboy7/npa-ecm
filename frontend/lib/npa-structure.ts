@@ -167,7 +167,7 @@ export type Correspondence = {
   directorateId?: string;
   currentApproverId?: string;
   createdById?: string;
-  direction: 'upward' | 'downward';
+  direction: 'upward' | 'downward' | 'lateral';
   currentApproverName?: string;
   createdByName?: string;
   isActingSeat?: boolean;
@@ -259,7 +259,7 @@ export type Minute = {
   gradeLevel: string;
   actionType: 'minute' | 'forward' | 'approve' | 'reject' | 'treat';
   minuteText: string;
-  direction: 'upward' | 'downward';
+  direction: 'upward' | 'downward' | 'lateral';
   stepNumber: number;
   timestamp: string;
   actedBySecretary?: boolean;

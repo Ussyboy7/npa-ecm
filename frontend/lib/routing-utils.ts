@@ -15,7 +15,7 @@ import type { Office, OfficeMembership } from './npa-structure';
 
 export interface RoutingOptions {
   currentUser: User;
-  direction: 'upward' | 'downward';
+  direction: 'upward' | 'downward' | 'lateral';
   correspondence: Correspondence;
   existingMinutes: Minute[];
   offices: Office[];
@@ -93,6 +93,14 @@ export function getSuggestedApprovers(options: RoutingOptions): User[] {
 
   // Check if user is MD
   const isMD = currentUser?.gradeLevel === 'MDCS';
+
+  if (direction === 'lateral') {
+    if (!canRouteLaterally) return [];
+    activeUsers
+      .filter((user) => user.gradeLevel === currentUser?.gradeLevel && user.id !== currentUser?.id && !usersWhoAlreadyActed.has(user.id) && user.active !== false)
+      .forEach(addCandidate);
+    return Array.from(candidates.values());
+  }
 
   if (direction === 'downward') {
     const lowerGrades = gradeOrder.slice(currentGradeIndex + 1);

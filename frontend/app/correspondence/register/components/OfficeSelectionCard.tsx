@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import { Building2, ArrowDown, ArrowUp, AlertCircle, CheckCircle2, ChevronsUpDown, Check, Search } from 'lucide-react';
+import { Building2, ArrowDown, ArrowUp, ArrowRightLeft, AlertCircle, CheckCircle2, ChevronsUpDown, Check, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -88,7 +88,7 @@ export function OfficeSelectionCard({
       <div className="space-y-2">
         <label className="text-sm font-medium">Correspondence Flow <span className="text-destructive">*</span></label>
         <div className="flex gap-2">
-          {(['inward', 'outward'] as const).map((type) => (
+          {(['inward', 'outward', 'lateral'] as const).map((type) => (
             <Button
               key={type}
               type="button"
@@ -102,10 +102,15 @@ export function OfficeSelectionCard({
                   <ArrowDown className="h-4 w-4 mr-2" />
                   Inward
                 </>
-              ) : (
+              ) : type === 'outward' ? (
                 <>
                   <ArrowUp className="h-4 w-4 mr-2" />
                   Outward
+                </>
+              ) : (
+                <>
+                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                  Lateral
                 </>
               )}
             </Button>
@@ -114,7 +119,9 @@ export function OfficeSelectionCard({
         <p className={appType.caption}>
           {flowType === 'inward'
             ? 'Coming INTO your office: Capture external or inter-agency correspondence received (physical copy) or minuted to your office.'
-            : 'Going OUT OF your office: Register drafts prepared by your office before dispatching outward (minute internally or print & mail externally).'}
+            : flowType === 'lateral'
+              ? 'Side routing: ED→ED, GM→GM, AGM→AGM at the same tier (e.g., ED Finance → ED Operations). Office and distribution lists show same-tier peers.'
+              : 'Going OUT OF your office: Register drafts prepared by your office before dispatching outward (minute internally or print & mail externally).'}
         </p>
       </div>
 

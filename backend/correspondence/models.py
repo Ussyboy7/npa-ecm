@@ -66,6 +66,7 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     class Direction(models.TextChoices):
         UPWARD = "upward", "Upward"
         DOWNWARD = "downward", "Downward"
+        LATERAL = "lateral", "Lateral"
 
     class ArchiveLevel(models.TextChoices):
         DEPARTMENT = "department", "Department"
@@ -584,6 +585,7 @@ class Minute(UUIDModel, TimeStampedModel):
     class Direction(models.TextChoices):
         UPWARD = "upward", "Upward"
         DOWNWARD = "downward", "Downward"
+        LATERAL = "lateral", "Lateral"
 
     class AssistantType(models.TextChoices):
         TA = "TA", "Technical Assistant"
