@@ -4,13 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScanDialog } from "@/components/capture/ScanDialog";
 import { BatchUploadDialog } from "@/components/capture/BatchUploadDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   Scan,
-  Search,
   FileText,
   Layers,
   Loader2,
@@ -29,7 +27,6 @@ import {
 } from "@/lib/api/capture";
 import { logError } from "@/lib/client-logger";
 import { ListRowCard } from "@/components/shared/ListRowCard";
-import { StatStrip } from "@/components/shared/StatStrip";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import {
@@ -75,11 +72,14 @@ export function CaptureJobsPanel() {
   useEffect(() => {
     const onScan = () => setScanOpen(true);
     const onBatch = () => setBatchOpen(true);
+    const onSearch = (e: Event) => setQuery((e as CustomEvent).detail ?? "");
     window.addEventListener('capture:scan', onScan);
     window.addEventListener('capture:batch', onBatch);
+    window.addEventListener('capture:search', onSearch as EventListener);
     return () => {
       window.removeEventListener('capture:scan', onScan);
       window.removeEventListener('capture:batch', onBatch);
+      window.removeEventListener('capture:search', onSearch as EventListener);
     };
   }, []);
 
@@ -135,6 +135,10 @@ export function CaptureJobsPanel() {
     );
   }, [jobs]);
   const completedJobs = jobs.filter((j) => j.status === "completed").slice(0, 20);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('capture:stats', { detail: { active: activeJobs.length, completed: jobs.filter((j) => j.status === "completed").length, batches: batches.length } }));
+  }, [activeJobs.length, jobs, batches.length]);
 
   const filteredActive = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -239,29 +243,7 @@ export function CaptureJobsPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Order mirrors My Documents: stats first, then filter bar, then tabs — same spacing */}
-      <StatStrip
-        items={[
-          { key: "active", label: "Active jobs", value: activeJobs.length },
-          { key: "completed", label: "Completed", value: jobs.filter((j) => j.status === "completed").length },
-          { key: "batches", label: "Batch uploads", value: batches.length },
-        ]}
-      />
-
-      <div className="rounded-xl bg-muted/30 p-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search capture jobs"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="h-8 pl-8 text-xs"
-              aria-label="Search capture jobs"
-            />
-          </div>
-        </div>
-      </div>
+      {/* Header chrome (Scan/Batch), stats, and filter bar now live in DocumentsListPage so layout matches My Documents */}
 
       <Tabs defaultValue="jobs" className="space-y-4">
         <TabsList>

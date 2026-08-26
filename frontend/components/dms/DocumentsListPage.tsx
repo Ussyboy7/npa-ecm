@@ -78,6 +78,8 @@ function MyDocumentsForm() {
   const [selectedType, setSelectedType] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [captureQuery, setCaptureQuery] = useState('');
+  const [captureStats, setCaptureStats] = useState<{ active: number; completed: number; batches: number } | null>(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +169,16 @@ function MyDocumentsForm() {
     if (sortBy === 'title') return sortOrder === 'desc' ? '-title' : 'title';
     return '-updated_at';
   }, [sortBy, sortOrder]);
+
+  useEffect(() => {
+    const onStats = (e: Event) => setCaptureStats((e as CustomEvent).detail);
+    window.addEventListener('capture:stats', onStats as EventListener);
+    return () => window.removeEventListener('capture:stats', onStats as EventListener);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('capture:search', { detail: captureQuery }));
+  }, [captureQuery]);
 
   // Load documents based on scope
   useEffect(() => {
@@ -397,19 +409,42 @@ function MyDocumentsForm() {
             </>
           )}
           stats={
-            activeTab === 'capture' ? undefined : (
-            <StatStrip
-              items={[
-                { key: 'total', label: 'Total', value: stats.total },
-                { key: 'draft', label: 'Draft', value: stats.draft },
-                { key: 'published', label: 'Published', value: stats.published },
-                { key: 'archived', label: 'Archived', value: stats.archived },
-              ]}
-            />
+            activeTab === 'capture' && captureStats ? (
+              <StatStrip
+                items={[
+                  { key: 'active', label: 'Active jobs', value: captureStats.active },
+                  { key: 'completed', label: 'Completed', value: captureStats.completed },
+                  { key: 'batches', label: 'Batch uploads', value: captureStats.batches },
+                ]}
+              />
+            ) : activeTab === 'capture' ? null : (
+              <StatStrip
+                items={[
+                  { key: 'total', label: 'Total', value: stats.total },
+                  { key: 'draft', label: 'Draft', value: stats.draft },
+                  { key: 'published', label: 'Published', value: stats.published },
+                  { key: 'archived', label: 'Archived', value: stats.archived },
+                ]}
+              />
             )
           }
         >
-        {activeTab === 'capture' ? null : (
+        {activeTab === 'capture' ? (
+          <div className="rounded-xl bg-muted/30 p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[200px] flex-1 max-w-sm">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search capture jobs"
+                  value={captureQuery}
+                  onChange={(e) => setCaptureQuery(e.target.value)}
+                  className="h-8 pl-8 text-xs"
+                  aria-label="Search capture jobs"
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
