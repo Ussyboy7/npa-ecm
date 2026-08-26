@@ -149,12 +149,6 @@ function WorkflowSLAForm() {
           subtitle={subtitle}
           icon={Target}
           actions={headerActions}
-          tabs={
-            <TabsList>
-              <TabsTrigger value="sla" className="text-xs px-2.5 py-1">SLA targets</TabsTrigger>
-              <TabsTrigger value="escalation" className="text-xs px-2.5 py-1">Escalations</TabsTrigger>
-            </TabsList>
-          }
         >
         <StatStrip items={statItems} />
 
@@ -174,6 +168,13 @@ function WorkflowSLAForm() {
               />
             </div>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <TabsList>
+            <TabsTrigger value="sla" className="text-xs px-2.5 py-1">SLA targets</TabsTrigger>
+            <TabsTrigger value="escalation" className="text-xs px-2.5 py-1">Escalations</TabsTrigger>
+          </TabsList>
         </div>
 
           <TabsContent value="sla" className="mt-2 focus-visible:outline-none">
