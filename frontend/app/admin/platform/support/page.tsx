@@ -44,9 +44,7 @@ export default function AdminHelpdeskPage() {
   }, [tickets, searchQuery, statusFilter]);
 
   return (
-    <AdminPageShell title="Platform" subtitle="Tier-1 ticket triage and resolution." icon={LifeBuoy} tabs={<PlatformTabList />}>
-      <div className="space-y-6">
-        <StatStrip
+    <AdminPageShell title="Platform" subtitle="Tier-1 ticket triage and resolution." icon={LifeBuoy} stats={<StatStrip
           items={[
             { key: "total", label: "Total Tickets", value: tickets.length },
             { key: "open", label: "Open", value: tickets.filter((t) => t.status === "open").length },
@@ -57,8 +55,12 @@ export default function AdminHelpdeskPage() {
               value: tickets.filter((t) => t.status === "resolved" || t.status === "closed").length,
             },
           ]}
-        />
+        />}>
+      <div className="mt-4">
+        <PlatformTabList />
+      </div>
 
+      <div className="space-y-6 mt-4">
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">

@@ -22,8 +22,11 @@ export default function IntegrationHubPage() {
       title="Platform"
       subtitle="Configure webhooks, email, HRMS, ERP connectors, and view activity logs."
       icon={Webhook}
-      tabs={<PlatformTabList />}
+      
     >
+      <div className="mt-4">
+        <PlatformTabList />
+      </div>
       <PermissionGate
         permission="can_manage_integration"
         title="Integration Hub Access Required"

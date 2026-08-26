@@ -217,7 +217,10 @@ export default function SystemHealthPage() {
 
   if (!canAccess) {
     return (
-      <AdminPageShell title="Platform" subtitle="ICT operations dashboard" icon={Activity} tabs={<PlatformTabList />}>
+      <AdminPageShell title="Platform" subtitle="ICT operations dashboard" icon={Activity} >
+      <div className="mt-4">
+        <PlatformTabList />
+      </div>
         <PermissionDeniedCard
           title="ICT Admin Access Required"
           check={null}
@@ -284,9 +287,12 @@ export default function SystemHealthPage() {
     <AdminPageShell
       title="Platform"
       subtitle="Live infrastructure monitoring — API process, database, disk volume, cache, backups, and API performance."
-      tabs={<PlatformTabList />}
+      
       icon={Activity}
     >
+      <div className="mt-4">
+        <PlatformTabList />
+      </div>
       <ClientErrorBoundary>
         {loading && !metrics ? (
           <LoadingState message="Loading system health…" />

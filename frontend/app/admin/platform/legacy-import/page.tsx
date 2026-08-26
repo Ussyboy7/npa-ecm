@@ -27,9 +27,12 @@ export default function LegacyImportPage() {
     <AdminPageShell
       title="Platform"
       subtitle="CSV templates and CLI for migrating historical correspondence and document metadata."
-      tabs={<PlatformTabList />}
+      
       icon={Database}
     >
+      <div className="mt-4">
+        <PlatformTabList />
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-border/60 p-4">
           <h3 className="text-base font-semibold mb-3">Correspondence template</h3>
