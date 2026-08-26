@@ -33,6 +33,7 @@ import {
   Save,
   ArrowDown,
   ArrowUp,
+  ArrowRightLeft,
   CheckCircle,
   FileText,
   Image as ImageIcon,
@@ -1449,7 +1450,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               </Label>
               {canChooseDirection ? (
                 <RadioGroup value={selectedDirection} onValueChange={(v: string) => {
-                  setSelectedDirection(v as 'upward' | 'downward');
+                  setSelectedDirection(v as 'upward' | 'downward' | 'lateral');
                   setForwardTo(''); // Reset forward to when direction changes
                 }}>
                   <div className="flex items-center space-x-2">
@@ -1464,6 +1465,13 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                     <Label htmlFor="direction-downward" className="font-normal cursor-pointer flex items-center gap-2">
                       <ArrowDown className="h-4 w-4 text-info" />
                       Downward
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="lateral" id="direction-lateral" />
+                    <Label htmlFor="direction-lateral" className="font-normal cursor-pointer flex items-center gap-2">
+                      <ArrowRightLeft className="h-4 w-4 text-amber-600" />
+                      Lateral
                     </Label>
                   </div>
                 </RadioGroup>
