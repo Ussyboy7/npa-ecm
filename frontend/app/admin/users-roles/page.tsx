@@ -191,21 +191,13 @@ function UsersRolesForm() {
           subtitle={tabSubtitle}
           icon={UserCog}
           actions={headerActions}
-          tabs={
-            <TabsList>
-              <TabsTrigger value="users" className="text-xs px-2.5 py-1">Users</TabsTrigger>
-              <TabsTrigger value="roles" className="text-xs px-2.5 py-1">Roles</TabsTrigger>
-              <TabsTrigger value="matrix" className="text-xs px-2.5 py-1">Matrix</TabsTrigger>
-              <TabsTrigger value="assistants" className="text-xs px-2.5 py-1">Assistants</TabsTrigger>
-            </TabsList>
-          }
         >
         <StatStrip items={statItems} />
 
         {activeTab === "users" ? (
           <div id="users-roles-filter-slot" />
         ) : activeTab === "matrix" ? null : (
-          <div className="rounded-xl bg-muted/30 p-2">
+          <div className="rounded-xl bg-muted/30 p-2 mt-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-[200px] flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -256,6 +248,15 @@ function UsersRolesForm() {
             </div>
           </div>
         )}
+
+        <div className="mt-4">
+          <TabsList>
+            <TabsTrigger value="users" className="text-xs px-2.5 py-1">Users</TabsTrigger>
+            <TabsTrigger value="roles" className="text-xs px-2.5 py-1">Roles</TabsTrigger>
+            <TabsTrigger value="matrix" className="text-xs px-2.5 py-1">Matrix</TabsTrigger>
+            <TabsTrigger value="assistants" className="text-xs px-2.5 py-1">Assistants</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="users" className="mt-2 focus-visible:outline-none">
             <Suspense
