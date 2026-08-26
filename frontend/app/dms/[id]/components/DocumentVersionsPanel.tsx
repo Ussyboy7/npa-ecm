@@ -250,7 +250,7 @@ export function DocumentVersionsPanel({
                     {uploadUser && (
                       <DropdownMenuItem onClick={() => onReplaceVersion(version.id)}>
                         <Pencil className="h-4 w-4 mr-2" />
-                        Replace file
+                        Edit
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
