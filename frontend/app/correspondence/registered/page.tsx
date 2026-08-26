@@ -178,7 +178,6 @@ const RegisteredCorrespondencePage = () => {
     <QueuePageShell
       title="Registered"
       subtitle="Executive registry of inbound correspondence across directorates"
-      tabs={<RegistryTabList />}
       actions={
         canRegister ? (
           <Button size="compact" onClick={() => router.push("/correspondence/register")}>
@@ -287,6 +286,10 @@ const RegisteredCorrespondencePage = () => {
             </Button>
           ) : null}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <RegistryTabList />
       </div>
 
       <div aria-live="polite">

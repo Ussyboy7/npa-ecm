@@ -362,7 +362,6 @@ function PhysicalDocumentsForm() {
       <QueuePageShell
         title="Physical"
         subtitle="Track physical document locations, check-outs, and returns"
-        tabs={<RegistryTabList />}
         actions={(
           <>
             <DropdownMenu>
@@ -394,6 +393,10 @@ function PhysicalDocumentsForm() {
           />
         )}
       >
+        <div className="mt-4">
+          <RegistryTabList />
+        </div>
+
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
