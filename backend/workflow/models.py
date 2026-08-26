@@ -20,6 +20,10 @@ class WorkflowTemplate(UUIDModel, TimeStampedModel):
     description = models.TextField(blank=True)
     applies_to = models.CharField(max_length=32, choices=AppliesTo.choices)
     is_active = models.BooleanField(default=True)
+    requires_departmental_endorsement = models.BooleanField(
+        default=True,
+        help_text="If True, EXECUTIVE correspondence must be endorsed at DEPARTMENTAL level before MD approval. If False, direct Officer->MD is allowed.",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

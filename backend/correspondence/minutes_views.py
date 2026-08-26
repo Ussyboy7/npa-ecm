@@ -41,6 +41,7 @@ from .services import (
     MinuteRouterService,
     MinuteSealService,
     ParallelBranchService,
+    validate_workflow_vs_requirement,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["correspondence", "user", "action_type", "direction"]
+    filterset_fields = ["correspondence", "user", "action_type", "direction", "approval_level", "approval_role", "from_office", "to_office"]
     ordering_fields = ["timestamp", "step_number"]
     ordering = ["timestamp"]
 
@@ -69,16 +70,30 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 )
             else:
                 queryset = queryset.filter(seal_applied__isnull=True)
+        else:
+            has_seal_bool = False
+        approval_level = self.request.query_params.get('approval_level')
+        if approval_level:
+            queryset = queryset.filter(approval_level=approval_level)
+        approval_role = self.request.query_params.get('approval_role')
+        if approval_role:
+            queryset = queryset.filter(approval_role=approval_role)
+        from_office_param = self.request.query_params.get('from_office') or self.request.query_params.get('from_office_id')
+        if from_office_param:
+            queryset = queryset.filter(from_office_id=from_office_param)
         # Directorate → Division → Department scoping for approvals (and sealed views).
         # MD / Superuser see all. ED sees directorate, GM sees division, AGM/staff sees department.
         # This makes /approvals org-scoped rather than global.
         user = getattr(self.request, "user", None)
+        is_register_query = (has_seal is not None and has_seal_bool) or (approval_level is not None) or (approval_role is not None)
         if user and getattr(user, "is_authenticated", False):
             is_super = bool(getattr(user, "is_superuser", False))
             role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
-            if is_super or role_name == "Managing Director":
+            grade = (getattr(user, "grade_level", "") or "").upper()
+            is_md = grade == "MDCS" or "managing director" in role_name.lower() or role_name.strip().lower() == "md"
+            if is_super or is_md:
                 pass
-            elif has_seal is not None and has_seal_bool:
+            elif is_register_query:
                 # Only scope the approvals/sealed listing; keep other minute lists unscoped
                 # (inbox, pending_approvals, detail views) to avoid breaking routing flows.
                 if getattr(user, "department_id", None):
@@ -180,6 +195,23 @@ class MinuteViewSet(viewsets.ModelViewSet):
         to_office = serializer.validated_data.get("to_office")
         from_office = serializer.validated_data.get("from_office") or current_office
         MinuteRouterService.prevent_self_loop(self.request.user, to_user, to_office, from_office)
+
+        # Workflow step constraint — fail on mismatch, don't silently bypass
+        # Validate that workflow configuration can satisfy correspondence's required approval level
+        # If template is explicitly provided, validate against it; otherwise validate global config
+        _workflow_template = serializer.validated_data.get("workflow_template") or serializer.validated_data.get("template")
+        if _workflow_template is not None and isinstance(_workflow_template, str):
+            from workflow.models import WorkflowTemplate
+
+            try:
+                _workflow_template = WorkflowTemplate.objects.get(id=_workflow_template)
+            except WorkflowTemplate.DoesNotExist:
+                _workflow_template = None
+        # When no explicit template, pass None to trigger global check (any executive template exists?)
+        # Also try to resolve a specific template if correspondence has workflow_template attr
+        if _workflow_template is None and hasattr(correspondence, "workflow_template") and getattr(correspondence, "workflow_template", None):
+            _workflow_template = getattr(correspondence, "workflow_template")
+        validate_workflow_vs_requirement(correspondence, _workflow_template)
 
         # For approve actions, map approval_level/approval_role before save; enforce MD-only and minute_text
         if action_type == "approve":
