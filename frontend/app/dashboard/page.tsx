@@ -21,7 +21,6 @@ import { fetchSLATargets, DEFAULT_SLA_TARGETS } from "@/lib/sla-client";
 import { calculateSLAStatus } from "@/lib/inbox-sla";
 import SecretaryDashboardContent from "./components/SecretaryDashboardContent";
 import {
-  ArrowRight,
   CheckCircle2,
   Inbox,
 } from "lucide-react";
@@ -238,13 +237,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/inbox">
-                Open full inbox <ArrowRight className="h-3.5 w-3.5 ml-1" />
-              </Link>
-            </Button>
-          </div>
+
         </div>
       )}
     </QueuePageShell>
