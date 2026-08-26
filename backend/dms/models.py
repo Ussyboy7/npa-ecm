@@ -110,6 +110,32 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
         related_name="documents",
     )
 
+    def save(self, *args, **kwargs):
+        if not self.reference_number or not self.reference_number.strip():
+            # Auto-generate HQ/<division>/<dept>/001 like correspondence
+            import re, os
+
+            def seg(v, fb):
+                raw = getattr(v, "code", None) or getattr(v, "name", None) or fb
+                return re.sub(r"[^A-Za-z0-9&]+", "", str(raw)).upper() or fb
+
+            loc = (os.getenv("NPA_REFERENCE_LOCATION_CODE", "HQ").strip().upper() or "HQ")
+            div = seg(self.division, "DIV")
+            dept = seg(self.department, "DEPT")
+            base = f"{loc}/{div}/{dept}"
+            # Find next seq
+            Model = self.__class__
+            count = Model.objects.filter(reference_number__startswith=f"{base}/").count()
+            for attempt in range(100):
+                cand = f"{base}/{count + attempt + 1:03d}"
+                if not Model.objects.filter(reference_number=cand).exists():
+                    self.reference_number = cand
+                    break
+            else:
+                import uuid
+                self.reference_number = f"{base}/{uuid.uuid4().hex[:8].upper()}"
+        super().save(*args, **kwargs)
+
     class Meta:
         ordering = ["-updated_at"]
         indexes = [
