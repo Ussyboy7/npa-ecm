@@ -10,15 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   Scan,
-  Upload,
-  RefreshCw,
+  Search,
   FileText,
   Layers,
   Loader2,
   Link2,
   CheckCircle2,
   XCircle,
-  Search,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import {
@@ -73,6 +71,17 @@ export function CaptureJobsPanel() {
   const [loading, setLoading] = useState(true);
   const [actionJobId, setActionJobId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const onScan = () => setScanOpen(true);
+    const onBatch = () => setBatchOpen(true);
+    window.addEventListener('capture:scan', onScan);
+    window.addEventListener('capture:batch', onBatch);
+    return () => {
+      window.removeEventListener('capture:scan', onScan);
+      window.removeEventListener('capture:batch', onBatch);
+    };
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -230,7 +239,7 @@ export function CaptureJobsPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Same toolbar chrome as My Documents / Shared filters */}
+      {/* Same filter-bar chrome as My Documents — search only; Scan/Batch live in header like Create */}
       <div className="rounded-xl bg-muted/30 p-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1 max-w-sm">
@@ -243,18 +252,6 @@ export function CaptureJobsPanel() {
               aria-label="Search capture jobs"
             />
           </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => void loadData()} disabled={loading}>
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button size="sm" className="h-8 text-xs" onClick={() => setScanOpen(true)}>
-            <Scan className="h-3.5 w-3.5" />
-            Scan document
-          </Button>
-          <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={() => setBatchOpen(true)}>
-            <Upload className="h-3.5 w-3.5" />
-            Batch upload
-          </Button>
         </div>
       </div>
 

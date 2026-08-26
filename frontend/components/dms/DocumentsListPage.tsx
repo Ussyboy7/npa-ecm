@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput, CheckCircle2, Scan } from 'lucide-react';
+import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput, CheckCircle2, Scan, Upload } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useSidebarVisibility } from '@/hooks/use-sidebar-visibility';
 import { queryDocumentsExtended, type DocumentRecord } from '@/lib/api/dms';
@@ -349,7 +349,16 @@ function MyDocumentsForm() {
           }
           actions={(
             <>
-              {activeTab !== 'capture' ? (
+              {activeTab === 'capture' ? (
+                <>
+                  <Button size="compact" onClick={() => window.dispatchEvent(new CustomEvent('capture:scan'))}>
+                    <Scan className="h-4 w-4" /> Scan document
+                  </Button>
+                  <Button variant="secondary" size="compact" onClick={() => window.dispatchEvent(new CustomEvent('capture:batch'))}>
+                    <Upload className="h-4 w-4" /> Batch upload
+                  </Button>
+                </>
+              ) : (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="compact">
@@ -367,7 +376,7 @@ function MyDocumentsForm() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              ) : null}
+              )}
               <ContextualHelp
                 title="Managing your documents"
                 description="Switch scope, then narrow the list with search and filters."
