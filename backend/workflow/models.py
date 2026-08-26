@@ -71,6 +71,15 @@ class WorkflowStep(UUIDModel, TimeStampedModel):
         related_name="workflow_steps",
     )
     requires_all_assistants = models.BooleanField(default=False)
+    required_approval_level = models.CharField(
+        max_length=16,
+        blank=True,
+        choices=[
+            ("departmental", "Departmental"),
+            ("divisional", "Divisional"),
+            ("executive", "Executive"),
+        ],
+    )
 
     class Meta:
         ordering = ["order"]

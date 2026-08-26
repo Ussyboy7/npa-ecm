@@ -82,6 +82,11 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         DIRECTIVE = "directive", "Directive"
         OTHER = "other", "Other"
 
+    class RequiredApprovalLevel(models.TextChoices):
+        NONE = "none", "None"
+        DEPARTMENTAL = "departmental", "Departmental"
+        EXECUTIVE = "executive", "Executive"
+
     reference_number = models.CharField(max_length=100, unique=True, blank=True)
     subject = models.CharField(max_length=500)
     treatment_response = models.TextField(blank=True, default="")
@@ -236,6 +241,23 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         default=False,
         help_text="Whether a physical (paper) original exists for this correspondence",
     )
+    # Approval / classification audit fields
+    required_approval_level = models.CharField(
+        max_length=16,
+        choices=RequiredApprovalLevel.choices,
+        default=RequiredApprovalLevel.DEPARTMENTAL,
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    strategic_flag = models.BooleanField(default=False)
+    classified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="correspondence_classified",
+    )
+    classified_at = models.DateTimeField(null=True, blank=True)
+    classification_reason = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["-created_at"]
@@ -591,6 +613,15 @@ class Minute(UUIDModel, TimeStampedModel):
         TA = "TA", "Technical Assistant"
         PA = "PA", "Personal Assistant"
 
+    class ApprovalLevel(models.TextChoices):
+        DEPARTMENTAL = "departmental", "Departmental"
+        DIVISIONAL = "divisional", "Divisional"
+        EXECUTIVE = "executive", "Executive"
+
+    class ApprovalRole(models.TextChoices):
+        ENDORSEMENT = "endorsement", "Endorsement"
+        APPROVAL = "approval", "Approval"
+
     correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="minutes")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="minutes")
     grade_level = models.CharField(max_length=50, blank=True)
@@ -756,6 +787,19 @@ class Minute(UUIDModel, TimeStampedModel):
         blank=True,
         related_name="minutes",
         help_text="Digital seal applied when this minute was an executive approval",
+    )
+    # Approval level actually exercised by this minute
+    approval_level = models.CharField(
+        max_length=16,
+        choices=ApprovalLevel.choices,
+        null=True,
+        blank=True,
+    )
+    approval_role = models.CharField(
+        max_length=16,
+        choices=ApprovalRole.choices,
+        null=True,
+        blank=True,
     )
 
     class Meta:
