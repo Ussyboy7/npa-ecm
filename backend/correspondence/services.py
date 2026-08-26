@@ -596,6 +596,18 @@ class CompletionPackageService:
 
         # Helpers for new layout
         def _cover():
+            # Logo
+            try:
+                logo_path = os.path.join(os.path.dirname(__file__), "npalogo.png")
+                if os.path.exists(logo_path):
+                    from reportlab.platypus import Image as RLImage
+                    # Use a small crest at the top
+                    logo_tbl = Table([[RLImage(logo_path, width=0.55*inch, height=0.55*inch)]], colWidths=[0.6*inch])
+                    logo_tbl.setStyle(TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
+                    story.append(logo_tbl)
+                    story.append(Spacer(1, 0.08*inch))
+            except:
+                pass
             # Badge
             badge_tbl = Table([[Paragraph('<font color="#1e3a5f"><b>OFFICIAL CORRESPONDENCE RECORD</b></font>', ParagraphStyle('b', parent=styles['Normal'], fontSize=7, textColor=navy, alignment=TA_CENTER))]], colWidths=[3.2*inch])
             badge_tbl.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f1f5f9')), ('ROUNDEDCORNERS', [4,4,4,4]), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('LEFTPADDING', (0,0), (-1,-1), 6), ('RIGHTPADDING', (0,0), (-1,-1), 6), ('BOTTOMPADDING', (0,0), (-1,-1), 4), ('TOPPADDING', (0,0), (-1,-1), 4)]))
