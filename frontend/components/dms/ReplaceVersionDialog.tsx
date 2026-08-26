@@ -156,15 +156,15 @@ export const ReplaceVersionDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent size="3xl" height="fill">
-        <DialogHeader>
+      <DialogContent size="5xl" height="screen" className="flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Edit Version {version.versionNumber}</DialogTitle>
           <DialogDescription>
             Edit the content or upload a new file to replace this version. The version number and upload date will be preserved.
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(95vh-200px)] sm:max-h-[60vh] pr-2 sm:pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-2 sm:pr-4">
           <div className="space-y-4">
             <div className="p-3 border rounded-lg bg-muted/30">
               <p className="text-sm font-medium mb-1">Current Version:</p>
