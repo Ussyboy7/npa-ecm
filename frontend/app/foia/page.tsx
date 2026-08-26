@@ -225,49 +225,47 @@ export default function FOIAListPage() {
           ]}
         />
       }
-      tabs={
-        <div className="space-y-3">
-          <div className="flex gap-1 flex-wrap">
-            {TABS.map((tab) => (
-              <Button
-                key={tab.value}
-                variant={activeTab === tab.value ? "default" : "outline"}
-                size="compact"
-                onClick={() => setActiveTab(tab.value)}
-              >
-                {tab.label}
-              </Button>
-            ))}
-          </div>
-          <div className="rounded-xl bg-muted/30 p-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[200px] flex-1 max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search requests..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-8 pl-8 text-xs"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 w-[140px] text-xs">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  {FOIA_STATUS_OPTIONS.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {getFoiaStatusBadge(value).label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      }
     >
+      <div className="mt-4 flex gap-1 flex-wrap">
+        {TABS.map((tab) => (
+          <Button
+            key={tab.value}
+            variant={activeTab === tab.value ? "default" : "outline"}
+            size="compact"
+            onClick={() => setActiveTab(tab.value)}
+          >
+            {tab.label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="rounded-xl bg-muted/30 p-2 mt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search requests..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-8 w-[140px] text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {FOIA_STATUS_OPTIONS.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {getFoiaStatusBadge(value).label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       {error && <ErrorState message={error} variant="inline" />}
 
       {loading ? (
