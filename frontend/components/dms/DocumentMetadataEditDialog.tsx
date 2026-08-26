@@ -108,10 +108,26 @@ export const DocumentMetadataEditDialog = ({
   // Initialize draft when dialog opens or document changes
   useEffect(() => {
     if (open && document) {
+      // Canonical: HQ/GM/ICT/001 for GM, HQ/AGM/ICT/SA&DM/001 for AGM (no dept for GM+)
+      const previewRef = (() => {
+        if (document.referenceNumber) return document.referenceNumber;
+        const div = divisions.find((d) => d.id === (document.divisionId ?? '')) || divisions.find((d) => d.id === metadataDraft.divisionId);
+        const dept = departments.find((d) => d.id === (document.departmentId ?? '')) || departments.find((d) => d.id === metadataDraft.departmentId);
+        const seg = (v: { code?: string; name: string } | undefined, fb: string) => {
+          const raw = (v as unknown as { code?: string })?.code || v?.name || fb;
+          return String(raw).replace(/[^A-Za-z0-9&]+/g, '').toUpperCase() || fb;
+        };
+        if (!div && !dept && !document.divisionId && !metadataDraft.divisionId) return '';
+        // For now preview as HQ/GM/... or HQ/AGM/... based on document's division's tier? Use GM as example for ICT
+        const isAgmDept = !!dept;
+        const tier = isAgmDept ? "AGM" : "GM";
+        const base = tier === "GM" ? `HQ/${tier}/${seg(div as unknown as { code?: string; name: string }, 'DIV')}` : `HQ/${tier}/${seg(div as unknown as { code?: string; name: string }, 'DIV')}/${seg(dept as unknown as { code?: string; name: string }, 'DEPT')}`;
+        return `${base}/001`;
+      })();
       setMetadataDraft({
         title: document.title,
         description: document.description ?? '',
-        referenceNumber: document.referenceNumber ?? '',
+        referenceNumber: previewRef || (document.referenceNumber ?? ''),
         documentType: document.documentType ?? 'other',
         divisionId: document.divisionId,
         departmentId: document.departmentId,
@@ -123,7 +139,7 @@ export const DocumentMetadataEditDialog = ({
       setHasUnsavedChanges(false);
       setMetadataErrors({});
     }
-  }, [open, document]);
+  }, [open, document, divisions, departments]);
 
   useEffect(() => {
     if (!open) return;
@@ -149,6 +165,24 @@ export const DocumentMetadataEditDialog = ({
       }
     }
   }, [metadataDraft.divisionId, metadataDraft.departmentId, departments, document?.divisionId]);
+
+  // Keep HQ preview in sync when division/department changes and reference is still preview/empty
+  useEffect(() => {
+    if (!open || !document || document.referenceNumber) return;
+    const isPreview = metadataDraft.referenceNumber.startsWith('HQ/');
+    if (!isPreview && metadataDraft.referenceNumber) return;
+    const div = divisions.find((d) => d.id === metadataDraft.divisionId);
+    const dept = departments.find((d) => d.id === metadataDraft.departmentId);
+    const seg = (v: { code?: string; name: string } | undefined, fb: string) => {
+      const raw = (v as unknown as { code?: string })?.code || v?.name || fb;
+      return String(raw).replace(/[^A-Za-z0-9&]+/g, '').toUpperCase() || fb;
+    };
+    const base = `HQ/${seg(div as unknown as { code?: string; name: string }, 'DIV')}/${seg(dept as unknown as { code?: string; name: string }, 'DEPT')}`;
+    const preview = `${base}/001`;
+    if (preview !== metadataDraft.referenceNumber) {
+      setMetadataDraft((prev) => ({ ...prev, referenceNumber: preview }));
+    }
+  }, [open, document, metadataDraft.divisionId, metadataDraft.departmentId, divisions, departments, metadataDraft.referenceNumber]);
 
   // Check for duplicate reference numbers
   useEffect(() => {
@@ -694,7 +728,7 @@ export const DocumentMetadataEditDialog = ({
                         if (metadataErrors.referenceNumber)
                           setMetadataErrors({ ...metadataErrors, referenceNumber: '' });
                       }}
-                      placeholder="Enter reference number..."
+                      placeholder="e.g., HQ/GM/ICT/SA&DM/001 (auto-generated if blank)"
                       aria-label="Reference number"
                       aria-invalid={!!metadataErrors.referenceNumber}
                       aria-describedby={metadataErrors.referenceNumber ? 'reference-error' : undefined}
@@ -703,6 +737,7 @@ export const DocumentMetadataEditDialog = ({
                       <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
                     )}
                   </div>
+                  <p className="text-xs text-muted-foreground">Leave blank to auto-generate as HQ/&lt;division&gt;/&lt;dept&gt;/001. Editable.</p>
                   {metadataErrors.referenceNumber && (
                     <p id="reference-error" className="text-xs text-destructive" role="alert">
                       {metadataErrors.referenceNumber}

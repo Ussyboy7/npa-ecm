@@ -105,7 +105,7 @@ def _reference_segment(value, fallback: str) -> str:
 
 
 def _reference_path(owning_office, division, department) -> str:
-    """Build the official location/tier/division/department reference path."""
+    """Build canonical HQ/<tier>/<division>[/<dept>]/001 — no dept for GM and above."""
     office_type = str(getattr(owning_office, "office_type", "") or "").lower()
     tier = {
         "md": "MD",
@@ -113,14 +113,12 @@ def _reference_path(owning_office, division, department) -> str:
         "gm": "GM",
         "agm": "AGM",
     }.get(office_type, _reference_segment(owning_office, "REG"))
-    return "/".join(
-        (
-            _REFERENCE_LOCATION_CODE,
-            tier,
-            _reference_segment(getattr(owning_office, "division", None) or division, "DIV"),
-            _reference_segment(getattr(owning_office, "department", None) or department, "DEPT"),
-        )
-    )
+    div_seg = _reference_segment(getattr(owning_office, "division", None) or division, "DIV")
+    # Only AGM and below include department (REG also)
+    if tier in ("AGM", "REG"):
+        dept_seg = _reference_segment(getattr(owning_office, "department", None) or department, "DEPT")
+        return "/".join((_REFERENCE_LOCATION_CODE, tier, div_seg, dept_seg))
+    return "/".join((_REFERENCE_LOCATION_CODE, tier, div_seg))
 
 
 def _is_client_generated_reference(value: str | None) -> bool:

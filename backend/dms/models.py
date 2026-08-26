@@ -112,7 +112,8 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
 
     def save(self, *args, **kwargs):
         if not self.reference_number or not self.reference_number.strip():
-            # Auto-generate HQ/<division>/<dept>/001 like correspondence
+            # Canonical: HQ/<tier>/<division>[/<dept>]/001
+            # GM and above: HQ/GM/ICT/001 (no dept), AGM and below: HQ/AGM/ICT/SA&DM/001 (with dept)
             import re, os
 
             def seg(v, fb):
@@ -120,9 +121,37 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
                 return re.sub(r"[^A-Za-z0-9&]+", "", str(raw)).upper() or fb
 
             loc = (os.getenv("NPA_REFERENCE_LOCATION_CODE", "HQ").strip().upper() or "HQ")
+            # Determine tier from author
+            tier = "REG"
+            try:
+                author = getattr(self, "author", None)
+                if author:
+                    m = getattr(author, "office_memberships", None)
+                    office = None
+                    if m is not None:
+                        mem = m.filter(is_active=True).select_related("office").order_by("-is_primary").first()
+                        if mem and mem.office:
+                            office = mem.office
+                    ot = str(getattr(office, "office_type", "") or "").lower() if office else ""
+                    tier_map = {"md": "MD", "ed": "ED", "gm": "GM", "agm": "AGM"}
+                    if ot in tier_map:
+                        tier = tier_map[ot]
+                    elif getattr(author, "grade_level", None):
+                        gl = str(author.grade_level).upper()
+                        if gl == "MDCS": tier = "MD"
+                        elif gl == "EDCS": tier = "ED"
+                        elif gl == "GMCS": tier = "GM"
+                        elif gl == "AGMCS": tier = "AGM"
+            except:
+                pass
             div = seg(self.division, "DIV")
-            dept = seg(self.department, "DEPT")
-            base = f"{loc}/{div}/{dept}"
+            # Only include dept for AGM and below (AGM, etc.), not for GM and above
+            include_dept = tier in ("AGM", "REG") or (tier not in ("MD", "ED", "GM"))
+            if include_dept:
+                dept = seg(self.department, "DEPT")
+                base = f"{loc}/{tier}/{div}/{dept}"
+            else:
+                base = f"{loc}/{tier}/{div}"
             # Find next seq
             Model = self.__class__
             count = Model.objects.filter(reference_number__startswith=f"{base}/").count()
