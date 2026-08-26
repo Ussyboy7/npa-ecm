@@ -247,14 +247,12 @@ export function DocumentVersionsPanel({
                         {isProcessing ? "Cancel OCR" : "Run OCR"}
                       </DropdownMenuItem>
                     )}
-                    {uploadUser &&
-                      (uploadUser.id === version.uploadedBy ||
-                        uploadUser.id === document.authorId) && (
-                        <DropdownMenuItem onClick={() => onReplaceVersion(version.id)}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Replace file
-                        </DropdownMenuItem>
-                      )}
+                    {uploadUser && (
+                      <DropdownMenuItem onClick={() => onReplaceVersion(version.id)}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Replace file
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
