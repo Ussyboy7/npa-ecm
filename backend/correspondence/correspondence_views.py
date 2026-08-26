@@ -329,6 +329,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                             | Q(current_office__department_id=user.department_id)
                             | Q(minutes__from_office__department_id=user.department_id)
                             | Q(minutes__user=user)
+                            | Q(minutes__to_user=user)
                         )
                     elif getattr(user, "division_id", None):
                         qs = qs.filter(
@@ -337,6 +338,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                             | Q(current_office__division_id=user.division_id)
                             | Q(minutes__from_office__division_id=user.division_id)
                             | Q(minutes__user=user)
+                            | Q(minutes__to_user=user)
                         )
                     elif getattr(user, "directorate_id", None):
                         qs = qs.filter(
@@ -345,6 +347,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                             | Q(division__directorate_id=user.directorate_id)
                             | Q(minutes__from_office__directorate_id=user.directorate_id)
                             | Q(minutes__user=user)
+                            | Q(minutes__to_user=user)
                         )
                     else:
                         # No org — fall back to office-membership / created/approver union (minimal)
@@ -367,7 +370,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                                 ).values_list('correspondence_id', flat=True).distinct()
                             )
 
-                        base_q = Q(id__in=parallel_ids) | Q(id__in=dist_ids) | Q(created_by=user) | Q(current_approver=user) | Q(minutes__user=user)
+                        base_q = Q(id__in=parallel_ids) | Q(id__in=dist_ids) | Q(created_by=user) | Q(current_approver=user) | Q(minutes__user=user) | Q(minutes__to_user=user)
                         user_office_ids = list(user_offices)
                         if user_office_ids:
                             base_q |= Q(current_office_id__in=user_office_ids) | Q(owning_office_id__in=user_office_ids) | Q(minutes__from_office_id__in=user_office_ids) | Q(minutes__to_office_id__in=user_office_ids)
