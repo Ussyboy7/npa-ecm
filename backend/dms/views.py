@@ -606,10 +606,16 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if not latest_version:
             raise ValidationError({"detail": "Document has no versions"})
         
-        # Get content to summarize
-        content = latest_version.content_text or latest_version.ocr_text or ""
+        # Extract text on demand when OCR/background job never populated the version
+        # (common for correspondence auto-promoted PDF attachments).
+        content = OCRService.ensure_text_for_version(latest_version)
         if not content.strip():
-            raise ValidationError({"detail": "Document has no text content to summarize"})
+            raise ValidationError({
+                "detail": (
+                    "Document has no text content to summarize. "
+                    "Run OCR on the version first, or upload a text-based PDF/DOCX."
+                )
+            })
         
         try:
             summary = DocumentSummaryService.generate_summary(content, document.title)
@@ -707,6 +713,12 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         raise ValidationError({"detail": "No downloadable content for this version."})
 
     def _compose_watermark_text(self, document, user, *, forensic: bool) -> str:
+        # Completion packages already have COMPLETED burned into the PDF via ReportLab;
+        # don't add a second forensic watermark on top (would double).
+        tags = getattr(document, "tags", None) or []
+        title = getattr(document, "title", "") or ""
+        if "completion-package" in tags or "Completion Package" in title:
+            return ""
         rights = resolve_document_rights(document, user)
         parts: list[str] = []
         policy_wm = (rights.get("watermark_text") or "").strip()
