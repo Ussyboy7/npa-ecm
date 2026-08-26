@@ -376,7 +376,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                         qs = qs.filter(base_q)
                     # For department/division/directorate cases, qs already filtered strictly above
 
-        return qs
+        return qs.distinct()
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
