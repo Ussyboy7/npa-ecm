@@ -146,7 +146,10 @@ class Command(BaseCommand):
 
     def _reset_organization_units(self) -> None:
         self.stdout.write("Purging existing organization hierarchy…")
-        # Purge users first to avoid FK constraint issues
+        # Purge dependent records first to avoid FK constraint issues
+        from accounts.models import DocumentSeal
+        DocumentSeal.objects.all().delete()
+        # Purge users
         User.objects.all().delete()
         self.stdout.write(self.style.WARNING("Existing users removed."))
         Department.objects.all().delete()
