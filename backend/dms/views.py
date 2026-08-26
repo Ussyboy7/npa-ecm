@@ -915,9 +915,28 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
     def replace_version(self, request, pk=None):
         """Replace an existing version with new file content."""
         version = self.get_object()
-        
-        # Check permissions - only author or document owner can replace
-        if version.uploaded_by != request.user and version.document.author != request.user:
+
+        # Allow author, uploader, superuser, or anyone with write share
+        if version.uploaded_by == request.user or version.document.author == request.user or getattr(request.user, "is_superuser", False):
+            pass
+        elif version.document.permissions.filter(users=request.user).exists():
+            # Shared with write — check access type via DocumentPermission
+            from dms.models import DocumentPermission
+
+            has_write = DocumentPermission.objects.filter(document=version.document, users=request.user, access__in=["write", "admin"]).exists()
+            if not has_write:
+                # Also allow if shared via division/department with write
+                has_write = DocumentPermission.objects.filter(
+                    document=version.document,
+                    access__in=["write", "admin"]
+                ).filter(
+                    Q(divisions__in=[getattr(request.user, "division_id", None)]) |
+                    Q(departments__in=[getattr(request.user, "department_id", None)]) |
+                    Q(grade_levels__contains=[getattr(request.user, "grade_level", None)])
+                ).exists()
+            if not has_write:
+                raise PermissionDenied("You can only replace versions you uploaded or documents you own")
+        else:
             raise PermissionDenied("You can only replace versions you uploaded or documents you own")
         
         # Create a mutable copy of request data
