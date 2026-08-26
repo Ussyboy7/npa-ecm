@@ -26,6 +26,7 @@ class ActivityLog(UUIDModel):
         # Correspondence actions
         CORRESPONDENCE_CREATED = "correspondence_created", "Correspondence Created"
         CORRESPONDENCE_UPDATED = "correspondence_updated", "Correspondence Updated"
+        CORRESPONDENCE_CLASSIFICATION_CHANGED = "correspondence_classification_changed", "Correspondence Classification Changed"
         CORRESPONDENCE_ROUTED = "correspondence_routed", "Correspondence Routed"
         CORRESPONDENCE_MINUTED = "correspondence_minuted", "Correspondence Minuted"
         CORRESPONDENCE_APPROVED = "correspondence_approved", "Correspondence Approved"

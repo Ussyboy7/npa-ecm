@@ -10,8 +10,8 @@ A modern, full-featured electronic content management system (ECM) built with Dj
 - **Advanced Search** - Full-text search with optional semantic re-rank (MVP)
 - **Version Control** - Track document versions, diff viewer
 - **Access Control** - Role-based permissions, DRM policy layer, document sharing
-- **Approval Workflows** - Customizable document approval processes
-- **Audit Trail** - Comprehensive logging of all document activities
+- **Approval Workflows** - Tiered Departmental / Executive approvals (Executive ₦50m threshold, MD-only; Departmental GM/AGM/ED endorsement) with scope-aware `can_approve` / `can_classify_approval`
+- **Audit Trail** - Comprehensive logging; classification changes use `CORRESPONDENCE_CLASSIFICATION_CHANGED` with reason
 - **Document Preview** - Built-in preview for various file types
 - **Bulk Operations** - Upload, download, and manage multiple documents
 

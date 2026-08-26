@@ -39,8 +39,19 @@ Handles letters, memos, official communications with approval workflows, digital
 - `DistributionSelector` — Routing with parallel branches
 - Detail page — DMS-aligned workspace (header / status strip / body / rail); see `docs/guides/DESIGN.md`
 
+## Approval Tiers & Classification
+
+Tiered model (scope-aware):
+
+- **Executive Approval** — MD only. UI label "Executive Approval". Requires `can_approve` with MD scope.
+- **Departmental Approval / Endorse** — GM / AGM / ED. UI labels "Departmental Approval" or "Endorse" (GM endorses on executive track, approves on departmental track).
+- **Permissions**: `can_approve` = "Departmental / Executive Approval (scope-aware)", `can_classify_approval` = "Classify Approval Level" (escalate/downgrade), `can_access_approvals` = "Access Approvals" (registers). Labels are intentionally distinct.
+- **Threshold**: `EXECUTIVE_THRESHOLD = ₦50,000,000` (`backend/correspondence/services/classification.py`). `amount >= 50m` or `strategic_flag=True` ⇒ `EXECUTIVE`, else `DEPARTMENTAL`. Seeded thresholds documented in `seed_demo_data`.
+- **Audit**: Any classification change logs `CORRESPONDENCE_CLASSIFICATION_CHANGED` with explicit `reason` (escalate/downgrade via `classification.py`).
+
 ## Key Services
 - `correspondence/services.py` — `CorrespondenceService`, `SealGenerationService`, `create_document_from_correspondence` (now returns `list[Document]` for primary + attachments), parallel routing branching logic
+- `correspondence/services/classification.py` — `EXECUTIVE_THRESHOLD = 50_000_000`, `classify_required_level()`, `escalate()` / `downgrade_with_reason()` (audit `CORRESPONDENCE_CLASSIFICATION_CHANGED`)
 - `lib/correspondence-helpers.ts` — Frontend helpers
 - `lib/correspondence-storage.ts` — API client
 - `lib/correspondence-parallel.ts` — Parallel branch utilities (status icons, deadline formatting, branch tree building)

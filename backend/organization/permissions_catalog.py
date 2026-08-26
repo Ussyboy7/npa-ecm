@@ -64,7 +64,7 @@ PERMISSION_LABELS: dict[str, str] = {
     "can_delete_documents": "Delete Documents",
     "can_share_documents": "Share Documents",
     "can_access_approvals": "Access Approvals",
-    "can_approve": "Approve Documents",
+    "can_approve": "Departmental / Executive Approval (scope-aware)",
     "can_reject": "Reject Documents",
     "can_access_administration": "Access Administration",
     "can_manage_users": "Manage Users",

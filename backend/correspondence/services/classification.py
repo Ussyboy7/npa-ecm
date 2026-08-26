@@ -1,4 +1,19 @@
-"""Classification service for correspondence approval levels."""
+"""Classification service for correspondence approval levels.
+
+Tiered approval model
+---------------------
+* **EXECUTIVE_THRESHOLD = ₦50,000,000** — documented here and in
+  ``docs/superpowers/plans``. Correspondence requires **Executive Approval**
+  (MD-only, scope-aware) when ``amount >= EXECUTIVE_THRESHOLD`` or
+  ``strategic_flag=True``; otherwise it requires **Departmental Approval**
+  (GM/AGM/ED endorsement or approval, scope-aware).
+* Permission wording is tiered: UI shows "Executive Approval" for MD and
+  "Departmental Approval" / "Endorse" for GM/AGM/ED (see Task 3).
+* Audit wording for any classification change is
+  ``CORRESPONDENCE_CLASSIFICATION_CHANGED`` with an explicit reason.
+
+Thresholds are seeded/documented via this constant and demo data.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +22,8 @@ from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+# 50 million naira — threshold for Executive vs Departmental approval tiers.
+# Documented in docs/features/correspondence.md and docs/superpowers/plans.
 EXECUTIVE_THRESHOLD = Decimal("50000000")
 
 
@@ -63,7 +80,7 @@ def escalate(correspondence, user, reason: str) -> None:
 
     AuditService.log_correspondence_activity(
         user=user,
-        action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+        action=ActivityLog.ActionType.CORRESPONDENCE_CLASSIFICATION_CHANGED,
         correspondence=correspondence,
         description=f"Escalated to executive approval: {reason}",
         metadata={"action": "escalate", "reason": reason, "level": "executive"},
@@ -103,7 +120,7 @@ def downgrade_with_reason(correspondence, user, reason: str) -> None:
 
     AuditService.log_correspondence_activity(
         user=user,
-        action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+        action=ActivityLog.ActionType.CORRESPONDENCE_CLASSIFICATION_CHANGED,
         correspondence=correspondence,
         description=f"Downgraded to departmental approval: {reason}",
         metadata={"action": "downgrade", "reason": reason, "level": "departmental"},
