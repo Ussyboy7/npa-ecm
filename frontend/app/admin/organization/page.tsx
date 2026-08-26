@@ -514,7 +514,6 @@ const OrganizationStructureContent = () => {
           title="Organization"
           subtitle={tabSubtitle}
           icon={FolderTree}
-          tabs={<OrganizationTabList />}
           actions={
             activeTab === "structure" ? (
               <>
@@ -537,7 +536,7 @@ const OrganizationStructureContent = () => {
         >
           <StatStrip items={orgStatItems} />
 
-          <div className="rounded-xl bg-muted/30 p-2">
+          <div className="rounded-xl bg-muted/30 p-2 mt-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-[200px] flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -559,6 +558,10 @@ const OrganizationStructureContent = () => {
                 </>
               ) : null}
             </div>
+          </div>
+
+          <div className="mt-4">
+            <OrganizationTabList />
           </div>
 
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as OrganizationTab)}>
