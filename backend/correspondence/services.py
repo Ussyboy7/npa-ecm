@@ -1449,8 +1449,11 @@ class ExecutiveApprovalPDFService:
             text = re.sub(r'\n\s*\n', '\n\n', text)
             return text.strip().replace('\n', '<br/>')
         
-        # Title
-        story.append(Paragraph("EXECUTIVE APPROVAL DOCUMENT", title_style))
+        # Title — tier-aware: executive vs departmental
+        _approval_level = getattr(minute, "approval_level", None) or getattr(correspondence, "required_approval_level", None)
+        _is_executive = str(_approval_level).lower() == "executive"
+        _title_text = "EXECUTIVE APPROVAL DOCUMENT" if _is_executive else "DEPARTMENTAL APPROVAL DOCUMENT"
+        story.append(Paragraph(_title_text, title_style))
         story.append(Spacer(1, 0.2*inch))
         
         # --- SECTION 1: Document That Was Approved ---
