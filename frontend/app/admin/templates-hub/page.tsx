@@ -1109,19 +1109,6 @@ function TemplatesHubForm() {
             subtitle={tabSubtitle}
             icon={LayoutTemplate}
             actions={headerActions}
-            tabs={
-              <TabsList>
-                <TabsTrigger value="documents" className="text-xs px-2.5 py-1">Documents</TabsTrigger>
-                <TabsTrigger value="minutes" className="text-xs px-2.5 py-1">Minutes</TabsTrigger>
-                <TabsTrigger value="cases" className="text-xs px-2.5 py-1">Cases</TabsTrigger>
-                {canAccessAdvancedTemplates ? (
-                  <>
-                    <TabsTrigger value="workflows" className="text-xs px-2.5 py-1">Workflows</TabsTrigger>
-                    <TabsTrigger value="forms" className="text-xs px-2.5 py-1">Forms</TabsTrigger>
-                  </>
-                ) : null}
-              </TabsList>
-            }
           >
           <StatStrip
             items={[
@@ -1138,7 +1125,7 @@ function TemplatesHubForm() {
           />
 
           {(activeTab === "workflows" || activeTab === "forms" || activeTab === "documents" || activeTab === "minutes" || activeTab === "cases") ? (
-            <div className="rounded-xl bg-muted/30 p-2">
+            <div className="rounded-xl bg-muted/30 p-2 mt-4">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[200px] flex-1 max-w-sm">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -1197,6 +1184,20 @@ function TemplatesHubForm() {
               </div>
             </div>
           ) : null}
+
+            <div className="mt-4">
+              <TabsList>
+                <TabsTrigger value="documents" className="text-xs px-2.5 py-1">Documents</TabsTrigger>
+                <TabsTrigger value="minutes" className="text-xs px-2.5 py-1">Minutes</TabsTrigger>
+                <TabsTrigger value="cases" className="text-xs px-2.5 py-1">Cases</TabsTrigger>
+                {canAccessAdvancedTemplates ? (
+                  <>
+                    <TabsTrigger value="workflows" className="text-xs px-2.5 py-1">Workflows</TabsTrigger>
+                    <TabsTrigger value="forms" className="text-xs px-2.5 py-1">Forms</TabsTrigger>
+                  </>
+                ) : null}
+              </TabsList>
+            </div>
 
             <TabsContent value="documents" className="mt-2 focus-visible:outline-none">
               {renderDocumentMinutePanel("document")}
