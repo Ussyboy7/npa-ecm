@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScanDialog } from "@/components/capture/ScanDialog";
 import { BatchUploadDialog } from "@/components/capture/BatchUploadDialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -17,6 +18,7 @@ import {
   Link2,
   CheckCircle2,
   XCircle,
+  Search,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import {
@@ -30,6 +32,8 @@ import {
 import { logError } from "@/lib/client-logger";
 import { ListRowCard } from "@/components/shared/ListRowCard";
 import { StatStrip } from "@/components/shared/StatStrip";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { LoadingState } from "@/components/shared/LoadingState";
 import {
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
@@ -68,6 +72,7 @@ export function CaptureJobsPanel() {
   const [batches, setBatches] = useState<BatchUpload[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionJobId, setActionJobId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -121,6 +126,24 @@ export function CaptureJobsPanel() {
     );
   }, [jobs]);
   const completedJobs = jobs.filter((j) => j.status === "completed").slice(0, 20);
+
+  const filteredActive = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return activeJobs;
+    return activeJobs.filter((j) => (j.document?.title ?? "").toLowerCase().includes(q) || j.job_type.toLowerCase().includes(q));
+  }, [activeJobs, query]);
+
+  const filteredCompleted = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return completedJobs;
+    return completedJobs.filter((j) => (j.document?.title ?? "").toLowerCase().includes(q) || j.job_type.toLowerCase().includes(q));
+  }, [completedJobs, query]);
+
+  const filteredBatches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return batches;
+    return batches.filter((b) => b.id.toLowerCase().includes(q) || b.status.toLowerCase().includes(q));
+  }, [batches, query]);
 
   const handleCancelJob = async (jobId: string) => {
     setActionJobId(jobId);
@@ -207,19 +230,32 @@ export function CaptureJobsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button variant="outline" size="compact" onClick={() => void loadData()} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-        <Button size="compact" onClick={() => setScanOpen(true)}>
-          <Scan className="h-4 w-4" />
-          Scan document
-        </Button>
-        <Button variant="secondary" size="compact" onClick={() => setBatchOpen(true)}>
-          <Upload className="h-4 w-4" />
-          Batch upload
-        </Button>
+      {/* Same toolbar chrome as My Documents / Shared filters */}
+      <div className="rounded-xl bg-muted/30 p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search capture jobs"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+              aria-label="Search capture jobs"
+            />
+          </div>
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => void loadData()} disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button size="sm" className="h-8 text-xs" onClick={() => setScanOpen(true)}>
+            <Scan className="h-3.5 w-3.5" />
+            Scan document
+          </Button>
+          <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={() => setBatchOpen(true)}>
+            <Upload className="h-3.5 w-3.5" />
+            Batch upload
+          </Button>
+        </div>
       </div>
 
       <StatStrip
@@ -241,13 +277,21 @@ export function CaptureJobsPanel() {
         </TabsList>
 
         <TabsContent value="jobs">
-          {jobs.length === 0 ? (
-            <div className="rounded-xl border border-border/60 py-8 text-center text-sm text-muted-foreground">
-              No capture jobs yet. Scan a document or upload from Documents to start OCR.
-            </div>
+          {loading ? (
+            <LoadingState message="Loading capture jobs…" />
+          ) : jobs.length === 0 ? (
+            <EmptyState
+              icon={<Scan className="h-12 w-12" />}
+              title="No capture jobs yet"
+              message="Scan a document or upload from Documents to start OCR."
+              actionLabel="Scan document"
+              onAction={() => setScanOpen(true)}
+            />
+          ) : filteredActive.length === 0 && filteredCompleted.length === 0 ? (
+            <EmptyState icon="search" title="No matches" message={`No capture jobs match "${query}".`} />
           ) : (
             <div className={correspondenceQueueListStackClass}>
-              {[...activeJobs, ...completedJobs].map((job) => (
+              {[...filteredActive, ...filteredCompleted].map((job) => (
                 <ListRowCard
                   key={job.id}
                   density="compact"
@@ -303,13 +347,21 @@ export function CaptureJobsPanel() {
         </TabsContent>
 
         <TabsContent value="batches">
-          {batches.length === 0 ? (
-            <div className="rounded-xl border border-border/60 py-8 text-center text-sm text-muted-foreground">
-              No batch uploads yet
-            </div>
+          {loading ? (
+            <LoadingState message="Loading batch uploads…" />
+          ) : batches.length === 0 ? (
+            <EmptyState
+              icon={<Layers className="h-12 w-12" />}
+              title="No batch uploads yet"
+              message="Use Batch upload to ingest multiple files at once."
+              actionLabel="Batch upload"
+              onAction={() => setBatchOpen(true)}
+            />
+          ) : filteredBatches.length === 0 ? (
+            <EmptyState icon="search" title="No matches" message={`No batch uploads match "${query}".`} />
           ) : (
             <div className={correspondenceQueueListStackClass}>
-              {batches.map((batch) => (
+              {filteredBatches.map((batch) => (
                 <ListRowCard
                   key={batch.id}
                   density="compact"

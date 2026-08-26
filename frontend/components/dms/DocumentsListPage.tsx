@@ -400,7 +400,7 @@ function MyDocumentsForm() {
             )
           }
         >
-        {activeTab !== 'capture' ? (
+        {activeTab === 'capture' ? null : (
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
@@ -457,7 +457,7 @@ function MyDocumentsForm() {
             )}
           </div>
         </div>
-        ) : null}
+        )}
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
