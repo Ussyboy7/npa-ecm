@@ -297,23 +297,26 @@ export const getOidcLoginUrl = (): string => `${getBaseUrl()}/accounts/auth/oidc
 export const fetchOidcStatus = async (): Promise<{ enabled: boolean }> =>
   apiFetch<{ enabled: boolean }>("/accounts/auth/oidc/status/");
 
-export const logout = async () => {
+export const logout = () => {
   const refresh = getStoredRefreshToken();
-  if (refresh) {
-    try {
-      await fetch(`${getBaseUrl()}/accounts/auth/token/blacklist/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ refresh }),
-        credentials: "include",
-      });
-    } catch (error) {
-      logWarn("Failed to blacklist token", error);
-    }
-  }
+
+  // Clear the browser session immediately so logout never leaves the app in a
+  // blank intermediate state while the best-effort blacklist request runs.
   clearTokens();
+  clearOriginalTokens();
+
+  if (refresh) {
+    void fetch(`${getBaseUrl()}/accounts/auth/token/blacklist/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh }),
+      credentials: "include",
+    }).catch((error) => {
+      logWarn("Failed to blacklist token", error);
+    });
+  }
 };
 
 export const storeOriginalTokens = (userId?: string) => {

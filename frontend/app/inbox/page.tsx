@@ -251,24 +251,6 @@ const ExecutiveInbox = () => {
     });
   }, [inboxItems, slaTargets]);
 
-  if (!currentUser) {
-    return (
-      <QueuePageShell
-        title="My Inbox"
-        subtitle="Correspondence and documents shared with you"
-      >
-        <EmptyState
-          icon="inbox"
-          title="Sign in required"
-          message="Use the Role Switcher in Settings to choose a user context before viewing your inbox."
-          actionLabel="Open Settings"
-          onAction={() => { window.location.href = '/settings'; }}
-          variant="dashed"
-        />
-      </QueuePageShell>
-    );
-  }
-
   return (
     <QueuePageShell
       title="My Inbox"

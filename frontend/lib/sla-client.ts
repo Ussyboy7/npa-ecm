@@ -481,7 +481,7 @@ export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
     return slaTargetsPromise;
   }
 
-  slaTargetsPromise = (async () => {
+  const request = (async () => {
     try {
       const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
       const targets = {
@@ -498,9 +498,17 @@ export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
       return DEFAULT_SLA_TARGETS;
     }
   })();
-  slaTargetsPromise.finally(() => { slaTargetsPromise = null; });
+  slaTargetsPromise = request;
+  request.then(
+    () => {
+      if (slaTargetsPromise === request) slaTargetsPromise = null;
+    },
+    () => {
+      if (slaTargetsPromise === request) slaTargetsPromise = null;
+    },
+  );
 
-  return slaTargetsPromise;
+  return request;
 };
 
 export const updateSLATargets = async (targets: SLATargets): Promise<{ updated: SLAConfiguration[] }> => {

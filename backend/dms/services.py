@@ -10,6 +10,8 @@ from typing import Optional
 
 from django.conf import settings
 
+from common.storage_utils import resolve_media_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,7 +99,16 @@ class OCRService:
     
     @classmethod
     def _extract_from_pdf(cls, file_path: str) -> Optional[str]:
-        """Extract text from a PDF using pdf2image and pytesseract."""
+        """Extract text from a PDF — native text layer first, then OCR."""
+        # Prefer pdftotext for digital PDFs (fast; common for uploaded reports).
+        native = cls._extract_pdf_with_pdftotext(file_path)
+        if native and native.strip():
+            logger.info(
+                "OCR: Extracted %s characters from PDF via pdftotext",
+                len(native.strip()),
+            )
+            return native.strip()
+
         try:
             import pytesseract
             from pdf2image import convert_from_path
@@ -131,10 +142,57 @@ class OCRService:
                 
         except ImportError:
             logger.warning("OCR: pdf2image or pytesseract not installed")
-            return cls._extract_pdf_with_pdftotext(file_path)
+            return None
         except Exception as e:
             logger.error(f"OCR PDF extraction failed: {e}")
             return None
+
+    @classmethod
+    def ensure_text_for_version(cls, version) -> str:
+        """
+        Return plain text for a DocumentVersion.
+
+        Uses content_text/ocr_text when present; otherwise extracts from HTML or
+        the on-disk file and persists into ocr_text.
+        """
+        existing = (version.content_text or "").strip() or (version.ocr_text or "").strip()
+        if existing:
+            return existing
+
+        if version.content_html and version.content_html.strip():
+            from django.utils.html import strip_tags
+
+            text = " ".join(strip_tags(version.content_html).split())
+            if text:
+                version.ocr_text = text
+                version.save(update_fields=["ocr_text"])
+                return text
+
+        file_url = (version.file_url or "").strip()
+        if not file_url or file_url.startswith(("http://", "https://", "data:")):
+            return ""
+
+        file_path = resolve_media_path(file_url)
+        if not os.path.isfile(file_path):
+            logger.warning("OCR ensure_text: file missing at %s", file_path)
+            return ""
+
+        mime = (version.file_type or "").lower().strip() or "application/octet-stream"
+        name = (version.file_name or "").lower()
+        if mime == "application/octet-stream":
+            if name.endswith(".pdf"):
+                mime = "application/pdf"
+            elif name.endswith(".docx"):
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            elif name.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".gif")):
+                mime = f"image/{name.rsplit('.', 1)[-1].replace('jpg', 'jpeg')}"
+
+        extracted = cls.extract_text(file_path, mime)
+        if extracted and extracted.strip():
+            version.ocr_text = extracted.strip()
+            version.save(update_fields=["ocr_text"])
+            return version.ocr_text
+        return ""
     
     @classmethod
     def _extract_with_tesseract_cli(cls, file_path: str) -> Optional[str]:

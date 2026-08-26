@@ -118,6 +118,8 @@ export const registerReducer = (
       return {
         ...state,
         documentFiles: [...state.documentFiles, ...action.payload],
+        // Upload XOR My Documents for the primary source file
+        linkedDocumentIds: action.payload.length > 0 ? [] : state.linkedDocumentIds,
         ui: {
           ...state.ui,
           errors: { ...state.ui.errors, documentFiles: '' },
@@ -131,12 +133,18 @@ export const registerReducer = (
       };
 
     case 'SET_DOCUMENT_FILES':
-      return { ...state, documentFiles: action.payload };
+      return {
+        ...state,
+        documentFiles: action.payload,
+        linkedDocumentIds: action.payload.length > 0 ? [] : state.linkedDocumentIds,
+      };
 
     case 'SET_LINKED_DOCUMENTS':
       return {
         ...state,
         linkedDocumentIds: action.payload,
+        // Selecting from My Documents clears pending uploads
+        documentFiles: action.payload.length > 0 ? [] : state.documentFiles,
         ui: { ...state.ui, errors: { ...state.ui.errors, documentFiles: '' } },
       };
 

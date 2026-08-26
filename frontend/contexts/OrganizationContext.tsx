@@ -120,6 +120,7 @@ export const OrganizationProvider: React.FC<{
         rolesRows,
         officesRows,
         officeMembershipsRows,
+        usersRows,
       ] = await Promise.all([
         fetchFirstPage('/organization/directorates/?ordering=name'),
         fetchFirstPage('/organization/divisions/?ordering=name'),
@@ -127,6 +128,7 @@ export const OrganizationProvider: React.FC<{
         fetchFirstPage('/organization/roles/?ordering=name'),
         fetchFirstPage('/organization/offices/?ordering=name'),
         fetchFirstPage('/organization/office-memberships/?ordering=office__name'),
+        fetchFirstPage('/accounts/users/?is_active=true&ordering=username', 100),
       ]);
 
       const apiDirectorates = directoratesRows.map(mapApiDirectorate);
@@ -135,6 +137,7 @@ export const OrganizationProvider: React.FC<{
       const apiRoles = rolesRows.map(mapApiRole);
       const apiOffices = officesRows.map(mapApiOffice);
       const apiOfficeMemberships = officeMembershipsRows.map(mapApiOfficeMembership);
+      const apiUsers = dedupeUsers(usersRows.map(mapApiUserToUser));
 
       const sortedDirectorates = sortByName(apiDirectorates);
       const sortedDivisions = sortByName(apiDivisions);
@@ -148,6 +151,7 @@ export const OrganizationProvider: React.FC<{
       setOffices(sortedOffices);
       setOfficeMemberships(apiOfficeMemberships);
       setRoles(sortedRoles);
+      setUsers(apiUsers);
 
       updateOrganizationCache({
         directorates: sortedDirectorates,
@@ -155,12 +159,14 @@ export const OrganizationProvider: React.FC<{
         departments: sortedDepartments,
         offices: sortedOffices,
         officeMemberships: apiOfficeMemberships,
+        users: apiUsers,
       });
 
       logInfo('Organization data loaded successfully:', {
         directorates: sortedDirectorates.length,
         divisions: sortedDivisions.length,
         departments: sortedDepartments.length,
+        users: apiUsers.length,
       });
 
       // Defer delegations fetch — only 6 pages need this

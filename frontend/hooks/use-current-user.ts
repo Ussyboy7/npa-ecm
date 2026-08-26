@@ -5,6 +5,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { isRecord } from "@/lib/type-utils";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
+import { isPublicAppPath } from "@/lib/app-shell-paths";
 import { apiFetch, clearTokens, hasOriginalTokens, hasTokens, isImpersonatingUser, getOriginalUserId } from "@/lib/api-client";
 
 const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
@@ -190,13 +191,34 @@ export const useCurrentUser = () => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => {
+    const handleAuthChanged = () => {
       if (globalUserState.loading) return;
       globalUserState.hydrated = false;
       void performGlobalFetch();
     };
-    window.addEventListener(AUTH_CHANGED_EVENT, handler);
-    return () => window.removeEventListener(AUTH_CHANGED_EVENT, handler);
+    const handleStorageChanged = (event: StorageEvent) => {
+      if (!["access_token", "refresh_token", "npa_ecm_access_token", "npa_ecm_refresh_token", "original_access_token", "original_refresh_token"].includes(event.key ?? "")) {
+        return;
+      }
+      if (globalUserState.loading) return;
+      globalUserState.hydrated = false;
+      if (!hasTokens()) {
+        globalUserState.user = null;
+        globalUserState.hydrated = true;
+        notifySubscribers();
+        if (!isPublicAppPath(window.location.pathname)) {
+          window.location.assign('/login');
+        }
+        return;
+      }
+      void performGlobalFetch();
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
+    window.addEventListener("storage", handleStorageChanged);
+    return () => {
+      window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
+      window.removeEventListener("storage", handleStorageChanged);
+    };
   }, [performGlobalFetch]);
 
   const loadCurrentUser = useCallback(async () => {

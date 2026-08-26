@@ -30,6 +30,10 @@ import type { Correspondence } from '@/lib/npa-structure';
 import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
 import { fetchCorrespondenceAttachmentContent } from '@/lib/correspondence-url-utils';
 import { getCorrespondencePreviewContext, getPrimaryLinkedDocument, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
+import {
+  findAttachmentMatchingDocument,
+  visibleLinkedDocuments,
+} from '@/lib/correspondence-file-dedupe';
 import { useDocumentPreview } from '@/hooks/use-document-preview';
 import { toast } from "@/components/ui/sonner";
 import { logError, logWarn } from '@/lib/client-logger';
@@ -192,39 +196,52 @@ export const DocumentPreviewPanel = ({
   const { currentUser } = useCurrentUser();
   const [documentSurface, setDocumentSurface] = useState<'preview' | 'manage'>('preview');
 
+  const attachments = correspondence?.attachments ?? [];
+  const displayLinkedDocuments = useMemo(
+    () => visibleLinkedDocuments(linkedDocuments, attachments),
+    [linkedDocuments, attachments],
+  );
+
   const previewContext = getCorrespondencePreviewContext(
     correspondence,
-    linkedDocuments,
+    displayLinkedDocuments,
     selectedAttachmentIndex,
     isCompleted,
   );
 
-  const attachments = correspondence?.attachments ?? [];
   const previewLinkedDoc = useMemo(() => {
     if (selectedLinkedDocumentId) {
-      return linkedDocuments.find((d) => d.id === selectedLinkedDocumentId) ?? null;
+      const selected = displayLinkedDocuments.find((d) => d.id === selectedLinkedDocumentId) ?? null;
+      // Ignore selection of an auto-promoted twin (hidden from Manage files).
+      if (selected) return selected;
+      if (linkedDocuments.some((d) => d.id === selectedLinkedDocumentId)) return null;
     }
     // No attachment selected for preview: fall back to primary linked DMS doc
     if (selectedAttachmentIndex !== null) return null;
     if (attachments.length > 0) return null;
-    return getPrimaryLinkedDocument(linkedDocuments) || linkedDocuments[0] || null;
+    return getPrimaryLinkedDocument(displayLinkedDocuments) || displayLinkedDocuments[0] || null;
   }, [
     attachments.length,
+    displayLinkedDocuments,
     linkedDocuments,
     selectedAttachmentIndex,
     selectedLinkedDocumentId,
   ]);
   const activeAttachment = useMemo(() => {
-    if (selectedLinkedDocumentId) return null;
+    if (selectedLinkedDocumentId) {
+      const selectedVisible = displayLinkedDocuments.find((d) => d.id === selectedLinkedDocumentId);
+      if (selectedVisible) return null;
+      // Twin was selected: fall through to attachment preview
+    }
     if (selectedAttachmentIndex !== null && attachments[selectedAttachmentIndex]) {
       return attachments[selectedAttachmentIndex];
     }
     // Linked-only correspondence: don't surface a phantom attachment
-    if (attachments.length === 0 && linkedDocuments.length > 0) return null;
+    if (attachments.length === 0 && displayLinkedDocuments.length > 0) return null;
     return attachments[0] ?? null;
   }, [
     attachments,
-    linkedDocuments.length,
+    displayLinkedDocuments,
     selectedAttachmentIndex,
     selectedLinkedDocumentId,
   ]);
@@ -258,7 +275,35 @@ export const DocumentPreviewPanel = ({
       setSecurePdfBytes(null);
       setSecurePdfError(null);
 
-      // DRM-linked DMS PDF via content API
+      const loadAttachmentPdf = async (attachmentId: string) => {
+        const blob = await fetchCorrespondenceAttachmentContent(attachmentId);
+        if (cancelled) return;
+        setSecurePdfBytes(await blob.arrayBuffer());
+      };
+
+      const twinAttachment = findAttachmentMatchingDocument(previewLinkedDoc, attachments);
+
+      // Prefer attachment bytes when the linked DMS doc is an auto-promoted twin
+      // (version file_url often points at correspondence_attachments/).
+      if (twinAttachment?.id) {
+        const name = twinAttachment.fileName?.toLowerCase() || '';
+        const isPdf =
+          twinAttachment.fileType === 'application/pdf' || name.endsWith('.pdf');
+        if (isPdf) {
+          setSecurePdfLoading(true);
+          try {
+            await loadAttachmentPdf(twinAttachment.id);
+          } catch (err) {
+            if (cancelled) return;
+            setSecurePdfError(err instanceof Error ? err.message : 'Failed to load PDF');
+          } finally {
+            if (!cancelled) setSecurePdfLoading(false);
+          }
+          return;
+        }
+      }
+
+      // DRM-linked DMS PDF via content API (with attachment fallback)
       if (previewLinkedVersion) {
         const isPdf =
           previewLinkedVersion.fileName?.toLowerCase().endsWith('.pdf') ||
@@ -270,6 +315,15 @@ export const DocumentPreviewPanel = ({
           if (cancelled) return;
           setSecurePdfBytes(await blob.arrayBuffer());
         } catch (err) {
+          const fallback = findAttachmentMatchingDocument(previewLinkedDoc, attachments);
+          if (fallback?.id) {
+            try {
+              await loadAttachmentPdf(fallback.id);
+              return;
+            } catch {
+              // fall through to original error
+            }
+          }
           if (cancelled) return;
           setSecurePdfError(err instanceof Error ? err.message : 'Failed to load PDF');
         } finally {
@@ -286,10 +340,7 @@ export const DocumentPreviewPanel = ({
 
       setSecurePdfLoading(true);
       try {
-        const blob = await fetchCorrespondenceAttachmentContent(activeAttachment.id);
-        const bytes = await blob.arrayBuffer();
-        if (cancelled) return;
-        setSecurePdfBytes(bytes);
+        await loadAttachmentPdf(activeAttachment.id);
       } catch (err) {
         if (cancelled) return;
         setSecurePdfError(err instanceof Error ? err.message : 'Failed to load PDF');
@@ -301,12 +352,12 @@ export const DocumentPreviewPanel = ({
     return () => {
       cancelled = true;
     };
-  }, [activeAttachment, previewLinkedVersion]);
+  }, [activeAttachment, attachments, previewLinkedDoc, previewLinkedVersion]);
 
   const effectiveLinkedDoc =
-    linkedDocuments.find(d => d.role === 'primary' && d.versions.length > 0) ||
-    linkedDocuments.find(d => d.versions.length > 0) ||
-    linkedDocuments[0];
+    displayLinkedDocuments.find(d => d.role === 'primary' && d.versions.length > 0) ||
+    displayLinkedDocuments.find(d => d.versions.length > 0) ||
+    displayLinkedDocuments[0];
   const autoCreatedDocumentId =
     (correspondence as Correspondence & { auto_created_document_id?: string })?.auto_created_document_id ||
     effectiveLinkedDoc?.id;
@@ -315,7 +366,7 @@ export const DocumentPreviewPanel = ({
     if (!currentUser?.id) return;
     const target = resolveCorrespondenceDmsAccessTarget(
       correspondence,
-      linkedDocuments,
+      displayLinkedDocuments,
       previewContext.source,
     );
     if (!target) return;
@@ -330,7 +381,7 @@ export const DocumentPreviewPanel = ({
     } catch (error: unknown) {
       logWarn('[DocumentPreviewPanel] Failed to write DMS access log', error);
     }
-  }, [correspondence, currentUser?.id, linkedDocuments, previewContext.source]);
+  }, [correspondence, currentUser?.id, displayLinkedDocuments, previewContext.source]);
 
   const handleForceDownload = useCallback(
     async (fileName?: string, attachmentId?: string) => {
@@ -446,7 +497,7 @@ export const DocumentPreviewPanel = ({
   }) || [];
 
   const fileCount =
-    (correspondence.attachments?.length ?? 0) + linkedDocuments.length;
+    (correspondence.attachments?.length ?? 0) + displayLinkedDocuments.length;
   const hasFiles = fileCount > 0 || !isCompleted;
   const isManageMode = documentSurface === 'manage' && !isPreviewFullscreen;
 
@@ -494,13 +545,13 @@ export const DocumentPreviewPanel = ({
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 space-y-5">
-        {linkedDocuments.length > 0 && (
+        {displayLinkedDocuments.length > 0 && (
           <div className="space-y-2 min-w-0">
             <p className={cn(corrType.sectionLabel, 'px-0.5')}>
-              Documents ({linkedDocuments.length})
+              Documents ({displayLinkedDocuments.length})
             </p>
             <div className="space-y-1">
-              {linkedDocuments.map((doc) => {
+              {displayLinkedDocuments.map((doc) => {
                 const isSelected =
                   selectedLinkedDocumentId === doc.id ||
                   (!selectedLinkedDocumentId &&
@@ -653,7 +704,7 @@ export const DocumentPreviewPanel = ({
           </div>
         )}
 
-        {linkedDocuments.length === 0 && (correspondence.attachments?.length ?? 0) === 0 && (
+        {displayLinkedDocuments.length === 0 && (correspondence.attachments?.length ?? 0) === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <FolderOpen className="h-8 w-8 mx-auto mb-3 opacity-40" />
             <p className={corrType.itemTitle}>No files yet</p>
@@ -742,7 +793,7 @@ export const DocumentPreviewPanel = ({
       >
             {/* Header bar with file info and actions */}
             {(() => {
-              const linkedDoc = getPrimaryLinkedDocument(linkedDocuments);
+              const linkedDoc = getPrimaryLinkedDocument(displayLinkedDocuments);
               const selectedVersionIndex = linkedDoc ? (selectedLinkedDocVersion[linkedDoc.id] ?? linkedDoc.versions.length - 1) : -1;
               const selectedVersion = linkedDoc && selectedVersionIndex >= 0 ? linkedDoc.versions[selectedVersionIndex] : null;
               
@@ -939,7 +990,7 @@ export const DocumentPreviewPanel = ({
             <div className="flex-1 overflow-auto min-h-0 min-w-0 bg-muted/20">
               {(() => {
                 const linkedDoc =
-                  previewLinkedDoc || getPrimaryLinkedDocument(linkedDocuments) || null;
+                  previewLinkedDoc || getPrimaryLinkedDocument(displayLinkedDocuments) || null;
                 const selectedVersion =
                   previewLinkedVersion ||
                   (linkedDoc

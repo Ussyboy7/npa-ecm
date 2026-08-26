@@ -12,7 +12,9 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
 
-  if (isPublicAppPath(pathname)) {
+  // During the first render Next may not have resolved the pathname yet.
+  // Avoid flashing the authenticated dashboard shell on public routes.
+  if (!pathname || isPublicAppPath(pathname)) {
     return <>{children}</>;
   }
 

@@ -399,6 +399,25 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
         require_permission(self.request.user, "can_create_documents")
         author = serializer.validated_data.get("author") or self.request.user
+        # Auto-generate reference_number as DOC/<division>/<dept>/001 if blank (mirrors HQ/... for correspondence)
+        if not (serializer.validated_data.get("reference_number") or "").strip():
+            import re
+            from dms.models import Document as _Doc
+            div = serializer.validated_data.get("division")
+            dept = serializer.validated_data.get("department")
+            def _seg(v, fb):
+                raw = getattr(v, "code", None) or getattr(v, "name", None) or fb
+                return re.sub(r"[^A-Za-z0-9&]+", "", str(raw)).upper() or fb
+            prefix = "DOC/%s/%s" % (_seg(div, "DIV"), _seg(dept, "DEPT"))
+            base = _Doc.objects.filter(reference_number__startswith=prefix + "/").count()
+            cand = None
+            for i in range(100):
+                c = f"{prefix}/{base + i + 1:03d}"
+                if not _Doc.objects.filter(reference_number=c).exists():
+                    cand = c
+                    break
+            if cand:
+                serializer.validated_data["reference_number"] = cand
         document = serializer.save(author=author)
         
         # Create audit log

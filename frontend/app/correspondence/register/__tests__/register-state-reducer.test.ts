@@ -131,6 +131,22 @@ describe('registerReducer', () => {
     expect(next.documentFiles[0]).toBe(file);
   });
 
+  it('ADD_DOCUMENT_FILES clears linked My Documents (XOR)', () => {
+    const file = new File(['test'], 'test.pdf', { type: 'application/pdf' });
+    const state: RegisterState = { ...baseState, linkedDocumentIds: ['doc-1'] };
+    const next = registerReducer(state, { type: 'ADD_DOCUMENT_FILES', payload: [file] });
+    expect(next.documentFiles).toHaveLength(1);
+    expect(next.linkedDocumentIds).toEqual([]);
+  });
+
+  it('SET_LINKED_DOCUMENTS clears uploaded files (XOR)', () => {
+    const file = new File(['test'], 'test.pdf', { type: 'application/pdf' });
+    const state: RegisterState = { ...baseState, documentFiles: [file] };
+    const next = registerReducer(state, { type: 'SET_LINKED_DOCUMENTS', payload: ['doc-1'] });
+    expect(next.linkedDocumentIds).toEqual(['doc-1']);
+    expect(next.documentFiles).toEqual([]);
+  });
+
   it('handles ADD_DOCUMENT_FILES appends to existing files', () => {
     const file1 = new File(['a'], 'a.pdf', { type: 'application/pdf' });
     const file2 = new File(['b'], 'b.pdf', { type: 'application/pdf' });

@@ -6,15 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical, ExternalLink, Printer } from 'lucide-react';
+import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical, ExternalLink, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from "@/components/ui/sonner";
 import type { DocumentAccessLog } from '@/lib/api/dms';
 import type { User } from '@/lib/npa-structure';
+
+const LOGS_PAGE_SIZE = 10;
 
 type AccessActionFilter = 'all' | DocumentAccessLog['action'];
 
@@ -67,6 +69,7 @@ export const AccessActivityCard = ({
   const [sortOption, setSortOption] = useState<SortOption>('recent');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
+  const [logsPage, setLogsPage] = useState(1);
 
   const getDisplayUserName = (log: DocumentAccessLog): string =>
     userLookup.get(log.userId)?.name || log.userName || 'Unknown';
@@ -83,7 +86,6 @@ export const AccessActivityCard = ({
     return name.slice(0, 2).toUpperCase();
   };
 
-  // Restore filter state from localStorage after mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const stored = localStorage.getItem(`access-activity-filters-${documentId}`);
@@ -98,7 +100,6 @@ export const AccessActivityCard = ({
     }
   }, [documentId]);
 
-  // Persist filter state to localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
     localStorage.setItem(
@@ -113,7 +114,6 @@ export const AccessActivityCard = ({
   }, [documentId, accessLogFilter, accessLogDateFilter, searchQuery, sortOption]);
 
   const handleExport = () => {
-    // Properly escape CSV values
     const escapeCsvValue = (value: string): string => {
       if (value.includes(',') || value.includes('"') || value.includes('\n')) {
         return `"${value.replace(/"/g, '""')}"`;
@@ -149,7 +149,7 @@ export const AccessActivityCard = ({
     try {
       await onRefresh();
       toast.success('Access logs refreshed');
-      } catch (_error: unknown) {
+    } catch (_error: unknown) {
       toast.error('Failed to refresh access logs');
     } finally {
       setIsRefreshing(false);
@@ -162,14 +162,11 @@ export const AccessActivityCard = ({
     }
   };
 
-  // Filter and sort logs
   const filtered = useMemo(() => {
     const now = new Date();
     let result = accessLogs.filter((log) => {
-      // Action filter
       if (accessLogFilter !== 'all' && log.action !== accessLogFilter) return false;
 
-      // Date filter
       if (accessLogDateFilter !== 'all') {
         const logDate = new Date(log.timestamp);
         const diffMs = now.getTime() - logDate.getTime();
@@ -180,7 +177,6 @@ export const AccessActivityCard = ({
         if (accessLogDateFilter === 'month' && diffDays >= 30) return false;
       }
 
-      // Search filter
       if (searchQuery.trim()) {
         const userName = getDisplayUserName(log).toLowerCase();
         const searchLower = searchQuery.toLowerCase();
@@ -190,7 +186,6 @@ export const AccessActivityCard = ({
       return true;
     });
 
-    // Sort logs
     result = [...result].sort((a, b) => {
       switch (sortOption) {
         case 'recent':
@@ -213,7 +208,16 @@ export const AccessActivityCard = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessLogs, accessLogFilter, accessLogDateFilter, searchQuery, sortOption]);
 
-  // Calculate statistics from filtered logs
+  useEffect(() => {
+    setLogsPage(1);
+  }, [accessLogFilter, accessLogDateFilter, searchQuery, sortOption, accessLogs.length]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / LOGS_PAGE_SIZE));
+  const safePage = Math.min(logsPage, totalPages);
+  const pageLogs = filtered.slice((safePage - 1) * LOGS_PAGE_SIZE, safePage * LOGS_PAGE_SIZE);
+  const pageStart = filtered.length === 0 ? 0 : (safePage - 1) * LOGS_PAGE_SIZE + 1;
+  const pageEnd = Math.min(safePage * LOGS_PAGE_SIZE, filtered.length);
+
   const stats = useMemo(() => {
     return {
       views: filtered.filter((l) => l.action === 'view').length,
@@ -226,7 +230,6 @@ export const AccessActivityCard = ({
     };
   }, [filtered]);
 
-  // Format relative time
   const formatRelativeTime = (timestamp: string): string => {
     try {
       return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
@@ -366,15 +369,15 @@ export const AccessActivityCard = ({
       )}
 
       <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>
-        <DialogContent size="xl">
-          <DialogHeader>
-            <DialogTitle>Access Activity Logs</DialogTitle>
+        <DialogContent size="lg" height="fill" className="max-h-[min(70vh,560px)] gap-3">
+          <DialogHeader className="shrink-0 pr-8">
+            <DialogTitle>Access activity logs</DialogTitle>
             <DialogDescription>
               {filtered.length} {filtered.length === 1 ? 'log' : 'logs'} for this document
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 space-y-3 overflow-y-auto">
-            {/* Search */}
+
+          <div className="shrink-0 space-y-2">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
@@ -385,13 +388,12 @@ export const AccessActivityCard = ({
                 className="h-8 text-sm pl-7"
               />
             </div>
-            {/* Filter Row */}
             <div className="flex items-center gap-2 flex-wrap">
               <Select
                 value={accessLogFilter}
                 onValueChange={(value) => setAccessLogFilter(value as AccessActionFilter)}
               >
-                <SelectTrigger className="w-40 h-8 text-xs">
+                <SelectTrigger className="w-[140px] h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -407,7 +409,7 @@ export const AccessActivityCard = ({
                 value={accessLogDateFilter}
                 onValueChange={(value) => setAccessLogDateFilter(value as 'all' | 'today' | 'week' | 'month')}
               >
-                <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectTrigger className="w-[110px] h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -421,7 +423,7 @@ export const AccessActivityCard = ({
                 value={sortOption}
                 onValueChange={(value) => setSortOption(value as SortOption)}
               >
-                <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectTrigger className="w-[130px] h-8 text-xs">
                   <div className="flex items-center gap-1">
                     <ArrowUpDown className="h-3 w-3" />
                     <SelectValue />
@@ -435,8 +437,9 @@ export const AccessActivityCard = ({
                 </SelectContent>
               </Select>
             </div>
-            {/* Logs Table */}
-            <div className="space-y-1.5">
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <Loader2 className="h-6 w-6 text-muted-foreground mb-2 animate-spin" />
@@ -473,7 +476,7 @@ export const AccessActivityCard = ({
                   )}
                 </div>
               ) : (
-                filtered.map((log) => {
+                pageLogs.map((log) => {
                   const userName = getDisplayUserName(log);
                   const meta = accessActionMeta(log.action);
                   const ActionIcon = meta.icon;
@@ -519,11 +522,44 @@ export const AccessActivityCard = ({
                   );
                 })
               )}
-            </div>
           </div>
+
+          {filtered.length > 0 && (
+            <DialogFooter className="shrink-0 sm:justify-between gap-2 border-t border-border/40 pt-3">
+              <p className="text-[11px] text-muted-foreground self-center">
+                {pageStart}–{pageEnd} of {filtered.length}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2"
+                  disabled={safePage <= 1}
+                  onClick={() => setLogsPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-[11px] tabular-nums text-muted-foreground min-w-[3.5rem] text-center">
+                  {safePage}/{totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setLogsPage((p) => Math.min(totalPages, p + 1))}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </>
   );
 };
-

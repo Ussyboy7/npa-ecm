@@ -55,9 +55,11 @@ export const DocumentsStep = memo(function DocumentsStep({
   const [myDocsLoading, setMyDocsLoading] = useState(false);
   const [myDocsSearch, setMyDocsSearch] = useState('');
   const selectedIds = new Set(linkedDocumentIds);
+  const hasUploads = documentFiles.length > 0;
+  const hasLinkedDocs = linkedDocumentIds.length > 0;
 
   const handleFileSelect = (files: FileList | null) => {
-    if (!files) return;
+    if (!files || hasLinkedDocs) return;
     const validFiles = Array.from(files).filter(validateFile);
     if (validFiles.length) {
       onDocumentFilesAdd(validFiles);
@@ -86,20 +88,33 @@ export const DocumentsStep = memo(function DocumentsStep({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <Label>
-            Upload Documents <span className="text-destructive">*</span>
+            Source document <span className="text-destructive">*</span>
           </Label>
-          <Button type="button" variant="outline" size="sm" onClick={() => setShowMyDocs(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            title={hasUploads ? 'Selecting a document clears uploaded files' : undefined}
+            onClick={() => setShowMyDocs(true)}
+          >
             <FolderSearch className="h-4 w-4 mr-2" />
             Select from My Documents
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Upload a new file or select an existing document — not both for the same registration.
+        </p>
         <div
           role="button"
-          tabIndex={0}
-          onClick={() => fileInputRef.current?.click()}
+          tabIndex={hasLinkedDocs ? -1 : 0}
+          onClick={() => {
+            if (hasLinkedDocs) return;
+            fileInputRef.current?.click();
+          }}
           onKeyDown={(e) => {
+            if (hasLinkedDocs) return;
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               fileInputRef.current?.click();
@@ -111,6 +126,7 @@ export const DocumentsStep = memo(function DocumentsStep({
           }}
           onDrop={(e) => {
             e.preventDefault();
+            if (hasLinkedDocs) return;
             const fileList = Array.from(e.dataTransfer.files ?? []).filter(validateFile);
             if (fileList.length) {
               onDocumentFilesAdd(fileList);
@@ -118,17 +134,22 @@ export const DocumentsStep = memo(function DocumentsStep({
               toast.success(`${fileList.length} file(s) added`);
             }
           }}
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors
             ${
-              errors.documentFiles
-                ? 'border-destructive bg-destructive/5'
-                : 'border-border hover:bg-muted/50 hover:border-primary/50'
+              hasLinkedDocs
+                ? 'border-border bg-muted/30 cursor-not-allowed opacity-60'
+                : errors.documentFiles
+                  ? 'border-destructive bg-destructive/5 cursor-pointer'
+                  : 'border-border hover:bg-muted/50 hover:border-primary/50 cursor-pointer'
             }`}
           aria-label="Upload documents"
+          aria-disabled={hasLinkedDocs}
           aria-describedby={errors.documentFiles ? 'documentFiles-error' : undefined}
         >
           <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" aria-hidden="true" />
-          <p className="text-sm font-medium mb-1">Click to upload or drag and drop</p>
+          <p className="text-sm font-medium mb-1">
+            {hasLinkedDocs ? 'Using document(s) from My Documents' : 'Click to upload or drag and drop'}
+          </p>
           <p className="text-xs text-muted-foreground">PDF, DOC, DOCX up to 30MB</p>
           <input
             type="file"
@@ -136,6 +157,7 @@ export const DocumentsStep = memo(function DocumentsStep({
             accept=".pdf,.doc,.docx"
             ref={fileInputRef}
             multiple
+            disabled={hasLinkedDocs}
             onChange={(e) => handleFileSelect(e.target.files)}
             aria-label="File input"
           />
@@ -264,6 +286,11 @@ export const DocumentsStep = memo(function DocumentsStep({
             <DialogTitle>Select from My Documents</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {hasUploads && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Selecting a document clears uploaded files for this registration.
+              </p>
+            )}
             <Input placeholder="Search my documents…" value={myDocsSearch} onChange={(e) => setMyDocsSearch(e.target.value)} />
             <div className="max-h-[320px] overflow-auto rounded-lg border divide-y">
               {myDocsLoading ? (
