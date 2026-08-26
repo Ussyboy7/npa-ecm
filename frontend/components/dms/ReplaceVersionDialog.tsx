@@ -156,7 +156,7 @@ export const ReplaceVersionDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent size="5xl" height="screen" className="flex flex-col">
+      <DialogContent size="full" className="flex flex-col max-h-[90vh]">
         <DialogHeader className="shrink-0">
           <DialogTitle>Edit Version {version.versionNumber}</DialogTitle>
           <DialogDescription>
