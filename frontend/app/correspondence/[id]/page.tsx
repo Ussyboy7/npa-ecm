@@ -600,13 +600,14 @@ const CorrespondenceDetailContent = () => {
                 ? undefined
                 : () => openModal('minute')
             }
-            primaryActionLabel={
-              activeUser.gradeLevel === 'MDCS'
-                ? 'Minute & Approve'
-                : correspondence.direction === 'downward'
-                  ? 'Minute'
-                  : 'Endorse'
-            }
+            primaryActionLabel={(() => {
+              const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+              const isMD = activeUser.gradeLevel === 'MDCS' || activeUser.systemRole === 'Managing Director';
+              if (required === 'executive' && isMD) return 'Executive Approval';
+              if (required === 'executive') return 'Endorse';
+              if (required === 'departmental') return 'Departmental Approval';
+              return activeUser.gradeLevel === 'MDCS' ? 'Minute & Approve' : correspondence.direction === 'downward' ? 'Minute' : 'Endorse';
+            })()}
             primaryActionDisabled={turnRestrictedDisabled}
             onCaseUnlinked={async () => {
               await refreshData();
