@@ -174,8 +174,10 @@ export default function ExternalEntitiesPage() {
         title="Organization"
         subtitle="Directory of ministries, agencies, and external organizations for correspondence registration"
         icon={Building2}
-        tabs={<OrganizationTabList />}
       >
+        <div className="mt-4">
+          <OrganizationTabList />
+        </div>
         <PermissionDeniedCard
           check={null}
           fallbackMessage="External entity management requires administration or registry permissions."
@@ -189,7 +191,7 @@ export default function ExternalEntitiesPage() {
       title="Organization"
       subtitle="Directory of ministries, agencies, and external organizations for correspondence registration"
       icon={Building2}
-      tabs={<OrganizationTabList />}
+      stats={<StatStrip items={statItems} />}
       actions={
         <Button size="compact" onClick={openCreate}>
           <Plus className="h-4 w-4 mr-2" />
@@ -197,9 +199,12 @@ export default function ExternalEntitiesPage() {
         </Button>
       }
     >
+      <div className="mt-4">
+        <OrganizationTabList />
+      </div>
+
       <ClientErrorBoundary>
-        <div className="space-y-4">
-          <StatStrip items={statItems} />
+        <div className="space-y-4 mt-4">
 
           <div className="rounded-xl bg-muted/30 p-2">
             <div className="relative min-w-[200px] max-w-sm">
