@@ -172,10 +172,8 @@ const Dashboard = () => {
             items={[
               { key: "inQueue", label: "In queue", value: summary.total },
               { key: "urgent", label: "Urgent", value: summary.urgent },
-              { key: "breach", label: "SLA breach", value: summary.overdue },
               { key: "dueSoon", label: "Due soon", value: summary.dueSoon },
               { key: "approvals", label: "Pending approvals", value: pendingApprovals.length, onClick: () => router.push("/approvals"), hint: "Open Pending approvals" },
-              { key: "cases", label: "My cases", value: myCasesCount, onClick: () => router.push("/cases/my"), hint: "Open My cases" },
             ]}
           />
 
@@ -240,9 +238,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{summary.total} total inbox items</Badge>
-            <Badge variant="outline">{summary.urgent} urgent</Badge>
+          <div className="flex justify-end">
             <Button variant="outline" size="sm" asChild>
               <Link href="/inbox">
                 Open full inbox <ArrowRight className="h-3.5 w-3.5 ml-1" />
