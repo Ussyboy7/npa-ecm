@@ -344,15 +344,46 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const canDistribute = userPermissions.canDistribute;
   
   // Check if user is MD (highest level - can only send downward)
-  const isMD = currentUser?.gradeLevel === 'MDCS';
+  const isMD = currentUser?.gradeLevel === 'MDCS' || currentUser?.systemRole === 'Managing Director';
   
   // Other users (below MD) can choose direction
   const canChooseDirection = !isMD;
 
-  // Only MD can approve
-  const canApprove = isMD;
+  // Unified approval gate: permission + scope + turn/delegation/CC
+  const hasCanApprovePerm = Boolean(userPermissions.canApprove || currentUser?.rolePermissions?.can_approve);
+  const isCurrentTurn = correspondence.currentApproverId ? String(correspondence.currentApproverId) === String(currentUser?.id) : false;
+  const myOfficeIds = useMemo(() => officeMemberships.filter(m => m.userId === currentUser?.id && m.isActive).map(m => m.officeId), [officeMemberships, currentUser?.id]);
+  const explicitCC = useMemo(() => {
+    if (!currentUser || !correspondence.distribution) return false;
+    return correspondence.distribution.some((d) => {
+      if (d.type === 'user' && d.userId === currentUser.id) return true;
+      if (d.type === 'office' && d.officeId && myOfficeIds.includes(d.officeId)) return true;
+      return false;
+    });
+  }, [correspondence.distribution, currentUser, myOfficeIds]);
+  // Delegation is per-correspondence; parent page tracks backendDelegation – approximate as false here; CC/turn covers main cases and backend is truth
+  const isDelegatee = false;
+  const scopeOk = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.isSuperuser) return true;
+    if (currentUser.systemRole === 'Super Admin') return true;
+    // If correspondence has no division/department, treat as in-scope
+    if (!correspondence.divisionId && !correspondence.departmentId) return true;
+    // Direct match
+    if (correspondence.divisionId && correspondence.divisionId === currentUser.division) return true;
+    if (correspondence.departmentId && correspondence.departmentId === currentUser.department) return true;
+    // MD sees all
+    if (isMD) return true;
+    // For other executive grades, allow if user shares directorate? fallback: check directorate via divisions
+    if (currentUser.directorate) {
+      const corrDivision = divisions.find((d) => d.id === correspondence.divisionId);
+      if (corrDivision && corrDivision.directorateId === currentUser.directorate) return true;
+    }
+    return false;
+  }, [currentUser, correspondence.divisionId, correspondence.departmentId, isMD, divisions]);
+  const canApprove = hasCanApprovePerm && scopeOk && (isCurrentTurn || isDelegatee || explicitCC);
 
-  // Reset action type to 'minute' if user cannot approve
+  // Reset action type to 'minute' if user cannot approve (but keep approve if they are CC/delegatee)
   useEffect(() => {
     if (!canApprove && actionType === 'approve') {
       setActionType('minute');
@@ -667,14 +698,16 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       return false;
     }
 
-    // Only require signature for executive approvals
+    // Only require signature for approvals; seal for EXECUTIVE only (MD)
     if (actionType === 'approve') {
       if (!userSignature) {
         toast.error('A digital signature is required to approve. Upload your signature in Settings → Signature.');
         return false;
       }
-      // For executive approvals, signature is always required (applySignature should be true)
-      if (isExecutive && !applySignature) {
+      const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+      const isExecTrack = required === 'executive';
+      // For MD executive approvals, signature/seal is mandatory
+      if (isMD && isExecTrack && !applySignature) {
         toast.error('Digital seal is required for executive approvals. Please enable signature application.');
         return false;
       }
@@ -695,8 +728,10 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       return;
     }
     
-    // Check if 2FA is required for executive approvals
-    const requiresTwoFA = actionType === 'approve' && isExecutive && userSignature;
+    // 2FA/seal only for EXECUTIVE (MD) – endorsement and departmental do not require 2FA
+    const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+    const isExecMD = actionType === 'approve' && isMD && required === 'executive' && Boolean(userSignature);
+    const requiresTwoFA = isExecMD;
     
     if (requiresTwoFA && !twoFAVerificationToken) {
       // Show 2FA modal for executive approvals
@@ -1462,38 +1497,84 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                     </div>
                   </div>
                   
-                  {/* Approval Option — MD only */}
-                  {isMD && (
-                    <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
-                      actionType === 'approve' 
-                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
-                        : 'border-border hover:bg-muted/50'
-                    }`}>
-                      <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
-                      <div className="flex-1 space-y-1">
-                        <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-emerald-600" />
-                          Executive Approval
-                          {actionType === 'approve' && !isSignatureLoading && !userSignature && (
-                            <AlertCircle className="h-3 w-3 text-destructive" />
-                          )}
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          <strong className="text-emerald-600 dark:text-emerald-400">Formal approval with digital seal.</strong> Requires signature. 
-                          This will apply a digital executive seal to the document.
-                        </p>
-                        {actionType === 'approve' && isSignatureLoading && !userSignature && (
-                          <p className="text-xs text-muted-foreground mt-1">Checking signature…</p>
-                        )}
-                        {actionType === 'approve' && !isSignatureLoading && !userSignature && (
-                          <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" />
-                            Digital signature required for approval
+                  {/* Approval Options — permission+scope+turn gated */}
+                  {canApprove && (() => {
+                    const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+                    const isExecutiveTrack = required === 'executive';
+                    if (isExecutiveTrack) {
+                      if (isMD) {
+                        return (
+                          <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
+                            actionType === 'approve' 
+                              ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
+                              : 'border-border hover:bg-muted/50'
+                          }`}>
+                            <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
+                            <div className="flex-1 space-y-1">
+                              <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
+                                <Shield className="h-4 w-4 text-emerald-600" />
+                                Executive Approval
+                                {actionType === 'approve' && !isSignatureLoading && !userSignature && (
+                                  <AlertCircle className="h-3 w-3 text-destructive" />
+                                )}
+                              </Label>
+                              <p className="text-xs text-muted-foreground">
+                                <strong className="text-emerald-600 dark:text-emerald-400">Formal executive approval with digital seal.</strong> Requires signature. 
+                                This will apply a digital executive seal to the document.
+                              </p>
+                              {actionType === 'approve' && isSignatureLoading && !userSignature && (
+                                <p className="text-xs text-muted-foreground mt-1">Checking signature…</p>
+                              )}
+                              {actionType === 'approve' && !isSignatureLoading && !userSignature && (
+                                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  Digital signature required for executive approval
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+                      // GM/AGM/ED endorsement on executive track
+                      return (
+                        <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
+                          actionType === 'approve' 
+                            ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20' 
+                            : 'border-border hover:bg-muted/50'
+                        }`}>
+                          <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
+                          <div className="flex-1 space-y-1">
+                            <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
+                              <Shield className="h-4 w-4 text-amber-600" />
+                              Endorse — Reviewed and endorsed
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Departmental endorsement for executive-track matter; will be forwarded for MD executive approval.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    // Departmental track
+                    return (
+                      <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
+                        actionType === 'approve' 
+                          ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' 
+                          : 'border-border hover:bg-muted/50'
+                      }`}>
+                        <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
+                        <div className="flex-1 space-y-1">
+                          <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-blue-600" />
+                            Departmental Approval
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Final approval for departmental matter within your authority.
                           </p>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </RadioGroup>
             </div>
@@ -1501,19 +1582,45 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
           {/* Your Minute/Approval Text */}
           <div>
-            {actionType === 'approve' && (
-              <div className="mb-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
-                <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                  <strong>Executive Approval:</strong> This will apply a digital executive seal to the document. 
-                  Your signature is required and will be embedded in the seal.
-                </p>
-              </div>
-            )}
+            {actionType === 'approve' && (() => {
+              const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+              if (required === 'executive' && isMD) {
+                return (
+                  <div className="mb-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                      <strong>Executive Approval:</strong> This will apply a digital executive seal to the document. 
+                      Your signature is required and will be embedded in the seal.
+                    </p>
+                  </div>
+                );
+              }
+              if (required === 'executive' && !isMD) {
+                return (
+                  <div className="mb-3 p-3 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      <strong>Endorsement:</strong> Reviewed and endorsed — forwarded for MD executive approval. Minute text is required.
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="mb-3 p-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    <strong>Departmental Approval:</strong> Final approval within your departmental authority. Minute text is required.
+                  </p>
+                </div>
+              );
+            })()}
             <Textarea
               id="minute"
               placeholder={
                 actionType === 'approve' 
-                  ? "Enter your approval comments or decision (this will be included with the digital seal)..."
+                  ? (() => {
+                      const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+                      if (required === 'executive' && isMD) return "Enter your executive approval comments (this will be included with the digital seal)...";
+                      if (required === 'executive' && !isMD) return "Enter your endorsement comments — Reviewed and endorsed...";
+                      return "Enter your departmental approval comments...";
+                    })()
                   : "Enter your comments, instructions, or recommendations..."
               }
               value={minuteText}

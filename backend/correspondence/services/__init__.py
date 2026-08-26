@@ -2598,13 +2598,147 @@ class MinuteRouterService:
     }
 
     @classmethod
-    def check_permissions(cls, user, action_type):
-        """Gate creation by action type."""
-        from organization.permission_utils import require_permission
+    def _is_md(cls, user) -> bool:
+        grade = (getattr(user, "grade_level", "") or "").upper()
+        role = getattr(getattr(user, "system_role", None), "name", "") or ""
+        role_upper = role.upper()
+        return grade == "MDCS" or "MANAGING DIRECTOR" in role_upper or role_upper.strip() == "MD" or getattr(user, "is_superuser", False)
+
+    @classmethod
+    def resolve_approval_levels(cls, user, correspondence):
+        """Map required_approval_level + actor grade/role to actual approval_level/approval_role.
+
+        - required==EXECUTIVE and MD -> EXECUTIVE+APPROVAL
+        - required==EXECUTIVE and GM/AGM/ED or other non-MD -> DEPARTMENTAL+ENDORSEMENT
+        - required==DEPARTMENTAL -> DEPARTMENTAL+APPROVAL
+        - required==NONE -> DEPARTMENTAL+APPROVAL (final)
+        Never returns EXECUTIVE+ENDORSEMENT.
+        """
+        from correspondence.models import Correspondence, Minute
+
+        required = getattr(correspondence, "required_approval_level", Correspondence.RequiredApprovalLevel.DEPARTMENTAL)
+        if required == Correspondence.RequiredApprovalLevel.EXECUTIVE:
+            if cls._is_md(user):
+                return (Minute.ApprovalLevel.EXECUTIVE, Minute.ApprovalRole.APPROVAL)
+            # GM/AGM/ED or any non-MD within scope -> endorsement
+            return (Minute.ApprovalLevel.DEPARTMENTAL, Minute.ApprovalRole.ENDORSEMENT)
+        # DEPARTMENTAL or NONE -> final approval
+        return (Minute.ApprovalLevel.DEPARTMENTAL, Minute.ApprovalRole.APPROVAL)
+
+    @classmethod
+    def check_permissions(cls, user, action_type, correspondence=None, request=None):
+        """Gate creation by action type with unified approval gate.
+
+        For approve: hasPerm(can_approve) && org_scope allows correspondence && isCurrentTurn/delegation/CC explicit.
+        Maps approval_level/approval_role and enforces MD-only for EXECUTIVE+APPROVAL.
+        """
+        from organization.permission_utils import require_permission, user_has_permission
 
         permission = cls.ACTION_PERMISSION_MAP.get(action_type)
         if permission:
             require_permission(user, permission)
+
+        # Only apply unified gate for approve/endorse actions when correspondence is known
+        if action_type == "approve" and correspondence is not None:
+            # minute_text required for approve/endorse is validated in serializer, but also guard here if available in request data
+            # Org scope check
+            from organization.org_scope import apply_correspondence_org_scope
+
+            qs = type(correspondence).objects.filter(pk=correspondence.pk)
+            allowed_qs = apply_correspondence_org_scope(qs, user)
+            if not allowed_qs.exists():
+                from rest_framework.exceptions import PermissionDenied
+                from audit.services import AuditService
+                from audit.models import ActivityLog
+
+                try:
+                    AuditService.log_correspondence_activity(
+                        user=user,
+                        action=ActivityLog.ActionType.CORRESPONDENCE_REJECTED,
+                        correspondence=correspondence,
+                        request=request,
+                        description=f"Approval denied – org scope check failed for {getattr(user, 'username', user)}",
+                        metadata={"reason": "org_scope", "required_level": getattr(correspondence, "required_approval_level", None)},
+                    )
+                except Exception:
+                    pass
+                raise PermissionDenied({"detail": "Org scope does not allow approval for this correspondence.", "reason": "org_scope"})
+
+            # Turn / delegation / CC check
+            from correspondence.models import CorrespondenceDistribution, CorrespondenceDelegation
+
+            is_current_turn = False
+            if getattr(correspondence, "current_approver_id", None):
+                is_current_turn = str(correspondence.current_approver_id) == str(user.id)
+            # Also allow if correspondence has no current_approver yet (initial creation) – treat creator as turn?
+            # Check delegation
+            is_delegatee = CorrespondenceDelegation.objects.filter(
+                correspondence=correspondence,
+                assistant=user,
+                status=CorrespondenceDelegation.Status.ACTIVE,
+            ).exists()
+            # CC explicit – user-type distribution or office-type where user belongs to that office
+            is_cc = CorrespondenceDistribution.objects.filter(
+                correspondence=correspondence,
+                user=user,
+                is_active=True,
+            ).exists()
+            if not is_cc:
+                # office-type CC
+                from organization.models import OfficeMembership
+
+                user_office_ids = list(
+                    OfficeMembership.objects.filter(user=user, is_active=True).values_list("office_id", flat=True)
+                )
+                if user_office_ids:
+                    is_cc = CorrespondenceDistribution.objects.filter(
+                        correspondence=correspondence,
+                        office_id__in=user_office_ids,
+                        is_active=True,
+                    ).exists()
+
+            if not (is_current_turn or is_delegatee or is_cc):
+                from rest_framework.exceptions import PermissionDenied
+                from audit.services import AuditService
+                from audit.models import ActivityLog
+
+                try:
+                    AuditService.log_correspondence_activity(
+                        user=user,
+                        action=ActivityLog.ActionType.CORRESPONDENCE_REJECTED,
+                        correspondence=correspondence,
+                        request=request,
+                        description=f"Approval denied – not current turn/delegatee/CC for {getattr(user, 'username', user)}",
+                        metadata={"reason": "not_turn"},
+                    )
+                except Exception:
+                    pass
+                raise PermissionDenied({"detail": "Not current turn, delegatee, or CC – cannot approve.", "reason": "not_turn"})
+
+            # If correspondence is EXECUTIVE track, ensure caller is not trying to claim EXECUTIVE+APPROVAL without MD
+            # This is also enforced in serializer, but double-check here for service-level callers
+            from correspondence.models import Minute
+
+            expected_level, expected_role = cls.resolve_approval_levels(user, correspondence)
+            # If expected is EXECUTIVE+APPROVAL, caller must be MD (already handled)
+            if expected_level == Minute.ApprovalLevel.EXECUTIVE and expected_role == Minute.ApprovalRole.APPROVAL:
+                if not cls._is_md(user):
+                    from rest_framework.exceptions import PermissionDenied
+                    from audit.services import AuditService
+                    from audit.models import ActivityLog
+
+                    try:
+                        AuditService.log_correspondence_activity(
+                            user=user,
+                            action=ActivityLog.ActionType.CORRESPONDENCE_REJECTED,
+                            correspondence=correspondence,
+                            request=request,
+                            description=f"Approval denied – MD only for EXECUTIVE+APPROVAL ({getattr(user, 'username', user)})",
+                            metadata={"reason": "md_only"},
+                        )
+                    except Exception:
+                        pass
+                    raise PermissionDenied({"detail": "Only MD can perform EXECUTIVE+APPROVAL.", "reason": "md_only"})
 
     @classmethod
     def prevent_self_loop(cls, user, to_user, to_office, from_office):

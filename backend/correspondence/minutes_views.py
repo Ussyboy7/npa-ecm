@@ -163,10 +163,15 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         action_type = serializer.validated_data.get("action_type", "minute")
+        correspondence = serializer.validated_data.get("correspondence")
+        # Unified gate: permission + scope + turn/delegation/CC for approve
+        if correspondence is not None and action_type == "approve":
+            MinuteRouterService.check_permissions(self.request.user, action_type, correspondence=correspondence, request=self.request)
+        else:
+            MinuteRouterService.check_permissions(self.request.user, action_type, correspondence=correspondence, request=self.request)
 
-        MinuteRouterService.check_permissions(self.request.user, action_type)
-
-        correspondence = serializer.validated_data["correspondence"]
+        if correspondence is None:
+            correspondence = serializer.validated_data["correspondence"]
         if correspondence.status == Correspondence.Status.COMPLETED:
             raise ValidationError({"detail": "Completed correspondence cannot be updated."})
         current_office = correspondence.current_office
@@ -175,6 +180,48 @@ class MinuteViewSet(viewsets.ModelViewSet):
         to_office = serializer.validated_data.get("to_office")
         from_office = serializer.validated_data.get("from_office") or current_office
         MinuteRouterService.prevent_self_loop(self.request.user, to_user, to_office, from_office)
+
+        # For approve actions, map approval_level/approval_role before save; enforce MD-only and minute_text
+        if action_type == "approve":
+            # Ensure minute_text present (serializer already validates, but double-check for service-level callers)
+            minute_text = serializer.validated_data.get("minute_text", "")
+            if not minute_text or not str(minute_text).strip():
+                raise ValidationError({"minute_text": "Minute text is required for approval/endorsement."})
+            # Determine expected levels and inject if client did not provide or provided inconsistent values
+            expected_level, expected_role = MinuteRouterService.resolve_approval_levels(self.request.user, correspondence)
+            # If client provided explicit levels, validate they match expected or MD-only
+            provided_level = serializer.validated_data.get("approval_level")
+            provided_role = serializer.validated_data.get("approval_role")
+            if provided_level or provided_role:
+                # Reject EXECUTIVE+ENDORSEMENT universally
+                if provided_level == "executive" and provided_role == "endorsement":
+                    raise ValidationError({"approval_role": "EXECUTIVE+ENDORSEMENT is not allowed."})
+                # If client tries to claim EXECUTIVE+APPROVAL without being MD
+                if provided_level == "executive" and provided_role == "approval" and not MinuteRouterService._is_md(self.request.user):
+                    try:
+                        AuditService.log_correspondence_activity(
+                            user=self.request.user,
+                            action=ActivityLog.ActionType.CORRESPONDENCE_REJECTED,
+                            correspondence=correspondence,
+                            request=self.request,
+                            description=f"Approval denied – MD only for EXECUTIVE+APPROVAL ({self.request.user.username})",
+                            metadata={"reason": "md_only", "provided_level": provided_level, "provided_role": provided_role},
+                        )
+                    except Exception:
+                        pass
+                    from rest_framework.exceptions import PermissionDenied as _PermissionDenied
+
+                    raise _PermissionDenied({"detail": "Only MD can perform EXECUTIVE+APPROVAL.", "reason": "md_only"})
+                # Otherwise enforce expected mapping if client provided mismatched (optional – we override)
+                # Use provided values if they match invariant, else override to expected
+                if provided_level != expected_level or provided_role != expected_role:
+                    # If mismatch but not MD-only violation, override to expected (GM endorsement case)
+                    # For GM trying to force EXECUTIVE+APPROVAL we already rejected above
+                    serializer.validated_data["approval_level"] = expected_level
+                    serializer.validated_data["approval_role"] = expected_role
+            else:
+                serializer.validated_data["approval_level"] = expected_level
+                serializer.validated_data["approval_role"] = expected_role
 
         minute, _ = MinuteRouterService.save_minute_with_delegation(
             serializer, self.request, correspondence, from_office,

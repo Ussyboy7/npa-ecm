@@ -286,6 +286,8 @@ class MinuteSerializer(serializers.ModelSerializer):
             "seal_applied",
             "seal_data",
             "correspondence_details",
+            "approval_level",
+            "approval_role",
             "created_at",
             "updated_at",
         ]
@@ -346,6 +348,31 @@ class MinuteSerializer(serializers.ModelSerializer):
         if obj.performed_by:
             return obj.performed_by.get_full_name() or obj.performed_by.username
         return None
+
+    def validate(self, attrs):
+        action_type = attrs.get("action_type", getattr(self.instance, "action_type", None))
+        # minute_text is stored as minute_text; DRF field is minute_text
+        text = attrs.get("minute_text", getattr(self.instance, "minute_text", None) if self.instance else None)
+        if action_type == "approve":
+            if not text or not str(text).strip():
+                raise serializers.ValidationError({"minute_text": "Minute text is required for approval/endorsement."})
+            # Reject explicit EXECUTIVE+ENDORSEMENT (invalid invariant)
+            level = attrs.get("approval_level")
+            role = attrs.get("approval_role")
+            if level == "executive" and role == "endorsement":
+                raise serializers.ValidationError({"approval_role": "EXECUTIVE+ENDORSEMENT is not allowed."})
+            # MD-only for EXECUTIVE+APPROVAL – check if client explicitly requests it
+            if level == "executive" and role == "approval":
+                request = self.context.get("request")
+                user = getattr(request, "user", None) if request else None
+                if user is not None:
+                    grade = (getattr(user, "grade_level", "") or "").upper()
+                    role_name = (getattr(getattr(user, "system_role", None), "name", "") or "").upper()
+                    is_md = grade == "MDCS" or "MANAGING DIRECTOR" in role_name or role_name == "MD"
+                    if not is_md and not getattr(user, "is_superuser", False):
+                        from rest_framework.exceptions import PermissionDenied
+                        raise PermissionDenied({"detail": "Only MD can perform EXECUTIVE+APPROVAL.", "reason": "md_only"})
+        return attrs
     
     branch_originator_name = serializers.SerializerMethodField()
     branch_originator_id = serializers.UUIDField(source="branch_originator.id", read_only=True, allow_null=True)
@@ -599,6 +626,13 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "completion_summary_generated_at",
             "lifecycle_stages",
             "dispatch_records",
+            # Approval classification
+            "required_approval_level",
+            "amount",
+            "strategic_flag",
+            "classified_by",
+            "classified_at",
+            "classification_reason",
             # Parallel routing fields
             "workflow_state",
             "active_parallel_branches",

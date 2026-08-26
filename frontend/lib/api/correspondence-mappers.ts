@@ -248,6 +248,9 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
           created_at: asString(d.created_at),
         }))
       : undefined,
+    requiredApprovalLevel: asOneOfOptional(item.required_approval_level, ['departmental', 'executive', 'none'] as const) ?? 'departmental',
+    amount: (typeof item.amount === 'string' || typeof item.amount === 'number') ? item.amount : null,
+    strategicFlag: typeof item.strategic_flag === 'boolean' ? item.strategic_flag : false,
     workflowState,
     activeParallelBranches: asNumberOptional(item.active_parallel_branches),
     completedParallelBranches: asNumberOptional(item.completed_parallel_branches),
@@ -382,6 +385,8 @@ export const mapApiMinute = (item: ApiMinute): Minute => {
     minuteType: asOneOfOptional(item.minute_type, ['routing', 'instruction', 'clarification', 'addendum'] as const),
     isAdditional: typeof item.is_additional === 'boolean' ? item.is_additional : undefined,
     relatesToMinuteId: normalizeId(item.relates_to_minute ?? item.relates_to_minute_id),
+    approvalLevel: asOneOfOptional(item.approval_level, ['departmental', 'divisional', 'executive'] as const) ?? null,
+    approvalRole: asOneOfOptional(item.approval_role, ['endorsement', 'approval'] as const) ?? null,
     // Digital seal data (for executive approvals)
     sealApplied: normalizeId(item.seal_applied ?? item.seal_applied_id),
     sealData: sealDataObj

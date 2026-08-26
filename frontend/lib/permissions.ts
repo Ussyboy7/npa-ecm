@@ -11,6 +11,7 @@ export type PermissionProfile = {
   canRegisterCorrespondence: boolean;
   canAccessDocumentManagement: boolean;
   canAccessAssistantCalendar: boolean;
+  canApprove: boolean;
   canDistribute: boolean;
   canViewCorrespondenceRegistry: boolean;
   canAccessSystemHealth: boolean;
@@ -33,6 +34,7 @@ const defaultProfile: PermissionProfile = {
   canRegisterCorrespondence: false,
   canAccessDocumentManagement: false,
   canAccessAssistantCalendar: false,
+  canApprove: false,
   canDistribute: false,
   canViewCorrespondenceRegistry: false,
   canAccessSystemHealth: false,
@@ -55,6 +57,7 @@ const SUPERUSER_PROFILE: PermissionProfile = {
   canRegisterCorrespondence: true,
   canAccessDocumentManagement: true,
   canAccessAssistantCalendar: true,
+  canApprove: true,
   canDistribute: true,
   canViewCorrespondenceRegistry: true,
   canAccessSystemHealth: true,
@@ -113,6 +116,7 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
     canRegisterCorrespondence: perm(user, "can_register_correspondence"),
     canAccessDocumentManagement: perm(user, "can_access_document_management"),
     canAccessAssistantCalendar: false,
+    canApprove: perm(user, "can_approve"),
     canDistribute: perm(user, "can_distribute"),
     canViewCorrespondenceRegistry: perm(user, "can_view_registry"),
     canAccessSystemHealth: perm(user, "can_access_system_health"),
@@ -137,6 +141,7 @@ export const PERMISSION_KEY_MAP: Record<keyof Omit<PermissionProfile, "allowedAr
   canRegisterCorrespondence: "can_register_correspondence",
   canAccessDocumentManagement: "can_access_document_management",
   canAccessAssistantCalendar: "can_access_assistant_calendar",
+  canApprove: "can_approve",
   canDistribute: "can_distribute",
   canViewCorrespondenceRegistry: "can_view_registry",
   canAccessSystemHealth: "can_access_system_health",

@@ -202,6 +202,10 @@ export type Correspondence = {
   workflowState?: 'sequential' | 'parallel' | 'merged' | 'waiting_merge';
   activeParallelBranches?: number;
   completedParallelBranches?: number;
+  // Approval classification
+  requiredApprovalLevel?: 'departmental' | 'executive' | 'none';
+  amount?: string | number | null;
+  strategicFlag?: boolean;
   // Routing concept metadata
   flowType?: 'inward-internal' | 'inward-external' | 'outward-internal' | 'outward-external';
   isInward?: boolean;
@@ -320,6 +324,8 @@ export type Minute = {
   toOfficeName?: string;
   toUserId?: string;
   toUserName?: string;
+  approvalLevel?: 'departmental' | 'divisional' | 'executive' | null;
+  approvalRole?: 'endorsement' | 'approval' | null;
   // Digital seal data (for executive approvals)
   sealApplied?: string; // ID of the seal
   sealData?: {
