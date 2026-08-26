@@ -226,19 +226,6 @@ export default function FOIAListPage() {
         />
       }
     >
-      <div className="mt-4 flex gap-1 flex-wrap">
-        {TABS.map((tab) => (
-          <Button
-            key={tab.value}
-            variant={activeTab === tab.value ? "default" : "outline"}
-            size="compact"
-            onClick={() => setActiveTab(tab.value)}
-          >
-            {tab.label}
-          </Button>
-        ))}
-      </div>
-
       <div className="rounded-xl bg-muted/30 p-2 mt-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1 max-w-sm">
@@ -264,6 +251,19 @@ export default function FOIAListPage() {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="mt-4 flex gap-1 flex-wrap">
+        {TABS.map((tab) => (
+          <Button
+            key={tab.value}
+            variant={activeTab === tab.value ? "default" : "outline"}
+            size="compact"
+            onClick={() => setActiveTab(tab.value)}
+          >
+            {tab.label}
+          </Button>
+        ))}
       </div>
 
       {error && <ErrorState message={error} variant="inline" />}
