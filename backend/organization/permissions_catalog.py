@@ -16,6 +16,7 @@ PERMISSION_KEYS: tuple[str, ...] = (
     "can_archive_directorate",
     "can_view_all_correspondence",
     "can_view_registry",
+    "can_classify_approval",
     "can_access_document_management",
     "can_create_documents",
     "can_edit_documents",
@@ -56,6 +57,7 @@ PERMISSION_LABELS: dict[str, str] = {
     "can_archive_directorate": "Archive at Directorate Level",
     "can_view_all_correspondence": "View All Correspondence",
     "can_view_registry": "View Correspondence Registry",
+    "can_classify_approval": "Classify Approval Level",
     "can_access_document_management": "Access Document Management",
     "can_create_documents": "Create Documents",
     "can_edit_documents": "Edit Documents",
@@ -131,6 +133,7 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_archive_directorate": True,
         "can_view_all_correspondence": True,
         "can_view_registry": True,
+        "can_classify_approval": True,
         "can_access_document_management": True,
         "can_create_documents": True,
         "can_edit_documents": True,
@@ -159,6 +162,7 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_archive_directorate": True,
         "can_view_all_correspondence": True,
         "can_view_registry": True,
+        "can_classify_approval": True,
         "can_access_document_management": True,
         "can_create_documents": True,
         "can_edit_documents": True,
@@ -184,6 +188,7 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_archive_department": True,
         "can_archive_division": True,
         "can_view_registry": True,
+        "can_classify_approval": True,
         "can_access_document_management": True,
         "can_create_documents": True,
         "can_edit_documents": True,
@@ -207,6 +212,7 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_archive_department": True,
         "can_archive_division": True,
         "can_view_registry": True,
+        "can_classify_approval": True,
         "can_access_document_management": True,
         "can_create_documents": True,
         "can_edit_documents": True,
@@ -401,9 +407,9 @@ def get_permission_catalog() -> list[dict[str, str]]:
             return "analytics"
         if permission_key.startswith("can_access_document_management") or permission_key.startswith("can_create_documents") or permission_key.startswith("can_edit_documents") or permission_key.startswith("can_delete_documents") or permission_key.startswith("can_share_documents"):
             return "documents"
-        if permission_key.startswith("can_access_approvals") or permission_key.startswith("can_approve") or permission_key.startswith("can_reject"):
+        if permission_key.startswith("can_access_approvals") or permission_key.startswith("can_approve") or permission_key.startswith("can_reject") or permission_key.startswith("can_classify"):
             return "workflow"
-        if permission_key.startswith("can_register_correspondence") or permission_key.startswith("can_minute_correspondence") or permission_key.startswith("can_treat_correspondence") or permission_key.startswith("can_distribute") or permission_key.startswith("can_archive") or permission_key.startswith("can_view_"):
+        if permission_key.startswith("can_register_correspondence") or permission_key.startswith("can_minute_correspondence") or permission_key.startswith("can_treat_correspondence") or permission_key.startswith("can_distribute") or permission_key.startswith("can_archive") or permission_key.startswith("can_view_") or permission_key.startswith("can_classify"):
             return "correspondence"
         return "administration"
 
