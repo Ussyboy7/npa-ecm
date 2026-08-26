@@ -239,7 +239,15 @@ export function CaptureJobsPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Same filter-bar chrome as My Documents — search only; Scan/Batch live in header like Create */}
+      {/* Order mirrors My Documents: stats first, then filter bar, then tabs — same spacing */}
+      <StatStrip
+        items={[
+          { key: "active", label: "Active jobs", value: activeJobs.length },
+          { key: "completed", label: "Completed", value: jobs.filter((j) => j.status === "completed").length },
+          { key: "batches", label: "Batch uploads", value: batches.length },
+        ]}
+      />
+
       <div className="rounded-xl bg-muted/30 p-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1 max-w-sm">
@@ -254,14 +262,6 @@ export function CaptureJobsPanel() {
           </div>
         </div>
       </div>
-
-      <StatStrip
-        items={[
-          { key: "active", label: "Active jobs", value: activeJobs.length },
-          { key: "completed", label: "Completed", value: jobs.filter((j) => j.status === "completed").length },
-          { key: "batches", label: "Batch uploads", value: batches.length },
-        ]}
-      />
 
       <Tabs defaultValue="jobs" className="space-y-4">
         <TabsList>
