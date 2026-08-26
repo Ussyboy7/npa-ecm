@@ -146,6 +146,9 @@ class Command(BaseCommand):
 
     def _reset_organization_units(self) -> None:
         self.stdout.write("Purging existing organization hierarchy…")
+        # Purge users first to avoid FK constraint issues
+        User.objects.all().delete()
+        self.stdout.write(self.style.WARNING("Existing users removed."))
         Department.objects.all().delete()
         Division.objects.all().delete()
         Directorate.objects.all().delete()
