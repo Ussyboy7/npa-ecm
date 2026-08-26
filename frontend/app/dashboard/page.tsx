@@ -8,7 +8,6 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { InboxSummaryCards } from "@/app/inbox/components/InboxSummaryCards";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useRoleChecks } from "@/hooks/use-role-checks";
@@ -22,11 +21,8 @@ import { fetchSLATargets, DEFAULT_SLA_TARGETS } from "@/lib/sla-client";
 import { calculateSLAStatus } from "@/lib/inbox-sla";
 import SecretaryDashboardContent from "./components/SecretaryDashboardContent";
 import {
-  AlertCircle,
   ArrowRight,
-  Briefcase,
   CheckCircle2,
-  Clock,
   Inbox,
 } from "lucide-react";
 
@@ -154,16 +150,6 @@ const Dashboard = () => {
     return () => { ignore = true; };
   }, [currentUser?.id, slaTargets]);
 
-  const quickLinks = useMemo(
-    () => [
-      { label: "Overdue items", count: summary.overdue, href: "/inbox", icon: AlertCircle, tone: "text-destructive", bg: "bg-destructive/10" },
-      { label: "Due soon", count: summary.dueSoon, href: "/inbox", icon: Clock, tone: "text-orange-600", bg: "bg-orange-500/10" },
-      { label: "Pending approvals", count: pendingApprovals.length, href: "/approvals", icon: CheckCircle2, tone: "text-primary", bg: "bg-primary/10" },
-      { label: "My cases", count: myCasesCount, href: "/cases/my", icon: Briefcase, tone: "text-blue-600", bg: "bg-blue-500/10" },
-    ],
-    [summary.overdue, summary.dueSoon, pendingApprovals.length, myCasesCount],
-  );
-
   return (
     <QueuePageShell
       title="Dashboard"
@@ -182,16 +168,15 @@ const Dashboard = () => {
         <ErrorState message={error} onRetry={() => router.refresh()} />
       ) : (
         <div className="space-y-6">
-          <InboxSummaryCards summary={summary} />
-
           <StatStrip
-            items={quickLinks.map((link) => ({
-              key: link.label,
-              label: link.label,
-              value: link.count,
-              onClick: () => router.push(link.href),
-              hint: `Open ${link.label}`,
-            }))}
+            items={[
+              { key: "inQueue", label: "In queue", value: summary.total },
+              { key: "urgent", label: "Urgent", value: summary.urgent },
+              { key: "breach", label: "SLA breach", value: summary.overdue },
+              { key: "dueSoon", label: "Due soon", value: summary.dueSoon },
+              { key: "approvals", label: "Pending approvals", value: pendingApprovals.length, onClick: () => router.push("/approvals"), hint: "Open Pending approvals" },
+              { key: "cases", label: "My cases", value: myCasesCount, onClick: () => router.push("/cases/my"), hint: "Open My cases" },
+            ]}
           />
 
           <div className="grid gap-5 lg:grid-cols-2">
