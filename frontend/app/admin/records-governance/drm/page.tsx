@@ -175,7 +175,7 @@ export default function DrmPoliciesPage() {
       title="Records & security"
       subtitle="Retention, legal holds, disposal, and document rights (DRM)."
       icon={Shield}
-      tabs={<RecordsSecurityTabList />}
+      stats={<StatStrip items={statItems} />}
       actions={
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
@@ -230,9 +230,11 @@ export default function DrmPoliciesPage() {
         </Dialog>
       }
     >
-      <div className="space-y-6">
-        <StatStrip items={statItems} />
+      <div className="mt-4">
+        <RecordsSecurityTabList />
+      </div>
 
+      <div className="space-y-6 mt-4">
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="relative min-w-[200px] max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

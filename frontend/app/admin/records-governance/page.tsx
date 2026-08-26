@@ -223,7 +223,7 @@ function RecordsGovernanceContent() {
         title="Records & security"
         subtitle="Retention, legal holds, disposal, and document rights (DRM)."
         icon={Archive}
-        tabs={<RecordsSecurityTabList />}
+        stats={<StatStrip items={statItems} />}
         actions={
           activeTab === "retention" ? (
             <Button size="compact" onClick={() => setScheduleDialogOpen(true)}>
@@ -238,9 +238,12 @@ function RecordsGovernanceContent() {
           ) : null
         }
       >
+          <div className="mt-4">
+            <RecordsSecurityTabList />
+          </div>
+
           {activeTab === "overview" ? (
-          <div className="space-y-5">
-            <StatStrip items={statItems} />
+          <div className="space-y-5 mt-4">
             <div className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">
               <p className="font-medium text-foreground mb-1">Archived records</p>
               {summary?.archived_correspondence ?? 0} archived correspondence items not yet
@@ -251,7 +254,7 @@ function RecordsGovernanceContent() {
           ) : null}
 
           {activeTab === "retention" ? (
-          <div className="space-y-4">
+          <div className="space-y-4 mt-4">
             <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
                 <TableHeader>
@@ -292,7 +295,7 @@ function RecordsGovernanceContent() {
           ) : null}
 
           {activeTab === "holds" ? (
-          <div className="space-y-4">
+          <div className="space-y-4 mt-4">
             <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
                 <TableHeader>
@@ -383,7 +386,7 @@ function RecordsGovernanceContent() {
           ) : null}
 
           {activeTab === "disposal" ? (
-          <div className="space-y-4">
+          <div className="space-y-4 mt-4">
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="compact" onClick={() => void handleGenerateDue()}>
                 Generate due requests
