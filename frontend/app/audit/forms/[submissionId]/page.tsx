@@ -819,7 +819,11 @@ export default function AuditFormFillPage() {
       {workflow?.status === "completed" && !submission.is_draft && (
         <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-emerald-900">Certified by GM Audit — ready to forward</p>
+            <p className="text-sm font-medium text-emerald-900">Certified by {(() => {
+              const signed = signatures.find((s) => s.status === "signed") || workflow?.signatures?.find((s) => s.status === "signed");
+              const name = signed?.signer_name?.trim() || signed?.signed_by_name?.trim() || "";
+              return name || "GM Audit";
+            })()} — ready to forward</p>
             <p className="text-xs text-muted-foreground">Send this audit query via correspondence to the target department/division for explanation.</p>
           </div>
           <Button size="compact" onClick={() => setForwardDialogOpen(true)}>
@@ -863,6 +867,31 @@ export default function AuditFormFillPage() {
                     method: "POST",
                     body: JSON.stringify({ action: "SEND_FOR_CERTIFICATION" }),
                   });
+                  // Ensure workflow assigned_to_user=gmaudit explicitly (not just office membership)
+                  try {
+                    if (!workflow) {
+                      let gmauditId: string | null = null;
+                      try {
+                        const usersRes = await apiFetch<{ results: Array<{ id: string; username: string }> }>(`/accounts/users/?search=gmaudit&page_size=10`);
+                        const list: Array<{ id: string; username: string }> = Array.isArray((usersRes as unknown as { results?: unknown })?.results)
+                          ? ((usersRes as unknown as { results: Array<{ id: string; username: string }> }).results as Array<{ id: string; username: string }>)
+                          : (Array.isArray(usersRes) ? (usersRes as unknown as Array<{ id: string; username: string }>) : []);
+                        const found = list.find((u) => (u.username || "").toLowerCase() === "gmaudit");
+                        if (found) gmauditId = found.id;
+                      } catch {}
+                      if (gmauditId) {
+                        await apiFetch(`/forms/signature-workflows/create_workflow/`, {
+                          method: "POST",
+                          body: JSON.stringify({
+                            submission_id: submissionId,
+                            routing_mode: "sequential",
+                            signature_assignments: [{ field_name: "gm_audit_signature", field_label: "GM Audit Signature", user_id: gmauditId }],
+                            notes: "GM Audit certification",
+                          }),
+                        }).catch(() => null);
+                      }
+                    }
+                  } catch {}
                   toast.success("Sent for certification");
                   void fetchSubmission();
                 } catch (err) {

@@ -423,7 +423,81 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     def _can_user_sign(self, signature: FormSignature, user) -> bool:
-        """Check if user can sign this signature."""
+        """Check if user can sign this signature.
+
+        Hardened for GM Audit certification: OFF_DIV_AUDIT membership alone
+        is insufficient. For audit certification signatures, require
+        assigned_to_user == gmaudit (specific user) OR Role == GM Audit OR
+        explicit Delegation(principal=gmaudit). UI must show
+        "Certified by <actual actor>" not blanket GM Audit.
+        """
+        # --- Detect audit certification signature ---
+        is_audit_cert = False
+        field_name = (signature.field_name or "").lower()
+        if "audit" in field_name or "gmaudit" in field_name or "gm_audit" in field_name:
+            is_audit_cert = True
+        try:
+            office_code = getattr(signature.assigned_to_office, "code", None) if signature.assigned_to_office else None
+            if office_code == "OFF_DIV_AUDIT":
+                is_audit_cert = True
+        except Exception:
+            pass
+        try:
+            if signature.assigned_to_user and getattr(signature.assigned_to_user, "username", "").lower() == "gmaudit":
+                is_audit_cert = True
+        except Exception:
+            pass
+        try:
+            wf = getattr(signature, "workflow", None)
+            if wf and getattr(wf, "submission", None) and getattr(wf.submission, "template", None):
+                slug = getattr(wf.submission.template, "slug", "") or ""
+                if slug == "audit-query-bills-certification":
+                    is_audit_cert = True
+        except Exception:
+            pass
+
+        if is_audit_cert:
+            # Hardened: require gmaudit user/role/delegation, not office membership
+            # 1) Direct gmaudit user
+            if getattr(user, "username", "").lower() == "gmaudit":
+                return True
+            # 2) Role == GM Audit (exact, case-insensitive) or contains gm+audit
+            try:
+                role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+                if role_name.strip().lower() == "gm audit":
+                    return True
+                rn = role_name.lower()
+                if "gm" in rn and "audit" in rn:
+                    return True
+            except Exception:
+                pass
+            # 3) Explicit Delegation(principal=gmaudit, assistant=user, active)
+            try:
+                from correspondence.models import Delegation
+                from django.contrib.auth import get_user_model
+                from django.utils import timezone
+
+                UserModel = get_user_model()
+                gmaudit_user = UserModel.objects.filter(username__iexact="gmaudit").first()
+                if gmaudit_user:
+                    today = timezone.now().date()
+                    delegations = Delegation.objects.filter(
+                        principal=gmaudit_user,
+                        assistant=user,
+                        active=True,
+                    )
+                    for d in delegations:
+                        if d.starts_at and d.starts_at > today:
+                            continue
+                        if d.ends_at and d.ends_at < today:
+                            continue
+                        return True
+            except Exception:
+                pass
+            # Office membership alone insufficient for OFF_DIV_AUDIT
+            return False
+
+        # Non-audit: original logic
         # If assigned to specific user
         if signature.assigned_to_user:
             return signature.assigned_to_user == user
