@@ -291,6 +291,10 @@ export default function AuditFormFillPage() {
   const [signFormData, setSignFormData] = useState<Record<string, { signer_name: string; signer_pn: string; signer_designation: string }>>({});
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [forwardTargetOffice, setForwardTargetOffice] = useState("");
+  const [forwardAttentionUser, setForwardAttentionUser] = useState("");
+  const [forwardCc, setForwardCc] = useState("");
+  const [forwardDueDate, setForwardDueDate] = useState("");
+  const [forwardActionRequired, setForwardActionRequired] = useState(true);
   const [forwardSubject, setForwardSubject] = useState("");
   const [forwarding, setForwarding] = useState(false);
 
@@ -431,12 +435,46 @@ export default function AuditFormFillPage() {
   };
 
   const handleForwardViaCorrespondence = async () => {
-    if (!forwardTargetOffice || !forwardSubject.trim()) {
+    const officeCode = forwardTargetOffice.trim();
+    if (!officeCode || !forwardSubject.trim()) {
       toast.error("Select target office and enter subject");
+      return;
+    }
+    // Validate office code — office picker or at least pattern check (OFF_... or UUID)
+    const isValidOffice =
+      /^OFF_[A-Z0-9_]+$/i.test(officeCode) ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(officeCode);
+    if (!isValidOffice) {
+      toast.error("Enter a valid office code (e.g., OFF_DIV_FINANCE) or select from picker");
       return;
     }
     setForwarding(true);
     try {
+      // Resolve FormDocument to get actual DMS Document id (not submission.id)
+      let resolvedDocumentId: string | null = null;
+      let resolvedFormDocumentId: string | null = null;
+      try {
+        const fdRes = await apiFetch<{ results: Array<{ id: string; document: { id: string } }> } | Array<{ id: string; document: { id: string } }>>(
+          `/dms/form-documents/?submission=${submissionId}`
+        );
+        const arr: Array<{ id: string; document: { id: string } }> = Array.isArray(fdRes)
+          ? fdRes
+          : ((fdRes as { results?: Array<{ id: string; document: { id: string } }> }).results ?? []);
+        const first = arr[0];
+        if (first?.document?.id) {
+          resolvedDocumentId = first.document.id;
+          resolvedFormDocumentId = first.id;
+        } else if (first?.id) {
+          resolvedFormDocumentId = first.id;
+        }
+      } catch {
+        // optional — will fallback to no link if not found
+      }
+
+      const dueDateValue = forwardDueDate.trim() ? forwardDueDate.trim() : null;
+      const ccList = forwardCc.trim() ? forwardCc.split(",").map((s) => s.trim()).filter(Boolean) : [];
+      const attentionUserValue = forwardAttentionUser.trim() || null;
+
       const corr = await apiFetch<{ id: string }>("/correspondence/items/", {
         method: "POST",
         body: JSON.stringify({
@@ -444,20 +482,44 @@ export default function AuditFormFillPage() {
           body_html: `<p>Audit query <strong>${template?.name}</strong> certified by GM Audit — forwarded for your explanation/action.</p><p>Form: ${submission?.id}</p>`,
           correspondence_type: "audit_query",
           priority: "high",
-          owning_office: forwardTargetOffice,
+          // split target fields instead of single owning_office
+          target_office: officeCode,
+          owning_office: officeCode,
+          attention_user: attentionUserValue,
+          cc: ccList,
+          action_required: forwardActionRequired,
+          due_date: dueDateValue,
           amount: 0,
         }),
       });
-      // Link form to correspondence via case or direct link if available
-      try {
-        await apiFetch(`/correspondence/items/${corr.id}/link-document/`, {
-          method: "POST",
-          body: JSON.stringify({ document_id: submission?.id }),
-        });
-      } catch { /* link optional — correspondence itself is the audit trail */ }
+      // Link FormDocument's actual Document to correspondence (use FormDocument id resolution, not submission.id)
+      const documentIdToLink = resolvedDocumentId ?? resolvedFormDocumentId;
+      if (documentIdToLink) {
+        try {
+          await apiFetch(`/correspondence/items/${corr.id}/link-document/`, {
+            method: "POST",
+            body: JSON.stringify({ document_id: documentIdToLink }),
+          });
+        } catch {
+          /* link optional — correspondence itself is the audit trail */
+        }
+        // Fallback via generic document-links endpoint for DMS linkage
+        try {
+          await apiFetch(`/correspondence/document-links/`, {
+            method: "POST",
+            body: JSON.stringify({ correspondence: corr.id, document: documentIdToLink }),
+          });
+        } catch {
+          /* ignore secondary link failure */
+        }
+      }
       toast.success("Audit query forwarded via correspondence");
       setForwardDialogOpen(false);
       setForwardTargetOffice("");
+      setForwardAttentionUser("");
+      setForwardCc("");
+      setForwardDueDate("");
+      setForwardActionRequired(true);
       setForwardSubject("");
       router.push(`/correspondence/${corr.id}`);
     } catch (err) {
@@ -912,9 +974,29 @@ export default function AuditFormFillPage() {
             <p className="mt-1 text-xs text-muted-foreground">Certified query will be sent to the selected office for explanation/action.</p>
             <div className="mt-4 space-y-4">
               <div className="space-y-2">
-                <Label>Target Office</Label>
-                <Input value={forwardTargetOffice} onChange={(e) => setForwardTargetOffice(e.target.value)} placeholder="Office ID (e.g., OFF_DIV_FINANCE) — will be office picker" />
-                <p className="text-xs text-muted-foreground">For now enter office code; office picker will be added.</p>
+                <Label>Target Office *</Label>
+                <Input value={forwardTargetOffice} onChange={(e) => setForwardTargetOffice(e.target.value)} placeholder="Office ID (e.g., OFF_DIV_FINANCE) — office picker" />
+                <p className="text-xs text-muted-foreground">Validated: must be OFF_... code or UUID — office picker integration coming.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Attention User (optional)</Label>
+                <Input value={forwardAttentionUser} onChange={(e) => setForwardAttentionUser(e.target.value)} placeholder="User ID for attention" />
+              </div>
+              <div className="space-y-2">
+                <Label>CC (comma-separated user/office IDs)</Label>
+                <Input value={forwardCc} onChange={(e) => setForwardCc(e.target.value)} placeholder="e.g., user-id-1, OFF_DIV_FINANCE" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Due Date</Label>
+                  <Input type="date" value={forwardDueDate} onChange={(e) => setForwardDueDate(e.target.value)} />
+                </div>
+                <div className="space-y-2 flex flex-col justify-end">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={forwardActionRequired} onCheckedChange={(v) => setForwardActionRequired(Boolean(v))} />
+                    Action required
+                  </label>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Correspondence Subject</Label>
@@ -922,7 +1004,7 @@ export default function AuditFormFillPage() {
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setForwardDialogOpen(false)} disabled={forwarding}>Cancel</Button>
-                <Button onClick={handleForwardViaCorrespondence} disabled={forwarding || !forwardTargetOffice || !forwardSubject.trim()}>
+                <Button onClick={handleForwardViaCorrespondence} disabled={forwarding || !forwardTargetOffice.trim() || !forwardSubject.trim()}>
                   {forwarding ? "Forwarding..." : "Create Correspondence"}
                 </Button>
               </div>
