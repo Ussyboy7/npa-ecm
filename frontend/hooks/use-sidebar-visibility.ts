@@ -10,6 +10,7 @@ export interface SidebarVisibility {
   showMyInbox: boolean;
   showMySent: boolean;
   showExecutiveApprovals: boolean;
+  showDepartmentalApprovals: boolean;
   showNotifications: boolean;
 
   // Offices & Registry
@@ -86,6 +87,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showMyInbox: false,
         showMySent: false,
         showExecutiveApprovals: false,
+        showDepartmentalApprovals: false,
         showNotifications: false,
         showOfficeInbox: false,
         showRegisterCorrespondence: false,
@@ -142,6 +144,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showMyInbox: true,
         showMySent: true,
         showExecutiveApprovals: true,
+        showDepartmentalApprovals: true,
         showNotifications: false,
         showOfficeInbox: true,
         showRegisterCorrespondence: true,
@@ -237,6 +240,8 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showNotifications = false;
     const showExecutiveApprovals =
       has("can_access_approvals") || (roleChecks.isSecretary && hasExecutiveAssignment);
+    const showDepartmentalApprovals =
+      has("can_approve") || has("can_access_approvals");
 
     const showOfficeInbox = registryOn && hasOfficeQueueRole;
     const showOfficeSent = registryOn && hasOfficeQueueRole;
@@ -324,6 +329,7 @@ export function useSidebarVisibility(): SidebarVisibility {
       showMyInbox,
       showMySent,
       showExecutiveApprovals,
+      showDepartmentalApprovals,
       showNotifications,
       showOfficeInbox,
       showRegisterCorrespondence,

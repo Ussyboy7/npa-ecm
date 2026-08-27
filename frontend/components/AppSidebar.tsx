@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   FileText, Settings, ChevronDown,
@@ -32,6 +32,7 @@ import { SidebarNavItem, AdminNavItem } from "@/components/shared/SidebarNavItem
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { currentUser, hydrated } = useCurrentUser();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -173,7 +174,10 @@ export function AppSidebar() {
                 />
               )}
               {visibility.showExecutiveApprovals && (
-                <SidebarNavItem href="/approvals" icon={FileCheck} label="Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals')} badge={counts.executiveApprovals} badgeVariant="secondary" description="Sealed executive approvals" />
+                <SidebarNavItem href="/approvals" icon={FileCheck} label="Executive Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals') && searchParams.get('level') !== 'departmental'} badge={counts.executiveApprovals} badgeVariant="secondary" description="Executive Register — MD approvals" />
+              )}
+              {visibility.showDepartmentalApprovals && (
+                <SidebarNavItem href="/approvals?level=departmental" icon={ClipboardCheck} label="Departmental Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals') && searchParams.get('level') === 'departmental'} badge={undefined} badgeVariant="secondary" description="Departmental history — approvals and endorsements" />
               )}
               {visibility.showNotifications && (
                 <SidebarNavItem href="/notifications" icon={Bell} label="Notifications" isCollapsed={isCollapsed} isActive={isActivePath('/notifications')} />

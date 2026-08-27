@@ -88,7 +88,9 @@ interface ExecutiveApproval {
 function ApprovalsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+  const level = (searchParams.get('level') === 'departmental' ? 'departmental' : 'executive') as 'executive' | 'departmental';
+  const isDepartmental = level === 'departmental';
+
   const [approvals, setApprovals] = useState<ExecutiveApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,6 +152,7 @@ function ApprovalsForm() {
   // Sync filters with URL
   useEffect(() => {
     const params = new URLSearchParams();
+    if (level === 'departmental') params.set('level', 'departmental');
     if (searchQuery) params.set('search', searchQuery);
     if (filterRole !== 'all') params.set('role', filterRole);
     if (filterStatus !== 'all') params.set('status', filterStatus);
@@ -160,30 +163,44 @@ function ApprovalsForm() {
 
     const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [searchQuery, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [level, searchQuery, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Reset page when filters change - will be added after pagination is defined
 
   const getFilterParams = useCallback(() => {
     const orderingMap: Record<string, string> = {
-      'sealedAt-desc': '-sealed_at',
-      'sealedAt-asc': 'sealed_at',
+      'sealedAt-desc': '-timestamp',
+      'sealedAt-asc': 'timestamp',
       'reference-asc': 'correspondence_details__reference_number',
       'reference-desc': '-correspondence_details__reference_number',
       'status-desc': '-seal_data__is_valid',
     };
     const orderingKey = `${sortBy}-${sortOrder}`;
-    const ordering = orderingMap[orderingKey] || '-sealed_at';
+    const ordering = orderingMap[orderingKey] || '-timestamp';
 
     const params = new URLSearchParams({
       action_type: 'approve',
-      has_seal: 'true',
+      approval_level: level,
       ordering,
     });
+    // For executive register, scope to final approvals (MD). For departmental, include both approval and endorsement.
+    // Backend distinguishes via approval_role; level alone suffices for register, but we keep role filter explicit for executive.
+    if (level === 'executive' && filterRole === 'all') {
+      // executive register = executive + approval (endorsement is departmental)
+      // Let backend return all executive+approval; if filterRole is explicit, use it instead.
+    }
     if (debouncedSearch) {
       params.append('search', debouncedSearch);
     }
-    if (filterStatus !== 'all') {
+    // Role filter maps to approval_role for departmental history
+    if (isDepartmental && filterRole !== 'all') {
+      // filterRole values are md/ed etc UI; for departmental we map endorsement/approval via role param if needed
+      // Keep as no-op for executive; departmental uses approval_role explicit via filterRole custom values
+      if (filterRole === 'endorsement' || filterRole === 'approval') {
+        params.append('approval_role', filterRole);
+      }
+    }
+    if (filterStatus !== 'all' && !isDepartmental) {
       const isValid = filterStatus === 'valid' ? 'true' : 'false';
       params.append('is_valid', isValid);
     }
@@ -194,7 +211,7 @@ function ApprovalsForm() {
       params.append('date_to', dateTo);
     }
     return params;
-  }, [debouncedSearch, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [level, isDepartmental, debouncedSearch, filterStatus, filterRole, dateFrom, dateTo, sortBy, sortOrder]);
 
   const loadApprovals = useCallback(async (page: number = 1, pageSize: number = 25, soft = false) => {
     try {
@@ -358,17 +375,18 @@ function ApprovalsForm() {
   // Load data when pagination or filters change
   useEffect(() => {
     void loadApprovals(pagination.page, pagination.pageSize);
-  }, [pagination.page, pagination.pageSize, debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder, loadApprovals]);
+  }, [level, pagination.page, pagination.pageSize, debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder, loadApprovals]);
 
   // Reset page when filters change
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [level, debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Sync pagination with URL
   useEffect(() => {
     const params = new URLSearchParams();
+    if (level === 'departmental') params.set('level', 'departmental');
     if (searchQuery) params.set('search', searchQuery);
     if (filterRole !== 'all') params.set('role', filterRole);
     if (filterStatus !== 'all') params.set('status', filterStatus);
@@ -381,7 +399,7 @@ function ApprovalsForm() {
 
     const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [searchQuery, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize]);
+  }, [level, searchQuery, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize]);
 
   const hasActiveFilters = useMemo(() => {
     return !!(debouncedSearch || filterRole !== "all" || filterStatus !== "all" || dateFrom || dateTo);
@@ -579,8 +597,8 @@ function ApprovalsForm() {
   return (
     <>
       <QueuePageShell
-        title="Approvals"
-        subtitle="Track and verify approvals with digital executive seals"
+        title={isDepartmental ? "Departmental Approvals" : "Executive Approvals"}
+        subtitle={isDepartmental ? "Departmental and endorsement history — scope-filtered by your office" : "Executive Register — MD approvals with seal status (seal shown as column, not filter)"}
         actions={(
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -612,6 +630,11 @@ function ApprovalsForm() {
           />
         )}
       >
+        {/* Level tabs */}
+        <div className="flex gap-2">
+          <Button variant={!isDepartmental ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => router.push('/approvals')}>Executive Register</Button>
+          <Button variant={isDepartmental ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => router.push('/approvals?level=departmental')}>Departmental</Button>
+        </div>
         {/* Inline filter bar */}
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -619,22 +642,35 @@ function ApprovalsForm() {
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search approvals..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
             </div>
-            <Select value={filterRole} onValueChange={setFilterRole}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Role" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="managing director">MD</SelectItem>
-                <SelectItem value="executive director">ED</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="valid">Valid</SelectItem>
-                <SelectItem value="invalid">Invalid</SelectItem>
-              </SelectContent>
-            </Select>
+            {isDepartmental ? (
+              <Select value={filterRole} onValueChange={setFilterRole}>
+                <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="Role" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="approval">Final Approval</SelectItem>
+                  <SelectItem value="endorsement">Endorsement</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={filterRole} onValueChange={setFilterRole}>
+                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Role" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="managing director">MD</SelectItem>
+                  <SelectItem value="executive director">ED</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {!isDepartmental && (
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="valid">Valid</SelectItem>
+                  <SelectItem value="invalid">Invalid</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
             <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
               <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
@@ -651,10 +687,10 @@ function ApprovalsForm() {
       </div>
 
         {loading && !refreshing ? (
-          <LoadingState message="Loading executive approvals…" />
+          <LoadingState message={isDepartmental ? "Loading departmental approvals…" : "Loading executive approvals…"} />
         ) : error ? (
           <ErrorState
-            title="Error loading executive approvals"
+            title={isDepartmental ? "Error loading departmental approvals" : "Error loading executive approvals"}
             message={error}
             onRetry={handleRetry}
             retryLabel="Retry"
@@ -663,11 +699,13 @@ function ApprovalsForm() {
         ) : filteredApprovals.length === 0 ? (
           <EmptyState
             icon={<Shield className={registryQueueEmptyIconClass} />}
-            title={hasActiveFilters ? 'No approvals match your filters' : 'No executive approvals found'}
+            title={hasActiveFilters ? 'No approvals match your filters' : isDepartmental ? 'No departmental approvals found' : 'No executive approvals found'}
             message={
               hasActiveFilters
                 ? 'Try adjusting your search or filters to see more results.'
-                : 'Executive approvals with digital seals will appear here once they are created.'
+                : isDepartmental
+                  ? 'Departmental approvals for your office will appear here once created (includes endorsements).'
+                  : 'Executive approvals (MD, Executive+Approval) will appear here once they are created. Seal status is shown as a column.'
             }
             actionLabel={hasActiveFilters ? 'Clear Filters' : undefined}
             onAction={hasActiveFilters ? clearFilters : undefined}
