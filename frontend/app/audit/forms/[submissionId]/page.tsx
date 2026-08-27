@@ -23,6 +23,17 @@ import {
   Loader2,
   Eye,
   Pencil,
+  FileText,
+  Clock,
+  BadgeCheck,
+  Share2,
+  Hourglass,
+  Inbox,
+  Lock,
+  CheckCircle,
+  AlertCircle,
+  FileCheck,
+  MailQuestion,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
@@ -295,10 +306,12 @@ export default function AuditFormFillPage() {
   const [forwardCc, setForwardCc] = useState("");
   const [forwardDueDate, setForwardDueDate] = useState("");
   const [forwardActionRequired, setForwardActionRequired] = useState(true);
+  const [forwardRequiredApprovalLevel, setForwardRequiredApprovalLevel] = useState("departmental");
   const [forwardSubject, setForwardSubject] = useState("");
   const [forwarding, setForwarding] = useState(false);
   const [caseId, setCaseId] = useState<string | null>(null);
   const [auditState, setAuditState] = useState<string | null>(null);
+  const [caseMetadata, setCaseMetadata] = useState<Record<string, unknown> | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchSubmission = useCallback(async () => {
@@ -325,7 +338,9 @@ export default function AuditFormFillPage() {
         if (caseData && caseData.id) {
           setCaseId(caseData.id);
           const ms = (caseData.metadata as Record<string, unknown>) || {};
+          setCaseMetadata(ms);
           if (ms.audit_state) setAuditState(String(ms.audit_state).toUpperCase());
+          else setAuditState("DRAFT");
         } else {
           // Fallback: list audit cases and match by metadata audit_submission_id
           const list = await apiFetch<{ results: Array<{ id: string; metadata?: Record<string, unknown> }> }>(
@@ -337,10 +352,13 @@ export default function AuditFormFillPage() {
           if (found) {
             setCaseId(found.id);
             const ms = (found.metadata as Record<string, unknown>) || {};
+            setCaseMetadata(ms);
             if (ms.audit_state) setAuditState(String(ms.audit_state).toUpperCase());
+            else setAuditState("DRAFT");
           } else {
             setCaseId(null);
             setAuditState(null);
+            setCaseMetadata(null);
           }
         }
       } catch {
@@ -473,6 +491,10 @@ export default function AuditFormFillPage() {
       toast.error("Select target office and enter subject");
       return;
     }
+    if (!caseId) {
+      toast.error("Case not found for this submission — ensure audit case exists (CERTIFIED)");
+      return;
+    }
     // Validate office code — office picker or at least pattern check (OFF_... or UUID)
     const isValidOffice =
       /^OFF_[A-Z0-9_]+$/i.test(officeCode) ||
@@ -483,81 +505,51 @@ export default function AuditFormFillPage() {
     }
     setForwarding(true);
     try {
-      // Resolve FormDocument to get actual DMS Document id (not submission.id)
-      let resolvedDocumentId: string | null = null;
-      let resolvedFormDocumentId: string | null = null;
-      try {
-        const fdRes = await apiFetch<{ results: Array<{ id: string; document: { id: string } }> } | Array<{ id: string; document: { id: string } }>>(
-          `/dms/form-documents/?submission=${submissionId}`
-        );
-        const arr: Array<{ id: string; document: { id: string } }> = Array.isArray(fdRes)
-          ? fdRes
-          : ((fdRes as { results?: Array<{ id: string; document: { id: string } }> }).results ?? []);
-        const first = arr[0];
-        if (first?.document?.id) {
-          resolvedDocumentId = first.document.id;
-          resolvedFormDocumentId = first.id;
-        } else if (first?.id) {
-          resolvedFormDocumentId = first.id;
-        }
-      } catch {
-        // optional — will fallback to no link if not found
-      }
-
       const dueDateValue = forwardDueDate.trim() ? forwardDueDate.trim() : null;
       const ccList = forwardCc.trim() ? forwardCc.split(",").map((s) => s.trim()).filter(Boolean) : [];
       const attentionUserValue = forwardAttentionUser.trim() || null;
+      const subject = forwardSubject.trim();
+      const bodyHtml = `<p>Audit query <strong>${template?.name ?? "Audit Query"}</strong> certified by GM Audit — forwarded for your explanation/action.</p><p>Form: ${submission?.id ?? ""}</p><p>PV: ${(formData as Record<string, unknown>)?.pv_no as string ?? ""}</p>`;
 
-      const corr = await apiFetch<{ id: string }>("/correspondence/items/", {
-        method: "POST",
-        body: JSON.stringify({
-          subject: forwardSubject.trim(),
-          body_html: `<p>Audit query <strong>${template?.name}</strong> certified by GM Audit — forwarded for your explanation/action.</p><p>Form: ${submission?.id}</p>`,
-          correspondence_type: "audit_query",
-          priority: "high",
-          // split target fields instead of single owning_office
-          target_office: officeCode,
-          owning_office: officeCode,
-          attention_user: attentionUserValue,
-          cc: ccList,
-          action_required: forwardActionRequired,
-          due_date: dueDateValue,
-          amount: 0,
-        }),
-      });
-      // Link FormDocument's actual Document to correspondence (use FormDocument id resolution, not submission.id)
-      const documentIdToLink = resolvedDocumentId ?? resolvedFormDocumentId;
-      if (documentIdToLink) {
-        try {
-          await apiFetch(`/correspondence/items/${corr.id}/link-document/`, {
-            method: "POST",
-            body: JSON.stringify({ document_id: documentIdToLink }),
-          });
-        } catch {
-          /* link optional — correspondence itself is the audit trail */
+      // Wire via Case action REFER (atomically creates Correspondence + links + transitions)
+      const result = await apiFetch<{ id: string; correspondence_id?: string; correspondence_reference?: string; audit_state?: string }>(
+        `/correspondence/cases/${caseId}/actions/`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: "REFER",
+            subject,
+            body: bodyHtml,
+            body_html: bodyHtml,
+            target_office: officeCode,
+            attention: attentionUserValue,
+            attention_user: attentionUserValue,
+            cc: ccList,
+            action_required: forwardActionRequired,
+            due_date: dueDateValue,
+            required_approval_level: forwardRequiredApprovalLevel,
+          }),
         }
-        // Fallback via generic document-links endpoint for DMS linkage
-        try {
-          await apiFetch(`/correspondence/document-links/`, {
-            method: "POST",
-            body: JSON.stringify({ correspondence: corr.id, document: documentIdToLink }),
-          });
-        } catch {
-          /* ignore secondary link failure */
-        }
-      }
-      toast.success("Audit query forwarded via correspondence");
+      );
+      toast.success(`Audit query referred to ${officeCode} via ${result.correspondence_reference ?? result.correspondence_id ?? "correspondence"}`);
       setForwardDialogOpen(false);
       setForwardTargetOffice("");
       setForwardAttentionUser("");
       setForwardCc("");
       setForwardDueDate("");
       setForwardActionRequired(true);
+      setForwardRequiredApprovalLevel("departmental");
       setForwardSubject("");
-      router.push(`/correspondence/${corr.id}`);
+      // Refresh case state/banner; show updated state
+      await fetchSubmission();
+      if (result.correspondence_id) {
+        // Keep user on page but offer link — banner will show CORR-...
+        toast.success(`Correspondence: ${result.correspondence_reference ?? result.correspondence_id}`);
+      }
     } catch (err) {
-      logError("Failed to forward audit query", err);
-      toast.error("Failed to create correspondence");
+      logError("Failed to refer audit query", err);
+      const msg = err instanceof Error ? err.message : "Failed to refer — ensure state is CERTIFIED and you are Audit member";
+      toast.error(msg);
     } finally {
       setForwarding(false);
     }
@@ -784,6 +776,63 @@ export default function AuditFormFillPage() {
       </div>
 
       <Separator />
+
+      {/* Audit work-item state banner — DRAFT/SUBMITTED/AWAITING_CERTIFICATION/CERTIFIED/REFERRED/AWAITING_RESPONSE/RESPONSE_RECEIVED/CLOSED */}
+      {auditState && (() => {
+        const meta = (caseMetadata || {}) as Record<string, unknown>;
+        const lastRefer = (meta.last_refer as Record<string, unknown>) || {};
+        const trail = (meta.audit_trail as Array<Record<string, unknown>>) || [];
+        const lastEntry = trail.length ? trail[trail.length - 1] : null;
+        const certifiedBy = trail.find((t) => String(t.action).toUpperCase() === "CERTIFY") as Record<string, unknown> | undefined;
+        const corrRef = (lastRefer.correspondence_reference as string) || (meta.refer_correspondence_reference as string) || (lastEntry?.correspondence_reference as string) || "";
+        const corrId = (lastRefer.correspondence_id as string) || (meta.refer_correspondence_id as string) || (lastEntry?.correspondence_id as string) || "";
+        const targetOffice = (lastRefer.target_office_code as string) || (lastRefer.target_office as string) || (meta.refer_target_office as string) || "";
+        const dueDate = (lastRefer.due_date as string) || (meta.refer_due_date as string) || "";
+        const state = auditState.toUpperCase();
+        // Config per state with distinct colors/icons
+        const configs: Record<string, { bg: string; border: string; text: string; icon: React.ReactNode; label: string; desc: string }> = {
+          DRAFT: { bg: "bg-slate-50", border: "border-slate-200", text: "text-slate-700", icon: <FileText className="h-4 w-4" />, label: "Draft", desc: "Draft — complete and submit the query." },
+          SUBMITTED: { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-800", icon: <Send className="h-4 w-4" />, label: "Submitted", desc: "Submitted — awaiting GM Audit certification workflow." },
+          AWAITING_CERTIFICATION: { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-800", icon: <Clock className="h-4 w-4" />, label: "Awaiting Certification", desc: `Awaiting certification — only GM Audit (gmaudit) can certify${certifiedBy ? ` (requested)` : ""}.` },
+          CERTIFIED: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-800", icon: <BadgeCheck className="h-4 w-4" />, label: "Certified", desc: certifiedBy ? `Certified by ${String(certifiedBy.actor_username || certifiedBy.actor || "GM Audit")} — ready to refer` : "Certified by GM Audit — ready to refer via correspondence." },
+          REFERRED: { bg: "bg-purple-50", border: "border-purple-200", text: "text-purple-800", icon: <Share2 className="h-4 w-4" />, label: "Referred", desc: targetOffice ? `Sent to ${targetOffice}${corrRef ? ` via ${corrRef}` : ""}${corrId ? ` (Correspondence: ${corrRef || corrId})` : ""}` : `Referred — correspondence created${corrRef ? `: ${corrRef}` : ""}` },
+          AWAITING_RESPONSE: { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-800", icon: <Hourglass className="h-4 w-4" />, label: "Awaiting Response", desc: targetOffice ? `Awaiting response from ${targetOffice}${dueDate ? ` — due ${dueDate}` : ""}${corrRef ? ` · Correspondence: ${corrRef}` : corrId ? ` · Correspondence: ${corrId.slice(0,8)}` : ""}` : `Awaiting response${corrRef ? ` · Correspondence: ${corrRef}` : ""}` },
+          RESPONSE_RECEIVED: { bg: "bg-teal-50", border: "border-teal-200", text: "text-teal-800", icon: <Inbox className="h-4 w-4" />, label: "Response Received", desc: corrRef ? `Response received — Correspondence: ${corrRef}` : corrId ? `Response received — Correspondence: ${corrId.slice(0,8)}` : "Response received — under audit review." },
+          AUDIT_REVIEW: { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-800", icon: <Eye className="h-4 w-4" />, label: "Audit Review", desc: "Under audit review — awaiting closure." },
+          CLOSED: { bg: "bg-slate-900", border: "border-slate-700", text: "text-slate-100", icon: <Lock className="h-4 w-4" />, label: "Closed", desc: lastEntry?.timestamp ? `Closed on ${String(lastEntry.timestamp).slice(0,10)} by ${String(lastEntry.actor_username || "system")}` : "Closed — audit work-item complete." },
+        };
+        const cfg = configs[state] || configs.DRAFT;
+        const showCorrLink = !!(corrId || corrRef) && ["REFERRED","AWAITING_RESPONSE","RESPONSE_RECEIVED","AUDIT_REVIEW","CLOSED"].includes(state);
+        return (
+          <div className={`rounded-xl border ${cfg.border} ${cfg.bg} p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3`}>
+            <div className="flex items-start gap-3 min-w-0">
+              <span className={`mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full border ${cfg.border} bg-white/60 ${cfg.text}`}>{cfg.icon}</span>
+              <div className="min-w-0">
+                <p className={`text-sm font-semibold ${cfg.text}`}>{cfg.label} <span className="font-normal opacity-70">· {state}</span></p>
+                <p className="text-xs text-muted-foreground line-clamp-2">{cfg.desc}</p>
+                {state === "CERTIFIED" && certifiedBy && (certifiedBy.timestamp as string) && (
+                  <p className="text-xs text-muted-foreground">Certified by {String(certifiedBy.actor_username || certifiedBy.actor)} at {String(certifiedBy.timestamp).slice(0,19).replace("T"," ")}</p>
+                )}
+                {state === "AWAITING_CERTIFICATION" && (
+                  <p className="text-xs text-muted-foreground">State: AWAITING_CERTIFICATION — Send for Certification → CERTIFY</p>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Badge variant="outline" className={`${cfg.border} ${cfg.text} bg-white/50`}>{state}</Badge>
+              {showCorrLink && corrId && (
+                <Button variant="outline" size="compact" onClick={() => router.push(`/correspondence/${corrId}`)}>
+                  <FileCheck className="mr-1 h-3.5 w-3.5" />
+                  {corrRef ? corrRef : `Correspondence: ${corrId.slice(0,8)}`}
+                </Button>
+              )}
+              {showCorrLink && !corrId && corrRef && (
+                <span className="text-xs font-mono text-muted-foreground">Correspondence: {corrRef}</span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {unsectionedFields.length > 0 && (
         <div className="rounded-xl border border-border/60">
@@ -1111,12 +1160,27 @@ export default function AuditFormFillPage() {
                   <Label>Due Date</Label>
                   <Input type="date" value={forwardDueDate} onChange={(e) => setForwardDueDate(e.target.value)} />
                 </div>
-                <div className="space-y-2 flex flex-col justify-end">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={forwardActionRequired} onCheckedChange={(v) => setForwardActionRequired(Boolean(v))} />
-                    Action required
-                  </label>
+                <div className="space-y-2">
+                  <Label>Required Approval Level</Label>
+                  <select
+                    value={forwardRequiredApprovalLevel}
+                    onChange={(e) => setForwardRequiredApprovalLevel(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  >
+                    <option value="none">None</option>
+                    <option value="departmental">Departmental</option>
+                    <option value="executive">Executive</option>
+                  </select>
                 </div>
+              </div>
+              <div className="space-y-2 flex flex-col">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={forwardActionRequired} onCheckedChange={(v) => setForwardActionRequired(Boolean(v))} />
+                  Action required
+                </label>
+                {auditState && auditState !== "CERTIFIED" && (
+                  <p className="text-xs text-amber-600">REFER requires state CERTIFIED — current: {auditState}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Correspondence Subject</Label>
