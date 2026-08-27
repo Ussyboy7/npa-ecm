@@ -342,7 +342,7 @@ export const DistributionSelector = ({
           <Label className="text-xs text-muted-foreground">Selected Recipients ({selectedDistribution.length})</Label>
           <div className="space-y-2">
             {selectedDistribution.map((recipient, index) => (
-              <div className="rounded-xl border border-border/60 border-border p-3">
+              <div key={`${recipient.type}-${(recipient as unknown as { id?: string }).id ?? index}`} className="rounded-xl border border-border/60 border-border p-3">
 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {recipient.type === "user" ? <UserIcon className="h-4 w-4 text-primary" /> : <Building2 className="h-4 w-4 text-primary" />}
