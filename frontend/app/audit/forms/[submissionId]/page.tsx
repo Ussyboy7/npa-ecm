@@ -289,6 +289,10 @@ export default function AuditFormFillPage() {
   const [signingId, setSigningId] = useState<string | null>(null);
 
   const [signFormData, setSignFormData] = useState<Record<string, { signer_name: string; signer_pn: string; signer_designation: string }>>({});
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
+  const [forwardTargetOffice, setForwardTargetOffice] = useState("");
+  const [forwardSubject, setForwardSubject] = useState("");
+  const [forwarding, setForwarding] = useState(false);
 
   const fetchSubmission = useCallback(async () => {
     try {
@@ -423,6 +427,44 @@ export default function AuditFormFillPage() {
         return "secondary";
       default:
         return "outline";
+    }
+  };
+
+  const handleForwardViaCorrespondence = async () => {
+    if (!forwardTargetOffice || !forwardSubject.trim()) {
+      toast.error("Select target office and enter subject");
+      return;
+    }
+    setForwarding(true);
+    try {
+      const corr = await apiFetch<{ id: string }>("/correspondence/items/", {
+        method: "POST",
+        body: JSON.stringify({
+          subject: forwardSubject.trim(),
+          body_html: `<p>Audit query <strong>${template?.name}</strong> certified by GM Audit — forwarded for your explanation/action.</p><p>Form: ${submission?.id}</p>`,
+          correspondence_type: "audit_query",
+          priority: "high",
+          owning_office: forwardTargetOffice,
+          amount: 0,
+        }),
+      });
+      // Link form to correspondence via case or direct link if available
+      try {
+        await apiFetch(`/correspondence/items/${corr.id}/link-document/`, {
+          method: "POST",
+          body: JSON.stringify({ document_id: submission?.id }),
+        });
+      } catch { /* link optional — correspondence itself is the audit trail */ }
+      toast.success("Audit query forwarded via correspondence");
+      setForwardDialogOpen(false);
+      setForwardTargetOffice("");
+      setForwardSubject("");
+      router.push(`/correspondence/${corr.id}`);
+    } catch (err) {
+      logError("Failed to forward audit query", err);
+      toast.error("Failed to create correspondence");
+    } finally {
+      setForwarding(false);
     }
   };
 
@@ -678,6 +720,51 @@ export default function AuditFormFillPage() {
         );
       })}
 
+      {/* Forward via Correspondence — appears after GM Audit certification */}
+      {workflow?.status === "completed" && !submission.is_draft && (
+        <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-emerald-900">Certified by GM Audit — ready to forward</p>
+            <p className="text-xs text-muted-foreground">Send this audit query via correspondence to the target department/division for explanation.</p>
+          </div>
+          <Button size="compact" onClick={() => setForwardDialogOpen(true)}>
+            <Send className="mr-2 h-4 w-4" /> Forward via Correspondence
+          </Button>
+        </div>
+      )}
+
+      {/* Send to GM Audit for certification — officer can initiate, any audit member can raise */}
+      {!submission.is_draft && (!workflow || workflow.status !== "completed") && (
+        <div className="rounded-xl border border-amber-200/60 bg-amber-50/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">GM Audit certification</p>
+            <p className="text-xs text-muted-foreground">Officer or any audit member can send this query to GM Audit (gmaudit) to verify/approve. GM Audit is busy — anyone from audit can raise it.</p>
+          </div>
+          <Button
+            size="compact"
+            variant="outline"
+            onClick={async () => {
+              try {
+                await apiFetch(`/forms/submissions/${submissionId}/create_signature_workflow/`, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    routing_mode: "sequential",
+                    signature_assignments: [{ field_name: "gm_audit_signature", office_id: "OFF_DIV_AUDIT" }],
+                  }),
+                });
+                toast.success("Sent to GM Audit for certification");
+                void fetchSubmission();
+              } catch (err) {
+                logError("Failed to create certification workflow", err);
+                toast.error("Failed to send to GM Audit — ensure GM Audit office exists");
+              }
+            }}
+          >
+            <UserCheck className="mr-2 h-4 w-4" /> Send to GM Audit
+          </Button>
+        </div>
+      )}
+
       {(workflow || signatures.length > 0) && (
         <>
           <Separator />
@@ -815,6 +902,33 @@ export default function AuditFormFillPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Forward via Correspondence — dialog */}
+      {forwardDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-background p-6 shadow-xl">
+            <h3 className="text-base font-semibold">Forward Audit Query via Correspondence</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Certified query will be sent to the selected office for explanation/action.</p>
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label>Target Office</Label>
+                <Input value={forwardTargetOffice} onChange={(e) => setForwardTargetOffice(e.target.value)} placeholder="Office ID (e.g., OFF_DIV_FINANCE) — will be office picker" />
+                <p className="text-xs text-muted-foreground">For now enter office code; office picker will be added.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Correspondence Subject</Label>
+                <Input value={forwardSubject} onChange={(e) => setForwardSubject(e.target.value)} placeholder={`Re: ${template?.name} — ${submission?.id?.slice(0,8)}`} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setForwardDialogOpen(false)} disabled={forwarding}>Cancel</Button>
+                <Button onClick={handleForwardViaCorrespondence} disabled={forwarding || !forwardTargetOffice || !forwardSubject.trim()}>
+                  {forwarding ? "Forwarding..." : "Create Correspondence"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
