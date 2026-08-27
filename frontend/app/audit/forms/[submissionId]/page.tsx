@@ -297,6 +297,9 @@ export default function AuditFormFillPage() {
   const [forwardActionRequired, setForwardActionRequired] = useState(true);
   const [forwardSubject, setForwardSubject] = useState("");
   const [forwarding, setForwarding] = useState(false);
+  const [caseId, setCaseId] = useState<string | null>(null);
+  const [auditState, setAuditState] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchSubmission = useCallback(async () => {
     try {
@@ -313,6 +316,36 @@ export default function AuditFormFillPage() {
       setFormData(subData.data || {});
       setWorkflow(workflowData);
       setSignatures(workflowData?.signatures || []);
+
+      // Resolve Case(AUDIT) for this submission to drive state-machine actions
+      try {
+        const caseData = await apiFetch<{ id: string; metadata?: Record<string, unknown> }>(
+          `/correspondence/cases/by-submission/${submissionId}/`
+        ).catch(() => null);
+        if (caseData && caseData.id) {
+          setCaseId(caseData.id);
+          const ms = (caseData.metadata as Record<string, unknown>) || {};
+          if (ms.audit_state) setAuditState(String(ms.audit_state).toUpperCase());
+        } else {
+          // Fallback: list audit cases and match by metadata audit_submission_id
+          const list = await apiFetch<{ results: Array<{ id: string; metadata?: Record<string, unknown> }> }>(
+            `/correspondence/cases/?case_type=audit&page_size=100`
+          ).catch(() => null);
+          const found = list?.results?.find(
+            (c) => String((c.metadata as Record<string, unknown>)?.audit_submission_id) === String(submissionId)
+          );
+          if (found) {
+            setCaseId(found.id);
+            const ms = (found.metadata as Record<string, unknown>) || {};
+            if (ms.audit_state) setAuditState(String(ms.audit_state).toUpperCase());
+          } else {
+            setCaseId(null);
+            setAuditState(null);
+          }
+        }
+      } catch {
+        // case resolution optional — keep actions disabled if not found
+      }
     } catch (err) {
       logError("Failed to load submission", err);
       toast.error("Failed to load submission");
@@ -795,35 +828,93 @@ export default function AuditFormFillPage() {
         </div>
       )}
 
-      {/* Send to GM Audit for certification — officer can initiate, any audit member can raise */}
-      {!submission.is_draft && (!workflow || workflow.status !== "completed") && (
+      {/* State-machine actions: SEND_FOR_CERTIFICATION (officer) and CERTIFY (GM Audit, signature-gated) */}
+      {!submission.is_draft && (
         <div className="rounded-xl border border-amber-200/60 bg-amber-50/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium">GM Audit certification</p>
-            <p className="text-xs text-muted-foreground">Officer or any audit member can send this query to GM Audit (gmaudit) to verify/approve. GM Audit is busy — anyone from audit can raise it.</p>
+            <p className="text-xs text-muted-foreground">
+              {auditState === "AWAITING_CERTIFICATION"
+                ? "Awaiting GM Audit certification — only gmaudit can certify (signature required)."
+                : "Officer or any audit member can send this query to GM Audit (gmaudit) to verify/approve."}
+              {auditState ? ` State: ${auditState}` : ""}
+            </p>
           </div>
-          <Button
-            size="compact"
-            variant="outline"
-            onClick={async () => {
-              try {
-                await apiFetch(`/forms/submissions/${submissionId}/create_signature_workflow/`, {
-                  method: "POST",
-                  body: JSON.stringify({
-                    routing_mode: "sequential",
-                    signature_assignments: [{ field_name: "gm_audit_signature", office_id: "OFF_DIV_AUDIT" }],
-                  }),
-                });
-                toast.success("Sent to GM Audit for certification");
-                void fetchSubmission();
-              } catch (err) {
-                logError("Failed to create certification workflow", err);
-                toast.error("Failed to send to GM Audit — ensure GM Audit office exists");
-              }
-            }}
-          >
-            <UserCheck className="mr-2 h-4 w-4" /> Send to GM Audit
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="compact"
+              variant="outline"
+              disabled={!caseId || actionLoading === "send"}
+              onClick={async () => {
+                if (!caseId) {
+                  toast.error("Case not found for this submission — ensure audit case exists");
+                  return;
+                }
+                setActionLoading("send");
+                try {
+                  // If audit state is DRAFT, first SUBMIT then SEND_FOR_CERTIFICATION (strict state machine)
+                  if (auditState === "DRAFT") {
+                    await apiFetch(`/correspondence/cases/${caseId}/actions/`, {
+                      method: "POST",
+                      body: JSON.stringify({ action: "SUBMIT" }),
+                    }).catch(() => null);
+                  }
+                  await apiFetch(`/correspondence/cases/${caseId}/actions/`, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "SEND_FOR_CERTIFICATION" }),
+                  });
+                  toast.success("Sent for certification");
+                  void fetchSubmission();
+                } catch (err) {
+                  logError("Failed to send for certification", err);
+                  const msg = err instanceof Error ? err.message : "Failed to send for certification";
+                  toast.error(msg);
+                } finally {
+                  setActionLoading(null);
+                }
+              }}
+            >
+              {actionLoading === "send" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <UserCheck className="mr-2 h-4 w-4" />
+              )}
+              Send for Certification
+            </Button>
+            <Button
+              size="compact"
+              disabled={!caseId || actionLoading === "certify"}
+              onClick={async () => {
+                if (!caseId) {
+                  toast.error("Case not found for this submission");
+                  return;
+                }
+                setActionLoading("certify");
+                try {
+                  // CERTIFY internally creates signature workflow if needed and signs (gmaudit only)
+                  await apiFetch(`/correspondence/cases/${caseId}/actions/`, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "CERTIFY" }),
+                  });
+                  toast.success("Certified by GM Audit");
+                  void fetchSubmission();
+                } catch (err) {
+                  logError("Failed to certify", err);
+                  const msg = err instanceof Error ? err.message : "Certify failed — ensure GM Audit signature is completed";
+                  toast.error(msg);
+                } finally {
+                  setActionLoading(null);
+                }
+              }}
+            >
+              {actionLoading === "certify" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Pencil className="mr-2 h-4 w-4" />
+              )}
+              Certify
+            </Button>
+          </div>
         </div>
       )}
 

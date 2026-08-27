@@ -1560,6 +1560,33 @@ class CaseWorkflowRule(UUIDModel, TimeStampedModel):
             return False
         return True
 
+    @classmethod
+    def get_allowed_actions(cls, state: str) -> list[str]:
+        """Return allowed audit actions for a given audit_state via seeded rules or fallback.
+
+        Uses CaseWorkflowRule rows when available, otherwise falls back to
+        correspondence.services.case_audit.AUDIT_STATE_ACTIONS.
+        """
+        try:
+            from correspondence.services.case_audit import (
+                AUDIT_STATE_ACTIONS as _FALLBACK_ACTIONS,
+            )
+
+            key = (state or "DRAFT").upper()
+            # Prefer DB row if present
+            rule = cls.objects.filter(
+                name=f"AUDIT_STATE_{key}", case_type=Case.CaseType.AUDIT
+            ).first()
+            if rule and isinstance(rule.trigger_conditions, dict):
+                allowed = rule.trigger_conditions.get("allowed_actions")
+                if isinstance(allowed, list):
+                    return allowed
+            return _FALLBACK_ACTIONS.get(key, [])
+        except Exception:
+            from correspondence.services.case_audit import AUDIT_STATE_ACTIONS as _F
+
+            return _F.get((state or "DRAFT").upper(), [])
+
 
 class CaseSLA(UUIDModel, TimeStampedModel):
     """SLA tracking for cases."""

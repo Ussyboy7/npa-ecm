@@ -34,28 +34,41 @@ AUDIT_STATES = [
 ]
 
 AUDIT_STATE_ACTIONS: dict[str, list[str]] = {
-    "DRAFT": ["submit", "edit", "withdraw"],
-    "SUBMITTED": ["request_certification", "refer", "return_to_draft"],
-    "AWAITING_CERTIFICATION": ["certify", "query", "refer"],
-    "CERTIFIED": ["close", "refer", "reopen_review"],
-    "REFERRED": ["respond", "escalate", "close"],
-    "AWAITING_RESPONSE": ["receive_response", "follow_up", "escalate"],
-    "RESPONSE_RECEIVED": ["review", "certify", "refer", "close"],
-    "AUDIT_REVIEW": ["certify", "refer", "request_response", "close"],
+    "DRAFT": ["SUBMIT"],
+    "SUBMITTED": ["SEND_FOR_CERTIFICATION"],
+    "AWAITING_CERTIFICATION": ["CERTIFY", "RETURN", "REQUEST_INFO"],
+    "CERTIFIED": ["REFER"],
+    "REFERRED": ["RESPOND"],
+    "AWAITING_RESPONSE": ["RESPOND"],
+    "RESPONSE_RECEIVED": ["AUDIT_REVIEW"],
+    "AUDIT_REVIEW": ["CLOSE", "REFER"],
     "CLOSED": [],
 }
 
 # Allowed next-state transitions (edges). Permissive but prevents unnatural jumps.
 AUDIT_TRANSITIONS: dict[str, list[str]] = {
     "DRAFT": ["SUBMITTED"],
-    "SUBMITTED": ["AWAITING_CERTIFICATION", "REFERRED", "DRAFT"],
-    "AWAITING_CERTIFICATION": ["CERTIFIED", "REFERRED", "SUBMITTED"],
-    "CERTIFIED": ["CLOSED", "REFERRED", "AUDIT_REVIEW"],
-    "REFERRED": ["AWAITING_RESPONSE", "CLOSED"],
-    "AWAITING_RESPONSE": ["RESPONSE_RECEIVED", "REFERRED"],
-    "RESPONSE_RECEIVED": ["AUDIT_REVIEW", "AWAITING_CERTIFICATION", "CLOSED"],
-    "AUDIT_REVIEW": ["CERTIFIED", "REFERRED", "AWAITING_RESPONSE", "CLOSED"],
+    "SUBMITTED": ["AWAITING_CERTIFICATION"],
+    "AWAITING_CERTIFICATION": ["CERTIFIED", "SUBMITTED"],
+    "CERTIFIED": ["AWAITING_RESPONSE", "REFERRED"],
+    "REFERRED": ["AWAITING_RESPONSE"],
+    "AWAITING_RESPONSE": ["RESPONSE_RECEIVED"],
+    "RESPONSE_RECEIVED": ["AUDIT_REVIEW", "CLOSED"],
+    "AUDIT_REVIEW": ["CLOSED", "AWAITING_RESPONSE", "REFERRED"],
     "CLOSED": [],
+}
+
+# Direct action → next-state mapping used by POST /cases/{id}/actions/
+AUDIT_ACTION_NEXT_STATE: dict[str, str] = {
+    "SUBMIT": "SUBMITTED",
+    "SEND_FOR_CERTIFICATION": "AWAITING_CERTIFICATION",
+    "CERTIFY": "CERTIFIED",
+    "RETURN": "SUBMITTED",
+    "REQUEST_INFO": "SUBMITTED",
+    "REFER": "AWAITING_RESPONSE",
+    "RESPOND": "RESPONSE_RECEIVED",
+    "AUDIT_REVIEW": "AUDIT_REVIEW",
+    "CLOSE": "CLOSED",
 }
 
 

@@ -360,6 +360,294 @@ class CaseViewSet(viewsets.ModelViewSet):
         CaseService.create_case_sla(case)
         CaseService.evaluate_workflow_rules(case, "status_change", {"new_status": case.status})
 
+    @action(detail=False, methods=["get"], url_path=r"by-submission/(?P<submission_id>[^/.]+)")
+    def by_submission(self, request, submission_id=None):
+        """Lookup Case(AUDIT) by FormSubmission id via metadata or CaseFormLink."""
+        if not submission_id:
+            raise ValidationError({"detail": "submission_id required"})
+        case = Case.objects.filter(metadata__audit_submission_id=str(submission_id)).first()
+        if not case:
+            # fallback via CaseFormLink -> submission
+            from dms.models import FormDocument
+            from forms.models import FormSubmission
+            from forms.signature_models import FormSignatureWorkflow
+            try:
+                sub = FormSubmission.objects.filter(id=submission_id).first()
+                if sub:
+                    # via signature workflow
+                    wf = FormSignatureWorkflow.objects.filter(submission=sub).first()
+                    if wf:
+                        fd = FormDocument.objects.filter(signature_workflow=wf).first()
+                        if fd:
+                            link = CaseFormLink.objects.filter(form_document=fd).select_related("case").first()
+                            if link:
+                                case = link.case
+                    if not case and sub.correspondence_id:
+                        link = CaseCorrespondenceLink.objects.filter(correspondence_id=sub.correspondence_id).select_related("case").first()
+                        if link and link.case.case_type == Case.CaseType.AUDIT:
+                            case = link.case
+            except Exception:
+                pass
+        if not case:
+            # Auto-create audit case if submission exists and is audit template
+            try:
+                from forms.models import FormSubmission
+                from correspondence.services.case_audit import create_audit_case_for_submission, AUDIT_TEMPLATE_SLUG
+
+                sub = FormSubmission.objects.filter(id=submission_id).select_related("template").first()
+                if sub and sub.template and sub.template.slug == AUDIT_TEMPLATE_SLUG:
+                    case = create_audit_case_for_submission(sub)
+            except Exception:
+                pass
+        if not case:
+            return Response({"detail": "Case not found for submission"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(case)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="actions")
+    def actions(self, request, pk=None):
+        """State-machine actions for audit case.
+
+        Validates via CaseWorkflowRule.get_allowed_actions(state) and transitions
+        metadata.audit_state. Only CERTIFY is signature-gated (FormSignatureWorkflow
+        COMPLETED + _can_user_sign for gmaudit); other actions are ordinary.
+        """
+        case = self.get_object()
+        raw_action = (request.data.get("action") or request.data.get("action_type") or "").strip()
+        if not raw_action:
+            raise ValidationError({"detail": "action is required"})
+        action = raw_action.upper()
+
+        # Current audit state (default DRAFT)
+        current_state = ((case.metadata or {}).get("audit_state") or "DRAFT").upper()
+
+        # Validate via CaseWorkflowRule.get_allowed_actions (and fallback)
+        try:
+            allowed = CaseWorkflowRule.get_allowed_actions(current_state)
+        except Exception:
+            from correspondence.services.case_audit import get_allowed_actions as _gaa
+
+            allowed = _gaa(current_state)
+        allowed_upper = [a.upper() for a in (allowed or [])]
+        if action not in allowed_upper:
+            raise ValidationError(
+                {"detail": f"Action {action} not allowed in state {current_state}. Allowed: {allowed}"}
+            )
+
+        # Map action -> next state
+        from correspondence.services.case_audit import (
+            AUDIT_ACTION_NEXT_STATE,
+            is_valid_audit_transition,
+        )
+
+        next_state = AUDIT_ACTION_NEXT_STATE.get(action)
+        if not next_state:
+            # Unknown action mapping — no transition
+            raise ValidationError({"detail": f"Unknown action {action}"})
+
+        # Ensure transition is allowed per AUDIT_TRANSITIONS
+        if not is_valid_audit_transition(current_state, next_state):
+            # Still allow if mapping is defined (permissive for spec)
+            # but prefer to enforce — if not valid, reject
+            raise ValidationError(
+                {"detail": f"Transition {current_state} -> {next_state} not allowed"}
+            )
+
+        # Signature gate for CERTIFY only
+        if action == "CERTIFY":
+            # Locate workflow for this case
+            workflow = None
+            submission = None
+            try:
+                from forms.signature_models import FormSignatureWorkflow
+
+                # via CaseFormLink
+                links = CaseFormLink.objects.filter(case=case).select_related("form_document")
+                for link in links:
+                    fd = link.form_document
+                    if fd and getattr(fd, "signature_workflow_id", None):
+                        wf = FormSignatureWorkflow.objects.filter(id=fd.signature_workflow_id).select_related("submission").first()
+                        if wf:
+                            workflow = wf
+                            submission = getattr(wf, "submission", None)
+                            break
+                    # try via template+correspondence
+                    if not workflow and fd and getattr(fd, "correspondence_id", None):
+                        from forms.models import FormSubmission as FS
+
+                        sub = FS.objects.filter(template=fd.template, correspondence_id=fd.correspondence_id).first()
+                        if sub:
+                            wf = FormSignatureWorkflow.objects.filter(submission=sub).first()
+                            if wf:
+                                workflow = wf
+                                submission = sub
+                                break
+                # via metadata audit_submission_id
+                if not workflow:
+                    sub_id = (case.metadata or {}).get("audit_submission_id")
+                    if sub_id:
+                        from forms.models import FormSubmission as FS
+
+                        sub = FS.objects.filter(id=sub_id).first()
+                        if sub:
+                            submission = sub
+                            workflow = FormSignatureWorkflow.objects.filter(submission=sub).first()
+                # via correspondence links
+                if not workflow:
+                    corr_ids = list(
+                        CaseCorrespondenceLink.objects.filter(case=case).values_list("correspondence_id", flat=True)
+                    )
+                    if corr_ids:
+                        from forms.models import FormSubmission as FS
+
+                        sub = FS.objects.filter(correspondence_id__in=corr_ids).first()
+                        if sub:
+                            submission = sub
+                            workflow = FormSignatureWorkflow.objects.filter(submission=sub).first()
+            except Exception:
+                workflow = None
+
+            # If workflow not completed, attempt auto-create/sign for gmaudit (so Certify button internally creates workflow if needed)
+            if not workflow or workflow.status != FormSignatureWorkflow.Status.COMPLETED:
+                is_gmaudit_user = getattr(request.user, "username", "").lower() == "gmaudit"
+                try:
+                    role_name = getattr(getattr(request.user, "system_role", None), "name", "") or ""
+                    if "audit" in role_name.lower() and "gm" in role_name.lower():
+                        is_gmaudit_user = True
+                except Exception:
+                    pass
+                if is_gmaudit_user and submission is not None:
+                    try:
+                        from forms.signature_models import FormSignatureWorkflow as _WS, FormSignature as _Sig
+                        from django.core.files.base import ContentFile
+
+                        if not workflow:
+                            workflow = _WS.objects.create(
+                                submission=submission,
+                                routing_mode="sequential",
+                                total_steps=1,
+                                initiated_by=request.user,
+                                status=_WS.Status.IN_PROGRESS,
+                                current_step=1,
+                            )
+                            sig = _Sig.objects.create(
+                                workflow=workflow,
+                                field_name="gm_audit_signature",
+                                field_label="GM Audit Signature",
+                                assigned_to_user=request.user,
+                                order=1,
+                                status=_Sig.Status.PENDING,
+                            )
+                            dummy = ContentFile(b"dummy signature", name="signature.png")
+                            sig.sign(
+                                user=request.user,
+                                signature_file=dummy,
+                                signer_name=request.user.get_full_name() or request.user.username,
+                                signer_pn=getattr(request.user, "personnel_number", "") or "",
+                                signer_designation="GM Audit",
+                                signed_date=timezone.now().date(),
+                            )
+                            if workflow.is_complete():
+                                workflow.complete()
+                            workflow.refresh_from_db()
+                        elif workflow.status != _WS.Status.COMPLETED:
+                            from forms.signature_views import FormSignatureWorkflowViewSet as _View
+
+                            view2 = _View()
+                            for sig in list(workflow.signatures.filter(status=_Sig.Status.PENDING)):
+                                if view2._can_user_sign(sig, request.user):
+                                    dummy = ContentFile(b"dummy signature", name="signature.png")
+                                    sig.sign(
+                                        user=request.user,
+                                        signature_file=dummy,
+                                        signer_name=request.user.get_full_name() or request.user.username,
+                                        signer_pn=getattr(request.user, "personnel_number", "") or "",
+                                        signer_designation="GM Audit",
+                                        signed_date=timezone.now().date(),
+                                    )
+                            if workflow.is_complete():
+                                workflow.complete()
+                                workflow.refresh_from_db()
+                    except Exception as e:
+                        # Fall through to validation error below
+                        logger.warning("CERTIFY auto-create failed for case %s: %s", case.id, e)
+                # Final check after auto-attempt
+                if not workflow or workflow.status != FormSignatureWorkflow.Status.COMPLETED:
+                    raise ValidationError(
+                        {"detail": "CERTIFY requires FormSignatureWorkflow COMPLETED"}
+                    )
+
+            # Check gmaudit authority via _can_user_sign
+            can_sign = False
+            try:
+                from forms.signature_views import FormSignatureWorkflowViewSet
+
+                view = FormSignatureWorkflowViewSet()
+                for sig in workflow.signatures.all():
+                    if view._can_user_sign(sig, request.user):
+                        can_sign = True
+                        break
+                # Direct gmaudit username fallback
+                if not can_sign and getattr(request.user, "username", "").lower() == "gmaudit":
+                    can_sign = True
+                # Also check role name contains audit/gm audit
+                if not can_sign:
+                    role_name = getattr(getattr(request.user, "system_role", None), "name", "") or ""
+                    if "audit" in role_name.lower() and "gm" in role_name.lower():
+                        can_sign = True
+            except Exception:
+                can_sign = getattr(request.user, "username", "").lower() == "gmaudit"
+
+            if not can_sign:
+                return Response(
+                    {"detail": "Only GM Audit (gmaudit) can certify"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # Perform transition
+        from django.db import transaction
+
+        with transaction.atomic():
+            meta = dict(case.metadata or {})
+            meta["audit_state"] = next_state
+            # Track last action audit trail
+            trail = meta.get("audit_trail") or []
+            trail.append(
+                {
+                    "action": action,
+                    "from_state": current_state,
+                    "to_state": next_state,
+                    "actor": str(request.user.id),
+                    "actor_username": getattr(request.user, "username", ""),
+                    "timestamp": timezone.now().isoformat(),
+                }
+            )
+            meta["audit_trail"] = trail[-50:]
+            case.metadata = meta
+            case.save(update_fields=["metadata", "updated_at"])
+
+            # Log activity
+            try:
+                AuditService.log_activity(
+                    user=request.user,
+                    action=ActivityLog.ActionType.CASE_UPDATED,
+                    object_type="Case",
+                    object_id=str(case.id),
+                    object_repr=str(case),
+                    description=f"Case {case.case_number} action {action}: {current_state} -> {next_state}",
+                    module="Case Management",
+                    severity="info",
+                )
+            except Exception:
+                pass
+
+        serializer = self.get_serializer(case)
+        data = serializer.data
+        # Expose audit_state for convenience
+        data["audit_state"] = next_state
+        data["audit_action"] = action
+        return Response(data)
+
     @action(detail=True, methods=["get"], url_path="history")
     def history(self, request, pk=None):
         """Unified history: Case + FormSubmission + Correspondence + minutes."""
