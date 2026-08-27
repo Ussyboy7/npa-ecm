@@ -20,7 +20,7 @@ interface DistributionRecipient {
   directorateId?: string;
   divisionId?: string;
   departmentId?: string;
-  purpose?: 'information' | 'action' | 'comment';
+  purpose?: 'information' | 'action';
 }
 
 interface ConfirmationDialogProps {
@@ -124,8 +124,7 @@ export const ConfirmationDialog = ({
                             (recipient.type === 'office' ? 'Office' :
                              recipient.type === 'directorate' ? 'Directorate' : 
                              recipient.type === 'division' ? 'Division' : 'Department');
-                          const purposeLabel = recipient.purpose === 'action' ? 'Action' : 
-                                               recipient.purpose === 'comment' ? 'Comment' : 'Information';
+                          const purposeLabel = recipient.purpose === 'action' ? 'Action' : 'Information';
                           return (
                             <div key={recipient.id || idx} className="flex items-center gap-2 text-xs">
                               <Badge variant="outline" className="text-[10px] h-4 flex-shrink-0">

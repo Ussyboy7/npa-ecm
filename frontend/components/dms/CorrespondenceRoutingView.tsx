@@ -37,7 +37,7 @@ export function CorrespondenceRoutingView({
   const [officeSearchQuery, setOfficeSearchQuery] = useState('');
   const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
-  const [purpose, setPurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
+  const [purpose, setPurpose] = useState<'action' | 'information' | 'approval'>('action');
   const [notes, setNotes] = useState<string>('');
   const [subject, setSubject] = useState<string>(document.title || '');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');

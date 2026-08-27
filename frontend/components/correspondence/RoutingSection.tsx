@@ -43,8 +43,8 @@ interface RoutingSectionProps {
   onOfficeFilterDivisionChange: (divisionId: string) => void;
   
   // Purpose
-  purpose: 'action' | 'information' | 'comment' | 'approval';
-  onPurposeChange: (purpose: 'action' | 'information' | 'comment' | 'approval') => void;
+  purpose: 'action' | 'information' | 'approval';
+  onPurposeChange: (purpose: 'action' | 'information' | 'approval') => void;
   
   // Data
   offices: Array<{ id: string; name: string; officeType?: string; directorateId?: string; divisionId?: string }>;
@@ -398,12 +398,6 @@ export const RoutingSection = ({
                     For Information
                   </div>
                 </SelectItem>
-                <SelectItem value="comment">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-success" />
-                    For Comment
-                  </div>
-                </SelectItem>
                 <SelectItem value="approval">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-primary" />
@@ -445,17 +439,14 @@ export const RoutingSection = ({
                     className={`text-xs gap-1 shrink-0 ${
                       purpose === 'information' ? 'bg-info/10 text-info border-info/20' :
                       purpose === 'action' ? 'bg-warning/10 text-warning border-warning/20' :
-                      purpose === 'comment' ? 'bg-success/10 text-success border-success/20' :
                       'bg-primary/10 text-primary border-primary/20'
                     }`}
                   >
                     {purpose === 'information' ? <FileText className="h-3 w-3" /> :
                      purpose === 'action' ? <CheckCircle className="h-3 w-3" /> :
-                     purpose === 'comment' ? <MessageSquare className="h-3 w-3" /> :
                      <CheckCircle className="h-3 w-3" />}
                     {purpose === 'information' ? 'Info' :
-                     purpose === 'action' ? 'Action' :
-                     purpose === 'comment' ? 'Comment' : 'Approval'}
+                     purpose === 'action' ? 'Action' : 'Approval'}
                   </Badge>
                 </div>
                 <Button

@@ -103,7 +103,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [forwardTo, setForwardTo] = useState('');
   const [forwardToError, setForwardToError] = useState('');
   const [onBehalfOf, setOnBehalfOf] = useState('');
-  const [purpose, setPurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
+  const [purpose, setPurpose] = useState<'action' | 'information' | 'approval'>('action');
   
   // Routing state (like MinuteModal)
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');

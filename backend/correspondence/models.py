@@ -686,7 +686,6 @@ class Minute(UUIDModel, TimeStampedModel):
         choices=[
             ("action", "For Action"),
             ("information", "For Information"),
-            ("comment", "For Comment"),
             ("approval", "For Approval"),
         ],
         default="action",

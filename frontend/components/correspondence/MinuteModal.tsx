@@ -88,7 +88,7 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [minuteText, setMinuteText] = useState('');
   const [minuteTextError, setMinuteTextError] = useState('');
   const [actionType, setActionType] = useState<'minute' | 'approve'>('minute');
-  const [purpose, setPurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
+  const [purpose, setPurpose] = useState<'action' | 'information' | 'approval'>('action');
   const [forwardTo, setForwardTo] = useState('');
   const [forwardToError, setForwardToError] = useState('');
 
