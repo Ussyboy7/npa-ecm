@@ -384,6 +384,40 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   }, [currentUser, correspondence.divisionId, correspondence.departmentId, isMD, divisions]);
   const canApprove = hasCanApprovePerm && scopeOk && (isCurrentTurn || isDelegatee || explicitCC);
 
+  // Auto-compute Direction from sender vs recipient rank (tied to Route To)
+  const GRADE_RANK: Record<string, number> = { 'MDCS': 11, 'EDCS': 10, 'MSS1': 9, 'MSS2': 8, 'MSS3': 7, 'MSS4': 6, 'MSS5': 5, 'SSS1': 4, 'SSS2': 3, 'SSS3': 2, 'SSS4': 1, 'JSS1': 0, 'JSS2': 0, 'JSS3': 0 };
+  const OFFICE_RANK: Record<string, number> = { 'md': 11, 'ed': 10, 'gm': 9, 'agm': 8, 'directorate': 10, 'division': 9, 'department': 8 };
+  const getComputedDirection = (sender: typeof currentUser, targetId: string, type: 'person' | 'office'): 'upward' | 'downward' | 'lateral' | null => {
+    if (!sender) return null;
+    if (type === 'person' && targetId) {
+      const target = activeDirectoryUsers.find((u) => String(u.id) === String(targetId));
+      if (target) {
+        const s = GRADE_RANK[sender.gradeLevel] ?? 5;
+        const t = GRADE_RANK[(target as unknown as { gradeLevel: string }).gradeLevel] ?? 5;
+        if (s < t) return 'upward';
+        if (s > t) return 'downward';
+        return 'lateral';
+      }
+    }
+    if (type === 'office' && targetId) {
+      const office = offices.find((o) => String(o.id) === String(targetId));
+      if (office) {
+        const s = sender.gradeLevel === 'MDCS' ? 11 : sender.gradeLevel === 'EDCS' ? 10 : sender.gradeLevel === 'MSS1' ? 9 : sender.gradeLevel === 'MSS2' ? 8 : 5;
+        const t = OFFICE_RANK[String((office as unknown as { officeType: string }).officeType || '').toLowerCase()] ?? 5;
+        if (s < t) return 'upward';
+        if (s > t) return 'downward';
+        return 'lateral';
+      }
+    }
+    return null;
+  };
+  const autoDirection = getComputedDirection(currentUser, routeType === 'person' ? forwardTo : targetOfficeId, routeType);
+  useEffect(() => {
+    if (autoDirection && autoDirection !== selectedDirection) {
+      setSelectedDirection(autoDirection);
+    }
+  }, [autoDirection]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset action type to 'minute' if user cannot approve (but keep approve if they are CC/delegatee)
   useEffect(() => {
     if (!canApprove && actionType === 'approve') {
@@ -1449,6 +1483,15 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                 Direction {!isMD && '*'}
               </Label>
               {canChooseDirection ? (
+                autoDirection ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                    {autoDirection === 'upward' && <ArrowUp className="h-4 w-4 text-success" />}
+                    {autoDirection === 'downward' && <ArrowDown className="h-4 w-4 text-info" />}
+                    {autoDirection === 'lateral' && <ArrowRightLeft className="h-4 w-4 text-amber-600" />}
+                    <span className="text-sm font-medium capitalize">{autoDirection}</span>
+                    <span className="text-xs text-muted-foreground">— auto from recipient (GM→GM Lateral, GM→ED Upward, AGM→Principal Manager Downward)</span>
+                  </div>
+                ) : (
                 <RadioGroup value={selectedDirection} onValueChange={(v: string) => {
                   setSelectedDirection(v as 'upward' | 'downward' | 'lateral');
                   setForwardTo(''); // Reset forward to when direction changes
@@ -1475,6 +1518,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                     </Label>
                   </div>
                 </RadioGroup>
+                )
               ) : (
                 <div className="p-3 bg-muted/50 border border-border rounded-lg flex items-center gap-2">
                   <ArrowDown className="h-4 w-4 text-info" />
