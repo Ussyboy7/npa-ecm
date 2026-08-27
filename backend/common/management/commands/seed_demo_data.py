@@ -98,6 +98,7 @@ class Command(BaseCommand):
                 self._ensure_correspondence_templates()
                 self._ensure_audit_form_templates()
                 self._ensure_project_cases(users, divisions, departments, offices)
+                self._ensure_audit_case_aggregate()
             else:
                 self.stdout.write(self.style.WARNING("Skipping demo data creation (no users available)"))
                 
@@ -1038,6 +1039,17 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(f"Workflow templates ensured: {len(WORKFLOW_TEMPLATES)} templates"))
+
+    def _ensure_audit_case_aggregate(self):
+        """Seed audit workflow rules and backfill Cases(AUDIT) from FormSubmissions."""
+        self.stdout.write(self.style.MIGRATE_HEADING("Ensuring audit case aggregate (Case AUDIT + workflow rules)"))
+        try:
+            from correspondence.services.case_audit import ensure_audit_workflow_rules, backfill_audit_cases
+            ensure_audit_workflow_rules()
+            n = backfill_audit_cases()
+            self.stdout.write(self.style.SUCCESS(f"Audit aggregate ensured: {n} submissions linked to Cases(AUDIT)"))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Audit aggregate seeding skipped/failed: {e}"))
 
     def _ensure_support_content(self, users: dict[str, User]):
         HelpGuide.objects.update_or_create(

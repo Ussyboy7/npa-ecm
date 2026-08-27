@@ -360,6 +360,14 @@ class CaseViewSet(viewsets.ModelViewSet):
         CaseService.create_case_sla(case)
         CaseService.evaluate_workflow_rules(case, "status_change", {"new_status": case.status})
 
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request, pk=None):
+        """Unified history: Case + FormSubmission + Correspondence + minutes."""
+        case = self.get_object()
+        from correspondence.services.case_audit import get_case_history
+        data = get_case_history(case)
+        return Response(data)
+
     @action(detail=True, methods=["get"], url_path="sla-status")
     def sla_status(self, request, pk=None):
         case = self.get_object()

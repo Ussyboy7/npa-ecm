@@ -1165,6 +1165,13 @@ class Case(UUIDModel, SoftDeleteModel, TimeStampedModel):
     
     This is the foundation of the ECM vision: "correspondence triggers cases, documents are evidence,
     workflow is control, and the case file is the truth."
+
+    Audit aggregate: When case_type == AUDIT, the Case acts as the work-item aggregate for
+    the audit-query-bills-certification form. The form itself is linked via CaseFormLink,
+    evidence via CaseDocumentLink, and allowed states/actions are governed by
+    CaseWorkflowRule entries (DRAFT/SUBMITTED/AWAITING_CERTIFICATION/CERTIFIED/
+    REFERRED/AWAITING_RESPONSE/RESPONSE_RECEIVED/AUDIT_REVIEW/CLOSED) rather than a
+    fixed person chain. See correspondence.services.case_audit for backfill and history.
     """
     
     class Status(models.TextChoices):
