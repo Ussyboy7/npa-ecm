@@ -394,7 +394,9 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
         minute = self.get_object()
 
-        if minute.action_type != Minute.ActionType.APPROVE:
+        # Tier-aware: allow any approve minute (executive or departmental) and any minute with an approval_level set (endorsement)
+        _is_approval = minute.action_type == Minute.ActionType.APPROVE or getattr(minute, "approval_level", None) is not None
+        if not _is_approval:
             return Response(
                 {"detail": "This endpoint is only available for approval minutes."},
                 status=status.HTTP_400_BAD_REQUEST
