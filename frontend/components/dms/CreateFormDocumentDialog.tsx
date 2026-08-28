@@ -219,7 +219,7 @@ export function CreateFormDocumentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(95vh-200px)] sm:max-h-[60vh] pr-2 sm:pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-2 sm:pr-4">
           <div className="space-y-4 sm:space-y-6">
             {/* Template Selection */}
             <div className="space-y-2">

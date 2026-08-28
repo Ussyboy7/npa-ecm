@@ -57,7 +57,7 @@ const dialogContentVariants = cva(
       height: {
         auto: "",
         scroll: "max-h-[95vh] sm:max-h-[90vh] overflow-y-auto overflow-x-hidden",
-        fill: "max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col",
+        fill: "max-h-[95vh] sm:max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col",
         screen: "h-[92vh] max-h-[95vh] overflow-hidden flex flex-col",
       },
       density: {
