@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { getFormTemplates } from "@/lib/api/forms";
 import { createFormDocument } from "@/lib/api/dms-forms";
@@ -219,7 +218,7 @@ export function CreateFormDocumentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 pr-2 sm:pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-2 sm:pr-4">
           <div className="space-y-4 sm:space-y-6">
             {/* Template Selection */}
             <div className="space-y-2">
@@ -391,7 +390,7 @@ export function CreateFormDocumentDialog({
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating} className="w-full sm:w-auto">
