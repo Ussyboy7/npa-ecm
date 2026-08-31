@@ -198,6 +198,7 @@ cmd_deploy() {
     _deploy_prepare_media
     _deploy_stop_stack
     _deploy_build_up || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
+    _deploy_apply_runtime_configuration || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     $DO_HEALTH && _deploy_wait_healthy || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     _deploy_show_summary
     ui_success "ECM ${STACK_ENVIRONMENT} deployment complete"
@@ -299,6 +300,13 @@ _deploy_build_up() {
     docker image prune -f >/dev/null 2>&1 || true
     _deploy_purge_stale_containers
     stack_compose up -d --build
+}
+
+_deploy_apply_runtime_configuration() {
+    ui_step "Applying migrations and verifying runtime configuration"
+    stack_backend_manage migrate --noinput
+    stack_backend_manage setup_role_permissions --force
+    stack_backend_manage check_environment_parity --strict
 }
 
 _deploy_wait_healthy() {

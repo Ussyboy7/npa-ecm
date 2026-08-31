@@ -476,6 +476,8 @@ class FormDocumentSerializer(serializers.ModelSerializer):
     template = serializers.SerializerMethodField()
     signature_workflow = serializers.SerializerMethodField()
     correspondence = serializers.SerializerMethodField()
+    submission_id = serializers.UUIDField(source="submission.id", read_only=True)
+    case_links = serializers.SerializerMethodField()
 
     def get_document(self, obj):
         """Get document data including versions and case links."""
@@ -485,9 +487,9 @@ class FormDocumentSerializer(serializers.ModelSerializer):
             versions = obj.document.versions.all()
             version_serializer = DocumentVersionSerializer(versions, many=True, context=self.context)
             
-            # Get case links
-            from correspondence.models import CaseDocumentLink
-            case_links = CaseDocumentLink.objects.filter(document=obj.document).select_related('case')
+            # A form is linked to a case through CaseFormLink, not CaseDocumentLink.
+            from correspondence.models import CaseFormLink
+            case_links = CaseFormLink.objects.filter(form_document=obj).select_related('case')
             case_links_data = [
                 {
                     "id": str(link.id),
@@ -524,6 +526,23 @@ class FormDocumentSerializer(serializers.ModelSerializer):
             return {"id": str(obj.signature_workflow.id), "status": obj.signature_workflow.status}
         return None
     
+    def get_case_links(self, obj):
+        from correspondence.models import CaseFormLink
+
+        return [
+            {
+                "id": str(link.id),
+                "case": {
+                    "id": str(link.case.id),
+                    "caseNumber": link.case.case_number,
+                    "title": link.case.title,
+                    "status": link.case.status,
+                },
+                "notes": link.notes or "",
+            }
+            for link in CaseFormLink.objects.filter(form_document=obj).select_related("case")
+        ]
+
     def get_correspondence(self, obj):
         if obj.correspondence:
             return {"id": str(obj.correspondence.id), "reference_number": obj.correspondence.reference_number}
@@ -621,6 +640,8 @@ class FormDocumentSerializer(serializers.ModelSerializer):
             "signature_workflow_id",
             "correspondence",
             "correspondence_id",
+            "submission_id",
+            "case_links",
             "created_at",
             "updated_at",
         ]

@@ -47,7 +47,7 @@ export function ForwardFormDialog({
   form,
   onForwarded,
 }: ForwardFormDialogProps) {
-  const { divisions, departments } = useOrganization();
+  const { divisions, departments, offices } = useOrganization();
   const { users } = useOrgUsers();
   const [forwarding, setForwarding] = useState(false);
   const [targetType, setTargetType] = useState<'user' | 'division' | 'department'>('user');
@@ -101,21 +101,20 @@ export function ForwardFormDialog({
     );
   }, [availableUsers, userSearch]);
 
-  const divisionRecipientCount = useMemo(() => {
-    if (!selectedDivision) return 0;
-    return availableUsers.filter((u) => u.division === selectedDivision).length;
-  }, [availableUsers, selectedDivision]);
-
-  const departmentRecipientCount = useMemo(() => {
-    if (!selectedDepartment) return 0;
-    return availableUsers.filter((u) => u.department === selectedDepartment).length;
-  }, [availableUsers, selectedDepartment]);
+  const divisionOffice = useMemo(() => {
+    if (!selectedDivision) return null;
+    return offices.find((o) => o.divisionId === selectedDivision && (o.officeType === "gm" || o.officeType === "division")) || offices.find((o) => o.divisionId === selectedDivision) || null;
+  }, [offices, selectedDivision]);
+  const departmentOffice = useMemo(() => {
+    if (!selectedDepartment) return null;
+    return offices.find((o) => o.departmentId === selectedDepartment) || null;
+  }, [offices, selectedDepartment]);
 
   const pendingRecipientCount = useMemo(() => {
     if (targetType === 'user') return selectedUsers.length;
-    if (targetType === 'division') return divisionRecipientCount;
-    return departmentRecipientCount;
-  }, [targetType, selectedUsers.length, divisionRecipientCount, departmentRecipientCount]);
+    if (targetType === 'division') return divisionOffice ? 1 : 0;
+    return departmentOffice ? 1 : 0;
+  }, [targetType, selectedUsers.length, divisionOffice, departmentOffice]);
 
   const toggleUser = (userId: string, checked: boolean) => {
     setSelectedUsers((prev) =>
@@ -124,7 +123,10 @@ export function ForwardFormDialog({
   };
 
   const handleForward = async () => {
-    if (!form) return;
+    if (!form?.id) {
+      toast.error('Invalid form - missing ID. Please reload the form.');
+      return;
+    }
 
     if (targetType === 'user' && selectedUsers.length === 0) {
       toast.error('Please select at least one user');
@@ -140,17 +142,7 @@ export function ForwardFormDialog({
     }
 
     if (targetType !== 'user' && pendingRecipientCount === 0) {
-      toast.error('No active users found for that selection');
-      return;
-    }
-
-    if (
-      targetType !== 'user' &&
-      pendingRecipientCount > 0 &&
-      !window.confirm(
-        `This will notify ${pendingRecipientCount} user${pendingRecipientCount === 1 ? '' : 's'}. Continue?`,
-      )
-    ) {
+      toast.error('No office found for that selection');
       return;
     }
 
@@ -173,7 +165,13 @@ export function ForwardFormDialog({
       onOpenChange(false);
     } catch (error: unknown) {
       logError('Failed to forward form', error);
-      toast.error(getApiErrorMessage(error, 'Failed to forward form'));
+      const isNetworkError =
+        error instanceof TypeError && /failed to fetch/i.test(error.message);
+      toast.error(
+        isNetworkError
+          ? 'Network error - please check connection and re-login if session expired'
+          : getApiErrorMessage(error, 'Failed to forward form'),
+      );
     } finally {
       setForwarding(false);
     }
@@ -182,16 +180,19 @@ export function ForwardFormDialog({
   const actionLabel =
     actionType === 'review' ? 'review' : actionType === 'input' ? 'input' : 'signature';
 
+  const isAuditForm = form?.template?.slug === "audit-query-bills-certification";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="xl" height="fill" density="flush">
         <DialogHeader className="shrink-0 border-b px-4 pb-3 pt-4 sm:px-6 sm:pt-6">
           <DialogTitle className="flex items-center gap-2 pr-8">
             <Send className="h-5 w-5 text-primary" />
-            Forward Form
+            {isAuditForm ? "Share Document" : "Forward Form"}
           </DialogTitle>
           <DialogDescription>
-            Forward this form to users for {actionLabel}
+            {isAuditForm
+              ? "Shares this document with selected users. This does not route the Audit Case — use Route to Office in the Audit Case."
+              : `Forward this form to users for ${actionLabel}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -345,11 +346,13 @@ export function ForwardFormDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedDivision && (
+                {selectedDivision && divisionOffice && (
                   <p className="text-sm text-muted-foreground">
-                    {divisionRecipientCount} active user
-                    {divisionRecipientCount === 1 ? '' : 's'} will be notified.
+                    Routes to {divisionOffice.name} ({divisionOffice.code}) office — office members with access can act on this item.
                   </p>
+                )}
+                {selectedDivision && !divisionOffice && (
+                  <p className="text-sm text-amber-600">No office found for this division.</p>
                 )}
               </div>
             )}
@@ -372,11 +375,13 @@ export function ForwardFormDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedDepartment && (
+                {selectedDepartment && departmentOffice && (
                   <p className="text-sm text-muted-foreground">
-                    {departmentRecipientCount} active user
-                    {departmentRecipientCount === 1 ? '' : 's'} will be notified.
+                    Routes to {departmentOffice.name} ({departmentOffice.code}) office.
                   </p>
+                )}
+                {selectedDepartment && !departmentOffice && (
+                  <p className="text-sm text-amber-600">No office found for this department.</p>
                 )}
               </div>
             )}
@@ -401,12 +406,12 @@ export function ForwardFormDialog({
             {forwarding ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Forwarding...
+                {isAuditForm ? "Sharing..." : "Forwarding..."}
               </>
             ) : (
               <>
                 <Send className="mr-2 h-4 w-4" />
-                Forward
+                {isAuditForm ? "Share" : "Forward"}
                 {pendingRecipientCount > 0 ? ` (${pendingRecipientCount})` : ''}
               </>
             )}

@@ -39,6 +39,8 @@ import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { cn } from "@/lib/utils";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import type {
   FormTemplate,
   FormSubmission,
@@ -313,17 +315,74 @@ export default function AuditFormFillPage() {
   const [auditState, setAuditState] = useState<string | null>(null);
   const [caseMetadata, setCaseMetadata] = useState<Record<string, unknown> | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Office-centric routing state per spec
+  const { directorates, divisions, departments, offices } = useOrganization();
+  const { users: orgUsers } = useOrgUsers();
+  const [routeType, setRouteType] = useState<"division" | "department" | "directorate" | "office">("division");
+  const [selectedDivisionId, setSelectedDivisionId] = useState("");
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
+  const [selectedDirectorateId, setSelectedDirectorateId] = useState("");
+  const [selectedOfficeId, setSelectedOfficeId] = useState("");
 
   const fetchSubmission = useCallback(async () => {
     try {
       setLoading(true);
-      const [subData, workflowData] = await Promise.all([
-        apiFetch<FormSubmission>(`/forms/submissions/${submissionId}/`),
-        apiFetch<FormSignatureWorkflow | null>(
-          `/forms/submissions/${submissionId}/signature_workflow/`
-        ).catch(() => null),
-      ]);
+      let subData: FormSubmission | null = null;
+      let workflowData: FormSignatureWorkflow | null = null;
+      let canonicalSubmissionId = submissionId;
+      try {
+        const results = await Promise.all([
+          apiFetch<FormSubmission>(`/forms/submissions/${submissionId}/`),
+          apiFetch<FormSignatureWorkflow | null>(`/forms/submissions/${submissionId}/signature_workflow/`).catch(() => null),
+        ]);
+        subData = results[0];
+        workflowData = results[1];
+        canonicalSubmissionId = String(subData.id);
+      } catch (subErr: unknown) {
+        const status = (subErr as Record<string, unknown>)?.status as number | undefined;
+        // If FormSubmission not found, it may be a FormDocument id (e.g., opened from My Documents). Auto-resolve to the correct AQ submission.
+        if (status === 404) {
+          try {
+            const formDocuments = await apiFetch<{ results?: Array<{ id: string; template?: { id: string; slug?: string; name?: string }; case_links?: Array<{ case: { id: string; case_number?: string } }>; document?: { id: string } }> }>(`/dms/form-documents/?submission=${submissionId}`);
+            const fd = formDocuments?.results?.[0];
+            if (fd?.case_links?.[0]?.case?.id) {
+              const caseIdFromFd = fd.case_links[0].case.id;
+              const caseData = await apiFetch<{ id: string; metadata?: Record<string, unknown> }>(`/correspondence/cases/${caseIdFromFd}/`).catch(() => null);
+              const realSubId = (caseData?.metadata as Record<string, unknown>)?.audit_submission_id as string | undefined;
+              if (realSubId) {
+                const realResults = await Promise.all([
+                  apiFetch<FormSubmission>(`/forms/submissions/${realSubId}/`),
+                  apiFetch<FormSignatureWorkflow | null>(`/forms/submissions/${realSubId}/signature_workflow/`).catch(() => null),
+                ]);
+                subData = realResults[0];
+                workflowData = realResults[1];
+                canonicalSubmissionId = realSubId;
+                // Update URL to canonical submission id without pushing history
+                router.replace(`/audit/forms/${realSubId}`);
+              } else {
+                throw new Error(`No FormSubmission for ${submissionId} — this FormDocument has no linked audit submission.`);
+              }
+            } else if (fd?.id) {
+              throw new Error(`No FormSubmission for ${submissionId} — this appears to be a FormDocument (${fd.template?.name || fd.id}). Open via Audit → Cases or My Documents → Open Audit Case.`);
+            }
+            if (subData) {
+              // Successfully resolved via FormDocument → Case → Submission
+            } else {
+              throw subErr;
+            }
+          } catch (fallbackErr) {
+            // Keep a successful resolution; otherwise preserve the fallback
+            // failure so the user sees the actual cause, not the first 404.
+            if (!subData) {
+              throw fallbackErr;
+            }
+          }
+        } else {
+          throw subErr;
+        }
+      }
 
+      if (!subData) throw new Error("Submission not found");
       setSubmission(subData);
       setTemplate(subData.template);
       setFormData(subData.data || {});
@@ -333,7 +392,7 @@ export default function AuditFormFillPage() {
       // Resolve Case(AUDIT) for this submission to drive state-machine actions
       try {
         const caseData = await apiFetch<{ id: string; metadata?: Record<string, unknown> }>(
-          `/correspondence/cases/by-submission/${submissionId}/`
+          `/correspondence/cases/by-submission/${canonicalSubmissionId}/`
         ).catch(() => null);
         if (caseData && caseData.id) {
           setCaseId(caseData.id);
@@ -347,7 +406,7 @@ export default function AuditFormFillPage() {
             `/correspondence/cases/?case_type=audit&page_size=100`
           ).catch(() => null);
           const found = list?.results?.find(
-            (c) => String((c.metadata as Record<string, unknown>)?.audit_submission_id) === String(submissionId)
+            (c) => String((c.metadata as Record<string, unknown>)?.audit_submission_id) === String(canonicalSubmissionId)
           );
           if (found) {
             setCaseId(found.id);
@@ -365,9 +424,19 @@ export default function AuditFormFillPage() {
         // case resolution optional — keep actions disabled if not found
       }
     } catch (err) {
-      logError("Failed to load submission", err);
-      toast.error("Failed to load submission");
-      router.push("/audit/forms");
+      const status = (err as Record<string, unknown>)?.status as number | undefined;
+      const msg = err instanceof Error ? err.message : String(err);
+      // 404 is expected when opening a FormDocument id as submission — show EmptyState, don't spam console error
+      if (status === 404 || msg.includes("No FormSubmission")) {
+        setSubmission(null);
+        setTemplate(null);
+        // Keep toast but not logError for 404
+        toast.error("Audit query not found — try Audit → Cases (AQ-...) or My Documents → Open Audit Case");
+      } else {
+        logError("Failed to load submission", err);
+        toast.error("Failed to load submission");
+        router.push("/audit/forms");
+      }
     } finally {
       setLoading(false);
     }
@@ -376,6 +445,27 @@ export default function AuditFormFillPage() {
   useEffect(() => {
     void fetchSubmission();
   }, [fetchSubmission]);
+
+  // Resolve target office from routeType + selection — office is recipient per spec
+  const resolvedOffice = (() => {
+    if (routeType === "office" && selectedOfficeId) return offices.find((o) => o.id === selectedOfficeId) || null;
+    if (routeType === "division" && selectedDivisionId) {
+      // Prefer GM/division office for this division, fallback to any office with this division
+      return offices.find((o) => o.divisionId === selectedDivisionId && (o.officeType === "gm" || o.officeType === "division")) || offices.find((o) => o.divisionId === selectedDivisionId) || null;
+    }
+    if (routeType === "department" && selectedDepartmentId) {
+      return offices.find((o) => o.departmentId === selectedDepartmentId) || null;
+    }
+    if (routeType === "directorate" && selectedDirectorateId) {
+      return offices.find((o) => o.directorateId === selectedDirectorateId && (o.officeType === "ed" || o.officeType === "directorate")) || offices.find((o) => o.directorateId === selectedDirectorateId) || null;
+    }
+    return null;
+  })();
+
+  useEffect(() => {
+    if (resolvedOffice) setForwardTargetOffice(resolvedOffice.code || resolvedOffice.id);
+    else if (routeType === "office" && !selectedOfficeId) setForwardTargetOffice("");
+  }, [resolvedOffice, routeType, selectedOfficeId]);
 
   const getFields = (): AuditField[] => {
     if (!template?.structure?.fields) return [];
@@ -485,22 +575,64 @@ export default function AuditFormFillPage() {
     }
   };
 
+  const handleRequestAuthorization = async () => {
+    if (!caseId) {
+      toast.error("Case not found — ensure audit case exists (CERTIFIED)");
+      return;
+    }
+    setActionLoading("request_auth");
+    try {
+      await apiFetch(`/correspondence/cases/${caseId}/actions/`, {
+        method: "POST",
+        body: JSON.stringify({ action: "REQUEST_AUTHORIZATION" }),
+      });
+      toast.success("Sent to Department Head for authorization");
+      void fetchSubmission();
+    } catch (err) {
+      logError("Failed to request authorization", err);
+      toast.error(err instanceof Error ? err.message : "Failed to request authorization");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAuthorize = async () => {
+    if (!caseId) {
+      toast.error("Case not found");
+      return;
+    }
+    setActionLoading("authorize");
+    try {
+      await apiFetch(`/correspondence/cases/${caseId}/actions/`, {
+        method: "POST",
+        body: JSON.stringify({ action: "AUTHORIZE" }),
+      });
+      toast.success("Authorized — ready to route to destination office");
+      void fetchSubmission();
+    } catch (err) {
+      logError("Failed to authorize", err);
+      toast.error(err instanceof Error ? err.message : "Authorization failed — only Department Head / designated authority can authorize");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleForwardViaCorrespondence = async () => {
-    const officeCode = forwardTargetOffice.trim();
+    const officeCode = (resolvedOffice?.code || resolvedOffice?.id || forwardTargetOffice.trim());
     if (!officeCode || !forwardSubject.trim()) {
-      toast.error("Select target office and enter subject");
+      toast.error("Select destination and enter subject");
       return;
     }
     if (!caseId) {
-      toast.error("Case not found for this submission — ensure audit case exists (CERTIFIED)");
+      toast.error("Case not found for this submission — ensure audit case exists (CERTIFIED/AUTHORIZED)");
       return;
     }
-    // Validate office code — office picker or at least pattern check (OFF_... or UUID)
+    // Office is recipient — Attention is optional per spec
     const isValidOffice =
       /^OFF_[A-Z0-9_]+$/i.test(officeCode) ||
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(officeCode);
     if (!isValidOffice) {
-      toast.error("Enter a valid office code (e.g., OFF_DIV_FINANCE) or select from picker");
+      toast.error("Resolved office invalid — select a valid Division/Department/Directorate");
       return;
     }
     setForwarding(true);
@@ -531,7 +663,8 @@ export default function AuditFormFillPage() {
           }),
         }
       );
-      toast.success(`Audit query referred to ${officeCode} via ${result.correspondence_reference ?? result.correspondence_id ?? "correspondence"}`);
+      const officeLabel = resolvedOffice ? `${resolvedOffice.name} (${resolvedOffice.code})` : officeCode;
+      toast.success(`Referred to ${officeLabel} via ${result.correspondence_reference ?? result.correspondence_id ?? "correspondence"} — office queue`);
       setForwardDialogOpen(false);
       setForwardTargetOffice("");
       setForwardAttentionUser("");
@@ -540,6 +673,10 @@ export default function AuditFormFillPage() {
       setForwardActionRequired(true);
       setForwardRequiredApprovalLevel("departmental");
       setForwardSubject("");
+      setSelectedDivisionId("");
+      setSelectedDepartmentId("");
+      setSelectedDirectorateId("");
+      setSelectedOfficeId("");
       // Refresh case state/banner; show updated state
       await fetchSubmission();
       if (result.correspondence_id) {
@@ -777,6 +914,48 @@ export default function AuditFormFillPage() {
 
       <Separator />
 
+      {/* Audit Case source of truth header — AQ-2026-014 per product rule */}
+      {caseId && (() => {
+        const meta = (caseMetadata || {}) as Record<string, unknown>;
+        const trail = (meta.audit_trail as Array<Record<string, unknown>>) || [];
+        const certifiedBy = trail.find((t) => String(t.action).toUpperCase() === "CERTIFY") as Record<string, unknown> | undefined;
+        const authorizedBy = (meta.last_authorization as Record<string, unknown>) || trail.find((t) => String(t.action).toUpperCase() === "AUTHORIZE") as Record<string, unknown> | undefined;
+        const lastRefer = (meta.last_refer as Record<string, unknown>) || {};
+        const corrRef = (lastRefer.correspondence_reference as string) || (meta.refer_correspondence_reference as string) || "";
+        const authLabel = auditState === "AWAITING_INTERNAL_AUTHORIZATION" ? "Awaiting Authorization" : auditState === "AUTHORIZED" ? `Authorized by ${String((authorizedBy as Record<string, unknown>)?.authorized_by_username || (authorizedBy as Record<string, unknown>)?.actor_username || "Dept Head")}` : "Not Required";
+        const caseNumber = (meta.case_number as string) || (caseMetadata as Record<string, unknown>)?.case_number as string || submission?.id?.slice(0,8) || caseId.slice(0,8);
+        const raisedBy = submission?.submitted_by ? `${submission.submitted_by.name} (${submission.submitted_by.email ?? ""})`.trim() : "Officer";
+        const raisedAt = submission?.createdAt ? formatDateTime(submission.createdAt) : submission?.submitted_at ? formatDateTime(submission.submitted_at) : "";
+        return (
+          <div className="rounded-xl border border-border/60 bg-card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">AQ-{String(caseNumber).replace(/^AQ-/, "")} · Audit Query — Bills Certification</p>
+                <p className="text-xs text-muted-foreground">Case: {caseId.slice(0,8)} · Raised by: {raisedBy} {raisedAt ? `· ${raisedAt}` : ""}</p>
+              </div>
+              <Badge variant="outline">{auditState || "DRAFT"}</Badge>
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="text-muted-foreground">Certified by</p>
+                <p className="font-medium">{certifiedBy ? String((certifiedBy as Record<string, unknown>).actor_username || (certifiedBy as Record<string, unknown>).actor || "GM Audit") : "—"}</p>
+                {Boolean((certifiedBy as Record<string, unknown>)?.timestamp) && <p className="text-muted-foreground">{String((certifiedBy as Record<string, unknown>).timestamp).slice(0,10)}</p>}
+              </div>
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="text-muted-foreground">Authorization</p>
+                <p className="font-medium">{authLabel}</p>
+                <p className="text-muted-foreground text-xs">Dept Head authorization ≠ GM Audit certification</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="text-muted-foreground">Correspondence</p>
+                <p className="font-medium font-mono">{corrRef || "—"}</p>
+                {corrRef && <p className="text-muted-foreground">Office queue</p>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Audit work-item state banner — DRAFT/SUBMITTED/AWAITING_CERTIFICATION/CERTIFIED/REFERRED/AWAITING_RESPONSE/RESPONSE_RECEIVED/CLOSED */}
       {auditState && (() => {
         const meta = (caseMetadata || {}) as Record<string, unknown>;
@@ -789,15 +968,17 @@ export default function AuditFormFillPage() {
         const targetOffice = (lastRefer.target_office_code as string) || (lastRefer.target_office as string) || (meta.refer_target_office as string) || "";
         const dueDate = (lastRefer.due_date as string) || (meta.refer_due_date as string) || "";
         const state = auditState.toUpperCase();
-        // Config per state with distinct colors/icons
+        // Config per state with distinct colors/icons — office is recipient per spec
         const configs: Record<string, { bg: string; border: string; text: string; icon: React.ReactNode; label: string; desc: string }> = {
           DRAFT: { bg: "bg-slate-50", border: "border-slate-200", text: "text-slate-700", icon: <FileText className="h-4 w-4" />, label: "Draft", desc: "Draft — complete and submit the query." },
-          SUBMITTED: { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-800", icon: <Send className="h-4 w-4" />, label: "Submitted", desc: "Submitted — awaiting GM Audit certification workflow." },
-          AWAITING_CERTIFICATION: { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-800", icon: <Clock className="h-4 w-4" />, label: "Awaiting Certification", desc: `Awaiting certification — only GM Audit (gmaudit) can certify${certifiedBy ? ` (requested)` : ""}.` },
-          CERTIFIED: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-800", icon: <BadgeCheck className="h-4 w-4" />, label: "Certified", desc: certifiedBy ? `Certified by ${String(certifiedBy.actor_username || certifiedBy.actor || "GM Audit")} — ready to refer` : "Certified by GM Audit — ready to refer via correspondence." },
-          REFERRED: { bg: "bg-purple-50", border: "border-purple-200", text: "text-purple-800", icon: <Share2 className="h-4 w-4" />, label: "Referred", desc: targetOffice ? `Sent to ${targetOffice}${corrRef ? ` via ${corrRef}` : ""}${corrId ? ` (Correspondence: ${corrRef || corrId})` : ""}` : `Referred — correspondence created${corrRef ? `: ${corrRef}` : ""}` },
-          AWAITING_RESPONSE: { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-800", icon: <Hourglass className="h-4 w-4" />, label: "Awaiting Response", desc: targetOffice ? `Awaiting response from ${targetOffice}${dueDate ? ` — due ${dueDate}` : ""}${corrRef ? ` · Correspondence: ${corrRef}` : corrId ? ` · Correspondence: ${corrId.slice(0,8)}` : ""}` : `Awaiting response${corrRef ? ` · Correspondence: ${corrRef}` : ""}` },
-          RESPONSE_RECEIVED: { bg: "bg-teal-50", border: "border-teal-200", text: "text-teal-800", icon: <Inbox className="h-4 w-4" />, label: "Response Received", desc: corrRef ? `Response received — Correspondence: ${corrRef}` : corrId ? `Response received — Correspondence: ${corrId.slice(0,8)}` : "Response received — under audit review." },
+          SUBMITTED: { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-800", icon: <Send className="h-4 w-4" />, label: "Submitted", desc: "Submitted — awaiting GM Audit certification." },
+          AWAITING_CERTIFICATION: { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-800", icon: <Clock className="h-4 w-4" />, label: "Awaiting Certification", desc: `Awaiting certification — only GM Audit (gmaudit) can certify.` },
+          CERTIFIED: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-800", icon: <BadgeCheck className="h-4 w-4" />, label: "Certified", desc: certifiedBy ? `Certified by ${String(certifiedBy.actor_username || certifiedBy.actor || "GM Audit")} — ready for authorization or routing` : "Certified by GM Audit — request Department Head authorization or route to destination office." },
+          AWAITING_INTERNAL_AUTHORIZATION: { bg: "bg-yellow-50", border: "border-yellow-300", text: "text-yellow-800", icon: <Clock className="h-4 w-4" />, label: "Awaiting Authorization", desc: "Awaiting Department Head / Audit authority authorization — distinct from GM Audit certification." },
+          AUTHORIZED: { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-800", icon: <CheckCircle className="h-4 w-4" />, label: "Authorized", desc: "Authorized by Department Head — ready to route to destination office queue." },
+          REFERRED: { bg: "bg-purple-50", border: "border-purple-200", text: "text-purple-800", icon: <Share2 className="h-4 w-4" />, label: "Referred", desc: targetOffice ? `Routes to ${targetOffice} office${corrRef ? ` via ${corrRef}` : ""} — office queue` : `Referred — correspondence in office queue${corrRef ? `: ${corrRef}` : ""}` },
+          AWAITING_RESPONSE: { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-800", icon: <Hourglass className="h-4 w-4" />, label: "Awaiting Response", desc: targetOffice ? `Awaiting response from ${targetOffice} office${dueDate ? ` — due ${dueDate}` : ""}${corrRef ? ` · ${corrRef}` : ""}` : `Awaiting response — office queue${corrRef ? ` · ${corrRef}` : ""}` },
+          RESPONSE_RECEIVED: { bg: "bg-teal-50", border: "border-teal-200", text: "text-teal-800", icon: <Inbox className="h-4 w-4" />, label: "Response Received", desc: corrRef ? `Response received — ${corrRef} — under audit review` : "Response received — under audit review." },
           AUDIT_REVIEW: { bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-800", icon: <Eye className="h-4 w-4" />, label: "Audit Review", desc: "Under audit review — awaiting closure." },
           CLOSED: { bg: "bg-slate-900", border: "border-slate-700", text: "text-slate-100", icon: <Lock className="h-4 w-4" />, label: "Closed", desc: lastEntry?.timestamp ? `Closed on ${String(lastEntry.timestamp).slice(0,10)} by ${String(lastEntry.actor_username || "system")}` : "Closed — audit work-item complete." },
         };
@@ -864,20 +1045,43 @@ export default function AuditFormFillPage() {
         );
       })}
 
-      {/* Forward via Correspondence — appears after GM Audit certification */}
-      {workflow?.status === "completed" && !submission.is_draft && (
-        <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-emerald-900">Certified by {(() => {
-              const signed = signatures.find((s) => s.status === "signed") || workflow?.signatures?.find((s) => s.status === "signed");
-              const name = signed?.signer_name?.trim() || signed?.signed_by_name?.trim() || "";
-              return name || "GM Audit";
-            })()} — ready to forward</p>
-            <p className="text-xs text-muted-foreground">Send this audit query via correspondence to the target department/division for explanation.</p>
+      {/* Routing — office is recipient per spec, not N users. Two-stage: Internal Authorization (optional) → External Routing */}
+      {!submission.is_draft && auditState && ["CERTIFIED", "AWAITING_INTERNAL_AUTHORIZATION", "AUTHORIZED"].includes(auditState) && (
+        <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/20 p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-emerald-900">
+                {auditState === "CERTIFIED" && `Certified by ${(() => { const s = signatures.find((x) => x.status === "signed") || workflow?.signatures?.find((x) => x.status === "signed"); return s?.signer_name?.trim() || s?.signed_by_name?.trim() || "GM Audit"; })()} — routes to office queue`}
+                {auditState === "AWAITING_INTERNAL_AUTHORIZATION" && "Awaiting Department Head authorization"}
+                {auditState === "AUTHORIZED" && "Authorized — ready to route to destination office"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {auditState === "CERTIFIED" && "Office is recipient. Request Department Head authorization (optional) or route directly to Division/Department/Directorate office."}
+                {auditState === "AWAITING_INTERNAL_AUTHORIZATION" && "GM Audit certification ≠ Department Head authorization — awaiting HOD / designated authority."}
+                {auditState === "AUTHORIZED" && "Department Head authorized — select destination office (with optional Attention) to refer."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {auditState === "CERTIFIED" && (
+                <Button size="compact" variant="outline" disabled={actionLoading === "request_auth"} onClick={handleRequestAuthorization}>
+                  {actionLoading === "request_auth" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
+                  Request Dept Head Authorization
+                </Button>
+              )}
+              {auditState === "AWAITING_INTERNAL_AUTHORIZATION" && (
+                <Button size="compact" disabled={actionLoading === "authorize"} onClick={handleAuthorize}>
+                  {actionLoading === "authorize" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgeCheck className="mr-2 h-4 w-4" />}
+                  Authorize
+                </Button>
+              )}
+              {(auditState === "CERTIFIED" || auditState === "AUTHORIZED") && (
+                <Button size="compact" onClick={() => setForwardDialogOpen(true)}>
+                  <Send className="mr-2 h-4 w-4" /> Route to Office
+                </Button>
+              )}
+            </div>
           </div>
-          <Button size="compact" onClick={() => setForwardDialogOpen(true)}>
-            <Send className="mr-2 h-4 w-4" /> Forward via Correspondence
-          </Button>
+          <p className="text-xs text-muted-foreground">Office members with access can act on this item. Attention is optional and does not change the primary recipient.</p>
         </div>
       )}
 
@@ -1135,61 +1339,105 @@ export default function AuditFormFillPage() {
         </>
       )}
 
-      {/* Forward via Correspondence — dialog */}
+      {/* Route Audit Query — office is recipient, Attention is optional per spec */}
       {forwardDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-background p-6 shadow-xl">
-            <h3 className="text-base font-semibold">Forward Audit Query via Correspondence</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Certified query will be sent to the selected office for explanation/action.</p>
+          <div className="w-full max-w-xl rounded-xl bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base font-semibold">Route Audit Query</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Routes to destination office queue — Office members with access can act on this item. Attention is optional and does not change the primary recipient.</p>
             <div className="mt-4 space-y-4">
+              {/* Route To — Division / Department / Directorate / Office */}
               <div className="space-y-2">
-                <Label>Target Office *</Label>
-                <Input value={forwardTargetOffice} onChange={(e) => setForwardTargetOffice(e.target.value)} placeholder="Office ID (e.g., OFF_DIV_FINANCE) — office picker" />
-                <p className="text-xs text-muted-foreground">Validated: must be OFF_... code or UUID — office picker integration coming.</p>
+                <Label>Route To *</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["division","department","directorate","office"] as const).map((t) => (
+                    <label key={t} className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer ${routeType===t ? "border-primary bg-primary/5" : "border-border"}`}>
+                      <input type="radio" name="routeType" value={t} checked={routeType===t} onChange={() => setRouteType(t)} className="h-4 w-4" />
+                      <span className="text-sm capitalize">{t}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+
+              {routeType === "division" && (
+                <div className="space-y-2">
+                  <Label>Destination: Division *</Label>
+                  <select value={selectedDivisionId} onChange={(e) => setSelectedDivisionId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
+                    <option value="">Select division</option>
+                    {divisions.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                  </select>
+                  {resolvedOffice && <p className="text-xs text-muted-foreground">Office: {resolvedOffice.name} ({resolvedOffice.code}) — Routes to {resolvedOffice.name} office queue</p>}
+                </div>
+              )}
+              {routeType === "department" && (
+                <div className="space-y-2">
+                  <Label>Destination: Department *</Label>
+                  <select value={selectedDepartmentId} onChange={(e) => setSelectedDepartmentId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
+                    <option value="">Select department</option>
+                    {departments.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                  </select>
+                  {resolvedOffice && <p className="text-xs text-muted-foreground">Office: {resolvedOffice.name} ({resolvedOffice.code}) — office queue</p>}
+                </div>
+              )}
+              {routeType === "directorate" && (
+                <div className="space-y-2">
+                  <Label>Destination: Directorate *</Label>
+                  <select value={selectedDirectorateId} onChange={(e) => setSelectedDirectorateId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
+                    <option value="">Select directorate</option>
+                    {directorates.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                  </select>
+                  {resolvedOffice && <p className="text-xs text-muted-foreground">Office: {resolvedOffice.name} ({resolvedOffice.code})</p>}
+                </div>
+              )}
+              {routeType === "office" && (
+                <div className="space-y-2">
+                  <Label>Destination: Office *</Label>
+                  <select value={selectedOfficeId} onChange={(e) => setSelectedOfficeId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
+                    <option value="">Select office</option>
+                    {offices.filter((o) => o.isActive).slice(0,100).map((o) => (<option key={o.id} value={o.id}>{o.name} ({o.code})</option>))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label>Attention User (optional)</Label>
-                <Input value={forwardAttentionUser} onChange={(e) => setForwardAttentionUser(e.target.value)} placeholder="User ID for attention" />
+                <Label>Attention — Optional</Label>
+                <select value={forwardAttentionUser} onChange={(e) => setForwardAttentionUser(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
+                  <option value="">None — office queue</option>
+                  {orgUsers.filter((u) => u.active !== false).slice(0,100).map((u) => (<option key={u.id} value={u.id}>{u.name} {u.email ? `— ${u.email}` : ""}</option>))}
+                </select>
+                <p className="text-xs text-muted-foreground">E.g. Finance Division → Attention: GM Finance — does not change primary recipient.</p>
               </div>
-              <div className="space-y-2">
-                <Label>CC (comma-separated user/office IDs)</Label>
-                <Input value={forwardCc} onChange={(e) => setForwardCc(e.target.value)} placeholder="e.g., user-id-1, OFF_DIV_FINANCE" />
-              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Due Date</Label>
                   <Input type="date" value={forwardDueDate} onChange={(e) => setForwardDueDate(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Required Approval Level</Label>
-                  <select
-                    value={forwardRequiredApprovalLevel}
-                    onChange={(e) => setForwardRequiredApprovalLevel(e.target.value)}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                  >
-                    <option value="none">None</option>
-                    <option value="departmental">Departmental</option>
-                    <option value="executive">Executive</option>
+                  <Label>Action Required</Label>
+                  <select value={forwardActionRequired ? "explanation" : "information"} onChange={(e) => setForwardActionRequired(e.target.value==="explanation")} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
+                    <option value="explanation">Explanation / Response</option>
+                    <option value="information">For Information</option>
                   </select>
                 </div>
               </div>
-              <div className="space-y-2 flex flex-col">
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={forwardActionRequired} onCheckedChange={(v) => setForwardActionRequired(Boolean(v))} />
-                  Action required
-                </label>
-                {auditState && auditState !== "CERTIFIED" && (
-                  <p className="text-xs text-amber-600">REFER requires state CERTIFIED — current: {auditState}</p>
-                )}
-              </div>
+
               <div className="space-y-2">
-                <Label>Correspondence Subject</Label>
+                <Label>Correspondence Subject *</Label>
                 <Input value={forwardSubject} onChange={(e) => setForwardSubject(e.target.value)} placeholder={`Re: ${template?.name} — ${submission?.id?.slice(0,8)}`} />
               </div>
+
+              {auditState && !["CERTIFIED","AUTHORIZED"].includes(auditState) && (
+                <p className="text-xs text-amber-600">REFER requires CERTIFIED or AUTHORIZED — current: {auditState}</p>
+              )}
+              {resolvedOffice && (
+                <p className="text-xs text-emerald-700">Routes to {resolvedOffice.name} ({resolvedOffice.code}) office. Office members with access can act on this item.</p>
+              )}
+
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setForwardDialogOpen(false)} disabled={forwarding}>Cancel</Button>
-                <Button onClick={handleForwardViaCorrespondence} disabled={forwarding || !forwardTargetOffice.trim() || !forwardSubject.trim()}>
-                  {forwarding ? "Forwarding..." : "Create Correspondence"}
+                <Button onClick={handleForwardViaCorrespondence} disabled={forwarding || !resolvedOffice || !forwardSubject.trim()}>
+                  {forwarding ? "Routing..." : `Route to ${resolvedOffice ? resolvedOffice.code : "Office"}`}
                 </Button>
               </div>
             </div>

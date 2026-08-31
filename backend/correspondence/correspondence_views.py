@@ -16,6 +16,7 @@ from django.db.models import Exists, Prefetch, Q, OuterRef, Subquery, CharField,
 from django.utils import timezone
 from django.db import transaction
 from django.http import FileResponse, HttpResponse
+from django.shortcuts import get_object_or_404
 from common.storage_utils import resolve_media_path
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -105,7 +106,7 @@ def _reference_segment(value, fallback: str) -> str:
 
 
 def _reference_path(owning_office, division, department) -> str:
-    """Build canonical HQ/<tier>/<division>[/<dept>]/001 — no dept for GM and above."""
+    """Build canonical NPA/<owning office> path for yearly sequences."""
     office_type = str(getattr(owning_office, "office_type", "") or "").lower()
     tier = {
         "md": "MD",
@@ -113,12 +114,8 @@ def _reference_path(owning_office, division, department) -> str:
         "gm": "GM",
         "agm": "AGM",
     }.get(office_type, _reference_segment(owning_office, "REG"))
-    div_seg = _reference_segment(getattr(owning_office, "division", None) or division, "DIV")
-    # Only AGM and below include department (REG also)
-    if tier in ("AGM", "REG"):
-        dept_seg = _reference_segment(getattr(owning_office, "department", None) or department, "DEPT")
-        return "/".join((_REFERENCE_LOCATION_CODE, tier, div_seg, dept_seg))
-    return "/".join((_REFERENCE_LOCATION_CODE, tier, div_seg))
+    office_seg = _reference_segment(owning_office, tier)
+    return "/".join(("NPA", office_seg))
 
 
 def _is_client_generated_reference(value: str | None) -> bool:
@@ -443,13 +440,14 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 validated_data.get("division"),
                 validated_data.get("department"),
             )
+            sequence_prefix = f"{reference_path}/{today.year}/"
             base_count = Correspondence.all_objects.filter(
-                reference_number__startswith=f"{reference_path}/"
+                reference_number__startswith=sequence_prefix
             ).count()
 
             reference_number = None
             for attempt in range(100):
-                candidate = f"{reference_path}/{base_count + attempt + 1:03d}"
+                candidate = f"{sequence_prefix}{base_count + attempt + 1:06d}"
                 if not Correspondence.all_objects.filter(reference_number=candidate).exists():
                     reference_number = candidate
                     break
@@ -495,10 +493,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                             validated_data.get("division"),
                             validated_data.get("department"),
                         )
+                        sequence_prefix = f"{reference_path}/{timezone.now().year}/"
                         count = Correspondence.all_objects.filter(
-                            reference_number__startswith=f"{reference_path}/"
+                            reference_number__startswith=sequence_prefix
                         ).count() + 1
-                        reference_number = f"{reference_path}/{count:03d}"
+                        reference_number = f"{sequence_prefix}{count:06d}"
                         continue
                     else:
                         import uuid
@@ -1669,17 +1668,19 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
             department = Department.objects.filter(id=department_id).first()
         reference_path = _reference_path(owning_office, division, department)
-        base_count = Correspondence.all_objects.filter(reference_number__startswith=f"{reference_path}/").count()
+        year = timezone.now().year
+        sequence_prefix = f"{reference_path}/{year}/"
+        base_count = Correspondence.all_objects.filter(reference_number__startswith=sequence_prefix).count()
         candidate = None
         for attempt in range(100):
-            cand = f"{reference_path}/{base_count + attempt + 1:03d}"
+            cand = f"{sequence_prefix}{base_count + attempt + 1:06d}"
             if not Correspondence.all_objects.filter(reference_number=cand).exists():
                 candidate = cand
                 break
         if not candidate:
             import uuid
 
-            candidate = f"{reference_path}/{uuid.uuid4().hex[:8].upper()}"
+            candidate = f"{sequence_prefix}{uuid.uuid4().hex[:8].upper()}"
         return Response({"reference_number": candidate, "reference_path": reference_path})
 
     @action(detail=False, methods=["get"], url_path="sidebar-counts")
@@ -1823,7 +1824,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         ).values_list('correspondence_id', flat=True).distinct()
         ownership = Q(created_by=user) | Q(id__in=acted_ids) | Q(id__in=my_sent_dispatch_ids)
         pending_routed = Q(created_by=user, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office=F('owning_office'))
-        sent_filter = Q(id__in=routed_ids) | Q(status__in=[
+        sent_filter = Q(id__in=acted_ids) | Q(id__in=routed_ids) | Q(status__in=[
             Correspondence.Status.COMPLETED,
             Correspondence.Status.DISPATCHED,
             Correspondence.Status.ACKNOWLEDGED,

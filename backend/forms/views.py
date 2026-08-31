@@ -1,6 +1,7 @@
 """Views for forms app."""
 
 from rest_framework import viewsets, status
+from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -86,7 +87,17 @@ class FormSubmissionViewSet(viewsets.ModelViewSet):
         correspondence_id = self.request.query_params.get("correspondence")
         if correspondence_id:
             queryset = queryset.filter(correspondence_id=correspondence_id)
-        return queryset
+        user = self.request.user
+        if user.is_superuser:
+            return queryset
+        return queryset.filter(
+            Q(submitted_by=user)
+            | Q(correspondence__created_by=user)
+            | Q(correspondence__current_approver=user)
+            | Q(correspondence__owning_office__memberships__user=user, correspondence__owning_office__memberships__is_active=True)
+            | Q(signature_workflows__signatures__assigned_to_user=user)
+            | Q(template__created_by=user)
+        ).distinct()
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
@@ -98,6 +109,10 @@ class FormSubmissionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         submission.submit(user=request.user)
+        if submission.template.slug == "audit-query-bills-certification":
+            from correspondence.services.case_audit import create_audit_case_for_submission
+
+            create_audit_case_for_submission(submission)
         serializer = self.get_serializer(submission)
         return Response(serializer.data)
 
@@ -111,7 +126,7 @@ class FormSubmissionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         
-        submissions = FormSubmission.objects.filter(correspondence_id=correspondence_id)
+        submissions = self.get_queryset().filter(correspondence_id=correspondence_id)
         serializer = self.get_serializer(submissions, many=True)
         return Response(serializer.data)
     

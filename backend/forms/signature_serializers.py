@@ -76,7 +76,7 @@ class FormSignatureWorkflowSerializer(serializers.ModelSerializer):
     """Serializer for FormSignatureWorkflow."""
     
     submission_template_name = serializers.CharField(source="submission.template.name", read_only=True)
-    submission_reference = serializers.CharField(source="submission.correspondence.reference_number", read_only=True)
+    submission_reference = serializers.SerializerMethodField()
     initiated_by_name = serializers.CharField(source="initiated_by.get_full_name", read_only=True)
     signatures = FormSignatureSerializer(many=True, read_only=True)
     pending_signatures_count = serializers.SerializerMethodField()
@@ -110,6 +110,10 @@ class FormSignatureWorkflowSerializer(serializers.ModelSerializer):
             "completed_at",
         ]
     
+    def get_submission_reference(self, obj):
+        correspondence = getattr(obj.submission, "correspondence", None)
+        return getattr(correspondence, "reference_number", None)
+
     def get_pending_signatures_count(self, obj):
         """Get count of pending signatures."""
         return obj.signatures.filter(status=FormSignature.Status.PENDING).count()
@@ -152,14 +156,23 @@ class CreateSignatureWorkflowSerializer(serializers.Serializer):
             if "field_name" not in assignment:
                 raise serializers.ValidationError("Each assignment must have 'field_name'")
             
-            # At least one assignment target must be specified
-            has_target = any(
-                assignment.get(key) for key in ["office_id", "department_id", "division_id"]
-            )
-            if not has_target:
+            # At least one assignment target must be specified.
+            target_keys = ["office_id", "department_id", "division_id", "user_id"]
+            if not any(assignment.get(key) for key in target_keys):
                 raise serializers.ValidationError(
-                    "Each assignment must specify at least one: office_id, department_id, or division_id"
+                    "Each assignment must specify at least one: office_id, department_id, division_id, or user_id"
                 )
+
+            target_models = {
+                "office_id": Office,
+                "department_id": Department,
+                "division_id": Division,
+                "user_id": User,
+            }
+            for key, model in target_models.items():
+                value = assignment.get(key)
+                if value and not model.objects.filter(id=value).exists():
+                    raise serializers.ValidationError(f"Invalid {key}: {value}")
         
         return value
 

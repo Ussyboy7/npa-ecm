@@ -27,8 +27,8 @@ describe("forward-via-correspondence", () => {
       content.includes("formDocument") ||
       content.includes("formDoc");
     expect(hasResolvedUsage).toBe(true);
-    // link-document payload must reference resolved id, not submission
-    expect(content).toMatch(/link-document/);
+    // Routing is now performed through the case REFER action.
+    expect(content).toMatch(/action:\s*["']REFER["']/);
   });
 
   it("splits correspondence creation to include target_office / attention / cc / action_required / due_date", () => {

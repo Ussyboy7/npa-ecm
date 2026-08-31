@@ -12,9 +12,11 @@ export function formatDate(
   return value.toLocaleDateString(locale, options);
 }
 
+const DEFAULT_DATETIME_LOCALE = "en-US";
+
 export function formatDateTime(
   input: string | Date,
-  locale = DEFAULT_DATE_LOCALE,
+  locale = DEFAULT_DATETIME_LOCALE,
   options: Intl.DateTimeFormatOptions = {
     day: "2-digit",
     month: "short",
@@ -25,7 +27,7 @@ export function formatDateTime(
 ): string {
   if (!input) return "";
   const value = typeof input === "string" ? new Date(input) : input;
-  if (Number.isNaN(value.getTime())) return "N/A";
+  if (Number.isNaN(value.getTime())) return "";
   return value.toLocaleString(locale, options);
 }
 

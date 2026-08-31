@@ -26,6 +26,8 @@ AUDIT_STATES = [
     "SUBMITTED",
     "AWAITING_CERTIFICATION",
     "CERTIFIED",
+    "AWAITING_INTERNAL_AUTHORIZATION",
+    "AUTHORIZED",
     "REFERRED",
     "AWAITING_RESPONSE",
     "RESPONSE_RECEIVED",
@@ -37,7 +39,9 @@ AUDIT_STATE_ACTIONS: dict[str, list[str]] = {
     "DRAFT": ["SUBMIT"],
     "SUBMITTED": ["SEND_FOR_CERTIFICATION"],
     "AWAITING_CERTIFICATION": ["CERTIFY", "RETURN", "REQUEST_INFO"],
-    "CERTIFIED": ["REFER"],
+    "CERTIFIED": ["REFER", "REQUEST_AUTHORIZATION"],
+    "AWAITING_INTERNAL_AUTHORIZATION": ["AUTHORIZE", "RETURN"],
+    "AUTHORIZED": ["REFER"],
     "REFERRED": ["RESPOND"],
     "AWAITING_RESPONSE": ["RESPOND"],
     "RESPONSE_RECEIVED": ["AUDIT_REVIEW"],
@@ -50,7 +54,9 @@ AUDIT_TRANSITIONS: dict[str, list[str]] = {
     "DRAFT": ["SUBMITTED"],
     "SUBMITTED": ["AWAITING_CERTIFICATION"],
     "AWAITING_CERTIFICATION": ["CERTIFIED", "SUBMITTED"],
-    "CERTIFIED": ["AWAITING_RESPONSE", "REFERRED"],
+    "CERTIFIED": ["AWAITING_RESPONSE", "REFERRED", "AWAITING_INTERNAL_AUTHORIZATION", "AUTHORIZED"],
+    "AWAITING_INTERNAL_AUTHORIZATION": ["AUTHORIZED", "CERTIFIED"],
+    "AUTHORIZED": ["AWAITING_RESPONSE", "REFERRED"],
     "REFERRED": ["AWAITING_RESPONSE"],
     "AWAITING_RESPONSE": ["RESPONSE_RECEIVED"],
     "RESPONSE_RECEIVED": ["AUDIT_REVIEW", "CLOSED"],
@@ -65,6 +71,8 @@ AUDIT_ACTION_NEXT_STATE: dict[str, str] = {
     "CERTIFY": "CERTIFIED",
     "RETURN": "SUBMITTED",
     "REQUEST_INFO": "SUBMITTED",
+    "REQUEST_AUTHORIZATION": "AWAITING_INTERNAL_AUTHORIZATION",
+    "AUTHORIZE": "AUTHORIZED",
     "REFER": "AWAITING_RESPONSE",
     "RESPOND": "RESPONSE_RECEIVED",
     "AUDIT_REVIEW": "AUDIT_REVIEW",
@@ -152,23 +160,30 @@ def _audit_case_title(submission) -> str:
 
 def _generate_audit_case_number(submission) -> str:
     from correspondence.models import Case
-    # Prefer deterministic AQ- based on submission id.
+
+    # Stable human-facing AQ-YYYY-NNN per year, technical UUID remains separate.
+    # Yearly sequence with zero-padded NNN, e.g. AQ-2026-014
+    year = timezone.now().year
+    prefix = f"AQ-{year}-"
+    # Find max N for this year
+    existing = Case.objects.filter(case_number__startswith=prefix).values_list("case_number", flat=True)
+    max_n = 0
+    for cn in existing:
+        try:
+            suffix = cn[len(prefix):].split("-")[0]
+            n = int(suffix)
+            if n > max_n:
+                max_n = n
+        except Exception:
+            continue
+    for attempt in range(1, 200):
+        cand_n = max_n + attempt
+        cand = f"{prefix}{cand_n:03d}"
+        if not Case.objects.filter(case_number=cand).exists():
+            return cand
+    # Fallback deterministic on submission id if sequence exhausted
     sid = str(submission.id).replace("-", "")[:8].upper()
-    base = f"AQ-{sid}"
-    if not Case.objects.filter(case_number=base).exists():
-        return base
-    # Collision -> add date suffix
-    date_part = timezone.now().strftime("%Y%m%d")
-    cand = f"AQ-{date_part}-{sid[:6]}"
-    if not Case.objects.filter(case_number=cand).exists():
-        return cand
-    # Brute force suffix
-    for i in range(1, 100):
-        cand2 = f"{cand}-{i:02d}"
-        if not Case.objects.filter(case_number=cand2).exists():
-            return cand2
-    import uuid
-    return f"AQ-{uuid.uuid4().hex[:8].upper()}"
+    return f"AQ-{year}-{sid[:6]}"
 
 
 def _find_form_document_for_submission(submission):

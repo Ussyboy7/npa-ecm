@@ -150,6 +150,14 @@ def _resolve_user(identifier: str | None):
             return u
     except Exception:
         pass
+    # integer PK fallback (local DB uses integer IDs)
+    if s.isdigit():
+        try:
+            u = User.objects.filter(id=int(s)).first()
+            if u:
+                return u
+        except Exception:
+            pass
     # username fallback
     u = User.objects.filter(username=s).first()
     if u:
@@ -577,6 +585,9 @@ class CaseViewSet(viewsets.ModelViewSet):
         next_state = AUDIT_ACTION_NEXT_STATE.get(action)
         if not next_state:
             raise ValidationError({"detail": f"Unknown action {action}"})
+        # Special-case: RETURN from AWAITING_INTERNAL_AUTHORIZATION goes back to CERTIFIED (not SUBMITTED)
+        if action == "RETURN" and current_state == "AWAITING_INTERNAL_AUTHORIZATION":
+            next_state = "CERTIFIED"
 
         # Ensure transition is allowed per AUDIT_TRANSITIONS
         if not is_valid_audit_transition(current_state, next_state):
@@ -638,74 +649,12 @@ class CaseViewSet(viewsets.ModelViewSet):
             except Exception:
                 workflow = None
 
-            # If workflow not completed, attempt auto-create/sign for gmaudit (so Certify button internally creates workflow if needed)
+            # Certification must be backed by a real completed signature workflow.
+            # Do not fabricate or auto-sign a dummy signature in production.
             if not workflow or workflow.status != FormSignatureWorkflow.Status.COMPLETED:
-                is_gmaudit_user = getattr(request.user, "username", "").lower() == "gmaudit"
-                try:
-                    role_name = getattr(getattr(request.user, "system_role", None), "name", "") or ""
-                    if "audit" in role_name.lower() and "gm" in role_name.lower():
-                        is_gmaudit_user = True
-                except Exception:
-                    pass
-                if is_gmaudit_user and submission is not None:
-                    try:
-                        from forms.signature_models import FormSignatureWorkflow as _WS, FormSignature as _Sig
-                        from django.core.files.base import ContentFile
-
-                        if not workflow:
-                            workflow = _WS.objects.create(
-                                submission=submission,
-                                routing_mode="sequential",
-                                total_steps=1,
-                                initiated_by=request.user,
-                                status=_WS.Status.IN_PROGRESS,
-                                current_step=1,
-                            )
-                            sig = _Sig.objects.create(
-                                workflow=workflow,
-                                field_name="gm_audit_signature",
-                                field_label="GM Audit Signature",
-                                assigned_to_user=request.user,
-                                order=1,
-                                status=_Sig.Status.PENDING,
-                            )
-                            dummy = ContentFile(b"dummy signature", name="signature.png")
-                            sig.sign(
-                                user=request.user,
-                                signature_file=dummy,
-                                signer_name=request.user.get_full_name() or request.user.username,
-                                signer_pn=getattr(request.user, "personnel_number", "") or "",
-                                signer_designation="GM Audit",
-                                signed_date=timezone.now().date(),
-                            )
-                            if workflow.is_complete():
-                                workflow.complete()
-                            workflow.refresh_from_db()
-                        elif workflow.status != _WS.Status.COMPLETED:
-                            from forms.signature_views import FormSignatureWorkflowViewSet as _View
-
-                            view2 = _View()
-                            for sig in list(workflow.signatures.filter(status=_Sig.Status.PENDING)):
-                                if view2._can_user_sign(sig, request.user):
-                                    dummy = ContentFile(b"dummy signature", name="signature.png")
-                                    sig.sign(
-                                        user=request.user,
-                                        signature_file=dummy,
-                                        signer_name=request.user.get_full_name() or request.user.username,
-                                        signer_pn=getattr(request.user, "personnel_number", "") or "",
-                                        signer_designation="GM Audit",
-                                        signed_date=timezone.now().date(),
-                                    )
-                            if workflow.is_complete():
-                                workflow.complete()
-                                workflow.refresh_from_db()
-                    except Exception as e:
-                        logger.warning("CERTIFY auto-create failed for case %s: %s", case.id, e)
-                # Final check after auto-attempt
-                if not workflow or workflow.status != FormSignatureWorkflow.Status.COMPLETED:
-                    raise ValidationError(
-                        {"detail": "CERTIFY requires FormSignatureWorkflow COMPLETED"}
-                    )
+                raise ValidationError(
+                    {"detail": "CERTIFY requires a completed signature workflow"}
+                )
 
             # Check gmaudit authority via _can_user_sign
             can_sign = False
@@ -734,13 +683,139 @@ class CaseViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+        def _is_department_authorizer(user, case) -> bool:
+            """Department Head authorization: distinct from GM Audit certification."""
+            if getattr(user, "is_superuser", False):
+                return True
+            # Department head_of_department FK
+            dept = getattr(case, "department", None) or getattr(getattr(case, "division", None), "departments", None)
+            # Direct FK check
+            try:
+                if case.department_id and getattr(case.department, "head_of_department_id", None) == getattr(user, "id", None):
+                    return True
+            except Exception:
+                pass
+            # OfficeMembership with can_approve in audit office
+            try:
+                from organization.models import OfficeMembership
+
+                if OfficeMembership.objects.filter(user=user, is_active=True, can_approve=True).exists():
+                    # If user is in audit structure, allow
+                    if _is_audit_member(user, case):
+                        return True
+            except Exception:
+                pass
+            # Fallback: AGM of the case department/division
+            try:
+                role_name = (getattr(getattr(user, "system_role", None), "name", "") or "").lower()
+                if "agm" in role_name or "assistant general manager" in role_name:
+                    if getattr(user, "department_id", None) == getattr(case, "department_id", None):
+                        return True
+                    if getattr(user, "division_id", None) == getattr(case, "division_id", None):
+                        return True
+            except Exception:
+                pass
+            return False
+
+        if action == "REQUEST_AUTHORIZATION":
+            if current_state != "CERTIFIED":
+                raise ValidationError({"detail": f"REQUEST_AUTHORIZATION only allowed when CERTIFIED, current {current_state}"})
+            if not _is_audit_member(request.user, case):
+                return Response({"detail": "Only Audit members can request authorization"}, status=status.HTTP_403_FORBIDDEN)
+            with transaction.atomic():
+                meta = dict(case.metadata or {})
+                meta["audit_state"] = next_state
+                trail = meta.get("audit_trail") or []
+                trail.append(
+                    {
+                        "action": action,
+                        "from_state": current_state,
+                        "to_state": next_state,
+                        "actor": str(request.user.id),
+                        "actor_username": getattr(request.user, "username", ""),
+                        "timestamp": timezone.now().isoformat(),
+                    }
+                )
+                meta["audit_trail"] = trail[-50:]
+                meta["last_authorization_request"] = {
+                    "requested_by": str(request.user.id),
+                    "requested_by_username": getattr(request.user, "username", ""),
+                    "timestamp": timezone.now().isoformat(),
+                }
+                case.metadata = meta
+                case.save(update_fields=["metadata", "updated_at"])
+                try:
+                    AuditService.log_activity(
+                        user=request.user,
+                        action=ActivityLog.ActionType.CASE_UPDATED,
+                        object_type="Case",
+                        object_id=str(case.id),
+                        object_repr=str(case),
+                        description=f"Case {case.case_number} REQUEST_AUTHORIZATION: {current_state} -> {next_state}",
+                        module="Case Management",
+                        severity="info",
+                    )
+                except Exception:
+                    pass
+            serializer = self.get_serializer(case)
+            data = serializer.data
+            data["audit_state"] = next_state
+            data["audit_action"] = action
+            return Response(data)
+
+        if action == "AUTHORIZE":
+            if current_state != "AWAITING_INTERNAL_AUTHORIZATION":
+                raise ValidationError({"detail": f"AUTHORIZE only allowed when AWAITING_INTERNAL_AUTHORIZATION, current {current_state}"})
+            if not _is_department_authorizer(request.user, case):
+                return Response({"detail": "Only Department Head / designated Audit authority can authorize"}, status=status.HTTP_403_FORBIDDEN)
+            with transaction.atomic():
+                meta = dict(case.metadata or {})
+                meta["audit_state"] = next_state
+                trail = meta.get("audit_trail") or []
+                trail.append(
+                    {
+                        "action": action,
+                        "from_state": current_state,
+                        "to_state": next_state,
+                        "actor": str(request.user.id),
+                        "actor_username": getattr(request.user, "username", ""),
+                        "timestamp": timezone.now().isoformat(),
+                    }
+                )
+                meta["audit_trail"] = trail[-50:]
+                meta["last_authorization"] = {
+                    "authorized_by": str(request.user.id),
+                    "authorized_by_username": getattr(request.user, "username", ""),
+                    "timestamp": timezone.now().isoformat(),
+                }
+                case.metadata = meta
+                case.save(update_fields=["metadata", "updated_at"])
+                try:
+                    AuditService.log_activity(
+                        user=request.user,
+                        action=ActivityLog.ActionType.CASE_UPDATED,
+                        object_type="Case",
+                        object_id=str(case.id),
+                        object_repr=str(case),
+                        description=f"Case {case.case_number} AUTHORIZE: {current_state} -> {next_state}",
+                        module="Case Management",
+                        severity="info",
+                    )
+                except Exception:
+                    pass
+            serializer = self.get_serializer(case)
+            data = serializer.data
+            data["audit_state"] = next_state
+            data["audit_action"] = action
+            return Response(data)
+
         # REFER is a Case action that atomically creates Correspondence + links + transitions
         if action == "REFER":
-            # Actor validation: any Audit member when CERTIFIED (also allow AUDIT_REVIEW re-refer per workflow)
-            if current_state not in ("CERTIFIED", "AUDIT_REVIEW"):
-                raise ValidationError({"detail": f"REFER only allowed when CERTIFIED or AUDIT_REVIEW, current {current_state}"})
+            # Allow from CERTIFIED, AUTHORIZED, or AUDIT_REVIEW (audit review re-refer)
+            if current_state not in ("CERTIFIED", "AUTHORIZED", "AUDIT_REVIEW"):
+                raise ValidationError({"detail": f"REFER only allowed when CERTIFIED/AUTHORIZED or AUDIT_REVIEW, current {current_state}"})
             if not _is_audit_member(request.user, case):
-                return Response({"detail": "Only Audit members can REFER when CERTIFIED"}, status=status.HTTP_403_FORBIDDEN)
+                return Response({"detail": "Only Audit members can REFER"}, status=status.HTTP_403_FORBIDDEN)
 
             subject = (request.data.get("subject") or request.data.get("title") or "").strip()
             body = (request.data.get("body") or request.data.get("body_html") or "").strip()

@@ -400,6 +400,14 @@ class FormDocument(UUIDModel, TimeStampedModel):
         related_name="form_documents",
         help_text="The form template used for this form",
     )
+    submission = models.OneToOneField(
+        "forms.FormSubmission",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="form_document",
+        help_text="Canonical structured submission for this form document.",
+    )
     form_data = models.JSONField(
         default=dict,
         help_text="The form field data (JSON structure matching template fields)",

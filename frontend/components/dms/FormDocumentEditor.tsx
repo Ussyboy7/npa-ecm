@@ -505,8 +505,15 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     ? (signedCount / allSignatures.length) * 100
     : 0;
 
+  const isAuditForm = formDoc.template?.slug === "audit-query-bills-certification";
   return (
     <div className="space-y-4">
+      {isAuditForm && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
+          <p className="font-medium">Audit Query governed by Audit Case</p>
+          <p className="mt-1 text-amber-800">Share Document is personal collaboration only — it does not route the Audit Case. Use <span className="font-medium">Open Audit Case → Route to Office</span> to send this query to an office queue (creates CORR-AUDIT-… with routing history).</p>
+        </div>
+      )}
       {/* Compact Header with Status and Actions */}
       <div className="rounded-xl border border-border/60">
       <div className="pb-2 border-b border-border/60">
@@ -519,6 +526,13 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                   {template && (
                     <p className="mt-0.5 text-xs truncate text-muted-foreground">{template.name}</p>
                   )}
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                    <Badge variant="outline">DMS Form</Badge>
+                    {formDoc.submission_id ? <Badge variant="secondary">Submitted</Badge> : <Badge variant="outline">No submission yet</Badge>}
+                    {formDoc.correspondence ? <Badge variant="secondary">Correspondence linked</Badge> : <Badge variant="outline">Standalone</Badge>}
+                    {formDoc.case_links?.length ? <Badge variant="secondary">Case linked</Badge> : null}
+                    {formDoc.signature_workflow ? <Badge variant="secondary">Signature workflow</Badge> : null}
+                  </div>
                 </div>
               </div>
               {/* Progress Bar */}
@@ -548,7 +562,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       </div>
       <div className="pt-0">
 <div className="flex items-center justify-end gap-1.5 flex-wrap">
-            <Button 
+            <Button
               onClick={handleSave} 
               disabled={saving || formDoc.status === "completed"}
               size="sm"
@@ -568,7 +582,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
             </Button>
 
             {formDoc.status === "awaiting_signatures" && pendingSignatures.length > 0 && (
-              <Button 
+              <Button
                 variant="default" 
                 onClick={() => handleSign(pendingSignatures[0])}
                 size="sm"
@@ -581,18 +595,42 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
             {(formDoc.status === "draft" || formDoc.status === "in_progress") && (
               <>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowForwardDialog(true)}
-                  size="sm"
-                  className="h-8 text-xs px-2.5"
-                >
-                  <Send className="h-3.5 w-3.5 mr-1.5" />
-                  Forward
-                </Button>
-                {!formDoc.signature_workflow && supportsSignatures && (
-                  <Button 
-                    variant="outline" 
+                {formDoc.template?.slug === "audit-query-bills-certification" ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowForwardDialog(true)}
+                      size="sm"
+                      className="h-8 text-xs px-2.5"
+                      title="Shares this document with selected users. This does not route the Audit Case."
+                    >
+                      <Send className="h-3.5 w-3.5 mr-1.5" />
+                      Share Document
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-8 text-xs px-2.5"
+                      onClick={() => window.open(`/audit/forms/${formDoc.id}`, "_blank")}
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1.5" />
+                      Open Audit Case
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowForwardDialog(true)}
+                    size="sm"
+                    className="h-8 text-xs px-2.5"
+                  >
+                    <Send className="h-3.5 w-3.5 mr-1.5" />
+                    Forward
+                  </Button>
+                )}
+                {!formDoc.signature_workflow && supportsSignatures && formDoc.template?.slug !== "audit-query-bills-certification" && (
+                  <Button
+                    variant="outline"
                     onClick={handleSubmitForSignatures}
                     size="sm"
                     disabled={saving}
@@ -607,8 +645,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
             {formDoc.status === "completed" && (
               <>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={handleGeneratePdf} 
                   disabled={saving}
                   size="sm"
@@ -621,7 +659,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
             )}
 
             {formDoc.status !== "completed" && workflow && workflow.status === "completed" && (
-              <Button 
+              <Button
                 onClick={handleMarkCompleted} 
                 disabled={saving}
                 size="sm"
@@ -1181,7 +1219,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                       </div>
                                     </div>
                                     {isPending && workflow && canSign && (
-                                      <Button 
+                                      <Button
                                         size="sm" 
                                         variant="outline"
                                         onClick={() => handleSign(signature)}

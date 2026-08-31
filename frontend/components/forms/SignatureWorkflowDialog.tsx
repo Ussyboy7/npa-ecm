@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { logError, logWarn } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, X, Send } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
-import { createFormSubmission, createSignatureWorkflow } from "@/lib/api/forms";
+import { createSignatureWorkflow } from "@/lib/api/forms";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -102,23 +102,8 @@ export function SignatureWorkflowDialog({
     try {
       setSubmitting(true);
       
-      // If submission.id looks like a form document ID (not a submission), create a submission first
-      let submissionId = submission.id;
-      if (!submission.id.includes('-') || submission.id.length === 36) {
-        // This might be a form document ID, try to create a submission
-        try {
-          const newSubmission = await createFormSubmission({
-            template_id: submission.template.id,
-            data: submission.data || {},
-            is_draft: false,
-          });
-          submissionId = newSubmission.id;
-        } catch (createError) {
-          // If creation fails, use the original ID (might work if backend supports it)
-          logWarn("Could not create FormSubmission, using provided ID:", createError);
-        }
-      }
-      
+      const submissionId = submission.id;
+
       // Convert assignments to backend format (assign to user directly)
       const signature_assignments = assignments.map((assignment) => ({
         field_name: assignment.field_name,

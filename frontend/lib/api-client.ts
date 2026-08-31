@@ -41,30 +41,42 @@ const notifyAuthChanged = () => {
   window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 };
 
+const getStorage = (): Storage | null => {
+  if (!isBrowser()) return null;
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+};
+
 // Simple auth helpers for NPA-ECM
 export const getStoredAccessToken = () => {
   if (!isBrowser()) return null;
+  const storage = getStorage();
   return (
-    localStorage.getItem(ACCESS_TOKEN_KEY)
+    storage?.getItem(ACCESS_TOKEN_KEY)
     || getCookieValue(ACCESS_COOKIE_NAME)
   );
 };
 
 export const getStoredRefreshToken = () => {
   if (!isBrowser()) return null;
+  const storage = getStorage();
   return (
-    localStorage.getItem(REFRESH_TOKEN_KEY)
+    storage?.getItem(REFRESH_TOKEN_KEY)
     || getCookieValue(REFRESH_COOKIE_NAME)
   );
 };
 
 export const storeTokens = (accessToken: string, refreshToken: string, expiresInSeconds?: number) => {
   if (!isBrowser()) return;
+  const storage = getStorage();
   const accessTtlSeconds = expiresInSeconds ?? DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
   const expiresAt = Date.now() + accessTtlSeconds * 1000;
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-  localStorage.setItem(ACCESS_TOKEN_EXP_KEY, expiresAt.toString());
+  storage?.setItem(ACCESS_TOKEN_KEY, accessToken);
+  storage?.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  storage?.setItem(ACCESS_TOKEN_EXP_KEY, expiresAt.toString());
   setCookieValue(ACCESS_COOKIE_NAME, accessToken, accessTtlSeconds);
   setCookieValue(REFRESH_COOKIE_NAME, refreshToken, DEFAULT_REFRESH_TOKEN_TTL_SECONDS);
   clearCookieValue(LEGACY_ACCESS_COOKIE_NAME);
@@ -74,9 +86,10 @@ export const storeTokens = (accessToken: string, refreshToken: string, expiresIn
 
 export const clearTokens = () => {
   if (!isBrowser()) return;
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(ACCESS_TOKEN_EXP_KEY);
+  const storage = getStorage();
+  storage?.removeItem(ACCESS_TOKEN_KEY);
+  storage?.removeItem(REFRESH_TOKEN_KEY);
+  storage?.removeItem(ACCESS_TOKEN_EXP_KEY);
   clearCookieValue(ACCESS_COOKIE_NAME);
   clearCookieValue(REFRESH_COOKIE_NAME);
   notifyAuthChanged();

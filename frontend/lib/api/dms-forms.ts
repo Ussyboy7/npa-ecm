@@ -63,6 +63,7 @@ export interface FormDocument {
     id: string;
     reference_number: string;
   };
+  submission_id?: string;
   created_at: string;
   updated_at: string;
   case_links?: Array<{

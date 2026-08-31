@@ -31,7 +31,7 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["status", "template", "correspondence"]
+    filterset_fields = ["status", "template", "correspondence", "submission"]
     search_fields = ["document__title", "document__reference_number"]
     ordering_fields = ["created_at", "updated_at", "status"]
     ordering = ["-updated_at"]
@@ -106,6 +106,9 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         """Override create to handle document creation."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_create_documents")
         # Get document_id from request data
         document_id = request.data.get("document_id")
         if not document_id:
@@ -114,9 +117,15 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         
-        try:
-            document = Document.objects.get(id=document_id)
-        except Document.DoesNotExist:
+        user = request.user
+        document = Document.objects.filter(id=document_id, is_deleted=False).filter(
+            Q(author=user)
+            | Q(permissions__users=user)
+            | Q(permissions__divisions=user.division_id)
+            | Q(permissions__departments=user.department_id)
+            | Q(status=Document.DocumentStatus.PUBLISHED, sensitivity=Document.Sensitivity.PUBLIC)
+        ).distinct().first()
+        if document is None:
             return Response(
                 {"error": "Document not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -263,8 +272,15 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def mark_completed(self, request, pk=None):
-        """Mark form document as completed."""
+        """Mark a form document as completed after required signatures are complete."""
         form_doc = self.get_object()
+        if form_doc.requires_signatures():
+            workflow = form_doc.signature_workflow
+            if workflow is None or not workflow.is_complete():
+                return Response(
+                    {"error": "All required signatures must be completed before completing this form"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         form_doc.mark_completed()
         serializer = self.get_serializer(form_doc)
         return Response(serializer.data)
@@ -326,6 +342,20 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
         action_type = (request.data.get("action_type") or "review").strip().lower()
         message = (request.data.get("message") or "").strip()
         user_ids = request.data.get("user_ids") or []
+        from correspondence.models import CaseFormLink
+
+        is_audit_template = getattr(getattr(form_doc, "template", None), "slug", "") == "audit-query-bills-certification"
+        is_audit_governed = is_audit_template or CaseFormLink.objects.filter(form_document=form_doc).exists()
+        # Audit forms may be shared with named users, but official routing is through the Audit Case.
+        if is_audit_governed and target_type != "user":
+            return Response(
+                {
+                    "error": "This Audit Query is governed by its Audit Case. Use Audit → Route to Office to send it to an office queue. DMS Share is for personal document collaboration only.",
+                    "code": "audit_case_governed",
+                    "hint": "Open the Audit Case and use Route to Office (target_office = owner, attention = optional).",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         division_id = request.data.get("division_id") or ""
         department_id = request.data.get("department_id") or ""
 
@@ -345,6 +375,8 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
             username__iexact="debug"
         )
 
+        # Office is recipient per spec — Division/Department resolve to office queue, not fan-out to all users in division
+        resolved_office = None
         if target_type == "user":
             if not isinstance(user_ids, list) or not user_ids:
                 return Response(
@@ -358,14 +390,45 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
                     {"error": "division_id is required when target_type is division"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            recipients = list(recipients_qs.filter(division_id=division_id))
+            from organization.models import Office, OfficeMembership
+
+            resolved_office = (
+                Office.objects.filter(division_id=division_id, is_active=True, office_type__in=[Office.OfficeTier.GENERAL_MANAGER, Office.OfficeTier.DIVISION]).first()
+                or Office.objects.filter(division_id=division_id, is_active=True).first()
+            )
+            if not resolved_office:
+                return Response(
+                    {"error": "No office found for that division"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            member_user_ids = OfficeMembership.objects.filter(office=resolved_office, is_active=True).values_list("user_id", flat=True)
+            recipients = list(recipients_qs.filter(id__in=member_user_ids))
+            if not recipients:
+                return Response(
+                    {"error": f"No active members in office {resolved_office.code}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         else:
             if not department_id:
                 return Response(
                     {"error": "department_id is required when target_type is department"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            recipients = list(recipients_qs.filter(department_id=department_id))
+            from organization.models import Office, OfficeMembership
+
+            resolved_office = Office.objects.filter(department_id=department_id, is_active=True).first()
+            if not resolved_office:
+                return Response(
+                    {"error": "No office found for that department"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            member_user_ids = OfficeMembership.objects.filter(office=resolved_office, is_active=True).values_list("user_id", flat=True)
+            recipients = list(recipients_qs.filter(id__in=member_user_ids))
+            if not recipients:
+                return Response(
+                    {"error": f"No active members in office {resolved_office.code}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if not recipients:
             return Response(
@@ -449,13 +512,22 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
                     fallback_fields=template_signature_fields() or None,
                 )
 
-                submission = FormSubmission.objects.create(
-                    template=form_doc.template,
-                    correspondence=form_doc.correspondence,
-                    data=form_doc.form_data or {},
-                    is_draft=False,
-                    submitted_by=request.user,
-                )
+                submission = form_doc.submission
+                if submission is None:
+                    submission = FormSubmission.objects.create(
+                        template=form_doc.template,
+                        correspondence=form_doc.correspondence,
+                        data=form_doc.form_data or {},
+                        is_draft=False,
+                        submitted_by=request.user,
+                    )
+                    form_doc.submission = submission
+                    form_doc.save(update_fields=["submission", "updated_at"])
+
+                if form_doc.template.slug == "audit-query-bills-certification":
+                    from correspondence.services.case_audit import create_audit_case_for_submission
+
+                    create_audit_case_for_submission(submission, form_document=form_doc)
 
                 workflow = FormSignatureWorkflow.objects.create(
                     submission=submission,

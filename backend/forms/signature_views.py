@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import transaction, models
+from django.db.models import Q
 from django.utils import timezone
 
 from forms.signature_models import FormSignatureWorkflow, FormSignature
@@ -43,7 +44,17 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
-        return queryset
+        user = self.request.user
+        if user.is_superuser:
+            return queryset
+        return queryset.filter(
+            Q(initiated_by=user)
+            | Q(submission__submitted_by=user)
+            | Q(submission__correspondence__created_by=user)
+            | Q(submission__correspondence__current_approver=user)
+            | Q(submission__correspondence__owning_office__memberships__user=user, submission__correspondence__owning_office__memberships__is_active=True)
+            | Q(signatures__assigned_to_user=user)
+        ).distinct()
     
     @action(detail=False, methods=["post"])
     def create_workflow(self, request):
@@ -56,12 +67,17 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
         signature_assignments = serializer.validated_data["signature_assignments"]
         notes = serializer.validated_data.get("notes", "")
         
-        try:
-            submission = FormSubmission.objects.get(id=submission_id)
-        except FormSubmission.DoesNotExist:
+        submission = FormSubmission.objects.filter(id=submission_id).first()
+        if submission is None:
             return Response(
                 {"error": "Submission not found"},
                 status=status.HTTP_404_NOT_FOUND
+            )
+
+        if not self._can_access_submission(submission, request.user):
+            return Response(
+                {"error": "Submission not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
         
         # Check if workflow already exists
@@ -162,6 +178,21 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
         
         serializer = FormSignatureWorkflowSerializer(workflow, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def _can_access_submission(self, submission, user):
+        """Keep workflow creation aligned with submission visibility rules."""
+        if user.is_superuser:
+            return True
+        return FormSubmission.objects.filter(
+            id=submission.id
+        ).filter(
+            Q(submitted_by=user)
+            | Q(correspondence__created_by=user)
+            | Q(correspondence__current_approver=user)
+            | Q(correspondence__owning_office__memberships__user=user, correspondence__owning_office__memberships__is_active=True)
+            | Q(signature_workflows__signatures__assigned_to_user=user)
+            | Q(template__created_by=user)
+        ).exists()
     
     @action(detail=True, methods=["get"])
     def signatures(self, request, pk=None):

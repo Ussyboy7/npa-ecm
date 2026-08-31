@@ -9,6 +9,7 @@ const mockUseOrg = vi.hoisted(() => vi.fn(() => ({
   divisions: [],
   users: [] as User[],
 })));
+const mockUseOrgUsers = vi.hoisted(() => vi.fn(() => ({ users: [] as User[], loading: false })));
 
 vi.mock('next/link', () => ({
   default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) =>
@@ -17,6 +18,9 @@ vi.mock('next/link', () => ({
 
 vi.mock('@/contexts/OrganizationContext', () => ({
   useOrganization: mockUseOrg,
+}));
+vi.mock('@/hooks/use-org-users', () => ({
+  useOrgUsers: mockUseOrgUsers,
 }));
 
 const baseCorr: Correspondence = {
@@ -67,7 +71,7 @@ describe('InboxCorrespondenceCard', () => {
 
   it('shows status badge', () => {
     render(<InboxCorrespondenceCard corr={baseCorr} userOrgIds={emptyUserOrgIds} />);
-    expect(screen.getByText('in progress')).toBeDefined();
+    expect(screen.getByText('In Progress')).toBeDefined();
   });
 
   it('shows direction badge', () => {
@@ -113,8 +117,8 @@ describe('InboxCorrespondenceCard', () => {
   });
 
   it('renders assigned approver when present', () => {
-    mockUseOrg.mockImplementationOnce(() => ({
-      divisions: [],
+    mockUseOrgUsers.mockImplementationOnce(() => ({
+      loading: false,
       users: [
         { id: 'user-1', name: 'Jane Approver', email: 'jane@npa.gov', employeeId: 'EMP001', gradeLevel: 'GM', systemRole: 'GM', active: true },
         { id: 'user-2', name: 'Other User', email: 'other@npa.gov', employeeId: 'EMP002', gradeLevel: 'AGM', systemRole: 'AGM', active: true },
