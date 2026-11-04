@@ -741,7 +741,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     <Badge variant="outline">{pendingSignatures.length} pending</Badge>
                   </div>
                   {pendingSignatures.map((signature) => (
-                    <div className="rounded-xl border border-border/60 border-l-4 border-l-yellow-500 p-4">
+                    <div key={signature.id} className="rounded-xl border border-border/60 border-l-4 border-l-yellow-500 p-4">
 <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
@@ -765,7 +765,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     <div className="space-y-2">
                       <h3 className="text-sm font-semibold">You signed</h3>
                       {mySignedSignatures.map((signature) => (
-                        <div className="rounded-xl border border-border/60 border-l-4 border-l-green-500 p-4">
+                        <div key={signature.id} className="rounded-xl border border-border/60 border-l-4 border-l-green-500 p-4">
 <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>
@@ -804,7 +804,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                     <div className="space-y-2">
                       <h3 className="text-sm font-semibold">You signed</h3>
                       {mySignedSignatures.map((signature) => (
-                        <div className="rounded-xl border border-border/60 border-l-4 border-l-green-500 p-4">
+                        <div key={signature.id} className="rounded-xl border border-border/60 border-l-4 border-l-green-500 p-4">
 <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="text-sm font-medium">{getAssigneeLabel(signature)}</p>

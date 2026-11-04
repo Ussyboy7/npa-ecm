@@ -5,7 +5,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from organization.models import Department, Division
+from organization.models import Department, Division, Office
 
 from .models import (
     Document,
@@ -159,6 +159,12 @@ class DocumentPermissionSerializer(serializers.ModelSerializer):
         queryset=Department.objects.all(),
         required=False,
     )
+    office_ids = serializers.PrimaryKeyRelatedField(
+        source="offices",
+        many=True,
+        queryset=Office.objects.all(),
+        required=False,
+    )
     user_ids = serializers.PrimaryKeyRelatedField(
         source="users",
         many=True,
@@ -175,6 +181,7 @@ class DocumentPermissionSerializer(serializers.ModelSerializer):
             "note",
             "division_ids",
             "department_ids",
+            "office_ids",
             "grade_levels",
             "user_ids",
             "created_at",
@@ -234,6 +241,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     drm_rights = serializers.SerializerMethodField()
+    effective_rights = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
@@ -260,6 +268,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             "parent_document_id",
             "drm_policy_id",
             "drm_rights",
+            "effective_rights",
             "created_at",
             "updated_at",
         ]
@@ -271,6 +280,13 @@ class DocumentSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = request.user if request else None
         return resolve_document_rights(obj, user)
+
+    def get_effective_rights(self, obj):
+        from .drm import resolve_effective_document_rights
+
+        request = self.context.get("request")
+        user = request.user if request else None
+        return resolve_effective_document_rights(obj, user)
 
     def get_parent_document(self, obj):
         """Get parent document data if this is a response document."""

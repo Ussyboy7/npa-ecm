@@ -18,6 +18,7 @@ import {
   Search,
   User as UserIcon,
   Inbox,
+  UserCheck,
 } from 'lucide-react';
 import {
   correspondenceQueueListStackClass,
@@ -39,6 +40,9 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
+import { getMyActingAppointments, type ActingAppointment } from '@/lib/api/acting-appointments';
+import { formatDateShort } from '@/lib/datetime';
+import { logError } from '@/lib/client-logger';
 
 const STORAGE_KEY = 'office-inbox-selection';
 
@@ -108,6 +112,26 @@ const CorrespondenceInboxContent = () => {
 
   const isSuperuser = Boolean(currentUser?.isSuperuser);
   const hasCorrespondenceAccess = userOfficeIds.length > 0 || isSuperuser;
+
+  const [actingAppointments, setActingAppointments] = useState<ActingAppointment[]>([]);
+  useEffect(() => {
+    if (!currentUser?.id) { setActingAppointments([]); return; }
+    let ignore = false;
+    const loadActing = async () => {
+      try {
+        const mine = await getMyActingAppointments();
+        if (!ignore) setActingAppointments(mine.filter((a) => a.isCurrentlyEffective));
+      } catch (err) { logError('Failed to load acting appointments', err); if (!ignore) setActingAppointments([]); }
+    };
+    void loadActing();
+    return () => { ignore = true; };
+  }, [currentUser?.id]);
+
+  const visibleActingBanners = useMemo(() => {
+    if (!actingAppointments.length) return [];
+    if (!selectedOfficeId || selectedOfficeId === 'all') return actingAppointments;
+    return actingAppointments.filter((a) => String(a.office) === String(selectedOfficeId));
+  }, [actingAppointments, selectedOfficeId]);
 
   const selectableOffices = useMemo(() => {
     if (isSuperuser) return offices;
@@ -290,6 +314,18 @@ const CorrespondenceInboxContent = () => {
             />
           )}
         >
+        {visibleActingBanners.map((appt) => (
+          <div
+            key={appt.id}
+            className="flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-2.5 text-sm dark:border-sky-800/40 dark:bg-sky-950/20"
+          >
+            <UserCheck className="h-4 w-4 text-sky-700 dark:text-sky-400" />
+            <span className="flex-1 text-sky-900 dark:text-sky-200">
+              You are acting for <span className="font-semibold">{appt.principalName}</span>
+              {appt.officeName ? ` — ${appt.officeName}` : ''} · {formatDateShort(appt.startsAt)} — {appt.endsAt ? formatDateShort(appt.endsAt) : 'until further notice'}
+            </span>
+          </div>
+        ))}
         {/* Search + filters — muted strip, not a card */}
         <div className="rounded-xl bg-muted/30 p-2">
             <div className="md:hidden mb-2">

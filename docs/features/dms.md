@@ -39,7 +39,7 @@ The DMS module handles document upload, version control, metadata management, ac
 - `DocumentDrmBanner` — DRM rights notice on document detail
 - `ShareDocumentDialog` — Sharing with permissions (simplified: removed workspace sharing)
 - `ReplaceVersionDialog` — Replace version with file upload or `RichTextEditor` compose mode toggle
-- `RichTextEditor` — Custom rich-text compose (paste sanitize, DOMPurify, a11y toolbar); `QuillEditor` is a deprecated re-export
+- `RichTextEditor` — TipTap compose façade (Legacy retired)
 - `DocumentStatusStrip` / `DocumentHeader` — Detail identity + state strip
 - `DocumentUploadZone` / `FileUploadZone` — Drag-and-drop zones (`DocumentUploadZone` re-exports `FileUploadZone`)
 - `CreateFormDocumentDialog` — Creates a `Document` + `FormDocument` pair from a form template

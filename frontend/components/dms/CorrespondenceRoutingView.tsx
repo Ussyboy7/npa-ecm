@@ -14,8 +14,9 @@ import { logError } from "@/lib/client-logger";
 import { toast } from "@/components/ui/sonner";
 import { Send, Loader2 } from "lucide-react";
 import type { DocumentRecord } from "@/lib/api/dms";
-import { RoutingSection } from "@/components/correspondence/RoutingSection";
+import { PrimaryRoutePanel } from "@/components/correspondence/PrimaryRoutePanel";
 import { getDivisionById } from "@/lib/npa-structure";
+import { submitParallelRoute, submitCcDistribution } from "@/lib/parallel-routing";
 
 interface CorrespondenceRoutingViewProps {
   document: DocumentRecord;
@@ -31,6 +32,7 @@ export function CorrespondenceRoutingView({
   const { currentUser } = useCurrentUser();
 
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
+  const [routeMode, setRouteMode] = useState<'single' | 'parallel'>('single');
   const [forwardTo, setForwardTo] = useState<string>('');
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
@@ -38,6 +40,12 @@ export function CorrespondenceRoutingView({
   const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
   const [purpose, setPurpose] = useState<'action' | 'information' | 'approval'>('action');
+  const [mergeStrategy, setMergeStrategy] = useState<'all' | 'any' | 'majority' | 'independent'>('all');
+  const [parallelUserIds, setParallelUserIds] = useState<string[]>([]);
+  const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
+  const [branchConfigs, setBranchConfigs] = useState<Record<string, { purpose: 'action' | 'information' | 'approval'; minuteText: string }>>({});
+  const [distributionUserIds, setDistributionUserIds] = useState<string[]>([]);
+  const [distributionOfficeIds, setDistributionOfficeIds] = useState<string[]>([]);
   const [notes, setNotes] = useState<string>('');
   const [subject, setSubject] = useState<string>(document.title || '');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
@@ -85,18 +93,30 @@ export function CorrespondenceRoutingView({
     [officeMemberships, offices, findUserById]
   );
 
+  const parallelTargetCount = parallelUserIds.length + parallelOfficeIds.length;
+  const canSubmit =
+    routeMode === 'single'
+      ? routeType === 'person'
+        ? Boolean(forwardTo)
+        : Boolean(targetOfficeId)
+      : parallelTargetCount >= 2;
+
   const handleSubmit = async () => {
     if (!currentUser) {
       toast.error('User not found');
       return;
     }
 
-    if (routeType === 'office' && !targetOfficeId) {
+    if (routeMode === 'single' && routeType === 'office' && !targetOfficeId) {
       toast.error('Please select an office');
       return;
     }
-    if (routeType === 'person' && !forwardTo) {
+    if (routeMode === 'single' && routeType === 'person' && !forwardTo) {
       toast.error('Please select a person');
+      return;
+    }
+    if (routeMode === 'parallel' && parallelTargetCount < 2) {
+      toast.error('Parallel routing requires at least two people or offices');
       return;
     }
 
@@ -112,7 +132,7 @@ export function CorrespondenceRoutingView({
       formData.append('direction', 'upward');
       formData.append('document_type', 'letter');
       
-      if (routeType === 'office') {
+      if (routeMode === 'single' && routeType === 'office') {
         const office = offices.find((o) => o.id === targetOfficeId);
         if (office) {
           const primaryMember = officeMemberships.find(
@@ -123,7 +143,7 @@ export function CorrespondenceRoutingView({
           }
           formData.append('current_office', targetOfficeId);
         }
-      } else {
+      } else if (routeMode === 'single') {
         formData.append('current_approver_id', forwardTo);
       }
 
@@ -147,7 +167,19 @@ export function CorrespondenceRoutingView({
         }),
       });
 
-      if (notes.trim()) {
+      if (routeMode === 'parallel') {
+        await submitParallelRoute(apiFetch, {
+          correspondenceId: correspondenceResponse.id,
+          parallelUserIds,
+          parallelOfficeIds,
+          branchConfigs,
+          mergeStrategy,
+          defaultPurpose: purpose,
+          defaultMinuteText: notes.trim() || 'Please review and respond.',
+        });
+      }
+
+      if (routeMode === 'single' && (notes.trim() || purpose !== 'information')) {
         await apiFetch('/correspondence/minutes/', {
           method: 'POST',
           headers: {
@@ -157,12 +189,22 @@ export function CorrespondenceRoutingView({
             correspondence: correspondenceResponse.id,
             user_id: currentUser.id,
             action_type: 'minute',
-            minute_text: notes.trim(),
+            minute_text: notes.trim() || 'Routed via document correspondence',
             direction: 'upward',
             step_number: 1,
+            purpose,
+            requires_response: purpose !== 'information',
           }),
         });
       }
+
+      await submitCcDistribution(
+        apiFetch,
+        correspondenceResponse.id,
+        distributionUserIds,
+        distributionOfficeIds,
+        currentUser?.id,
+      );
 
       toast.success('Document sent via correspondence', {
         description: `Reference: ${correspondenceResponse.reference_number || correspondenceResponse.id}`,
@@ -196,7 +238,9 @@ export function CorrespondenceRoutingView({
           />
         </div>
 
-        <RoutingSection
+        <PrimaryRoutePanel
+          routeMode={routeMode}
+          onRouteModeChange={setRouteMode}
           routeType={routeType}
           onRouteTypeChange={(v) => {
             setRouteType(v);
@@ -212,7 +256,6 @@ export function CorrespondenceRoutingView({
           }}
           forwardTo={forwardTo}
           onForwardToChange={setForwardTo}
-          forwardToError=""
           personSearchQuery={personSearchQuery}
           onPersonSearchQueryChange={setPersonSearchQuery}
           targetOfficeId={targetOfficeId}
@@ -231,13 +274,25 @@ export function CorrespondenceRoutingView({
           onOfficeFilterDivisionChange={setOfficeFilterDivision}
           purpose={purpose}
           onPurposeChange={setPurpose}
+          parallelUserIds={parallelUserIds}
+          onParallelUserIdsChange={setParallelUserIds}
+          parallelOfficeIds={parallelOfficeIds}
+          onParallelOfficeIdsChange={setParallelOfficeIds}
+          mergeStrategy={mergeStrategy}
+          onMergeStrategyChange={setMergeStrategy}
+          branchConfigs={branchConfigs}
+          onBranchConfigsChange={setBranchConfigs}
+          defaultBranchText={notes.trim() || 'Please review and respond.'}
+          distributionUserIds={distributionUserIds}
+          onDistributionUserIdsChange={setDistributionUserIds}
+          distributionOfficeIds={distributionOfficeIds}
+          onDistributionOfficeIdsChange={setDistributionOfficeIds}
           offices={officeOptionsForRouting}
           directorates={directorates}
           divisions={divisions}
           users={activeUsers}
           assistantList={[]}
           approverList={activeUsers}
-          suggestedNext={undefined}
           findUserById={findUserById}
           getUserOfficeInfo={getUserOfficeInfo}
         />
@@ -271,7 +326,7 @@ export function CorrespondenceRoutingView({
         <Button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting || (routeType === 'person' && !forwardTo) || (routeType === 'office' && !targetOfficeId)}
+          disabled={isSubmitting || !canSubmit}
           className="w-full"
         >
           {isSubmitting ? (
@@ -290,4 +345,3 @@ export function CorrespondenceRoutingView({
     </div>
   );
 }
-

@@ -121,6 +121,19 @@ class ActingAppointmentViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         users = eligible_acting_candidates(office, exclude_user=principal)
+        # Build office context map: first membership office per user in hierarchy (for picker grouping)
+        from organization.acting_services import _hierarchy_office_ids  # type: ignore[import]
+
+        hierarchy_ids = _hierarchy_office_ids(office)
+        membership_map: dict[str, str] = {}
+        for m in (
+            OfficeMembership.objects.filter(office_id__in=hierarchy_ids, user_id__in=[u.id for u in users], is_active=True)  # type: ignore[attr-defined]
+            .select_related("office")
+            .order_by("-is_primary")
+        ):
+            uid = str(m.user_id)
+            if uid not in membership_map:
+                membership_map[uid] = m.office.name if m.office else ""
         return Response(
             [
                 {
@@ -129,6 +142,7 @@ class ActingAppointmentViewSet(viewsets.ReadOnlyModelViewSet):
                     "name": u.get_full_name() or u.username,
                     "email": u.email,
                     "grade_level": getattr(u, "grade_level", "") or "",
+                    "office_name": membership_map.get(str(u.id), ""),
                 }
                 for u in users
             ]

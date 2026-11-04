@@ -31,6 +31,7 @@ export interface ActingCandidate {
   name: string;
   email: string;
   gradeLevel: string;
+  officeName: string;
 }
 
 export interface ActingRequest {
@@ -152,6 +153,7 @@ export async function getEligibleActingCandidates(params: {
     name: String(raw.name ?? ''),
     email: String(raw.email ?? ''),
     gradeLevel: String(raw.grade_level ?? ''),
+    officeName: String(raw.office_name ?? ''),
   }));
 }
 

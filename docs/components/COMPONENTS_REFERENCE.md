@@ -33,7 +33,7 @@ Living reference for notable frontend components. For feature-level docs see `do
 
 - `DelegatedInboxContent`, `ExecutiveSupportInboxContent`, `OfficeInboxContent` — removed; use `/inbox`, `/correspondence/inbox`, `/tasks`
 - Duplicate inbox filter constants — use `lib/constants.ts`
-- Do not introduce new `contentEditable` editors — use `RichTextEditor` (`QuillEditor` is a deprecated re-export only)
+- Do not introduce new ad-hoc editors — use `RichTextEditor` (TipTap façade)
 
 ---
 
@@ -87,7 +87,7 @@ interface RichTextEditorProps {
 }
 ```
 
-Compat: `import { QuillEditor } from '@/components/dms/QuillEditor'` still works as a thin re-export.
+Engine: TipTap only via `RichTextEditor` façade. See `docs/features/rich-text-editor.md`.
 
 ---
 

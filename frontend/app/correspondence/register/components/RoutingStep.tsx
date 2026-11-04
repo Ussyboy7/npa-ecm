@@ -1,42 +1,42 @@
 "use client";
 
-import { memo, useMemo } from 'react';
-import { ArrowLeft, ArrowRight, Search, Building2, Globe, AlertCircle } from 'lucide-react';
+import { memo, useMemo, useState, useCallback } from 'react';
+import { ArrowLeft, ArrowRight, Building2, Globe, AlertCircle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { Directorate, Division, Department, Office, OfficeMembership } from '@/contexts/OrganizationContext';
 import type { User } from '@/lib/npa-structure';
-import { FormData, FlowType, DistributionState, detectCorrespondenceSource } from '../register-utils';
-import { REGISTER_CONSTANTS } from '../register-constants';
+import { PrimaryRoutePanel } from '@/components/correspondence/PrimaryRoutePanel';
+import { getDivisionById } from '@/lib/npa-structure';
+import {
+  FormData,
+  FlowType,
+  DistributionState,
+  detectCorrespondenceSource,
+  RegisterRoutingConfig,
+} from '../register-utils';
 
 interface RoutingStepProps {
   formData: FormData;
   flowType: FlowType;
   distributions: DistributionState;
+  routingConfig: RegisterRoutingConfig;
   errors: Record<string, string>;
-  assignSearch: string;
   directorates: Directorate[];
   divisions: Division[];
   departments: Department[];
   offices: Office[];
   officeMemberships: OfficeMembership[];
   organizationUsers: User[];
+  currentUserId?: string;
   onFormDataChange: (updates: Partial<FormData>) => void;
+  onRoutingChange: (updates: Partial<RegisterRoutingConfig>) => void;
   onDistributionChange: (type: 'directorates' | 'divisions' | 'departments', ids: string[]) => void;
-  onAssignSearchChange: (search: string) => void;
   onErrorClear: (field: string) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -46,195 +46,166 @@ export const RoutingStep = memo(function RoutingStep({
   formData,
   flowType,
   distributions,
+  routingConfig,
   errors,
-  assignSearch,
   directorates,
   divisions,
   departments,
   offices,
   officeMemberships,
   organizationUsers,
+  currentUserId,
   onFormDataChange,
+  onRoutingChange,
   onDistributionChange,
-  onAssignSearchChange,
   onErrorClear,
   onPrev,
   onNext,
 }: RoutingStepProps) {
-  // Get primary office holder for each office
-  const officesWithOccupants = useMemo(() => {
-    return offices
-      .filter((office) => office.isActive)
-      .map((office) => {
-        // Find primary office holder
-        const primaryMembership = officeMemberships.find(
-          (m) => m.officeId === office.id && m.isPrimary && m.isActive
-        );
-        const occupant = primaryMembership
-          ? organizationUsers.find((u) => u.id === primaryMembership.userId)
-          : undefined;
+  const [personSearchQuery, setPersonSearchQuery] = useState('');
+  const [officeSearchQuery, setOfficeSearchQuery] = useState('');
+  const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState('all');
+  const [officeFilterDivision, setOfficeFilterDivision] = useState('all');
 
-        return {
-          office,
-          occupant,
-          occupantUserId: primaryMembership?.userId || null,
-        };
-      })
-      .filter((item) => item.occupantUserId); // Only show offices with occupants
-  }, [offices, officeMemberships, organizationUsers]);
+  const activeUsers = useMemo(
+    () => organizationUsers.filter((u) => u.active !== false && u.id !== currentUserId),
+    [organizationUsers, currentUserId],
+  );
 
-  // Filter offices by search
-  const filteredOfficesWithOccupants = useMemo(() => {
-    if (!assignSearch.trim()) return officesWithOccupants;
-    const query = assignSearch.toLowerCase();
-    return officesWithOccupants.filter((item) => {
-      const office = item.office;
-      const occupant = item.occupant;
-      return (
-        office.name.toLowerCase().includes(query) ||
-        office.code?.toLowerCase().includes(query) ||
-        occupant?.name?.toLowerCase().includes(query) ||
-        occupant?.systemRole?.toLowerCase().includes(query) ||
-        occupant?.email?.toLowerCase().includes(query)
+  const officeOptionsForRouting = useMemo(
+    () =>
+      offices
+        .filter((o) => o.isActive)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((o) => ({
+          id: o.id,
+          name: o.name,
+          officeType: o.officeType ?? '',
+          directorateId: o.directorateId ?? undefined,
+          divisionId: o.divisionId ?? undefined,
+        })),
+    [offices],
+  );
+
+  const findUserById = useCallback(
+    (id: string) => activeUsers.find((u) => u.id === id),
+    [activeUsers],
+  );
+
+  const getUserOfficeInfo = useCallback(
+    (userId: string) => {
+      const membership = officeMemberships.find(
+        (m) => m.userId === userId && m.isPrimary && m.isActive,
       );
-    });
-  }, [officesWithOccupants, assignSearch]);
-
-  // Group offices by directorate
-  const officesByDirectorate = useMemo(() => {
-    const grouped = new Map<string, typeof filteredOfficesWithOccupants>();
-    
-    filteredOfficesWithOccupants.forEach((item) => {
-      const directorateId = item.office.directorateId || 'unassigned';
-      if (!grouped.has(directorateId)) {
-        grouped.set(directorateId, []);
-      }
-      grouped.get(directorateId)!.push(item);
-    });
-
-    return Array.from(grouped.entries()).map(([directorateId, items]) => {
-      const directorate = directorateId !== 'unassigned' 
-        ? directorates.find((d) => d.id === directorateId)
-        : null;
+      if (!membership) return null;
+      const office = offices.find((o) => o.id === membership.officeId);
+      const user = findUserById(userId);
+      const division = user?.division ? getDivisionById(user.division) : null;
       return {
-        directorate,
-        directorateId,
-        offices: items.sort((a, b) => a.office.name.localeCompare(b.office.name)),
+        office: office ? { name: office.name } : undefined,
+        division: division ? { name: division.name } : undefined,
       };
-    }).sort((a, b) => {
-      if (a.directorateId === 'unassigned') return 1;
-      if (b.directorateId === 'unassigned') return -1;
-      return (a.directorate?.name || '').localeCompare(b.directorate?.name || '');
-    });
-  }, [filteredOfficesWithOccupants, directorates]);
+    },
+    [officeMemberships, offices, findUserById],
+  );
 
-  const handleAssignChange = (value: string) => {
-    if (value === REGISTER_CONSTANTS.ASSIGN_PLACEHOLDER) {
-      onFormDataChange({ assignTo: '', divisionId: '' });
-      return;
-    }
-    // Value is the office ID, find the primary office holder
-    const officeWithOccupant = officesWithOccupants.find((item) => item.office.id === value);
-    if (officeWithOccupant && officeWithOccupant.occupantUserId) {
-      const occupant = officeWithOccupant.occupant;
-      onFormDataChange({
-        assignTo: officeWithOccupant.occupantUserId, // Store user ID for backend
-        divisionId: occupant?.division || officeWithOccupant.office.divisionId || '',
-      });
-    }
-    if (errors.assignTo) onErrorClear('assignTo');
+  const syncAssignTo = useCallback(
+    (updates: Partial<RegisterRoutingConfig>) => {
+      const next = { ...routingConfig, ...updates };
+      if (next.routeMode === 'single') {
+        if (next.routeType === 'person' && next.forwardTo) {
+          onFormDataChange({ assignTo: next.forwardTo });
+        } else if (next.routeType === 'office' && next.targetOfficeId) {
+          const primary = officeMemberships.find(
+            (m) => m.officeId === next.targetOfficeId && m.isPrimary && m.isActive,
+          );
+          onFormDataChange({
+            assignTo: primary?.userId ?? '',
+            divisionId: offices.find((o) => o.id === next.targetOfficeId)?.divisionId ?? formData.divisionId,
+          });
+        }
+      } else {
+        onFormDataChange({ assignTo: '' });
+      }
+      if (errors.assignTo) onErrorClear('assignTo');
+    },
+    [routingConfig, officeMemberships, offices, formData.divisionId, onFormDataChange, errors.assignTo, onErrorClear],
+  );
+
+  const handleRoutingPatch = (updates: Partial<RegisterRoutingConfig>) => {
+    onRoutingChange(updates);
+    syncAssignTo(updates);
   };
-
-  // Get currently selected office (by finding which office has the selected user as primary holder)
-  const selectedOffice = useMemo(() => {
-    if (!formData.assignTo) return null;
-    return officesWithOccupants.find((item) => item.occupantUserId === formData.assignTo);
-  }, [formData.assignTo, officesWithOccupants]);
 
   const handleDistributionToggle = (
     type: 'directorates' | 'divisions' | 'departments',
     id: string,
-    checked: boolean
+    checked: boolean,
   ) => {
     const currentIds = distributions[type];
-    const newIds = checked
-      ? [...currentIds, id]
-      : currentIds.filter((item) => item !== id);
+    const newIds = checked ? [...currentIds, id] : currentIds.filter((item) => item !== id);
     onDistributionChange(type, newIds);
   };
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>
-          Assign To <span className="text-destructive">*</span>
-        </Label>
-        <Select
-          value={selectedOffice?.office.id || REGISTER_CONSTANTS.ASSIGN_PLACEHOLDER}
-          onValueChange={handleAssignChange}
-        >
-          <SelectTrigger
-            className={errors.assignTo ? 'border-destructive' : ''}
-            aria-invalid={!!errors.assignTo}
-            aria-describedby={errors.assignTo ? 'assignTo-error' : undefined}
-          >
-            <SelectValue placeholder="Select office" />
-          </SelectTrigger>
-          <SelectContent className="max-h-[400px]">
-            <div className="sticky top-0 z-10 bg-popover p-2 border-b">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={assignSearch}
-                  onChange={(e) => onAssignSearchChange(e.target.value)}
-                  placeholder="Search office or occupant name..."
-                  className="pl-8 h-9"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                />
-              </div>
-            </div>
-            <SelectItem value={REGISTER_CONSTANTS.ASSIGN_PLACEHOLDER} disabled>
-              Select office
-            </SelectItem>
-            {officesByDirectorate.map(({ directorate, directorateId, offices: dirOffices }) => (
-              <div key={directorateId} className="border-t first:border-t-0">
-                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50">
-                  {directorate?.name || 'Unassigned'}
-                </div>
-                {dirOffices.map(({ office, occupant }) => {
-                  const division = divisions.find((div) => div.id === office.divisionId);
-                  return (
-                    <SelectItem key={office.id} value={office.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{office.name}</span>
-                        {occupant && (
-                          <span className="text-xs text-muted-foreground">
-                            Occupied by: {occupant.name}
-                            {occupant.systemRole && ` • ${occupant.systemRole}`}
-                            {division && ` • ${division.name}`}
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </div>
-            ))}
-          </SelectContent>
-        </Select>
-        {errors.assignTo && (
-          <p id="assignTo-error" className="text-xs text-destructive" role="alert">
-            {errors.assignTo}
-          </p>
-        )}
-      </div>
+      <PrimaryRoutePanel
+        routeMode={routingConfig.routeMode}
+        onRouteModeChange={(mode) => handleRoutingPatch({ routeMode: mode })}
+        routeType={routingConfig.routeType}
+        onRouteTypeChange={(type) => handleRoutingPatch({ routeType: type, forwardTo: '', targetOfficeId: '' })}
+        forwardTo={routingConfig.forwardTo}
+        onForwardToChange={(id) => handleRoutingPatch({ forwardTo: id, routeType: 'person' })}
+        forwardToError={errors.assignTo}
+        personSearchQuery={personSearchQuery}
+        onPersonSearchQueryChange={setPersonSearchQuery}
+        targetOfficeId={routingConfig.targetOfficeId}
+        onTargetOfficeIdChange={(id) => handleRoutingPatch({ targetOfficeId: id, routeType: 'office', forwardTo: '' })}
+        officeSearchQuery={officeSearchQuery}
+        onOfficeSearchQueryChange={setOfficeSearchQuery}
+        officeFilterDirectorate={officeFilterDirectorate}
+        onOfficeFilterDirectorateChange={(v) => {
+          setOfficeFilterDirectorate(v);
+          setOfficeFilterDivision('all');
+        }}
+        officeFilterDivision={officeFilterDivision}
+        onOfficeFilterDivisionChange={setOfficeFilterDivision}
+        purpose={routingConfig.purpose}
+        onPurposeChange={(p) => handleRoutingPatch({ purpose: p })}
+        parallelUserIds={routingConfig.parallelUserIds}
+        onParallelUserIdsChange={(ids) => handleRoutingPatch({ parallelUserIds: ids })}
+        parallelOfficeIds={routingConfig.parallelOfficeIds}
+        onParallelOfficeIdsChange={(ids) => handleRoutingPatch({ parallelOfficeIds: ids })}
+        mergeStrategy={routingConfig.mergeStrategy}
+        onMergeStrategyChange={(s) => handleRoutingPatch({ mergeStrategy: s })}
+        branchConfigs={routingConfig.branchConfigs}
+        onBranchConfigsChange={(configs) => onRoutingChange({ branchConfigs: configs })}
+        defaultBranchText={routingConfig.routingNotes || formData.remarks || 'Please review and respond.'}
+        distributionUserIds={routingConfig.distributionUserIds}
+        onDistributionUserIdsChange={(ids) => onRoutingChange({ distributionUserIds: ids })}
+        distributionOfficeIds={routingConfig.distributionOfficeIds}
+        onDistributionOfficeIdsChange={(ids) => onRoutingChange({ distributionOfficeIds: ids })}
+        showDistribution
+        offices={officeOptionsForRouting}
+        directorates={directorates}
+        divisions={divisions}
+        users={activeUsers}
+        assistantList={[]}
+        approverList={activeUsers}
+        findUserById={findUserById}
+        getUserOfficeInfo={getUserOfficeInfo}
+      />
+
+      {errors.assignTo && (
+        <p className="text-xs text-destructive" role="alert">
+          {errors.assignTo}
+        </p>
+      )}
 
       {flowType === 'outward' && (
         <div className="space-y-4">
           <Separator />
-          
-          {/* Source Type Detection & Selection */}
+
           {(() => {
             const detectedSource = detectCorrespondenceSource(flowType, formData, distributions);
             const isAmbiguous = detectedSource === 'ambiguous';
@@ -246,10 +217,7 @@ export const RoutingStep = memo(function RoutingStep({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Label className="text-base font-semibold">Correspondence Type</Label>
-                    <Badge 
-                      variant={displaySource === 'internal' ? 'default' : 'secondary'}
-                      className="gap-1.5"
-                    >
+                    <Badge variant={displaySource === 'internal' ? 'default' : 'secondary'} className="gap-1.5">
                       {displaySource === 'internal' ? (
                         <>
                           <Building2 className="h-3 w-3" />
@@ -264,34 +232,30 @@ export const RoutingStep = memo(function RoutingStep({
                     </Badge>
                   </div>
                 </div>
-                
+
                 {isAmbiguous && !explicitSource && (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
                       <div className="space-y-2">
                         <p className="text-sm font-medium">Ambiguous routing detected</p>
-                        <p className="text-xs text-muted-foreground">
-                          You've selected both distributions (NPA offices) and external recipient fields. 
-                          Please specify the intended routing type:
-                        </p>
                         <RadioGroup
                           value={formData.correspondenceSource || 'internal'}
-                          onValueChange={(value) => onFormDataChange({ correspondenceSource: value as 'internal' | 'external' })}
+                          onValueChange={(value) =>
+                            onFormDataChange({ correspondenceSource: value as 'internal' | 'external' })
+                          }
                           className="mt-2"
                         >
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="internal" id="source-internal" />
-                            <Label htmlFor="source-internal" className="flex items-center gap-2 cursor-pointer">
-                              <Building2 className="h-4 w-4" />
-                              <span>Internal (to NPA offices via distributions)</span>
+                            <Label htmlFor="source-internal" className="cursor-pointer">
+                              Internal (to NPA offices via distributions)
                             </Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="external" id="source-external" />
-                            <Label htmlFor="source-external" className="flex items-center gap-2 cursor-pointer">
-                              <Globe className="h-4 w-4" />
-                              <span>External (to external organization)</span>
+                            <Label htmlFor="source-external" className="cursor-pointer">
+                              External (to external organization)
                             </Label>
                           </div>
                         </RadioGroup>
@@ -299,22 +263,14 @@ export const RoutingStep = memo(function RoutingStep({
                     </AlertDescription>
                   </Alert>
                 )}
-                
-                {!isAmbiguous && (
-                  <p className="text-xs text-muted-foreground">
-                    {displaySource === 'internal' 
-                      ? 'Detected: Routing to NPA offices via distribution list'
-                      : 'Detected: Routing to external organization'}
-                  </p>
-                )}
               </div>
             );
           })()}
-          
+
           <div>
-            <Label className="text-base">Distribution List</Label>
+            <Label className="text-base">Outward distribution list</Label>
             <p className="text-sm text-muted-foreground mb-4">
-              Select units that should receive this dispatch
+              Directorate / division / department broadcast — separate from primary route and CC above.
             </p>
             {errors.distribution && (
               <p className="text-sm text-destructive mb-2" role="alert">
@@ -325,70 +281,49 @@ export const RoutingStep = memo(function RoutingStep({
               <div className="space-y-2">
                 <p className="text-sm font-medium">Directorates</p>
                 <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
-                  {directorates.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No directorates</p>
-                  ) : (
-                    directorates.map((dir) => (
-                      <label
-                        key={dir.id}
-                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
-                      >
-                        <Checkbox
-                          checked={distributions.directorates.includes(dir.id)}
-                          onCheckedChange={(checked) =>
-                            handleDistributionToggle('directorates', dir.id, !!checked)
-                          }
-                        />
-                        <span className="truncate">{dir.name}</span>
-                      </label>
-                    ))
-                  )}
+                  {directorates.map((dir) => (
+                    <label key={dir.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={distributions.directorates.includes(dir.id)}
+                        onCheckedChange={(checked) =>
+                          handleDistributionToggle('directorates', dir.id, !!checked)
+                        }
+                      />
+                      <span className="truncate">{dir.name}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Divisions</p>
                 <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
-                  {divisions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No divisions</p>
-                  ) : (
-                    divisions.map((division) => (
-                      <label
-                        key={division.id}
-                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
-                      >
-                        <Checkbox
-                          checked={distributions.divisions.includes(division.id)}
-                          onCheckedChange={(checked) =>
-                            handleDistributionToggle('divisions', division.id, !!checked)
-                          }
-                        />
-                        <span className="truncate">{division.name}</span>
-                      </label>
-                    ))
-                  )}
+                  {divisions.map((division) => (
+                    <label key={division.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={distributions.divisions.includes(division.id)}
+                        onCheckedChange={(checked) =>
+                          handleDistributionToggle('divisions', division.id, !!checked)
+                        }
+                      />
+                      <span className="truncate">{division.name}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Departments</p>
                 <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
-                  {departments.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No departments</p>
-                  ) : (
-                    departments.map((department) => (
-                      <label
-                        key={department.id}
-                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
-                      >
-                        <Checkbox
-                          checked={distributions.departments.includes(department.id)}
-                          onCheckedChange={(checked) =>
-                            handleDistributionToggle('departments', department.id, !!checked)
-                          }
-                        />
-                        <span className="truncate">{department.name}</span>
-                      </label>
-                    ))
-                  )}
+                  {departments.map((department) => (
+                    <label key={department.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={distributions.departments.includes(department.id)}
+                        onCheckedChange={(checked) =>
+                          handleDistributionToggle('departments', department.id, !!checked)
+                        }
+                      />
+                      <span className="truncate">{department.name}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
             </div>
@@ -409,4 +344,3 @@ export const RoutingStep = memo(function RoutingStep({
     </div>
   );
 });
-

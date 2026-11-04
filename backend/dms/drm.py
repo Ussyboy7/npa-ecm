@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -76,6 +77,60 @@ def should_withhold_direct_media(rights: dict) -> bool:
         return True
     # Active policy → always gate through /content/ and /download/
     return bool(rights.get("policy_id"))
+
+
+def resolve_effective_document_rights(document, user=None) -> dict:
+    """Combine document ACL access with DRM restrictions for one user."""
+    drm = resolve_document_rights(document, user)
+    user_id = getattr(user, "id", None) if user else None
+    is_owner = bool(user_id and str(user_id) == str(getattr(document, "author_id", "")))
+    is_superuser = bool(getattr(user, "is_superuser", False))
+
+    access_levels: set[str] = set()
+    if user and getattr(user, "is_authenticated", False):
+        from .models import DocumentPermission
+
+        matches = DocumentPermission.objects.filter(document=document).filter(
+            Q(users=user)
+            | Q(divisions=getattr(user, "division_id", None))
+            | Q(departments=getattr(user, "department_id", None))
+            | Q(offices__memberships__user=user, offices__memberships__is_active=True)
+            | Q(grade_levels__contains=[getattr(user, "grade_level", "")])
+        ).values_list("access", flat=True)
+        access_levels = set(matches)
+
+    if is_owner or is_superuser:
+        access_level = "admin"
+    elif "admin" in access_levels:
+        access_level = "admin"
+    elif "write" in access_levels:
+        access_level = "write"
+    elif "read" in access_levels:
+        access_level = "read"
+    else:
+        access_level = None
+
+    can_view = bool(
+        is_owner
+        or is_superuser
+        or access_level
+        or getattr(document, "sensitivity", "") in {"public", "internal"}
+        or (
+            getattr(document, "status", "") == "published"
+            and getattr(document, "sensitivity", "") == "public"
+        )
+    )
+    can_manage = access_level == "admin"
+    return {
+        **drm,
+        "access_level": access_level,
+        "can_view": can_view,
+        "can_download": can_view and drm["allow_download"],
+        "can_print": can_view and drm["allow_print"],
+        "can_replace_version": can_view and access_level in {"write", "admin"},
+        "can_manage_sharing": can_manage,
+        "can_archive": can_manage,
+    }
 
 
 def assert_view_allowed(document, user=None) -> None:

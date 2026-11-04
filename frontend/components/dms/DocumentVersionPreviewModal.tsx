@@ -15,7 +15,7 @@ import type { DocumentVersion, DocumentRecord } from "@/lib/api/dms";
 import { createDocumentVersion } from "@/lib/api/dms";
 import { downloadCanonicalDocument, fetchCanonicalContent } from "@/lib/canonical-document";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
-import mammoth from "mammoth";
+import { convertDocxArrayBufferToHtml } from "@/lib/docx-to-html";
 import { sanitizeRichText } from "@/lib/sanitize-html";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -98,9 +98,9 @@ export const DocumentVersionPreviewModal = ({
             setLoading(false);
           } else if (isWordDocx) {
             blob.arrayBuffer()
-              .then(arrayBuffer => mammoth.convertToHtml({ arrayBuffer }))
-              .then(result => {
-                setWordHtml(result.value);
+              .then((arrayBuffer) => convertDocxArrayBufferToHtml(arrayBuffer))
+              .then((html) => {
+                setWordHtml(html);
                 setLoading(false);
               })
               .catch(err => {

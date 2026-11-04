@@ -1,5 +1,5 @@
-# Local development stack (Mac). Project name isolates this from staging containers.
-name: npa-ecm-local
+# Local development stack (Mac). Project name isolates this from staging (npa-ecm-stag).
+name: npa-ecm
 
 services:
   postgres:

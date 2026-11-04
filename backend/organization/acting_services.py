@@ -74,12 +74,48 @@ def user_can_manage_acting(user, office: Optional[Office] = None, principal=None
     return False
 
 
+def _hierarchy_office_ids(office: Office) -> list:  # type: ignore[no-untyped-def]
+    """Strict hierarchy scope: department > division > directorate.
+
+    - Department office (e.g. Software Dept) → only that department
+    - Division office (e.g. ICT Division) → all departments under that division + division-level staff
+    - Directorate office → all offices under that directorate
+    Parent linkage removed — division scope already covers children, sibling expansion
+    (all divisions under MD) was the 56→35 spillover.
+    """
+    from .models import Office as OfficeModel  # type: ignore[import]
+
+    office_id = getattr(office, "id", None)
+    dept_id = getattr(office, "department_id", None)
+    div_id = getattr(office, "division_id", None)
+    dir_id = getattr(office, "directorate_id", None)
+
+    if dept_id:
+        conditions = Q(department_id=dept_id) | Q(id=office_id)
+    elif div_id:
+        conditions = Q(division_id=div_id) | Q(id=office_id)
+    elif dir_id:
+        conditions = Q(directorate_id=dir_id) | Q(id=office_id)
+    else:
+        conditions = Q(id=office_id)
+
+    return list(
+        OfficeModel.objects.filter(conditions, is_active=True).values_list("id", flat=True)  # type: ignore[attr-defined]
+    )
+
+
 def eligible_acting_candidates(office: Office, exclude_user=None):
-    """Active office members eligible to act (excluding principal by default)."""
+    """Active members eligible to act (excluding principal by default).
+
+    Scope is the office *hierarchy* (same department/division/directorate) so
+    offices that are 1-person seats still have a picker. Falls back to strict
+    single-office if no hierarchy is configured.
+    """
+    hierarchy_ids = _hierarchy_office_ids(office)
     qs = (
-        OfficeMembership.objects.filter(office=office, is_active=True)
+        OfficeMembership.objects.filter(office_id__in=hierarchy_ids, is_active=True)  # type: ignore[attr-defined]
         .exclude(assignment_role=OfficeMembership.AssignmentRole.ACTING)
-        .select_related("user")
+        .select_related("user", "office")
         .order_by("-is_primary", "user__last_name", "user__first_name")
     )
     if exclude_user is not None:
@@ -142,6 +178,12 @@ def _ensure_acting_membership(office: Office, acting_user, starts_at, ends_at) -
 
 
 def _transfer_seat_items(appointment: ActingAppointment) -> int:
+    """Office-only acting: tag seat items for office-tray handling, do NOT move My Inbox.
+
+    Keeps current_approver on the principal so My Inbox stays personal for both
+    principal and acting user. Acting user reaches these items via Office Inbox
+    (ACTING membership + office filter) and is allowed to act via permission check.
+    """
     from correspondence.models import Correspondence
 
     qs = _open_seat_items_queryset(appointment.principal, appointment.office)
@@ -149,7 +191,6 @@ def _transfer_seat_items(appointment: ActingAppointment) -> int:
     if not ids:
         return 0
     updated = Correspondence.objects.filter(id__in=ids).update(
-        current_approver=appointment.acting_user,
         acting_appointment=appointment,
         acting_original_approver=appointment.principal,
         updated_at=timezone.now(),
@@ -163,13 +204,11 @@ def _reclaim_seat_items(appointment: ActingAppointment) -> int:
     qs = Correspondence.objects.filter(
         is_deleted=False,
         acting_appointment=appointment,
-        current_approver=appointment.acting_user,
     ).exclude(status=Correspondence.Status.COMPLETED)
     ids = list(qs.values_list("id", flat=True))
     if not ids:
         return 0
     updated = Correspondence.objects.filter(id__in=ids).update(
-        current_approver=appointment.principal,
         acting_appointment=None,
         acting_original_approver=None,
         updated_at=timezone.now(),
@@ -207,10 +246,18 @@ def appoint_acting(
     if not user_can_manage_acting(appointed_by, office=office, principal=principal):
         raise PermissionDenied("You do not have permission to create an acting appointment.")
 
-    if not OfficeMembership.objects.filter(office=office, user=acting_user, is_active=True).exists():
+    hierarchy_ids = _hierarchy_office_ids(office)
+    has_membership = OfficeMembership.objects.filter(office_id__in=hierarchy_ids, user=acting_user, is_active=True).exists()  # type: ignore[attr-defined]
+    if not has_membership:
         raise ValidationError(
-            {"acting_user": "Acting officer must be an active member of this office."}
+            {"acting_user": "Acting officer must be an active member of this office or its department/division/directorate hierarchy."}
         )
+
+    # Principal must hold an active principal seat in the target office
+    if not OfficeMembership.objects.filter(  # type: ignore[attr-defined]
+        office=office, user=principal, assignment_role=OfficeMembership.AssignmentRole.PRINCIPAL, is_active=True
+    ).exists():
+        raise ValidationError({"principal": "Principal must be the active head of this office."})
 
     existing = ActingAppointment.objects.filter(office=office, is_active=True).first()
     if existing:
@@ -284,7 +331,7 @@ def appoint_acting(
         title=f"Acting appointment — {office_name}",
         message=(
             f"You have been appointed acting for {principal_name} at {office_name} "
-            f"until {end_label}. {transferred} open seat item(s) were moved to your My Inbox."
+            f"until {end_label}. {transferred} open seat item(s) are now in that office's inbox — open Office Inbox for that office to treat them."
         ),
         notification_type=Notification.NotificationType.SYSTEM,
         priority=Notification.Priority.HIGH,
@@ -292,7 +339,7 @@ def appoint_acting(
         module="organization",
         related_object_type="ActingAppointment",
         related_object_id=str(appointment.id),
-        action_url="/inbox",
+        action_url="/correspondence/inbox",
         action_required=True,
     )
     if principal.id != appointed_by.id:
@@ -411,7 +458,7 @@ def end_acting(
         title=f"Seat returned — {office_name}",
         message=(
             f"Acting appointment for {acting_name} at {office_name} has ended. "
-            f"{reclaimed} open item(s) are back in your My Inbox."
+            f"{reclaimed} open item(s) are available in the office inbox again."
         ),
         notification_type=Notification.NotificationType.SYSTEM,
         priority=Notification.Priority.HIGH,
@@ -419,7 +466,7 @@ def end_acting(
         module="organization",
         related_object_type="ActingAppointment",
         related_object_id=str(appointment.id),
-        action_url="/inbox",
+        action_url="/correspondence/inbox",
         action_required=True,
     )
 
@@ -550,9 +597,11 @@ def create_acting_request(
             raise ValidationError(
                 {"suggested_acting_user": "Suggested acting officer cannot be the principal."}
             )
-        if not user_is_office_member(suggested_acting_user, office):
+        if not user_is_office_member(suggested_acting_user, office) and not OfficeMembership.objects.filter(  # type: ignore[attr-defined]
+            office_id__in=_hierarchy_office_ids(office), user=suggested_acting_user, is_active=True
+        ).exists():
             raise ValidationError(
-                {"suggested_acting_user": "Suggested acting officer must be an office member."}
+                {"suggested_acting_user": "Suggested acting officer must be a member of this office or its directorate/division/department."}
             )
 
     pending_count = _open_seat_items_queryset(principal, office).count()

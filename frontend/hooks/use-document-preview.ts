@@ -14,7 +14,7 @@ import {
   type CanonicalDocRef,
   fetchCanonicalContent,
 } from '@/lib/canonical-document';
-import mammoth from 'mammoth';
+import { convertDocxArrayBufferToHtml } from '@/lib/docx-to-html';
 
 export interface Attachment {
   /** Prefer id fields — fileUrl is ignored except data: URLs for local drafts. */
@@ -128,9 +128,9 @@ export const useDocumentPreview = (attachment: Attachment | null | undefined): U
           timeoutIdRef.current = null;
         }
 
-        const result = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+        const html = await convertDocxArrayBufferToHtml(await blob.arrayBuffer());
         if (cancelledRef.current) return;
-        setWordHtml(result.value);
+        setWordHtml(html);
         setIsLoading(false);
       } catch (err) {
         if (cancelledRef.current) return;

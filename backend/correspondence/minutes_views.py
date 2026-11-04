@@ -117,6 +117,14 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 else:
                     # No org assignment (test accounts) — show nothing rather than everything
                     queryset = queryset.none()
+
+        correspondence_id = self.request.query_params.get("correspondence")
+        if correspondence_id and user and getattr(user, "is_authenticated", False):
+            correspondence = Correspondence.objects.filter(id=correspondence_id).first()
+            if correspondence:
+                queryset = ParallelBranchService.filter_minutes_for_viewer(
+                    queryset, correspondence, user
+                )
         return queryset
 
     @action(detail=False, methods=["get"], url_path="pending-approvals")
@@ -832,15 +840,12 @@ class MinuteViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="parallel-route")
     def parallel_route(self, request):
         user = request.user
-        executive_grades = ['MDCS', 'EDCS', 'GMCS', 'AGMCS']
-        if not hasattr(user, 'grade_level') or user.grade_level not in executive_grades:
-            raise ValidationError({
-                "detail": "Only executives (MD, ED, GM, AGM) can create parallel routes."
-            })
+        MinuteRouterService.check_permissions(user, "minute", request=request)
 
         correspondence_id = request.data.get("correspondence_id")
         recipients = request.data.get("recipients", [])
-        merge_strategy = request.data.get("merge_strategy", "independent")
+        merge_strategy = request.data.get("merge_strategy", "all")
+        parent_minute_id = request.data.get("parent_minute_id")
 
         if not correspondence_id or not recipients:
             raise ValidationError({
@@ -852,8 +857,15 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 "detail": "Parallel routing requires at least 2 recipients."
             })
 
-        user_ids = [r.get("user_id") for r in recipients if r.get("user_id")]
-        if len(user_ids) != len(set(user_ids)):
+        recipient_keys = [
+            ("user", r.get("user_id")) if r.get("user_id") else ("office", r.get("office_id"))
+            for r in recipients
+        ]
+        if any(not value for _, value in recipient_keys):
+            raise ValidationError({
+                "detail": "Each parallel recipient must specify either user_id or office_id."
+            })
+        if len(recipient_keys) != len(set(recipient_keys)):
             raise ValidationError({
                 "detail": "Duplicate recipients are not allowed. Each recipient must be unique."
             })
@@ -863,124 +875,24 @@ class MinuteViewSet(viewsets.ModelViewSet):
         except Correspondence.DoesNotExist:
             raise ValidationError({"detail": "Correspondence not found."})
 
-        parallel_group = ParallelRoutingGroup.objects.create(
-            correspondence=correspondence,
-            created_by=user,
+        parent_minute = None
+        if parent_minute_id:
+            try:
+                parent_minute = Minute.objects.get(
+                    id=parent_minute_id, correspondence=correspondence
+                )
+            except Minute.DoesNotExist:
+                raise ValidationError({"detail": "parent_minute_id not found on this correspondence."})
+
+        from correspondence.services import ParallelBranchService
+
+        parallel_group, created_minutes = ParallelBranchService.create_parallel_route(
+            correspondence,
+            user,
+            recipients,
             merge_strategy=merge_strategy,
-            total_branches=len(recipients),
-        )
-
-        recipient_user_ids = [r.get("user_id") for r in recipients if r.get("user_id")]
-        if len(recipient_user_ids) != len(set(recipient_user_ids)):
-            raise ValidationError({
-                "detail": "Duplicate recipients are not allowed in parallel routing."
-            })
-
-        created_minutes = []
-        recipient_users = {}
-
-        for recipient_data in recipients:
-            recipient_user_id = recipient_data.get("user_id")
-            if not recipient_user_id:
-                continue
-
-            purpose = recipient_data.get("purpose", "action")
-            office_id = recipient_data.get("office_id")
-            minute_text = recipient_data.get("minute_text", "").strip()
-            if not minute_text:
-                raise ValidationError({
-                    "detail": "Minute text is required for each parallel branch recipient."
-                })
-
-            if recipient_user_id not in recipient_users:
-                try:
-                    recipient_users[recipient_user_id] = User.objects.get(id=recipient_user_id)
-                except User.DoesNotExist:
-                    raise ValidationError({
-                        "detail": f"Recipient user {recipient_user_id} not found."
-                    })
-
-            recipient_user = recipient_users[recipient_user_id]
-
-            office = None
-            if office_id:
-                try:
-                    office = Office.objects.get(id=office_id)
-                except Office.DoesNotExist:
-                    pass
-
-            if not office:
-                office_membership = OfficeMembership.objects.filter(
-                    user=recipient_user,
-                    is_active=True,
-                    is_primary=True
-                ).select_related('office').first()
-                if office_membership:
-                    office = office_membership.office
-
-            if office:
-                user_in_office = OfficeMembership.objects.filter(
-                    office=office,
-                    user=recipient_user,
-                    is_active=True
-                ).exists()
-
-                if not user_in_office:
-                    raise ValidationError({
-                        "detail": f"User {recipient_user.get_full_name() or recipient_user.username} is not a member of {office.name}. Please select a user from that office."
-                    })
-
-            minute = Minute.objects.create(
-                correspondence=correspondence,
-                user=user,
-                minute_text=minute_text,
-                action_type=Minute.ActionType.MINUTE,
-                direction=correspondence.direction,
-                purpose=purpose,
-                requires_response=(purpose in ["action", "approval"]),
-                routing_type="parallel",
-                parallel_group_id=parallel_group.id,
-                is_parallel_branch=True,
-                merge_strategy=merge_strategy,
-                from_office=correspondence.current_office,
-                to_office=office,
-                to_user=recipient_user,
-                branch_originator=recipient_user,
-            )
-
-            notification_recipient = recipient_user
-
-            NotificationService.create_notification(
-                recipient=notification_recipient,
-                title=f"Parallel Route - {correspondence.reference_number}",
-                message=f"{user.get_full_name() or user.username} has routed this correspondence to you in parallel. Purpose: {purpose.replace('_', ' ').title()}",
-                notification_type=Notification.NotificationType.CORRESPONDENCE,
-                priority=Notification.Priority.HIGH if correspondence.priority == Correspondence.Priority.URGENT else Notification.Priority.NORMAL,
-                sender=user,
-                module="correspondence",
-                related_object_type="correspondence",
-                related_object_id=str(correspondence.id),
-                action_url=f"/correspondence/{correspondence.id}",
-                action_required=(purpose in ["action", "approval"]),
-            )
-
-            created_minutes.append(minute)
-
-        correspondence.workflow_state = "parallel"
-        correspondence.active_parallel_branches = len(created_minutes)
-        correspondence.save(update_fields=["workflow_state", "active_parallel_branches"])
-
-        AuditService.log_correspondence_activity(
-            user=user,
-            action="parallel_route_created",
-            correspondence=correspondence,
+            parent_minute=parent_minute,
             request=request,
-            description=f"Created parallel route with {len(recipients)} branches",
-            metadata={
-                "parallel_group_id": str(parallel_group.id),
-                "merge_strategy": merge_strategy,
-                "branch_count": len(recipients),
-            },
         )
 
         serializer = self.get_serializer(created_minutes, many=True)

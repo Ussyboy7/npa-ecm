@@ -74,6 +74,7 @@ export function DocumentPreviewPanel({
   highlightQuery = "",
   matchField = "",
 }: DocumentPreviewPanelProps) {
+  const watermarkText = document.effectiveRights?.watermark_text || document.drmRights?.watermark_text || null;
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [documentSurface, setDocumentSurface] = useState<"preview" | "manage">("preview");
   const preferOcr =
@@ -309,6 +310,7 @@ export function DocumentPreviewPanel({
                             expanded={isPreviewFullscreen}
                             allowDownload={canDownload}
                             highlightQuery={isOcrMatchField(matchField) ? "" : highlightQuery}
+                            watermarkText={watermarkText}
                           />
                         </TabsContent>
                         <TabsContent value="ocr" className="mt-0 min-h-0 flex-1 overflow-y-auto">
@@ -326,6 +328,7 @@ export function DocumentPreviewPanel({
                         expanded={isPreviewFullscreen}
                         allowDownload={canDownload}
                         highlightQuery={highlightQuery}
+                        watermarkText={watermarkText}
                       />
                     )
                   ) : (

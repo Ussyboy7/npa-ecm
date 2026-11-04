@@ -32,6 +32,8 @@ interface DistributionSelectorProps {
   onDistributionChange: (distribution: DistributionRecipient[]) => void;
   currentDivisionId?: string;
   currentDepartmentId?: string;
+  /** When true, only For Information (CC) — no parallel For Action */
+  ccOnly?: boolean;
 }
 
 const recipientKey = (recipient: DistributionRecipient): string => {
@@ -42,6 +44,7 @@ const recipientKey = (recipient: DistributionRecipient): string => {
 export const DistributionSelector = ({
   selectedDistribution,
   onDistributionChange,
+  ccOnly = false,
 }: DistributionSelectorProps) => {
   const { currentUser } = useCurrentUser();
   const { offices, divisions, departments: _departments, directorates } = useOrganization();
@@ -71,7 +74,7 @@ export const DistributionSelector = ({
     type: "office",
     officeId: office.id,
     name: office.name,
-    purpose,
+    purpose: ccOnly ? "information" : purpose,
   });
 
   const filteredOfficeOptions = useMemo(() => {
@@ -110,8 +113,9 @@ export const DistributionSelector = ({
   }, [users, currentUser?.id, selectedKeys, personSearchQuery]);
 
   const addDistribution = (recipient: DistributionRecipient, meta?: string) => {
-    if (recipient.type === "user" && recipient.purpose === "action" && !canCreateParallelRouting) return;
-    onDistributionChange([...selectedDistribution, recipient]);
+    const entry = ccOnly ? { ...recipient, purpose: "information" as const } : recipient;
+    if (entry.type === "user" && entry.purpose === "action" && !canCreateParallelRouting) return;
+    onDistributionChange([...selectedDistribution, entry]);
     setLastAdded({
       type: recipient.type === "user" ? "person" : "office",
       name: recipient.name || "Recipient",
@@ -277,6 +281,8 @@ export const DistributionSelector = ({
           </div>
 
           <div className="space-y-2">
+            {!ccOnly && (
+            <>
             <Label className="text-xs text-muted-foreground flex items-center gap-1">
               <FileText className="h-3 w-3" /> Purpose
             </Label>
@@ -299,6 +305,8 @@ export const DistributionSelector = ({
                 </SelectItem>
               </SelectContent>
             </Select>
+            </>
+            )}
           </div>
         </div>
 

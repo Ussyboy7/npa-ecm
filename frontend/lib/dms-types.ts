@@ -6,6 +6,23 @@ export type DocumentStatus = 'draft' | 'published' | 'archived';
 export type DocumentSensitivity = 'public' | 'internal' | 'confidential' | 'restricted';
 export type PermissionAccess = 'read' | 'write' | 'admin';
 
+export interface EffectiveDocumentRights {
+  access_level: PermissionAccess | null;
+  can_view: boolean;
+  can_download: boolean;
+  can_print: boolean;
+  can_replace_version: boolean;
+  can_manage_sharing: boolean;
+  can_archive: boolean;
+  allow_download: boolean;
+  allow_print: boolean;
+  allow_external_share: boolean;
+  view_only: boolean;
+  expired: boolean;
+  watermark_text: string;
+  message: string;
+}
+
 export interface DocumentPermission {
   id?: string;
   access: PermissionAccess;
@@ -94,6 +111,7 @@ export interface DocumentRecord {
     expired: boolean;
     message: string;
   };
+  effectiveRights?: EffectiveDocumentRights;
   form_document?: {
     id: string;
     template?: {
@@ -491,6 +509,26 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
           watermark_text: String(item.drm_rights.watermark_text ?? ''),
           expired: Boolean(item.drm_rights.expired),
           message: String(item.drm_rights.message ?? ''),
+        }
+      : undefined,
+    effectiveRights: isRecord(item.effective_rights)
+      ? {
+          access_level: ['read', 'write', 'admin'].includes(String(item.effective_rights.access_level))
+            ? String(item.effective_rights.access_level) as PermissionAccess
+            : null,
+          can_view: Boolean(item.effective_rights.can_view),
+          can_download: Boolean(item.effective_rights.can_download),
+          can_print: Boolean(item.effective_rights.can_print),
+          can_replace_version: Boolean(item.effective_rights.can_replace_version),
+          can_manage_sharing: Boolean(item.effective_rights.can_manage_sharing),
+          can_archive: Boolean(item.effective_rights.can_archive),
+          allow_download: Boolean(item.effective_rights.allow_download),
+          allow_print: Boolean(item.effective_rights.allow_print),
+          allow_external_share: Boolean(item.effective_rights.allow_external_share),
+          view_only: Boolean(item.effective_rights.view_only),
+          expired: Boolean(item.effective_rights.expired),
+          watermark_text: String(item.effective_rights.watermark_text ?? ''),
+          message: String(item.effective_rights.message ?? ''),
         }
       : undefined,
     correspondence_links: Array.isArray(item.correspondence_links)

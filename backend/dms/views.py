@@ -341,6 +341,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
             return qs.distinct()
 
         visibility_filter = Q(author=user) | Q(permissions__users=user)
+        visibility_filter |= Q(
+            permissions__offices__memberships__user=user,
+            permissions__offices__memberships__is_active=True,
+        )
 
         if user.division_id:
             visibility_filter |= Q(permissions__divisions=user.division_id)
@@ -685,7 +689,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="drm-rights")
     def drm_rights(self, request, pk=None):
         document = self.get_object()
-        return Response(resolve_document_rights(document, request.user))
+        from .drm import resolve_effective_document_rights
+
+        return Response(resolve_effective_document_rights(document, request.user))
 
 
 class DocumentVersionViewSet(viewsets.ModelViewSet):
@@ -698,6 +704,13 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
     filterset_fields = ["document"]
     ordering_fields = ["uploaded_at", "version_number"]
     ordering = ["-version_number"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset().filter(document__is_deleted=False)
+        document_view = DocumentViewSet()
+        document_view.request = self.request
+        visible_document_ids = document_view.get_queryset().values("id")
+        return queryset.filter(document_id__in=visible_document_ids)
 
     def _load_version_payload(self, version) -> tuple[bytes, str, str]:
         """Return (bytes, file_name, content_type) for a version file or HTML body."""
@@ -1113,17 +1126,35 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
 
 
 class DocumentPermissionViewSet(viewsets.ModelViewSet):
-    queryset = DocumentPermission.objects.prefetch_related("divisions", "departments", "users")
+    queryset = DocumentPermission.objects.prefetch_related("divisions", "departments", "offices", "users")
     serializer_class = DocumentPermissionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["document", "access"]
 
-    def create(self, request, *args, **kwargs):
-        """Create document permission and send notifications."""
+    def get_queryset(self):
+        queryset = super().get_queryset().filter(document__is_deleted=False)
+        user = self.request.user
+        if user.is_superuser:
+            return queryset
+        return queryset.filter(
+            Q(document__author=user)
+            | Q(document__permissions__users=user, document__permissions__access=DocumentPermission.AccessLevel.ADMIN)
+            | Q(
+                document__permissions__offices__memberships__user=user,
+                document__permissions__offices__memberships__is_active=True,
+                document__permissions__access=DocumentPermission.AccessLevel.ADMIN,
+            )
+        ).distinct()
+
+    def _require_share_permission(self):
         from organization.permission_utils import require_permission
 
-        require_permission(request.user, "can_share_documents")
+        require_permission(self.request.user, "can_share_documents")
+
+    def create(self, request, *args, **kwargs):
+        """Create document permission and send notifications."""
+        self._require_share_permission()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -1135,13 +1166,14 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         user_ids = serializer.validated_data.get("user_ids", [])
         division_ids = serializer.validated_data.get("division_ids", [])
         department_ids = serializer.validated_data.get("department_ids", [])
+        office_ids = serializer.validated_data.get("office_ids", [])
         
         # Create permission
         permission = serializer.save()
         
         # Get all users who should be notified
         from accounts.models import User
-        from organization.models import Division, Department
+        from organization.models import Division, Department, Office
         
         notified_users = set()
         
@@ -1162,6 +1194,17 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
             departments = Department.objects.filter(id__in=department_ids)
             for department in departments:
                 users = User.objects.filter(department=department, is_active=True)
+                notified_users.update(users)
+
+        # Add users belonging to selected offices only.
+        if office_ids:
+            offices = Office.objects.filter(id__in=office_ids)
+            for office in offices:
+                users = User.objects.filter(
+                    office_memberships__office=office,
+                    office_memberships__is_active=True,
+                    is_active=True,
+                )
                 notified_users.update(users)
         
         # Build notification message with note if provided
@@ -1195,6 +1238,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
             "user_count": len(user_ids) if user_ids else 0,
             "division_count": len(division_ids) if division_ids else 0,
             "department_count": len(department_ids) if department_ids else 0,
+            "office_count": len(office_ids) if office_ids else 0,
             "access_level": access,
         }
         if note:
@@ -1215,16 +1259,16 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="share-to-all")
     def share_to_all(self, request):
         """Share document with all active users in the system."""
-        from organization.permission_utils import require_permission
-
-        require_permission(request.user, "can_share_documents")
+        self._require_share_permission()
         document_id = request.data.get("document")
         access = request.data.get("access", "read")
         note = request.data.get("note", "")
         
         if not document_id:
             raise ValidationError({"document": "Document ID is required"})
-        
+        if access not in DocumentPermission.AccessLevel.values:
+            raise ValidationError({"access": "Invalid document access level"})
+
         try:
             document = Document.objects.select_related("drm_policy").get(id=document_id)
         except Document.DoesNotExist:
@@ -1297,6 +1341,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         """Update document permission (e.g., change access level)."""
+        self._require_share_permission()
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
@@ -1324,6 +1369,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """Delete document permission."""
+        self._require_share_permission()
         instance = self.get_object()
         document = instance.document
         

@@ -16,7 +16,7 @@ Guidance for AI agents working in this repository.
   - `scripts/ci/` — `run-backend-tests.sh`, `run-local-ci.sh`, `validate-compose.sh`
   - Do **not** add new per-env script sprawl. Add subcommands to `env-manager.sh` instead.
 - Docker Compose at repo root: `compose.yaml` (local default), `docker-compose.{local,stag,prod}.yml`
-- Project names: `npa-ecm-local`, `npa-ecm-stag` (do not run staging on macOS; use remote server)
+- Project names: `npa-ecm` (local), `npa-ecm-stag` (do not run staging on macOS; use remote server)
 
 ## Environment files
 

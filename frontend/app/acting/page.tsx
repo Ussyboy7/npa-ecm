@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -49,6 +50,16 @@ function formatDate(value: string | null): string {
   return formatDateLong(value);
 }
 
+function toISODateTime(dateStr: string, endOfDay: boolean): string | undefined {
+  if (!dateStr) return undefined;
+  const suffix = endOfDay ? "T23:59:59" : "T00:00:00";
+  try {
+    return new Date(`${dateStr}${suffix}`).toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
 export default function ActingSelfServicePage() {
   const { offices, officeMemberships } = useOrganization();
   const { currentUser } = useCurrentUser();
@@ -62,12 +73,21 @@ export default function ActingSelfServicePage() {
   const [submitting, setSubmitting] = useState(false);
   const [endingId, setEndingId] = useState<string | null>(null);
 
-  const [officeId, setOfficeId] = useState("");
-  const [actingUserId, setActingUserId] = useState("");
-  const [endsAt, setEndsAt] = useState("");
-  const [reason, setReason] = useState("");
-  const [candidates, setCandidates] = useState<ActingCandidate[]>([]);
-  const [suggestedId, setSuggestedId] = useState("");
+  // Appoint form state (isolated from request form)
+  const [appointOfficeId, setAppointOfficeId] = useState("");
+  const [appointActingUserId, setAppointActingUserId] = useState("");
+  const [appointStartsAt, setAppointStartsAt] = useState("");
+  const [appointEndsAt, setAppointEndsAt] = useState("");
+  const [appointReason, setAppointReason] = useState("");
+  const [appointCandidates, setAppointCandidates] = useState<ActingCandidate[]>([]);
+  const [appointCandidatesLoading, setAppointCandidatesLoading] = useState(false);
+
+  // Request form state
+  const [requestOfficeId, setRequestOfficeId] = useState("");
+  const [requestSuggestedId, setRequestSuggestedId] = useState("");
+  const [requestReason, setRequestReason] = useState("");
+  const [requestCandidates, setRequestCandidates] = useState<ActingCandidate[]>([]);
+  const [requestCandidatesLoading, setRequestCandidatesLoading] = useState(false);
 
   const myMemberships = useMemo(
     () =>
@@ -114,57 +134,104 @@ export default function ActingSelfServicePage() {
     void load();
   }, [load]);
 
+  // Fetch candidates for appoint dialog
   useEffect(() => {
-    if (!officeId) {
-      setCandidates([]);
+    if (!appointOfficeId) {
+      setAppointCandidates([]);
       return;
     }
     let ignore = false;
+    setAppointCandidatesLoading(true);
     const run = async () => {
       try {
-        const list = await getEligibleActingCandidates({ office: officeId });
+        const list = await getEligibleActingCandidates({ office: appointOfficeId });
         if (!ignore) {
-          setCandidates(list);
-          setActingUserId("");
-          setSuggestedId("");
+          setAppointCandidates(list);
+          setAppointActingUserId("");
         }
       } catch (err) {
-        logError("Failed to load candidates", err);
-        if (!ignore) setCandidates([]);
+        logError("Failed to load appoint candidates", err);
+        if (!ignore) setAppointCandidates([]);
+      } finally {
+        if (!ignore) setAppointCandidatesLoading(false);
       }
     };
     void run();
     return () => {
       ignore = true;
     };
-  }, [officeId]);
+  }, [appointOfficeId]);
 
-  const resetForms = () => {
-    setOfficeId("");
-    setActingUserId("");
-    setSuggestedId("");
-    setEndsAt("");
-    setReason("");
-    setCandidates([]);
+  // Fetch candidates for request dialog
+  useEffect(() => {
+    if (!requestOfficeId) {
+      setRequestCandidates([]);
+      return;
+    }
+    let ignore = false;
+    setRequestCandidatesLoading(true);
+    const run = async () => {
+      try {
+        const list = await getEligibleActingCandidates({ office: requestOfficeId });
+        if (!ignore) {
+          setRequestCandidates(list);
+          setRequestSuggestedId("");
+        }
+      } catch (err) {
+        logError("Failed to load request candidates", err);
+        if (!ignore) setRequestCandidates([]);
+      } finally {
+        if (!ignore) setRequestCandidatesLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [requestOfficeId]);
+
+  const resetAppointForm = () => {
+    setAppointOfficeId("");
+    setAppointActingUserId("");
+    setAppointStartsAt("");
+    setAppointEndsAt("");
+    setAppointReason("");
+    setAppointCandidates([]);
+  };
+
+  const resetRequestForm = () => {
+    setRequestOfficeId("");
+    setRequestSuggestedId("");
+    setRequestReason("");
+    setRequestCandidates([]);
   };
 
   const handleAppoint = async () => {
-    if (!officeId || !actingUserId) {
+    if (!appointOfficeId || !appointActingUserId) {
       toast({ title: "Office and acting officer are required", variant: "destructive" });
+      return;
+    }
+    if (appointStartsAt && appointEndsAt && appointStartsAt > appointEndsAt) {
+      toast({ title: "Start date must be before end date", variant: "destructive" });
+      return;
+    }
+    if (!appointReason.trim()) {
+      toast({ title: "Reason is required", variant: "destructive" });
       return;
     }
     setSubmitting(true);
     try {
       await appointActing({
-        office: officeId,
+        office: appointOfficeId,
         principal: currentUser?.id,
-        actingUser: actingUserId,
-        endsAt: endsAt ? new Date(`${endsAt}T23:59:59`).toISOString() : undefined,
-        reason: reason.trim() || "Planned leave",
+        actingUser: appointActingUserId,
+        startsAt: toISODateTime(appointStartsAt, false),
+        endsAt: toISODateTime(appointEndsAt, true),
+        reason: appointReason.trim(),
       });
       toast({ title: "Acting officer appointed" });
       setAppointOpen(false);
-      resetForms();
+      resetAppointForm();
       await load();
     } catch (err) {
       logError("Appoint failed", err);
@@ -179,20 +246,20 @@ export default function ActingSelfServicePage() {
   };
 
   const handleRequest = async () => {
-    if (!officeId || !reason.trim()) {
+    if (!requestOfficeId || !requestReason.trim()) {
       toast({ title: "Office and reason are required", variant: "destructive" });
       return;
     }
     setSubmitting(true);
     try {
       await createActingRequest({
-        office: officeId,
-        suggestedActingUser: suggestedId || undefined,
-        reason: reason.trim(),
+        office: requestOfficeId,
+        suggestedActingUser: requestSuggestedId || undefined,
+        reason: requestReason.trim(),
       });
       toast({ title: "Request sent to Super Admin" });
       setRequestOpen(false);
-      resetForms();
+      resetRequestForm();
       await load();
     } catch (err) {
       logError("Request failed", err);
@@ -225,6 +292,8 @@ export default function ActingSelfServicePage() {
     officeMemberships.find((m) => String(m.officeId) === officeIdValue)?.officeName ||
     officeIdValue;
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   if (!currentUser) {
     return (
       <QueuePageShell title="Acting capacity" subtitle="Office seat succession">
@@ -248,7 +317,7 @@ export default function ActingSelfServicePage() {
               open={appointOpen}
               onOpenChange={(open) => {
                 setAppointOpen(open);
-                if (!open) resetForms();
+                if (!open) resetAppointForm();
               }}
             >
               <DialogTrigger asChild>
@@ -260,12 +329,15 @@ export default function ActingSelfServicePage() {
               <DialogContent size="md">
                 <DialogHeader>
                   <DialogTitle>Appoint acting for your seat</DialogTitle>
+                  <DialogDescription>
+                    Select the office, dates, and colleague who will hold your seat. Candidates are drawn from the same department, division, or directorate.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
                   <div className="space-y-2">
-                    <Label>Your office</Label>
-                    <Select value={officeId} onValueChange={setOfficeId}>
-                      <SelectTrigger>
+                    <Label htmlFor="appoint-office">Your office</Label>
+                    <Select value={appointOfficeId} onValueChange={setAppointOfficeId}>
+                      <SelectTrigger id="appoint-office">
                         <SelectValue placeholder="Select office" />
                       </SelectTrigger>
                       <SelectContent>
@@ -278,35 +350,55 @@ export default function ActingSelfServicePage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Acting officer</Label>
+                    <Label htmlFor="appoint-officer">Acting officer</Label>
                     <Select
-                      value={actingUserId}
-                      onValueChange={setActingUserId}
-                      disabled={!officeId || candidates.length === 0}
+                      value={appointActingUserId}
+                      onValueChange={setAppointActingUserId}
+                      disabled={!appointOfficeId || appointCandidatesLoading}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select colleague" />
+                      <SelectTrigger id="appoint-officer">
+                        <SelectValue placeholder={appointCandidatesLoading ? "Loading colleagues…" : appointCandidates.length === 0 && appointOfficeId ? "No eligible officers found" : "Select colleague"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {candidates.map((c) => (
+                        {appointCandidates.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
                             {c.name}
-                            {c.gradeLevel ? ` (${c.gradeLevel})` : ""}
+                            {c.gradeLevel ? ` — ${c.gradeLevel}` : ""}
+                            {c.officeName ? ` · ${c.officeName}` : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {appointOfficeId && !appointCandidatesLoading && appointCandidates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No eligible officers found in this office hierarchy. Officers must hold an active membership in the same department, division, or directorate.
+                      </p>
+                    ) : null}
+                    {appointCandidates.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {appointCandidates.length} officer{appointCandidates.length !== 1 ? "s" : ""} available from same directorate/division/department.
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="appoint-starts">Starts on</Label>
+                      <Input id="appoint-starts" type="date" value={appointStartsAt} min={todayStr} onChange={(e) => setAppointStartsAt(e.target.value)} />
+                      <p className="text-[11px] text-muted-foreground">Defaults to now if left empty.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="appoint-ends">Ends on</Label>
+                      <Input id="appoint-ends" type="date" value={appointEndsAt} min={appointStartsAt || todayStr} onChange={(e) => setAppointEndsAt(e.target.value)} />
+                      <p className="text-[11px] text-muted-foreground">Leave empty for open-ended.</p>
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Ends on (optional)</Label>
-                    <Input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Reason</Label>
+                    <Label htmlFor="appoint-reason">Reason</Label>
                     <Textarea
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      placeholder="Leave, assignment…"
+                      id="appoint-reason"
+                      value={appointReason}
+                      onChange={(e) => setAppointReason(e.target.value)}
+                      placeholder="Leave, annual assignment, training…"
                       rows={3}
                     />
                   </div>
@@ -328,7 +420,7 @@ export default function ActingSelfServicePage() {
               open={requestOpen}
               onOpenChange={(open) => {
                 setRequestOpen(open);
-                if (!open) resetForms();
+                if (!open) resetRequestForm();
               }}
             >
               <DialogTrigger asChild>
@@ -340,15 +432,15 @@ export default function ActingSelfServicePage() {
               <DialogContent size="md">
                 <DialogHeader>
                   <DialogTitle>Request acting appointment</DialogTitle>
+                  <DialogDescription>
+                    Use this when the seat holder is unreachable. Super Admin will review and appoint.
+                  </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm text-muted-foreground">
-                  Use this when the seat holder is unreachable. Super Admin will review and appoint.
-                </p>
                 <div className="space-y-4 py-2">
                   <div className="space-y-2">
-                    <Label>Office</Label>
-                    <Select value={officeId} onValueChange={setOfficeId}>
-                      <SelectTrigger>
+                    <Label htmlFor="request-office">Office</Label>
+                    <Select value={requestOfficeId} onValueChange={setRequestOfficeId}>
+                      <SelectTrigger id="request-office">
                         <SelectValue placeholder="Select office" />
                       </SelectTrigger>
                       <SelectContent>
@@ -361,30 +453,35 @@ export default function ActingSelfServicePage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Suggested acting officer (optional)</Label>
+                    <Label htmlFor="request-suggested">Suggested acting officer (optional)</Label>
                     <Select
-                      value={suggestedId || "none"}
-                      onValueChange={(v) => setSuggestedId(v === "none" ? "" : v)}
-                      disabled={!officeId}
+                      value={requestSuggestedId || "none"}
+                      onValueChange={(v) => setRequestSuggestedId(v === "none" ? "" : v)}
+                      disabled={!requestOfficeId || requestCandidatesLoading}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Optional suggestion" />
+                      <SelectTrigger id="request-suggested">
+                        <SelectValue placeholder={requestCandidatesLoading ? "Loading…" : "Optional suggestion"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">No suggestion</SelectItem>
-                        {candidates.map((c) => (
+                        {requestCandidates.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
                             {c.name}
+                            {c.officeName ? ` · ${c.officeName}` : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {requestOfficeId && !requestCandidatesLoading && requestCandidates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No eligible officers found in hierarchy.</p>
+                    ) : null}
                   </div>
                   <div className="space-y-2">
-                    <Label>Reason</Label>
+                    <Label htmlFor="request-reason">Reason</Label>
                     <Textarea
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
+                      id="request-reason"
+                      value={requestReason}
+                      onChange={(e) => setRequestReason(e.target.value)}
                       placeholder="Seat holder unreachable, leave without handover, backlog…"
                       rows={3}
                     />
@@ -432,9 +529,10 @@ export default function ActingSelfServicePage() {
                     </div>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <p>
-                        {appt.officeName} · until {formatDate(appt.endsAt)} ·{" "}
+                        {appt.officeName} · {formatDate(appt.startsAt)} → {formatDate(appt.endsAt)} ·{" "}
                         {appt.itemsTransferred} items transferred
                       </p>
+                      {appt.reason ? <p className="text-xs">Reason: {appt.reason.split("\n")[0]}</p> : null}
                     </div>
                   </div>
                 ))}
@@ -446,7 +544,7 @@ export default function ActingSelfServicePage() {
                           {appt.actingUserName} is acting for you
                         </p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {appt.officeName} · until {formatDate(appt.endsAt)}
+                          {appt.officeName} · {formatDate(appt.startsAt)} → {formatDate(appt.endsAt)}
                         </p>
                       </div>
                       <Badge>Active</Badge>
@@ -504,8 +602,6 @@ export default function ActingSelfServicePage() {
           </TabsContent>
         </Tabs>
       )}
-
-      {/* silence unused */}
     </QueuePageShell>
   );
 }

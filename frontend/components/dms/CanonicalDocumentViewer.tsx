@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import mammoth from "mammoth";
+import { convertDocxArrayBufferToHtml } from "@/lib/docx-to-html";
 import { Loader2, AlertCircle } from "lucide-react";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import { sanitizeRichText } from "@/lib/sanitize-html";
@@ -93,9 +93,9 @@ export function CanonicalDocumentViewer({
         if (isPDF) {
           setPdfBytes(await blob.arrayBuffer());
         } else if (isDocx) {
-          const result = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+          const html = await convertDocxArrayBufferToHtml(await blob.arrayBuffer());
           if (cancelled) return;
-          setWordHtml(result.value);
+          setWordHtml(html);
         } else if (blob.type.includes("html") || fileName.toLowerCase().endsWith(".html")) {
           setHtmlBody(await blob.text());
         } else {

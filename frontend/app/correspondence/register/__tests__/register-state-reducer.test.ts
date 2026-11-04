@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { registerReducer, createInitialState, RegisterState } from '../register-state-reducer';
 import type { RegisterAction } from '../register-state-reducer';
+import { createInitialRoutingConfig } from '../register-utils';
 
 const baseState: RegisterState = {
   currentStep: 'basics',
@@ -36,6 +37,7 @@ const baseState: RegisterState = {
     divisions: [],
     departments: [],
   },
+  routingConfig: createInitialRoutingConfig(),
   ui: {
     assignSearch: '',
     officeSearch: '',

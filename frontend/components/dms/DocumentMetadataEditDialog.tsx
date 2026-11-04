@@ -64,13 +64,16 @@ const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+const EMPTY_DIVISIONS: Division[] = [];
+const EMPTY_DEPARTMENTS: Department[] = [];
+
 export const DocumentMetadataEditDialog = ({
   open,
   onOpenChange,
   document,
   onDocumentUpdate,
-  divisions = [],
-  departments = [],
+  divisions = EMPTY_DIVISIONS,
+  departments = EMPTY_DEPARTMENTS,
 }: DocumentMetadataEditDialogProps) => {
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({
     title: '',

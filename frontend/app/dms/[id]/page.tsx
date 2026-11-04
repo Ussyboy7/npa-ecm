@@ -1,7 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { SearchHighlightBanner } from '@/components/search/SearchHighlightBanner';
 import {
@@ -21,10 +21,10 @@ import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog'
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import {
   fetchDocumentById,
+  getDocumentComments,
   getDocumentAccessLogs,
   downloadDocumentVersion,
   canDownloadDocument,
-  canShareDocument,
   type DocumentRecord,
   type DocumentVersion,
   type DocumentAccessLog,
@@ -33,14 +33,13 @@ import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { DocumentMobileTabBar, DocumentWorkspace } from '@/app/dms/[id]/components/DocumentWorkspace';
 import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
-import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { unlinkDocumentFromCase } from '@/lib/api/cases';
 import { DocumentHeader } from '@/components/dms/DocumentHeader';
+import { DocumentMetadataEditDialog } from '@/components/dms/DocumentMetadataEditDialog';
 import { DocumentStatusStrip } from '@/components/dms/DocumentStatusStrip';
 import { AccessActivityDetailsDialog } from '@/components/dms/AccessActivityDetailsDialog';
 import { useDocumentDetail } from '@/app/dms/[id]/hooks/use-document-detail';
 import { useDocumentOcr } from '@/app/dms/[id]/hooks/use-document-ocr';
-import { Correspondence } from '@/lib/npa-structure';
 import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -72,15 +71,24 @@ const DocumentDetailContent = () => {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [versionUploadOpen, setVersionUploadOpen] = useState(false);
   const [linkCaseDialogOpen, setLinkCaseDialogOpen] = useState(false);
-  const [minuteDocumentModalOpen, setMinuteDocumentModalOpen] = useState(false);
   const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
   const [replaceVersionId, setReplaceVersionId] = useState<string | null>(null);
-  const [minuteDocumentCorrespondence, setMinuteDocumentCorrespondence] = useState<Correspondence | null>(null);
   const [selectedAccessLog, setSelectedAccessLog] = useState<DocumentAccessLog | null>(null);
   const [mobileActiveTab, setMobileActiveTab] = useState<'document' | 'details'>('document');
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [documentFocus, setDocumentFocus] = useState(false);
+  const [metadataEditOpen, setMetadataEditOpen] = useState(false);
+  const [unreadComments, setUnreadComments] = useState(0);
+  const seenCommentsRef = useRef<number | null>(null);
+  const notifiedCommentsRef = useRef(0);
+
+  // Mark known comments as seen (resets unread count and notification baseline).
+  const markCommentsSeen = useCallback(() => {
+    seenCommentsRef.current = comments.length;
+    notifiedCommentsRef.current = comments.length;
+    setUnreadComments(0);
+  }, [comments.length]);
 
   const { currentUser, hydrated } = useCurrentUser();
   const { result: accessExplanation, loading: accessExplanationLoading } = useAccessExplanation(
@@ -133,8 +141,9 @@ const DocumentDetailContent = () => {
 
   // Memoize open comments dialog handler
   const handleOpenCommentsDialog = useCallback(() => {
+    markCommentsSeen();
     setCommentsDialogOpen(true);
-  }, []);
+  }, [markCommentsSeen]);
 
   // Get user initials for avatar
   const getUserInitials = (userId: string) => {
@@ -160,6 +169,46 @@ const DocumentDetailContent = () => {
     return versions[0];
   }, [versions, selectedVersionId]);
 
+  // ---- Comments live updates (polling + unread + toast) ----
+  useEffect(() => {
+    if (!document?.id) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const latest = await getDocumentComments(document.id);
+        if (cancelled) return;
+        setComments(latest);
+        const count = latest.length;
+        if (seenCommentsRef.current === null) {
+          seenCommentsRef.current = count;
+          notifiedCommentsRef.current = count;
+          return;
+        }
+        if (count > seenCommentsRef.current) {
+          setUnreadComments(count - seenCommentsRef.current);
+        }
+        if (count > notifiedCommentsRef.current) {
+          notifiedCommentsRef.current = count;
+          const newCount = count - seenCommentsRef.current;
+          toast.info(
+            `${newCount} new comment${newCount === 1 ? "" : "s"} on “${
+              document.title || "document"
+            }”`,
+            { id: "document-new-comment" },
+          );
+        }
+      } catch {
+        /* ignore transient poll errors */
+      }
+    };
+    void poll();
+    const id = window.setInterval(poll, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [document?.id, document?.title, setComments]);
+
   const handleDownloadVersion = useCallback(async (version: DocumentVersion | null | undefined) => {
     if (!document) return;
     if (!canDownloadDocument(document)) {
@@ -181,11 +230,6 @@ const DocumentDetailContent = () => {
   const handleDownloadLatest = useCallback(() => {
     void handleDownloadVersion(selectedVersion);
   }, [handleDownloadVersion, selectedVersion]);
-
-  const handleOpenFullscreen = useCallback((version?: DocumentVersion | null) => {
-    const target = version ?? selectedVersion;
-    if (target) setPreviewVersion(target);
-  }, [selectedVersion]);
 
   const handleSelectVersion = useCallback((version: DocumentVersion) => {
     setSelectedVersionId(version.id);
@@ -225,23 +269,6 @@ const DocumentDetailContent = () => {
             <div className="flex-shrink-0">
               <DocumentHeader
                 document={document}
-                author={author}
-                currentUser={currentUser}
-                divisionLookup={divisionLookup}
-                departmentLookup={departmentLookup}
-                divisions={divisions}
-                departments={departments}
-                hasLinkedCorrespondence={relatedCorrespondence.length > 0}
-                canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
-                canShare={canShareDocument(document)}
-                canFullscreen={Boolean(selectedVersion)}
-                onFullscreen={() => handleOpenFullscreen()}
-                onDownload={handleDownloadLatest}
-                onShare={openShareDialog}
-                onDocumentUpdate={(updated) => {
-                  setDocument(updated);
-                }}
-                onLinkCase={() => setLinkCaseDialogOpen(true)}
                 onUnlinkCase={async (caseId: string) => {
                   try {
                     await unlinkDocumentFromCase(caseId, document.id);
@@ -254,17 +281,6 @@ const DocumentDetailContent = () => {
                     logError("Failed to unlink document from case", err);
                     toast.error("Failed to unlink from case");
                   }
-                }}
-                onMinuteDocument={() => {
-                  if (!document || !currentUser) return;
-                  if (relatedCorrespondence.length === 0) {
-                    toast.error(
-                      'This document is not linked to any correspondence. Link it to a correspondence item to minute.'
-                    );
-                    return;
-                  }
-                  setMinuteDocumentCorrespondence(relatedCorrespondence[0].correspondence);
-                  setMinuteDocumentModalOpen(true);
                 }}
               />
 
@@ -298,7 +314,7 @@ const DocumentDetailContent = () => {
               ) : null}
 
               <DocumentMobileTabBar
-                commentsCount={comments.length}
+                commentsCount={unreadComments > 0 ? unreadComments : comments.length}
                 mobileActiveTab={mobileActiveTab}
                 onSetMobileActiveTab={setMobileActiveTab}
               />
@@ -356,6 +372,12 @@ const DocumentDetailContent = () => {
                   getUserInitials,
                   divisionNameById: divisionLookup,
                   departmentNameById: departmentLookup,
+                  unreadComments,
+                  onActiveTabChange: (tab) => {
+                    if (tab === "comments") markCommentsSeen();
+                  },
+                  onEditMetadata: () => setMetadataEditOpen(true),
+                  onLinkCase: () => setLinkCaseDialogOpen(true),
                 }}
               />
             </div>
@@ -380,6 +402,17 @@ const DocumentDetailContent = () => {
               setComments(updatedComments);
             }}
           />
+
+      {metadataEditOpen && document && (
+        <DocumentMetadataEditDialog
+          open={metadataEditOpen}
+          onOpenChange={setMetadataEditOpen}
+          document={document}
+          onDocumentUpdate={(updated) => {
+            setDocument(updated);
+          }}
+        />
+      )}
 
       {hydrated && uploadUser && document && versionUploadOpen && (
         <DocumentUploadDialog
@@ -408,23 +441,6 @@ const DocumentDetailContent = () => {
         }}
         />
       )}
-      {minuteDocumentCorrespondence && (
-        <MinuteModal
-          correspondence={minuteDocumentCorrespondence}
-          isOpen={minuteDocumentModalOpen}
-          onClose={() => {
-            setMinuteDocumentModalOpen(false);
-            setMinuteDocumentCorrespondence(null);
-            if (document) {
-              void fetchDocumentById(document.id).then(setDocument).catch((err) => {
-                logError('Failed to refresh document', err);
-              });
-            }
-          }}
-          direction="upward"
-        />
-      )}
-
       {linkCaseDialogOpen && document && (
         <LinkCaseDialog
           open={linkCaseDialogOpen}

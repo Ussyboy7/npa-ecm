@@ -826,13 +826,17 @@ class CaseViewSet(viewsets.ModelViewSet):
             due_date_raw = request.data.get("due_date")
             required_approval_level_raw = (request.data.get("required_approval_level") or "").strip().lower()
 
+            parallel_recipients = request.data.get("parallel_recipients") or []
+            merge_strategy = request.data.get("merge_strategy", "all")
+            use_parallel = isinstance(parallel_recipients, list) and len(parallel_recipients) >= 2
+
             if not subject:
                 raise ValidationError({"subject": "subject is required for REFER"})
-            if not target_office_raw:
+            if not use_parallel and not target_office_raw:
                 raise ValidationError({"target_office": "target_office is required"})
             # Resolve target office
-            target_office = _resolve_office(target_office_raw)
-            if not target_office:
+            target_office = _resolve_office(target_office_raw) if target_office_raw else None
+            if not use_parallel and not target_office:
                 raise ValidationError({"target_office": f"Office not found: {target_office_raw}"})
             attention_user = _resolve_user(attention_raw) if attention_raw else None
             # Parse cc list
@@ -858,6 +862,12 @@ class CaseViewSet(viewsets.ModelViewSet):
             if not body:
                 body = f"<p>Audit query <strong>{case.title}</strong> certified by GM Audit — forwarded for your explanation/action.</p><p>Case: {case.case_number}</p>"
 
+            refer_label = (
+                f"parallel ({len(parallel_recipients)} branches)"
+                if use_parallel
+                else (target_office.code if target_office else None)
+            )
+
             # Atomic creation + link + transition
             with transaction.atomic():
                 # Resolve owning office for correspondence (audit office)
@@ -867,8 +877,8 @@ class CaseViewSet(viewsets.ModelViewSet):
                     from organization.models import OfficeMembership
                     mem = OfficeMembership.objects.filter(user=request.user, is_active=True).select_related("office").first()
                     owning_office = mem.office if mem else target_office
-                division = target_office.division or case.division
-                department = target_office.department or case.department
+                division = (target_office.division if target_office else None) or case.division
+                department = (target_office.department if target_office else None) or case.department
                 ref = _generate_corr_reference(case)
                 # Determine priority
                 prio = Correspondence.Priority.HIGH if action_required else Correspondence.Priority.MEDIUM
@@ -881,11 +891,11 @@ class CaseViewSet(viewsets.ModelViewSet):
                     priority=prio,
                     direction=Correspondence.Direction.DOWNWARD,
                     owning_office=owning_office,
-                    current_office=target_office,
+                    current_office=owning_office if use_parallel else target_office,
                     division=division,
                     department=department,
                     created_by=request.user,
-                    current_approver=attention_user,
+                    current_approver=attention_user if not use_parallel else None,
                     required_approval_level=required_approval_level,
                     case=case,
                 )
@@ -913,16 +923,36 @@ class CaseViewSet(viewsets.ModelViewSet):
                             )
                     except Exception:
                         pass
+                if use_parallel:
+                    from correspondence.services import ParallelBranchService
+
+                    ParallelBranchService.create_parallel_route(
+                        corr,
+                        request.user,
+                        parallel_recipients,
+                        merge_strategy=merge_strategy,
+                        request=request,
+                    )
+                refer_target_label = refer_label
                 # CaseCorrespondenceLink (also keep direct FK for edge integrity)
-                CaseCorrespondenceLink.objects.get_or_create(case=case, correspondence=corr, defaults={"is_primary": False, "notes": f"REFER to {target_office.code} action_required={action_required} due={due_date}"})
+                CaseCorrespondenceLink.objects.get_or_create(
+                    case=case,
+                    correspondence=corr,
+                    defaults={
+                        "is_primary": False,
+                        "notes": f"REFER to {refer_target_label} action_required={action_required} due={due_date}",
+                    },
+                )
 
                 meta = dict(case.metadata or {})
                 meta["audit_state"] = next_state
                 # Record REFER edge details
                 meta["last_refer"] = {
-                    "target_office": str(target_office.id),
-                    "target_office_code": target_office.code,
-                    "target_office_name": target_office.name,
+                    "target_office": str(target_office.id) if target_office else None,
+                    "target_office_code": target_office.code if target_office else None,
+                    "target_office_name": target_office.name if target_office else None,
+                    "parallel": use_parallel,
+                    "parallel_recipient_count": len(parallel_recipients) if use_parallel else 0,
                     "attention": str(attention_user.id) if attention_user else None,
                     "attention_username": getattr(attention_user, "username", "") if attention_user else None,
                     "cc": cc_list,
@@ -933,7 +963,7 @@ class CaseViewSet(viewsets.ModelViewSet):
                     "correspondence_reference": corr.reference_number,
                 }
                 # Also store top-level mirrors for banner convenience
-                meta["refer_target_office"] = target_office.code
+                meta["refer_target_office"] = target_office.code if target_office else "parallel"
                 meta["refer_due_date"] = due_date.isoformat() if due_date else None
                 meta["refer_correspondence_id"] = str(corr.id)
                 meta["refer_correspondence_reference"] = corr.reference_number
@@ -948,7 +978,7 @@ class CaseViewSet(viewsets.ModelViewSet):
                         "timestamp": timezone.now().isoformat(),
                         "correspondence_id": str(corr.id),
                         "correspondence_reference": corr.reference_number,
-                        "target_office": target_office.code,
+                        "target_office": target_office.code if target_office else "parallel",
                         "attention": str(attention_user.id) if attention_user else None,
                         "action_required": action_required,
                         "due_date": due_date.isoformat() if due_date else None,
@@ -966,7 +996,7 @@ class CaseViewSet(viewsets.ModelViewSet):
                         object_type="Case",
                         object_id=str(case.id),
                         object_repr=str(case),
-                        description=f"Case {case.case_number} REFER to {target_office.code} via {corr.reference_number}: {current_state} -> {next_state}",
+                        description=f"Case {case.case_number} REFER to {refer_label} via {corr.reference_number}: {current_state} -> {next_state}",
                         module="Case Management",
                         severity="info",
                     )
@@ -980,7 +1010,7 @@ class CaseViewSet(viewsets.ModelViewSet):
                         action=ActivityLog.ActionType.CORRESPONDENCE_CREATED,
                         correspondence=corr,
                         request=request,
-                        description=f"AUDIT REFER {case.case_number} -> {target_office.code} CORR {corr.reference_number}",
+                        description=f"AUDIT REFER {case.case_number} -> {refer_label} CORR {corr.reference_number}",
                     )
                 except Exception:
                     pass
@@ -991,7 +1021,7 @@ class CaseViewSet(viewsets.ModelViewSet):
             data["audit_action"] = action
             data["correspondence_id"] = str(corr.id)
             data["correspondence_reference"] = corr.reference_number
-            data["target_office"] = target_office.code
+            data["target_office"] = refer_label
             return Response(data)
 
         # RESPOND: target office responding via Correspondence reply, transitions AWAITING_RESPONSE -> RESPONSE_RECEIVED
@@ -1028,10 +1058,10 @@ class CaseViewSet(viewsets.ModelViewSet):
                         reply_subject = f"Re: {parent_corr.subject if parent_corr else case.title} — Response"
                     if not reply_body:
                         reply_body = f"<p>Response to audit query {case.case_number}</p>"
-                    owning_office = case.current_office or parent_corr.current_office if parent_corr else case.owning_office
-                    # Reply goes back to audit office
-                    audit_office = case.owning_office or case.current_office
-                    # Fallback to user office
+                    owning_office = parent_corr.current_office if parent_corr and parent_corr.current_office else case.current_office or case.owning_office
+                    # Reply goes back to audit office (original owner), not responder's office
+                    audit_office = (parent_corr.owning_office if parent_corr and parent_corr.owning_office else None) or case.owning_office or case.current_office
+                    # Fallback to user office only if no audit office can be determined
                     if not audit_office:
                         from organization.models import OfficeMembership
                         mem = OfficeMembership.objects.filter(user=request.user, is_active=True).select_related("office").first()

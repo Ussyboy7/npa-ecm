@@ -91,14 +91,16 @@ export function CaseFormPreviewDialog({
       <DialogContent size="2xl" height="fill">
         <DialogHeader>
           <DialogTitle className="pr-8 truncate">{title || titleHint || "Form preview"}</DialogTitle>
-          <DialogDescription className="flex items-center gap-2 flex-wrap">
-            Read-only preview of the linked form.
+          <div className="flex items-center gap-2 flex-wrap text-[13px] text-muted-foreground leading-snug">
+            <DialogDescription className="flex-1 min-w-0">
+              Read-only preview of the linked form.
+            </DialogDescription>
             {status ? (
               <Badge variant="secondary" className="text-[10px] h-5 capitalize">
                 {status.replace(/_/g, " ")}
               </Badge>
             ) : null}
-          </DialogDescription>
+          </div>
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">

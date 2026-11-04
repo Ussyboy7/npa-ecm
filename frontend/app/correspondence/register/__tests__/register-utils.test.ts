@@ -16,7 +16,10 @@ import {
   isValidEmail,
   validateFile,
   createInitialFormData,
+  createInitialRoutingConfig,
 } from '../register-utils';
+
+const emptyDistributions = { directorates: [], divisions: [], departments: [] };
 
 describe('generateReferenceNumber', () => {
   it('returns empty string — server generates HQ/<tier>/<division>/<dept>/<seq>', () => {
@@ -72,24 +75,18 @@ describe('validateStep', () => {
   const baseFormData = createInitialFormData();
 
   it('validates basics step for inward flow', () => {
-    const errors = validateStep('basics', { ...baseFormData, subject: '', owningOfficeId: '' }, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('basics', { ...baseFormData, subject: '', owningOfficeId: '' }, 'inward', [], emptyDistributions);
     expect(errors.subject).toBe('Subject is required');
     expect(errors.owningOfficeId).toBe('Please select an owning office');
   });
 
   it('validates basics step requires receivedDate for inward', () => {
-    const errors = validateStep('basics', { ...baseFormData, receivedDate: '' }, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('basics', { ...baseFormData, receivedDate: '' }, 'inward', [], emptyDistributions);
     expect(errors.receivedDate).toBe('Date received is required');
   });
 
   it('validates basics step requires letterDate and dispatchDate for outward', () => {
-    const errors = validateStep('basics', baseFormData, 'outward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('basics', baseFormData, 'outward', [], emptyDistributions);
     expect(errors.letterDate).toBe('Letter date is required');
     expect(errors.dispatchDate).toBe('Dispatch date is required');
   });
@@ -101,58 +98,48 @@ describe('validateStep', () => {
       owningOfficeId: 'office-1',
       receivedDate: '2025-03-01',
     };
-    const errors = validateStep('basics', validData, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('basics', validData, 'inward', [], emptyDistributions);
     expect(Object.keys(errors)).toHaveLength(0);
   });
 
   it('validates sender step for inward requires senderOrganization', () => {
-    const errors = validateStep('sender', baseFormData, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('sender', baseFormData, 'inward', [], emptyDistributions);
     expect(errors.senderOrganization).toBe('Sender organization/private entity is required');
   });
 
   it('validates sender step for outward requires recipientName', () => {
-    const errors = validateStep('sender', baseFormData, 'outward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('sender', baseFormData, 'outward', [], emptyDistributions);
     expect(errors.recipientName).toBe('Recipient name is required');
   });
 
   it('validates email in sender step', () => {
-    const errors = validateStep('sender', { ...baseFormData, senderEmail: 'invalid' }, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('sender', { ...baseFormData, senderEmail: 'invalid' }, 'inward', [], emptyDistributions);
     expect(errors.senderEmail).toBe('Please enter a valid email address');
   });
 
   it('validates routing step requires assignTo', () => {
-    const errors = validateStep('routing', baseFormData, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
-    expect(errors.assignTo).toBe('Please assign to an executive');
+    const errors = validateStep('routing', baseFormData, 'inward', [], emptyDistributions);
+    expect(errors.assignTo).toBe('Please select a route destination');
+  });
+
+  it('validates parallel routing requires at least two branches', () => {
+    const routing = { ...createInitialRoutingConfig(), routeMode: 'parallel' as const };
+    const errors = validateStep('routing', baseFormData, 'inward', [], emptyDistributions, 0, routing);
+    expect(errors.assignTo).toBe('Parallel routing requires at least two people or offices');
   });
 
   it('validates routing step requires distribution for outward', () => {
-    const errors = validateStep('routing', baseFormData, 'outward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('routing', baseFormData, 'outward', [], emptyDistributions);
     expect(errors.distribution).toBe('Select at least one directorate, division, or department');
   });
 
   it('validates documents step requires files', () => {
-    const errors = validateStep('documents', baseFormData, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('documents', baseFormData, 'inward', [], emptyDistributions);
     expect(errors.documentFiles).toBe('Please upload or select at least one source document');
   });
 
   it('documents step passes with files', () => {
-    const errors = validateStep('documents', baseFormData, 'inward', [new File([''], 'x.pdf')], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateStep('documents', baseFormData, 'inward', [new File([''], 'x.pdf')], emptyDistributions);
     expect(Object.keys(errors)).toHaveLength(0);
   });
 });
@@ -161,26 +148,20 @@ describe('validateFormData', () => {
   const base = createInitialFormData();
 
   it('returns errors for empty form', () => {
-    const errors = validateFormData(base, 'inward', [], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateFormData(base, 'inward', [], emptyDistributions);
     expect(errors.subject).toBe('Subject is required');
-    expect(errors.assignTo).toBe('Please assign to an executive');
+    expect(errors.assignTo).toBe('Please select a route destination');
     expect(errors.owningOfficeId).toBe('Please select an owning office');
     expect(errors.documentFiles).toBe('Please upload or select at least one source document');
   });
 
   it('requires senderOrganization for inward', () => {
-    const errors = validateFormData(base, 'inward', [new File([''], 'x.pdf')], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateFormData(base, 'inward', [new File([''], 'x.pdf')], emptyDistributions);
     expect(errors.senderOrganization).toBe('Sender organization/private entity is required');
   });
 
   it('requires recipientName and distribution for outward', () => {
-    const errors = validateFormData(base, 'outward', [new File([''], 'x.pdf')], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateFormData(base, 'outward', [new File([''], 'x.pdf')], emptyDistributions);
     expect(errors.recipientName).toBe('Recipient name is required');
     expect(errors.dispatchDate).toBe('Dispatch date is required');
     expect(errors.letterDate).toBe('Letter date is required');
@@ -189,9 +170,7 @@ describe('validateFormData', () => {
 
   it('validates email addresses', () => {
     const data = { ...base, senderEmail: 'bad', recipientEmail: 'also-bad' };
-    const errors = validateFormData(data, 'inward', [new File([''], 'x.pdf')], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateFormData(data, 'inward', [new File([''], 'x.pdf')], emptyDistributions);
     expect(errors.senderEmail).toBe('Please enter a valid email address');
     expect(errors.recipientEmail).toBe('Please enter a valid email address');
   });
@@ -205,9 +184,7 @@ describe('validateFormData', () => {
       senderOrganization: 'Org',
       receivedDate: '2025-03-01',
     };
-    const errors = validateFormData(valid, 'inward', [new File([''], 'x.pdf')], {
-      directorates: [], divisions: [], departments: [],
-    });
+    const errors = validateFormData(valid, 'inward', [new File([''], 'x.pdf')], emptyDistributions);
     expect(Object.keys(errors)).toHaveLength(0);
   });
 });

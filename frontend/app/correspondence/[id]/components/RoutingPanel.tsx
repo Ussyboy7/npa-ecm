@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Check, Clock, GitBranch, ArrowUp, ArrowDown, ArrowRightLeft, Users, Mail } from 'lucide-react';
+import { Check, Clock, GitBranch, ArrowUp, ArrowDown, ArrowRightLeft, Users, Mail, Info, Building2, FolderTree, FileText } from 'lucide-react';
 import type { Correspondence, Minute, Office, OfficeMembership, User } from '@/lib/npa-structure';
 import { ActionsPanel } from './ActionsPanel';
 import { MinuteThreadPanel } from './MinuteThreadPanel';
 import { ParallelRoutingStatusPanel } from '@/components/correspondence/ParallelRoutingStatusPanel';
+import { RelatedResponsesPanel } from '@/components/correspondence/RelatedResponsesPanel';
+import { AccessActivityCard } from '@/components/dms/AccessActivityCard';
+import { getDocumentAccessLogs } from '@/lib/dms-logs';
+import type { DocumentAccessLog } from '@/lib/api/dms';
 import { corrType } from '../correspondence-type';
 import { cn } from '@/lib/utils';
 import { formatDate as formatDateValue } from '@/lib/datetime';
@@ -32,6 +37,8 @@ interface RoutingPanelProps {
   lookupUser: (userId?: string) => User | undefined;
   getActionIcon: (actionType: string) => React.ComponentType<{ className?: string }> | null;
   onOpenLinkCaseModal: () => void;
+  canReassign?: boolean;
+  onReassign?: () => void;
   onOpenMinuteModal: () => void;
   onOpenTreatmentModal: () => void;
   onOpenCompletionModal: () => void;
@@ -63,6 +70,8 @@ export function RoutingPanel({
   lookupUser,
   getActionIcon,
   onOpenLinkCaseModal,
+  canReassign,
+  onReassign,
   onOpenMinuteModal,
   onOpenTreatmentModal,
   onOpenCompletionModal,
@@ -74,16 +83,46 @@ export function RoutingPanel({
   onRecallMinute,
   onAddNote,
 }: RoutingPanelProps) {
-  const [activeTab, setActiveTab] = useState<'thread' | 'workflow' | 'action'>('thread');
+  const [activeTab, setActiveTab] = useState<'thread' | 'workflow' | 'action' | 'info'>('thread');
+  const primaryLinkedDocId = correspondence.linkedDocumentIds?.[0] ?? null;
+  const [accessLogs, setAccessLogs] = useState<DocumentAccessLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const userLookup = useMemo(() => {
+    const m = new Map<string, User>();
+    for (const u of organizationUsers) m.set(u.id, u);
+    return m;
+  }, [organizationUsers]);
+  const getUserInitials = (userId: string) => {
+    const u = userLookup.get(userId);
+    const name = u?.name ?? '';
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length-1][0]}`.toUpperCase();
+    return name.slice(0,2).toUpperCase();
+  };
+  const refreshAccessLogs = async () => {
+    if (!primaryLinkedDocId) return;
+    setLogsLoading(true);
+    try {
+      const logs = await getDocumentAccessLogs(primaryLinkedDocId);
+      setAccessLogs(logs);
+    } catch { /* ignore */ }
+    finally { setLogsLoading(false); }
+  };
+  useEffect(() => {
+    if (activeTab !== 'info' || !primaryLinkedDocId) return;
+    void refreshAccessLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, primaryLinkedDocId]);
 
   return (
     <aside className="flex flex-col flex-1 min-w-0 min-h-0 bg-transparent border-border/50 md:border-l">
       <div className="border-b border-border/40 p-2 bg-background/80 backdrop-blur-sm">
-        <div className="grid grid-cols-3 gap-1 rounded-full bg-muted/50 p-1">
+        <div className="grid grid-cols-4 gap-1 rounded-full bg-muted/50 p-1">
           <Button
             variant={activeTab === 'thread' ? 'default' : 'ghost'}
             size="sm"
-            className="text-xs rounded-full h-7"
+            className="text-xs rounded-full h-7 px-1"
             onClick={() => setActiveTab('thread')}
           >
             Thread
@@ -91,7 +130,7 @@ export function RoutingPanel({
           <Button
             variant={activeTab === 'workflow' ? 'default' : 'ghost'}
             size="sm"
-            className="text-xs rounded-full h-7"
+            className="text-xs rounded-full h-7 px-1"
             onClick={() => setActiveTab('workflow')}
           >
             Workflow
@@ -99,10 +138,18 @@ export function RoutingPanel({
           <Button
             variant={activeTab === 'action' ? 'default' : 'ghost'}
             size="sm"
-            className="text-xs rounded-full h-7"
+            className="text-xs rounded-full h-7 px-1"
             onClick={() => setActiveTab('action')}
           >
             Action
+          </Button>
+          <Button
+            variant={activeTab === 'info' ? 'default' : 'ghost'}
+            size="sm"
+            className="text-xs rounded-full h-7 px-1"
+            onClick={() => setActiveTab('info')}
+          >
+            Info
           </Button>
         </div>
       </div>
@@ -138,6 +185,9 @@ export function RoutingPanel({
               correspondenceId={correspondence.id}
               onRefresh={onSyncFromApi}
             />
+            {correspondence.relatedResponses && correspondence.relatedResponses.length > 0 && (
+              <RelatedResponsesPanel responses={correspondence.relatedResponses} />
+            )}
             {correspondence.distribution && correspondence.distribution.length > 0 && (
               <div className="rounded-xl border border-border/60">
                 <div className="border-b border-border/60 p-3 pb-0">
@@ -187,17 +237,18 @@ export function RoutingPanel({
           <div className="px-3 pt-3 pb-2">
             <p className={corrType.panelTitle}>Action</p>
             <p className={cn(corrType.caption, 'mt-0.5')}>
-              Secondary routing — Minute stays in the header.
+              Secondary routing — Minute, Approve & Respond actions below.
             </p>
           </div>
           <div className="px-3 pb-6">
             <ActionsPanel
               compact
-              hidePrimaryMinuteAction
               correspondence={correspondence}
               minutes={minutes}
               activeUser={activeUser}
               onOpenLinkCaseModal={onOpenLinkCaseModal}
+              canReassign={canReassign}
+              onReassign={onReassign}
               isCompleted={isCompleted}
               isCurrentUserTurn={isCurrentUserTurn}
               isForInformationOnly={isForInformationOnly}
@@ -220,6 +271,132 @@ export function RoutingPanel({
             />
           </div>
         </div>
+      )}
+
+      {activeTab === 'info' && (
+        <ScrollArea className="flex-1 min-h-0 animate-in fade-in duration-200 motion-reduce:animate-none">
+          <div className="p-3 space-y-3">
+            <div className="rounded-xl border border-border bg-background">
+              <div className="px-3 py-2.5 border-b border-border/60 flex items-center gap-2">
+                <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Properties</span>
+              </div>
+              <div className="px-3 py-3 space-y-3 text-sm">
+                {correspondence.owningOfficeName && (
+                  <div className="flex items-start gap-2">
+                    <Building2 className="h-3.5 w-3.5 mt-0.5 text-muted-foreground flex-shrink-0" />
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Owning office</div>
+                      <div className="font-medium leading-tight text-xs">{correspondence.owningOfficeName}</div>
+                    </div>
+                  </div>
+                )}
+                {correspondence.divisionName && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Division</div>
+                    <div className="font-medium leading-tight text-xs">{correspondence.divisionName}</div>
+                  </div>
+                )}
+                {correspondence.caseId && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Case</div>
+                    <Link href={`/cases/${correspondence.caseId}`} className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline text-xs">
+                      <FolderTree className="h-3.5 w-3.5" />
+                      {correspondence.caseId.slice(0,8)}
+                    </Link>
+                  </div>
+                )}
+                {typeof correspondence.hasPhysicalCopy === 'boolean' && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Physical copy</div>
+                    <Badge variant={correspondence.hasPhysicalCopy ? 'secondary' : 'outline'} className="text-[11px] rounded-none mt-1">
+                      {correspondence.hasPhysicalCopy ? 'Registered' : 'No physical copy'}
+                    </Badge>
+                  </div>
+                )}
+                {correspondence.parentCorrespondence && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">In response to</div>
+                    <Link href={`/correspondence/${correspondence.parentCorrespondence.id}`} className="font-medium text-primary hover:underline text-xs">
+                      {correspondence.parentCorrespondence.reference_number}
+                    </Link>
+                  </div>
+                )}
+                {(correspondence.distribution ?? []).length > 0 && (
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                      <Users className="h-3 w-3" /> Distribution
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(correspondence.distribution ?? []).map((dist) => (
+                        <span key={`${dist.id}-${dist.readAt ?? ''}`} className="inline-flex items-center rounded-md border bg-muted/40 px-2 py-1 text-[11px] leading-none">
+                          {dist.name ?? dist.id.slice(0,8)}
+                          {dist.readAt && <span className="ml-1 text-muted-foreground">· read {new Date(dist.readAt).toLocaleDateString()}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background">
+              <div className="px-3 py-2.5 border-b border-border/60 flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Linked documents</span>
+              </div>
+              <div className="px-3 py-3 space-y-2">
+                {correspondence.linkedDocumentIds?.length ? (
+                  correspondence.linkedDocumentIds.map((id) => (
+                    <Link key={id} href={`/dms/${id}`} className="flex items-center gap-2 text-xs font-medium text-primary hover:underline">
+                      <FileText className="h-3.5 w-3.5 flex-shrink-0" /> {id.slice(0, 8)}
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">No linked documents. DRM watermarks for linked docs are enforced in the preview — PDF burned server-side, HTML overlay.</p>
+                )}
+                {correspondence.linkedDocumentIds?.length ? (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">Linked document DRM travels with the correspondence: view-only / download-blocked / watermark is enforced in the preview above.</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background">
+              <div className="px-3 py-2.5 border-b border-border/60">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Activity</span>
+              </div>
+              <div className="px-3 py-3 space-y-3">
+                {primaryLinkedDocId ? (
+                  <AccessActivityCard
+                    documentId={primaryLinkedDocId}
+                    accessLogs={accessLogs}
+                    userLookup={userLookup}
+                    getUserInitials={getUserInitials}
+                    onRefresh={refreshAccessLogs}
+                    isLoading={logsLoading}
+                    compact
+                  />
+                ) : null}
+                {(correspondence.distribution ?? []).length > 0 ? (
+                  <div className={primaryLinkedDocId ? 'pt-2 border-t border-border/40' : ''}>
+                    <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Distribution read receipts</p>
+                    {(correspondence.distribution ?? []).some((d) => d.readAt) ? (
+                      <ul className="list-disc pl-4 space-y-1 text-xs text-muted-foreground">
+                        {(correspondence.distribution ?? []).filter((d) => d.readAt).map((d) => (
+                          <li key={`read-${d.id}`}>{d.name ?? d.id.slice(0,8)} — read {new Date(d.readAt!).toLocaleString()}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No receipts yet — will appear when recipients open the correspondence.</p>
+                    )}
+                  </div>
+                ) : !primaryLinkedDocId ? (
+                  <p className="text-xs text-muted-foreground">Minutes and acknowledgements are in the Thread.</p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </ScrollArea>
       )}
     </aside>
   );

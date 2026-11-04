@@ -55,7 +55,9 @@ import { useOrgUsers } from "@/hooks/use-org-users";
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers } from '@/lib/routing-utils';
-import { RoutingSection } from './RoutingSection';
+import { PrimaryRoutePanel } from './PrimaryRoutePanel';
+import { submitParallelRoute } from '@/lib/parallel-routing';
+import type { BranchConfig } from '@/lib/parallel-routing';
 
 
 import { useSignature } from '@/hooks/use-signature';
@@ -112,6 +114,11 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [officeSearchQuery, setOfficeSearchQuery] = useState('');
   const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
+  const [routeMode, setRouteMode] = useState<'single' | 'parallel'>('single');
+  const [mergeStrategy, setMergeStrategy] = useState<'all' | 'any' | 'majority' | 'independent'>('all');
+  const [parallelUserIds, setParallelUserIds] = useState<string[]>([]);
+  const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
+  const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>({});
   
   // Document selection state (for existing document response type)
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -315,6 +322,13 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setMemoContent('');
     setCharacterCount(0);
     setForwardTo('');
+    setRouteMode('single');
+    setMergeStrategy('all');
+    setParallelUserIds([]);
+    setParallelOfficeIds([]);
+    setBranchConfigs({});
+    setRouteType('person');
+    setTargetOfficeId('');
     setOnBehalfOf('');
     setSearchQuery('');
     setMemoSubjectError('');
@@ -651,8 +665,13 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       }
     }
 
-    // Validate recipient - either person or office must be selected
-    if (!forwardTo && !targetOfficeId) {
+    // Validate recipient — single or parallel
+    if (routeMode === 'parallel') {
+      if (parallelUserIds.length + parallelOfficeIds.length < 2) {
+        setForwardToError('Parallel routing requires at least two people or offices');
+        return false;
+      }
+    } else if (!forwardTo && !targetOfficeId) {
       setForwardToError('Please select a recipient (person or office)');
       return false;
     }
@@ -692,13 +711,14 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setIsSubmitting(true);
     // Create AbortController for request cancellation
     const signal = getSignal();
+    const isParallelRoute = routeMode === 'parallel';
     
     // Determine recipient - use person if selected, otherwise use office primary member
-    let recipient = forwardTo ? findUserById(forwardTo) : null;
-    let recipientOfficeId = targetOfficeId || undefined;
+    let recipient = !isParallelRoute && forwardTo ? findUserById(forwardTo) : null;
+    let recipientOfficeId = !isParallelRoute ? (targetOfficeId || undefined) : undefined;
     
     // If routing to office, try to get primary member
-    if (!recipient && targetOfficeId) {
+    if (!isParallelRoute && !recipient && targetOfficeId) {
       const primaryMember = officeMemberships.find(
         (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
       );
@@ -708,7 +728,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     }
     
     // Fallback: use forwardTo if available
-    if (!recipient && forwardTo) {
+    if (!recipient && forwardTo && !isParallelRoute) {
       recipient = findUserById(forwardTo);
     }
     
@@ -773,8 +793,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           direction: correspondence.direction,
           step_number: nextStep,
           from_office_id: currentUserOfficeId || undefined,
-          to_office_id: recipientOfficeId || targetOfficeId || undefined,
-          to_user_id: forwardTo || undefined,
+          to_office_id: isParallelRoute ? undefined : (recipientOfficeId || targetOfficeId || undefined),
+          to_user_id: isParallelRoute ? undefined : forwardTo || undefined,
           signature: applySignature && userSignature ? userSignature.imageData : null,
         }),
       });
@@ -787,15 +807,17 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         status: 'completed',
       };
       
-      if (forwardTo) {
-        correspondenceUpdate.current_approver_id = forwardTo;
-      } else if (targetOfficeId) {
-        correspondenceUpdate.current_office = targetOfficeId;
-        const primaryMember = officeMemberships.find(
-          (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
-        );
-        if (primaryMember) {
-          correspondenceUpdate.current_approver_id = primaryMember.userId;
+      if (!isParallelRoute) {
+        if (forwardTo) {
+          correspondenceUpdate.current_approver_id = forwardTo;
+        } else if (targetOfficeId) {
+          correspondenceUpdate.current_office = targetOfficeId;
+          const primaryMember = officeMemberships.find(
+            (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
+          );
+          if (primaryMember) {
+            correspondenceUpdate.current_approver_id = primaryMember.userId;
+          }
         }
       }
       
@@ -837,17 +859,21 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
       const departmentIdToSend = recipient?.department ?? selectedOffice?.departmentId ?? correspondence.departmentId;
       if (departmentIdToSend) responseFormData.append('department', departmentIdToSend);
-      // Set recipient - prefer person, fallback to office primary member
-      if (forwardTo) {
-        responseFormData.append('current_approver_id', forwardTo);
-      } else if (targetOfficeId) {
-        const primaryMember = officeMemberships.find(
-          (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
-        );
-        if (primaryMember) {
-          responseFormData.append('current_approver_id', primaryMember.userId);
+      // Set recipient on formal response — single route only; parallel uses submitParallelRoute below
+      if (!isParallelRoute) {
+        if (forwardTo) {
+          responseFormData.append('current_approver_id', forwardTo);
+        } else if (targetOfficeId) {
+          const primaryMember = officeMemberships.find(
+            (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
+          );
+          if (primaryMember) {
+            responseFormData.append('current_approver_id', primaryMember.userId);
+          }
+          responseFormData.append('current_office', targetOfficeId);
         }
-        responseFormData.append('current_office', targetOfficeId);
+      } else if (currentUserOfficeId) {
+        responseFormData.append('current_office', currentUserOfficeId);
       }
       responseFormData.append('direction', correspondence.direction);
       responseFormData.append('parent_correspondence_id', correspondence.id);
@@ -866,6 +892,20 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         headers: {}, // Let browser set Content-Type for FormData
       });
       createdResponseCorrespondenceId = responseCorrespondence.id;
+
+      if (isParallelRoute) {
+        const branchText = minuteText.trim() || `Response to ${correspondence.referenceNumber}`;
+        await submitParallelRoute(apiFetch, {
+          correspondenceId: responseCorrespondence.id,
+          parallelUserIds,
+          parallelOfficeIds,
+          branchConfigs,
+          mergeStrategy,
+          defaultPurpose: purpose,
+          defaultMinuteText: branchText,
+          signal,
+        });
+      }
 
       // Link document if existing document response type
       if (responseType === 'existing-document' && selectedDocumentId) {
@@ -894,9 +934,11 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       setIsSubmitting(false);
       
       toast.success('Response sent successfully', {
-        description: actingFor
-          ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
-          : `Sent to ${recipient?.name ?? 'selected user'}`,
+        description: isParallelRoute
+          ? `Formal response created with ${parallelUserIds.length + parallelOfficeIds.length} parallel branch(es)`
+          : actingFor
+            ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
+            : `Sent to ${recipient?.name ?? 'selected user'}`,
       });
 
       // Also notify that original correspondence was completed
@@ -1380,8 +1422,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
             <Separator />
 
-            {/* Route To - Using RoutingSection component (like MinuteModal) */}
-            <RoutingSection
+            {/* Route formal response — shared Single / Parallel panel */}
+            <PrimaryRoutePanel
+              routeMode={routeMode}
+              onRouteModeChange={setRouteMode}
               routeType={routeType}
               onRouteTypeChange={(v) => {
                 setRouteType(v);
@@ -1417,10 +1461,20 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               onOfficeFilterDivisionChange={setOfficeFilterDivision}
               purpose={purpose}
               onPurposeChange={setPurpose}
+              parallelUserIds={parallelUserIds}
+              onParallelUserIdsChange={setParallelUserIds}
+              parallelOfficeIds={parallelOfficeIds}
+              onParallelOfficeIdsChange={setParallelOfficeIds}
+              mergeStrategy={mergeStrategy}
+              onMergeStrategyChange={setMergeStrategy}
+              branchConfigs={branchConfigs}
+              onBranchConfigsChange={setBranchConfigs}
+              defaultBranchText={memoContent.replace(/<[^>]+>/g, ' ').trim() || `Response to ${correspondence.referenceNumber}`}
+              showDistribution={false}
               offices={officeOptions}
               directorates={directorates}
               divisions={divisions}
-              users={activeUsers}
+              users={activeUsers.filter((u) => u.id !== currentUser?.id)}
               assistantList={assistantList}
               approverList={approverList}
               suggestedNext={suggestedNext}

@@ -51,9 +51,15 @@ import {
   createTemplate as createTemplateRecord,
   type DocumentTemplate,
 } from '@/lib/api/document-templates';
-import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
-import { Loader2, Save, Upload as UploadIcon, FilePlus, Scan, ChevronDown, PenTool, Settings2 } from 'lucide-react';
+import {
+  validateFileType,
+  validateFileSize,
+  resolveUploadMimeType,
+  MAX_FILE_SIZE_MB,
+} from '@/lib/file-utils';
+import { Loader2, Save, Upload as UploadIcon, FilePlus, Scan, ChevronDown, PenTool, Settings2, FileText } from 'lucide-react';
 import { sanitizeRichText } from '@/lib/sanitize-html';
+import { importDocxFileToHtml } from '@/lib/import-docx';
 import { processOCR } from '@/lib/api/capture';
 import { uploadUserSignature } from '@/lib/api/signatures';
 import { formatDate } from '@/lib/datetime';
@@ -137,6 +143,8 @@ export const DocumentUploadDialog = ({
   });
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const signatureInputRef = useRef<HTMLInputElement>(null);
+  const wordImportInputRef = useRef<HTMLInputElement>(null);
+  const [isImportingWord, setIsImportingWord] = useState(false);
   const isMountedRef = useRef(true);
   const lastResolvedTokensRef = useRef<Record<string, string>>({});
 
@@ -552,6 +560,31 @@ export const DocumentUploadDialog = ({
     e.target.value = '';
   }, [refreshSignature]);
 
+  const handleWordImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    e.target.value = '';
+    if (!picked) return;
+
+    if (editorHtml.trim()) {
+      const ok = window.confirm('Replace the current compose content with this Word document?');
+      if (!ok) return;
+    }
+
+    setIsImportingWord(true);
+    try {
+      const html = await importDocxFileToHtml(picked);
+      if (!isMountedRef.current) return;
+      setEditorHtml(html);
+      setTemplateApplied(true);
+      toast.success('Word document imported — layout may differ from Word');
+    } catch (error: unknown) {
+      logError('Failed to import Word document', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to import Word document');
+    } finally {
+      if (isMountedRef.current) setIsImportingWord(false);
+    }
+  }, [editorHtml]);
+
   const handleSubmit = useCallback(async () => {
     if (!validateForm()) {
       toast.error('Please fix validation errors before submitting');
@@ -589,7 +622,7 @@ export const DocumentUploadDialog = ({
           fileUrl = await fileToDataUrl(htmlFile);
         } else if (file) {
           fileUrl = await fileToDataUrl(file);
-          fileType = file.type || 'application/octet-stream';
+          fileType = resolveUploadMimeType(file);
           fileName = file.name;
           fileSize = file.size;
         }
@@ -672,7 +705,7 @@ export const DocumentUploadDialog = ({
           fileUrl = await fileToDataUrl(htmlFile);
         } else if (file) {
           fileUrl = await fileToDataUrl(file);
-          fileType = file.type || 'application/octet-stream';
+          fileType = resolveUploadMimeType(file);
           fileName = file.name;
           fileSize = file.size;
         }
@@ -1003,6 +1036,29 @@ export const DocumentUploadDialog = ({
             >
               <Save className="h-3 w-3 mr-1" /> Save as template
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={isSubmitting || isImportingWord}
+              title="Import a .docx into the editor (not identical to Word)"
+              onClick={() => wordImportInputRef.current?.click()}
+            >
+              {isImportingWord ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <FileText className="h-3 w-3 mr-1" />
+              )}
+              Import Word
+            </Button>
+            <input
+              ref={wordImportInputRef}
+              type="file"
+              className="hidden"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={handleWordImport}
+              disabled={isSubmitting || isImportingWord}
+            />
           </>
         )}
       </div>

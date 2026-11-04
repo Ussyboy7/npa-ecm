@@ -16,11 +16,9 @@ import {
   Search,
   Users2,
   ArrowRight,
-  UserCheck,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useSidebarCounts } from '@/hooks/use-sidebar-counts';
-import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
@@ -38,9 +36,6 @@ import { InboxSummaryCards } from './components/InboxSummaryCards';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { InboxItemCard } from './components/InboxItemCard';
 import { InboxApprovalCard } from './components/InboxApprovalCard';
-import { getMyActingAppointments, type ActingAppointment } from '@/lib/api/acting-appointments';
-import { hasRolePermission } from '@/lib/permissions';
-import { formatDateShort } from '@/lib/datetime';
 
 const calculateDaysPending = (item: Correspondence): number => {
   if (!item.receivedDate) return 0;
@@ -109,53 +104,6 @@ const ExecutiveInbox = () => {
   const [error, setError] = useState<string | null>(null);
   const [slaTargets, setSlaTargets] = useState<{ urgent: number; high: number; medium: number; low: number } | null>(null);
   const counts = useSidebarCounts();
-  const { officeMemberships } = useOrganization();
-  const [actingAppointments, setActingAppointments] = useState<ActingAppointment[]>([]);
-
-  const isOfficePrincipal = useMemo(
-    () =>
-      officeMemberships.some(
-        (m) =>
-          m.isActive &&
-          m.assignmentRole === 'principal' &&
-          String(m.userId) === String(currentUser?.id ?? '')
-      ),
-    [officeMemberships, currentUser?.id]
-  );
-
-  const isOfficeMember = useMemo(
-    () =>
-      officeMemberships.some(
-        (m) => m.isActive && String(m.userId) === String(currentUser?.id ?? '')
-      ),
-    [officeMemberships, currentUser?.id]
-  );
-
-  const canManageActingAppointments =
-    Boolean(currentUser?.isSuperuser) ||
-    hasRolePermission(currentUser, 'can_manage_org_structure') ||
-    hasRolePermission(currentUser, 'can_manage_users');
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setActingAppointments([]);
-      return;
-    }
-    let ignore = false;
-    const loadActing = async () => {
-      try {
-        const mine = await getMyActingAppointments();
-        if (!ignore) setActingAppointments(mine.filter((a) => a.isCurrentlyEffective));
-      } catch (err) {
-        logError('Failed to load acting appointments', err);
-        if (!ignore) setActingAppointments([]);
-      }
-    };
-    void loadActing();
-    return () => {
-      ignore = true;
-    };
-  }, [currentUser?.id]);
 
   useEffect(() => {
     pagination.goToFirstPage();
@@ -258,48 +206,7 @@ const ExecutiveInbox = () => {
     >
       <InboxSummaryCards summary={summary} />
 
-      {actingAppointments.map((appt) => (
-        <div
-          key={appt.id}
-          className="flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-2.5 text-sm dark:border-sky-800/40 dark:bg-sky-950/20"
-        >
-          <UserCheck className="h-4 w-4 text-sky-700 dark:text-sky-400" />
-          <span className="flex-1 text-sky-900 dark:text-sky-200">
-            You are acting as <span className="font-semibold">{appt.principalName}</span>
-            {appt.officeName ? ` (${appt.officeName})` : ''}
-            {appt.endsAt
-              ? ` until ${formatDateShort(appt.endsAt)}`
-              : ' until further notice'}
-            . Seat items appear in this inbox with an Acting badge.
-          </span>
-        </div>
-      ))}
 
-      {(isOfficePrincipal || isOfficeMember) && (
-        <a
-          href="/acting"
-          className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-        >
-          <UserCheck className="h-4 w-4" />
-          <span className="flex-1">
-            {isOfficePrincipal
-              ? 'Appoint an acting officer for your seat (or request help)'
-              : 'Request an acting appointment if your office seat holder is away'}
-          </span>
-          <ArrowRight className="h-3 w-3" />
-        </a>
-      )}
-
-      {(canManageActingAppointments) && (
-        <a
-          href="/admin/organization/acting"
-          className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-        >
-          <UserCheck className="h-4 w-4" />
-          <span className="flex-1">Admin: manage acting appointments & requests</span>
-          <ArrowRight className="h-3 w-3" />
-        </a>
-      )}
 
       {counts.delegated > 0 && (
         <a

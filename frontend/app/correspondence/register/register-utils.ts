@@ -39,6 +39,36 @@ export type DistributionState = {
   departments: string[];
 };
 
+export type RegisterRoutingConfig = {
+  routeMode: 'single' | 'parallel';
+  routeType: 'person' | 'office';
+  forwardTo: string;
+  targetOfficeId: string;
+  purpose: 'action' | 'information' | 'approval';
+  mergeStrategy: 'all' | 'any' | 'majority' | 'independent';
+  parallelUserIds: string[];
+  parallelOfficeIds: string[];
+  branchConfigs: Record<string, { purpose: 'action' | 'information' | 'approval'; minuteText: string }>;
+  routingNotes: string;
+  distributionUserIds: string[];
+  distributionOfficeIds: string[];
+};
+
+export const createInitialRoutingConfig = (): RegisterRoutingConfig => ({
+  routeMode: 'single',
+  routeType: 'office',
+  forwardTo: '',
+  targetOfficeId: '',
+  purpose: 'action',
+  mergeStrategy: 'all',
+  parallelUserIds: [],
+  parallelOfficeIds: [],
+  branchConfigs: {},
+  routingNotes: '',
+  distributionUserIds: [],
+  distributionOfficeIds: [],
+});
+
 /**
  * Detect correspondence source type (internal/external) from form data
  * Returns 'internal' | 'external' | 'ambiguous' (when both are present)
@@ -149,12 +179,19 @@ export const validateFormData = (
   flowType: FlowType,
   documentFiles: File[],
   distributions: DistributionState,
-  linkedCount: number = 0
+  linkedCount: number = 0,
+  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
 
   if (!formData.subject) errors.subject = 'Subject is required';
-  if (!formData.assignTo) errors.assignTo = 'Please assign to an executive';
+  if (routing.routeMode === 'parallel') {
+    if (routing.parallelUserIds.length + routing.parallelOfficeIds.length < 2) {
+      errors.assignTo = 'Parallel routing requires at least two people or offices';
+    }
+  } else if (!formData.assignTo && !routing.forwardTo && !routing.targetOfficeId) {
+    errors.assignTo = 'Please select a route destination';
+  }
   if (!formData.owningOfficeId) errors.owningOfficeId = 'Please select an owning office';
 
   if (flowType === 'inward') {
@@ -199,7 +236,8 @@ export const validateStep = (
   flowType: FlowType,
   documentFiles: File[],
   distributions: DistributionState,
-  linkedCount: number = 0
+  linkedCount: number = 0,
+  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
 
@@ -231,7 +269,13 @@ export const validateStep = (
       }
       break;
     case 'routing':
-      if (!formData.assignTo) errors.assignTo = 'Please assign to an executive';
+      if (routing.routeMode === 'parallel') {
+        if (routing.parallelUserIds.length + routing.parallelOfficeIds.length < 2) {
+          errors.assignTo = 'Parallel routing requires at least two people or offices';
+        }
+      } else if (!formData.assignTo && !routing.forwardTo && !routing.targetOfficeId) {
+        errors.assignTo = 'Please select a route destination';
+      }
       if (flowType === 'outward') {
         if (
           distributions.directorates.length +
@@ -260,7 +304,8 @@ export const buildSubmissionFormData = (
   formData: FormData,
   flowType: FlowType,
   documentFiles: File[],
-  distributions: DistributionState
+  distributions: DistributionState,
+  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): globalThis.FormData => {
   const form = new globalThis.FormData();
   
@@ -303,7 +348,11 @@ export const buildSubmissionFormData = (
   }
   
   const direction = flowType === 'inward' ? 'upward' : flowType === 'lateral' ? 'lateral' : 'downward';
-  form.append('current_approver_id', formData.assignTo);
+  if (routing.routeMode === 'single') {
+    const approverId = formData.assignTo || routing.forwardTo;
+    if (approverId) form.append('current_approver_id', approverId);
+    if (routing.targetOfficeId) form.append('current_office', routing.targetOfficeId);
+  }
   form.append('document_type', formData.documentType);
   if (formData.tags) {
     const tags = formData.tags
@@ -330,16 +379,20 @@ export const calculateCompletionPercentage = (
   formData: FormData,
   flowType: FlowType,
   documentFiles: File[],
-  linkedCount: number = 0
+  linkedCount: number = 0,
+  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): number => {
   let completed = 0;
   let total = 0;
 
-  // Required fields for all
-  total += 4; // subject, senderOrganization, assignTo, owningOfficeId
+  total += 4;
   if (formData.subject) completed++;
   if (formData.senderOrganization) completed++;
-  if (formData.assignTo) completed++;
+  const routed =
+    routing.routeMode === 'parallel'
+      ? routing.parallelUserIds.length + routing.parallelOfficeIds.length >= 2
+      : Boolean(formData.assignTo || routing.forwardTo || routing.targetOfficeId);
+  if (routed) completed++;
   if (formData.owningOfficeId) completed++;
 
   // Flow-specific required fields

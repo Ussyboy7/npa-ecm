@@ -20,6 +20,7 @@ from .models import (
     CaseTemplate,
     CaseWorkflowRule,
     Correspondence,
+    CorrespondenceAccessLog,
     CorrespondenceAttachment,
     CorrespondenceDelegation,
     CorrespondenceDraft,
@@ -554,6 +555,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     is_external = serializers.SerializerMethodField()
     routing_metadata = serializers.SerializerMethodField()
     parallel_branches = serializers.SerializerMethodField()
+    related_responses = serializers.SerializerMethodField()
     is_read = serializers.BooleanField(read_only=True)
 
     def validate_reference_number(self, value):
@@ -638,6 +640,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "active_parallel_branches",
             "completed_parallel_branches",
             "parallel_branches",
+            "related_responses",
             "parent_correspondence",
             "parent_correspondence_id",
             "case",
@@ -724,6 +727,24 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "reference_number": obj.parent_correspondence.reference_number,
             "subject": obj.parent_correspondence.subject,
         }
+
+    def get_related_responses(self, obj):
+        """Formal response correspondences linked to this record."""
+        responses = (
+            obj.response_correspondence.filter(is_deleted=False)
+            .order_by("-created_at")
+            .values("id", "reference_number", "subject", "status", "created_at")
+        )
+        return [
+            {
+                "id": str(r["id"]),
+                "reference_number": r["reference_number"],
+                "subject": r["subject"],
+                "status": r["status"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            }
+            for r in responses
+        ]
 
     def get_case(self, obj):
         """Return case reference if exists."""
@@ -1438,3 +1459,18 @@ class CorrespondenceDraftSerializer(serializers.ModelSerializer):
             "reference_number": obj.correspondence.reference_number,
             "subject": obj.correspondence.subject,
         }
+
+class CorrespondenceAccessLogSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(
+        source="user",
+        queryset=User.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
+
+    class Meta:
+        model = CorrespondenceAccessLog
+        fields = ["id", "correspondence", "user", "user_id", "action", "timestamp"]
+        read_only_fields = ["id", "user", "timestamp"]

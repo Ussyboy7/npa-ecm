@@ -187,6 +187,13 @@ export type Correspondence = {
     reference_number: string;
     subject: string;
   } | null;
+  relatedResponses?: Array<{
+    id: string;
+    reference_number: string;
+    subject: string;
+    status: string;
+    created_at?: string | null;
+  }>;
   archiveLevel?: 'department' | 'division' | 'directorate';
   linkedDocumentIds?: string[];
   completionPackage?: {

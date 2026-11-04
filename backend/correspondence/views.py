@@ -3,6 +3,7 @@
 from .correspondence_views import (
     _sla_due_soon_filter,
     _sla_overdue_filter,
+    CorrespondenceAccessLogViewSet,
     CorrespondenceAttachmentViewSet,
     CorrespondenceDelegationViewSet,
     CorrespondenceDistributionViewSet,

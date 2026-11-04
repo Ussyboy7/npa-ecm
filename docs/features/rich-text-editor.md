@@ -2,14 +2,21 @@
 
 ## Overview
 
-NPA-ECM uses a **custom** rich-text surface for memo composition, document upload/replace compose mode, and templates hub content. It is **not** Quill.js, TipTap, or ProseMirror.
+NPA-ECM exposes a single public component, **`RichTextEditor`**, used for memo composition, DMS compose/replace, and templates hub content.
+
+Internally (Phase 5): **TipTap only**. There is no Legacy engine and no user-facing engine picker.
 
 | Item | Path |
 |------|------|
-| Component | `frontend/components/dms/RichTextEditor.tsx` |
-| Compat re-export | `QuillEditor` → `RichTextEditor` in `QuillEditor.tsx` (deprecated name) |
-| Sanitize | `frontend/lib/sanitize-html.ts` (`sanitizeRichText` / DOMPurify) |
-| Page setup | `frontend/components/dms/PageSetupDialog.tsx` |
+| Public façade | `frontend/components/dms/RichTextEditor.tsx` |
+| Props | `frontend/components/dms/editor/types.ts` |
+| TipTap engine | `frontend/components/dms/editor/TiptapRichTextEditor.tsx` |
+| Engine identity | `frontend/lib/editor-engine.ts` (always TipTap) |
+| Diagnostics | `frontend/lib/editor-diagnostics.ts` |
+| Sanitize / Office paste | `frontend/lib/sanitize-html.ts` |
+| TipTap find/replace | `frontend/lib/tiptap-find-replace.ts` |
+| Acceptance fixtures | `frontend/lib/__tests__/fixtures/editor-acceptance/` |
+| Page setup | `frontend/components/dms/PageSetupDialog.tsx` (shared) |
 
 ## Call sites
 
@@ -18,39 +25,15 @@ NPA-ECM uses a **custom** rich-text surface for memo composition, document uploa
 - `MemoCompositionSection` — correspondence memo body
 - `app/admin/templates-hub` — template HTML body
 
-## Hardening status (July 2026)
+## Capability
 
-**Done (custom-editor Phase 1):**
+Bold/italic/underline/strike; highlight; sub/sup; font family/size; line height; H1–H3; lists; align left/center/right/justify; links/images (dialogs); tables (insert, row/col, cell align/width, column resize); Word/Excel paste cleanup; page setup + print/PDF preview; merge-token Fields; signature image insert (visual only); find & replace; character/word count.
 
-- Rename / honest labelling (“Rich text editor”)
-- Paste pipeline (`onPaste` → sanitize HTML or plain text)
-- Word/Office paste cleanup (`cleanOfficeHtml` / `sanitizePastedRichText`)
-- Find and replace (toolbar + Ctrl/Cmd+F)
-- Print / PDF preview using page setup (`openComposePrintPreview`)
-- Sanitize on emit and on insert (link / image / table / signature)
-- Focused value sync (external `value` does not overwrite while focused)
-- Toolbar a11y: `role="toolbar"`, `aria-pressed` / `aria-label` on toggles
-- Editor a11y: `role="textbox"`, `aria-multiline`, labelled header
-- Link / image / table via Dialog (no `window.prompt`)
-- Image selection overlay via `getBoundingClientRect` relative to editor shell
-- Word + character count; cleaned font-size / line-height options
-
-**Explicitly deferred (needs TipTap / ProseMirror + Yjs):**
-
-- Replacing deprecated `document.execCommand`
-- Real document model (not `innerHTML` as source of truth)
-- Engine-grade undo / paste / list / IME behaviour
-- Live multi-user co-authoring (CRDT/OT)
-
-Live co-authoring today remains **session/presence scaffolding only** (`DocumentEditorSession` + Channels WS). See backlog P2.
-
-## Product domain features (keep when migrating engines)
-
-Page setup (paper/margins), print/PDF preview, find/replace, Word paste cleanup, signature insert, merge tokens, table row/col tools, NPA memo chrome. These should become TipTap extensions if/when the engine migrates — not discarded.
+**Still deferred:** live co-authoring; ONLYOFFICE; formal digital signature / approval workflows inside the editor.
 
 ## Related Docs
 
-- `docs/features/dms.md` — compose upload/replace
-- `docs/features/correspondence.md` — memo composition
-- `docs/procurement/REMAINING_WORK_BACKLOG.md` — live co-authoring P2
-- `docs/guides/WCAG_AUDIT_CHECKLIST.md` — a11y checklist
+- `docs/features/tiptap-migration-spec.md`
+- `docs/features/tiptap-phase5-implementation-report.md`
+- `docs/features/dms.md`
+- `docs/features/correspondence.md`

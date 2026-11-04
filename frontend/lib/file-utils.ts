@@ -26,28 +26,60 @@ export interface FileValidationResult {
   error?: string;
 }
 
+/** Map extension → expected MIME when the browser leaves `file.type` empty (common on macOS for Office). */
+const EXTENSION_MIME: Record<AllowedExtension, AllowedMimeType> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain',
+  html: 'text/html',
+};
+
 /**
- * Validates file type by MIME type and extension
+ * Validates file type by extension, then MIME when the browser reports one.
+ * macOS/Chrome often give `file.type === ""` for .docx/.xlsx — extension must still pass.
  */
 export const validateFileType = (file: File): FileValidationResult => {
-  // Check MIME type
-  if (!ALLOWED_MIME_TYPES.includes(file.type as AllowedMimeType)) {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (!extension || !ALLOWED_EXTENSIONS.includes(extension as AllowedExtension)) {
+    return {
+      valid: false,
+      error: `File extension ".${extension ?? ''}" is not allowed. Supported: ${ALLOWED_EXTENSIONS.join(', ')}.`,
+    };
+  }
+
+  const mime = (file.type || '').trim().toLowerCase();
+  // Empty or generic binary MIME: trust the extension (browser quirk).
+  if (!mime || mime === 'application/octet-stream') {
+    return { valid: true };
+  }
+
+  if (!ALLOWED_MIME_TYPES.includes(mime as AllowedMimeType)) {
+    // Some browsers report legacy/odd Office MIME; still accept if extension is allowed.
+    const expected = EXTENSION_MIME[extension as AllowedExtension];
+    if (expected && mime.includes('officedocument')) {
+      return { valid: true };
+    }
     return {
       valid: false,
       error: `File type "${file.type}" is not allowed. Please upload PDF, Word, Excel, PowerPoint, or Text files.`,
     };
   }
 
-  // Check file extension as backup
-  const extension = file.name.split('.').pop()?.toLowerCase();
-  if (!extension || !ALLOWED_EXTENSIONS.includes(extension as AllowedExtension)) {
-    return {
-      valid: false,
-      error: `File extension ".${extension}" is not allowed. Supported: ${ALLOWED_EXTENSIONS.join(', ')}.`,
-    };
-  }
-
   return { valid: true };
+};
+
+/** Best-effort MIME for uploads when the File API leaves type blank. */
+export const resolveUploadMimeType = (file: File): string => {
+  const mime = (file.type || '').trim();
+  if (mime && mime !== 'application/octet-stream') return mime;
+  const extension = file.name.split('.').pop()?.toLowerCase() as AllowedExtension | undefined;
+  if (extension && EXTENSION_MIME[extension]) return EXTENSION_MIME[extension];
+  return mime || 'application/octet-stream';
 };
 
 /**

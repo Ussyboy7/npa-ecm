@@ -44,6 +44,7 @@ import {
   calculateCompletionPercentage,
   createDistributionEntries,
 } from './register-utils';
+import { submitParallelRoute, submitCcDistribution } from '@/lib/parallel-routing';
 import { registerReducer, createInitialState } from './register-state-reducer';
 import { useDraftAutoSave } from './use-draft-auto-save';
 import { OfficeSelectionCard } from './components/OfficeSelectionCard';
@@ -99,7 +100,8 @@ const CorrespondenceRegisterForm = () => {
     linkedDocumentIds,
     flowType,
     distributions,
-    ui: { assignSearch, officeSearch: _officeSearch, submitting, errors, hasDraft, mounted },
+    routingConfig,
+    ui: { assignSearch: _assignSearch, officeSearch: _officeSearch, submitting, errors, hasDraft, mounted },
   } = state;
 
   // Load correspondence data if in edit mode - extracted as useCallback so it can be called from retry button
@@ -321,7 +323,7 @@ const CorrespondenceRegisterForm = () => {
   }, [membershipOffices, flowType, formData.owningOfficeId, activeOffices]);
 
   const completionPercentage = useMemo(
-    () => calculateCompletionPercentage(formData, flowType, documentFiles, linkedDocumentIds.length),
+    () => calculateCompletionPercentage(formData, flowType, documentFiles, linkedDocumentIds.length, routingConfig),
     [formData, flowType, documentFiles, linkedDocumentIds]
   );
 
@@ -411,7 +413,7 @@ const CorrespondenceRegisterForm = () => {
 
   const goToNextStep = useCallback(() => {
     if (validateOnStepChange) {
-      const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
+      const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length, routingConfig);
       if (Object.keys(stepErrors).length > 0) {
         dispatch({ type: 'SET_ERRORS', payload: stepErrors });
         toast.error('Please fix the errors in the current step before proceeding');
@@ -455,7 +457,7 @@ const CorrespondenceRegisterForm = () => {
       if (event) event.preventDefault();
 
       // Validate form
-      const validationErrors = validateFormData(formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
+      const validationErrors = validateFormData(formData, flowType, documentFiles, distributions, linkedDocumentIds.length, routingConfig);
       if (Object.keys(validationErrors).length > 0) {
         dispatch({ type: 'SET_ERRORS', payload: validationErrors });
         toast.error('Please fix the errors in the form');
@@ -484,7 +486,7 @@ const CorrespondenceRegisterForm = () => {
       const signal = getSignal();
 
       try {
-        const formDataToSubmit = buildSubmissionFormData(formData, flowType, documentFiles, distributions);
+        const formDataToSubmit = buildSubmissionFormData(formData, flowType, documentFiles, distributions, routingConfig);
 
         // Submit with retry logic - use PATCH for edit, POST for create
         const response = await fetchWithRetry(async () => {
@@ -514,6 +516,36 @@ const CorrespondenceRegisterForm = () => {
         });
 
         const correspondenceId = response?.id || editId;
+
+        if (correspondenceId && routingConfig.routeMode === 'parallel') {
+          const branchText =
+            routingConfig.routingNotes.trim() ||
+            formData.remarks.trim() ||
+            'Please review and respond.';
+          await submitParallelRoute(
+            (path, options) => apiFetch(path, { ...options, signal }),
+            {
+              correspondenceId,
+              parallelUserIds: routingConfig.parallelUserIds,
+              parallelOfficeIds: routingConfig.parallelOfficeIds,
+              branchConfigs: routingConfig.branchConfigs,
+              mergeStrategy: routingConfig.mergeStrategy,
+              defaultPurpose: routingConfig.purpose,
+              defaultMinuteText: branchText,
+              signal,
+            },
+          );
+        }
+
+        if (correspondenceId) {
+          await submitCcDistribution(
+            (path, options) => apiFetch(path, { ...options, signal }),
+            correspondenceId,
+            routingConfig.distributionUserIds,
+            routingConfig.distributionOfficeIds,
+            currentUser?.id,
+          );
+        }
 
         if (correspondenceId && flowType === 'outward') {
           await createDistributionEntries(
@@ -741,7 +773,7 @@ const CorrespondenceRegisterForm = () => {
                       const newStep = v as typeof currentStep;
                       if (validateOnStepChange && newStep !== currentStep) {
                         // Validate current step before switching
-                        const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
+                        const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length, routingConfig);
                         if (Object.keys(stepErrors).length > 0) {
                           dispatch({ type: 'SET_ERRORS', payload: stepErrors });
                           toast.error('Please fix the errors in the current step before switching tabs');
@@ -794,19 +826,20 @@ const CorrespondenceRegisterForm = () => {
                         formData={formData}
                         flowType={flowType}
                         distributions={distributions}
+                        routingConfig={routingConfig}
                         errors={errors}
-                        assignSearch={assignSearch}
                         directorates={directorates}
                         divisions={divisions}
                         departments={departments}
                         offices={activeOffices}
                         officeMemberships={officeMemberships}
                         organizationUsers={organizationUsers}
+                        currentUserId={currentUser?.id}
                         onFormDataChange={handleFormDataChange}
+                        onRoutingChange={(updates) =>
+                          dispatch({ type: 'UPDATE_ROUTING', payload: updates })
+                        }
                         onDistributionChange={handleDistributionChange}
-                        onAssignSearchChange={(search) => {
-                          dispatch({ type: 'SET_ASSIGN_SEARCH', payload: search });
-                        }}
                         onErrorClear={handleErrorClear}
                         onPrev={goToPrevStep}
                         onNext={goToNextStep}

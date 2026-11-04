@@ -11,7 +11,7 @@ import {
 } from "@/lib/canonical-document";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import type { DocumentVersion } from "@/lib/api/dms";
-import mammoth from "mammoth";
+import { convertDocxArrayBufferToHtml } from "@/lib/docx-to-html";
 
 interface DmsVersionPreviewContentProps {
   version: DocumentVersion;
@@ -19,6 +19,7 @@ interface DmsVersionPreviewContentProps {
   allowDownload?: boolean;
   /** When set (from Search), highlight matches in HTML / Word preview. */
   highlightQuery?: string;
+  watermarkText?: string | null;
 }
 
 function useScrollToSearchHit(enabled: boolean) {
@@ -43,6 +44,7 @@ export function DmsVersionPreviewContent({
   expanded = false,
   allowDownload = true,
   highlightQuery = "",
+  watermarkText = null,
 }: DmsVersionPreviewContentProps) {
   const minHeight = expanded ? "min-h-[480px]" : "min-h-[200px]";
   const fileName = version.fileName || "Document";
@@ -89,9 +91,9 @@ export function DmsVersionPreviewContent({
         if (isPDF) {
           setApiPdfBytes(await blob.arrayBuffer());
         } else if (isWordDocx) {
-          const result = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+          const html = await convertDocxArrayBufferToHtml(await blob.arrayBuffer());
           if (cancelled) return;
-          setWordHtml(result.value);
+          setWordHtml(html);
         } else {
           objectUrl = URL.createObjectURL(blob);
           setApiBlobUrl(objectUrl);
@@ -138,21 +140,56 @@ export function DmsVersionPreviewContent({
     const withHits = highlightQuery.trim()
       ? highlightHtml(sanitized, highlightQuery.trim())
       : sanitized;
+    const wm = (watermarkText || "").trim();
     return (
-      <div
-        ref={containerRef}
-        className={`document-print-area doc-paper ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
-        style={{
-          fontFamily: "Verdana, Geneva, sans-serif",
-          fontSize: "12px",
-          lineHeight: "1.5",
-          padding: expanded ? "40px" : "24px",
-          maxWidth: "800px",
-          margin: "0 auto",
-          textAlign: "left",
-        }}
-      >
-        <div dangerouslySetInnerHTML={{ __html: withHits }} />
+      <div className="relative overflow-hidden">
+        {wm ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden select-none"
+          >
+            <span
+              className="font-bold tracking-widest whitespace-nowrap opacity-[0.12] dark:opacity-[0.18]"
+              style={{
+                fontSize: "clamp(28px, 8vw, 64px)",
+                color: "rgb(85 85 85)",
+                transform: "rotate(-30deg)",
+              }}
+            >
+              {wm}
+            </span>
+          </div>
+        ) : null}
+        <div
+          ref={containerRef}
+          className={`document-print-area doc-paper ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
+          style={{
+            fontFamily: "Verdana, Geneva, sans-serif",
+            fontSize: "12px",
+            lineHeight: "1.5",
+            padding: expanded ? "40px" : "24px",
+            maxWidth: "900px",
+            margin: "0 auto",
+            textAlign: "left",
+          }}
+        >
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
+                .doc-paper table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+                .doc-paper td, .doc-paper th {
+                  border: 1px solid #c4c4c4;
+                  padding: 0.35rem 0.5rem;
+                  vertical-align: top;
+                }
+                .doc-paper th { font-weight: 600; background: #f3f4f6; }
+                .doc-paper p { margin: 0 0 0.55em; }
+                .doc-paper img { max-width: 100%; height: auto; display: inline-block; }
+              `,
+            }}
+          />
+          <div dangerouslySetInnerHTML={{ __html: withHits }} />
+        </div>
       </div>
     );
   };
@@ -204,8 +241,16 @@ export function DmsVersionPreviewContent({
   }
 
   if (isImage && apiBlobUrl) {
+    const wm = (watermarkText || "").trim();
     return (
-      <div className={`flex items-center justify-center p-4 bg-muted/20 ${minHeight}`}>
+      <div className={`relative flex items-center justify-center p-4 bg-muted/20 ${minHeight} overflow-hidden`}>
+        {wm ? (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center select-none">
+            <span className="font-bold tracking-widest whitespace-nowrap opacity-[0.14]" style={{ fontSize: "clamp(28px, 8vw, 56px)", color: "rgb(85 85 85)", transform: "rotate(-30deg)" }}>
+              {wm}
+            </span>
+          </div>
+        ) : null}
         <Image
           src={apiBlobUrl}
           alt={fileName}

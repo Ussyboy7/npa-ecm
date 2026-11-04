@@ -1956,3 +1956,28 @@ class CheckOutEvent(UUIDModel, TimeStampedModel):
 
 # Register FOIA models with the correspondence app so migrations stay in sync.
 from .foia_models import FOIANote, FOIARequest, FOIARequestDocument  # noqa: E402,F401
+
+class CorrespondenceAccessLog(UUIDModel):
+    """Audit log of correspondence access — mirrors DocumentAccessLog for Info > Activity."""
+
+    class AccessAction(models.TextChoices):
+        VIEW = "view", "View"
+        DOWNLOAD = "download", "Download"
+        ATTEMPTED_DOWNLOAD = "attempted-download", "Attempted Download"
+        PRINT = "print", "Print"
+        ATTEMPTED_PRINT = "attempted-print", "Attempted Print"
+
+    correspondence = models.ForeignKey(
+        Correspondence, on_delete=models.CASCADE, related_name="access_logs"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="correspondence_access_logs",
+    )
+    action = models.CharField(max_length=32, choices=AccessAction.choices)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-timestamp"]

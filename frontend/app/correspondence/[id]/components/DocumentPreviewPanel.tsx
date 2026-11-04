@@ -6,6 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   FileText,
   Download,
   Maximize2,
@@ -524,23 +530,26 @@ export const DocumentPreviewPanel = ({
             Upload, link, or switch the document shown in preview.
           </p>
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center flex-shrink-0">
           {!isCompleted && (
-            <>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-full" onClick={openFilePicker}>
-                <Upload className="h-3.5 w-3.5" />
-                Add
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5 rounded-full"
-                onClick={onOpenLinkDocument}
-              >
-                <LinkIcon className="h-3.5 w-3.5" />
-                Link
-              </Button>
-            </>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-full">
+                  <Upload className="h-3.5 w-3.5" />
+                  Add
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={openFilePicker}>
+                  <Upload className="h-4 w-4 mr-2 opacity-70" />
+                  Upload file
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenLinkDocument}>
+                  <FolderOpen className="h-4 w-4 mr-2 opacity-70" />
+                  From DMS
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
@@ -1010,6 +1019,20 @@ export const DocumentPreviewPanel = ({
                   (previewLinkedVersion.fileType === 'application/pdf' ||
                     previewLinkedVersion.fileName?.toLowerCase().endsWith('.pdf'));
                 const canDlLinked = linkedDoc ? canDownloadDocument(linkedDoc) : true;
+                const watermarkText = (linkedDoc as unknown as { effectiveRights?: { watermark_text?: string | null }; drmRights?: { watermark_text?: string | null } })?.effectiveRights?.watermark_text || (linkedDoc as unknown as { drmRights?: { watermark_text?: string | null } })?.drmRights?.watermark_text || null;
+                const watermarkOverlay = watermarkText ? (
+                  <div aria-hidden className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
+                    <span
+                      className="select-none whitespace-nowrap font-semibold uppercase tracking-[0.2em] text-[#555] opacity-[0.12]"
+                      style={{
+                        transform: 'rotate(-30deg)',
+                        fontSize: 'clamp(28px, 7vw, 64px)',
+                      }}
+                    >
+                      {watermarkText}
+                    </span>
+                  </div>
+                ) : null;
 
                 if (documentPreviewLoading && !previewLinkedDoc) {
                   return (
@@ -1107,10 +1130,11 @@ export const DocumentPreviewPanel = ({
                 if (documentContentHtml && documentContentHtml.trim().length > 0) {
                   return (
                     <div
-                      className="h-full overflow-auto p-6 doc-paper max-w-none"
+                      className="relative h-full overflow-auto p-6 doc-paper max-w-none"
                       aria-label="Document content preview"
                       style={{ colorScheme: 'light' }}
                     >
+                      {watermarkOverlay}
                       <div dangerouslySetInnerHTML={{ __html: documentContentHtml }} />
                     </div>
                   );
@@ -1121,10 +1145,11 @@ export const DocumentPreviewPanel = ({
                   if (selectedVersion.contentHtml?.trim() && !selectedVersion.hasFile) {
                     return (
                       <div
-                        className="h-full overflow-auto p-6 doc-paper max-w-none"
+                        className="relative h-full overflow-auto p-6 doc-paper max-w-none"
                         aria-label="Document content preview"
                         style={{ colorScheme: 'light' }}
                       >
+                        {watermarkOverlay}
                         <div dangerouslySetInnerHTML={{ __html: sanitizeThemedHtml(selectedVersion.contentHtml) }} />
                       </div>
                     );

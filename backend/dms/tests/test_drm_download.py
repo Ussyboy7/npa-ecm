@@ -10,7 +10,7 @@ from reportlab.pdfgen import canvas
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from dms.models import Document, DocumentAccessLog, DocumentRightsPolicy, DocumentVersion
+from dms.models import Document, DocumentAccessLog, DocumentPermission, DocumentRightsPolicy, DocumentVersion
 from dms.watermark import apply_text_watermark, is_pdf_bytes
 
 User = get_user_model()
@@ -54,6 +54,11 @@ class DrmDownloadTests(APITestCase):
             author=self.author,
             drm_policy=self.policy,
         )
+        viewer_permission = DocumentPermission.objects.create(
+            document=self.document,
+            access=DocumentPermission.AccessLevel.READ,
+        )
+        viewer_permission.users.add(self.viewer)
         self.version = DocumentVersion.objects.create(
             document=self.document,
             version_number=1,

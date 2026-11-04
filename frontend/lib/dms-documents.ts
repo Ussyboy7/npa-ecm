@@ -379,6 +379,7 @@ export const shareDocument = async (
     userIds?: string[];
     divisionIds?: string[];
     departmentIds?: string[];
+    officeIds?: string[];
     shareToAll?: boolean;
     access?: PermissionAccess;
     note?: string;
@@ -392,6 +393,7 @@ export const shareDocument = async (
     userIds = [],
     divisionIds = [],
     departmentIds = [],
+    officeIds = [],
     shareToAll = false,
     access = 'read',
     note = '',
@@ -407,7 +409,7 @@ export const shareDocument = async (
       }),
     });
   } else {
-    const hasSelection = userIds.length > 0 || divisionIds.length > 0 || departmentIds.length > 0;
+    const hasSelection = userIds.length > 0 || divisionIds.length > 0 || departmentIds.length > 0 || officeIds.length > 0;
     if (!hasSelection) {
       throw new Error('Select at least one recipient, division, or department');
     }
@@ -421,6 +423,7 @@ export const shareDocument = async (
         user_ids: Array.from(new Set(userIds.filter(Boolean))),
         division_ids: Array.from(new Set(divisionIds.filter(Boolean))),
         department_ids: Array.from(new Set(departmentIds.filter(Boolean))),
+        office_ids: Array.from(new Set(officeIds.filter(Boolean))),
       }),
     });
   }

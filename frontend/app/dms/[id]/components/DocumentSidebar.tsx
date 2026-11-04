@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AccessActivityCard } from "@/components/dms/AccessActivityCard";
 import { RelatedCorrespondenceCard } from "@/components/dms/RelatedCorrespondenceCard";
@@ -15,7 +16,6 @@ import type {
 } from "@/lib/api/dms";
 import type { Correspondence, Minute, User } from "@/lib/npa-structure";
 import { DocumentMetadataCard } from "./DocumentMetadataCard";
-import { DocumentSummaryCard } from "@/components/dms/DocumentSummaryCard";
 import { RelatedItemsPanel } from "@/components/search/RelatedItemsPanel";
 import { DocumentVersionsPanel } from "./DocumentVersionsPanel";
 import { DocumentDrmBanner } from "@/components/dms/DocumentDrmBanner";
@@ -23,7 +23,7 @@ import { CollaborationPanel } from "@/components/dms/CollaborationPanel";
 import type { OCRState } from "@/app/dms/[id]/hooks/use-document-ocr";
 import { cn } from "@/lib/utils";
 import { detailType } from "@/lib/detail-type";
-import { FileStack, MessageSquare, Link2, Info } from "lucide-react";
+import { FileStack, MessageSquare, Link2, Info, Pencil, FolderTree } from "lucide-react";
 
 export type SidebarTab = "versions" | "comments" | "links" | "details";
 
@@ -46,6 +46,9 @@ export interface DocumentSidebarProps {
   onCreateVersion?: () => void;
   onOpenCommentsDialog: () => void;
   onShare?: () => void;
+  onEditMetadata?: () => void;
+  onLinkCase?: () => void;
+  unreadComments?: number;
   onViewActivityDetails: (log: DocumentAccessLog) => void;
   onRefreshAccessLogs: () => Promise<void>;
   onPreviewVersion: (version: DocumentVersion) => void;
@@ -73,6 +76,9 @@ export function DocumentSidebar({
   onCreateVersion,
   onOpenCommentsDialog,
   onShare,
+  onEditMetadata,
+  onLinkCase,
+  unreadComments = 0,
   onViewActivityDetails,
   onRefreshAccessLogs,
   onPreviewVersion,
@@ -109,7 +115,7 @@ export function DocumentSidebar({
       label: "Comments",
       short: "Chat",
       icon: MessageSquare,
-      count: comments.length || undefined,
+      count: unreadComments > 0 ? unreadComments : comments.length || undefined,
     },
     {
       id: "links",
@@ -143,7 +149,14 @@ export function DocumentSidebar({
                 <Icon className="h-3 w-3 flex-shrink-0 opacity-80" />
                 <span className="truncate max-w-[3.5rem]">{tab.short}</span>
                 {tab.count != null && tab.count > 0 ? (
-                  <span className="tabular-nums opacity-70 flex-shrink-0 text-[10px]">
+                  <span
+                    className={cn(
+                      "tabular-nums flex-shrink-0 text-[10px]",
+                      tab.id === "comments" && unreadComments > 0
+                        ? "px-1 py-0 rounded-full bg-primary text-primary-foreground font-semibold"
+                        : "opacity-70",
+                    )}
+                  >
                     {tab.count}
                   </span>
                 ) : null}
@@ -198,6 +211,17 @@ export function DocumentSidebar({
 
           {activeTab === "links" && (
             <div className="space-y-3 min-w-0">
+              {onLinkCase && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={onLinkCase}
+                >
+                  <FolderTree className="h-4 w-4 mr-2 opacity-70" />
+                  Link to case
+                </Button>
+              )}
               {relatedCorrespondence.length > 0 ? (
                 <RelatedCorrespondenceCard
                   relatedCorrespondence={relatedCorrespondence}
@@ -215,8 +239,42 @@ export function DocumentSidebar({
               {document.drmRights?.policy_name ? (
                 <DocumentDrmBanner rights={document.drmRights} />
               ) : null}
+              {document.effectiveRights && (
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2">
+                  <p className="text-xs font-medium text-foreground">Effective rights</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline" className="capitalize text-[11px]">
+                      Access: {document.effectiveRights.access_level ?? "None"}
+                    </Badge>
+                    <Badge variant={document.effectiveRights.can_download ? "secondary" : "destructive"} className="text-[11px]">
+                      Download {document.effectiveRights.can_download ? "allowed" : "blocked"}
+                    </Badge>
+                    <Badge variant={document.effectiveRights.can_print ? "secondary" : "destructive"} className="text-[11px]">
+                      Print {document.effectiveRights.can_print ? "allowed" : "blocked"}
+                    </Badge>
+                    {document.effectiveRights.can_replace_version && <Badge variant="secondary" className="text-[11px]">Replace versions</Badge>}
+                    {document.effectiveRights.can_manage_sharing && <Badge variant="secondary" className="text-[11px]">Manage sharing</Badge>}
+                  </div>
+                  {document.effectiveRights.watermark_text && (
+                    <p className="text-xs text-muted-foreground">Watermark: {document.effectiveRights.watermark_text}</p>
+                  )}
+                  {document.effectiveRights.message && (
+                    <p className="text-xs text-muted-foreground leading-snug">{document.effectiveRights.message}</p>
+                  )}
+                </div>
+              )}
               <DocumentMetadataCard document={document} />
-              <DocumentSummaryCard document={document} compact />
+              {onEditMetadata && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  onClick={onEditMetadata}
+                >
+                  <Pencil className="h-4 w-4 mr-2 opacity-70" />
+                  Edit metadata
+                </Button>
+              )}
               <AccessActivityCard
                 documentId={document.id}
                 accessLogs={accessLogs}

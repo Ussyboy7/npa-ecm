@@ -54,6 +54,7 @@ from .models import (
     CaseTemplate,
     CaseWorkflowRule,
     Correspondence,
+    CorrespondenceAccessLog,
     CorrespondenceAttachment,
     CorrespondenceDelegation,
     CorrespondenceDraft,
@@ -2244,7 +2245,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             Q(current_approver=user) |
             Q(id__in=parallel_correspondence_ids) |
             Q(id__in=distribution_correspondence_ids)
-        ).exclude(status=Correspondence.Status.COMPLETED)
+        ).exclude(status=Correspondence.Status.COMPLETED).exclude(
+            # Office-seat items under acting are handled only in Office Inbox,
+            # not in personal My Inbox — keeps My=person, Office=seat.
+            acting_appointment__isnull=False
+        )
 
         statuses = request.query_params.getlist("status")
         if statuses:
@@ -3589,3 +3594,25 @@ class DispatchRecordViewSet(viewsets.ModelViewSet):
         record.acknowledged_by = request.user
         record.save(update_fields=["acknowledged_date", "acknowledged_by"])
         return Response(DispatchRecordSerializer(record, context={"request": request}).data)
+
+
+class CorrespondenceAccessLogViewSet(viewsets.GenericViewSet, viewsets.mixins.CreateModelMixin, viewsets.mixins.ListModelMixin):
+    """Audit trail of correspondence views, downloads, and prints — mirrors DocumentAccessLogViewSet."""
+    queryset = None  # set dynamically via get_queryset
+    serializer_class = None  # set via string to avoid circular import
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["correspondence", "action", "user"]
+    ordering_fields = ["timestamp"]
+    ordering = ["-timestamp"]
+
+    def get_serializer_class(self):
+        from .serializers import CorrespondenceAccessLogSerializer
+        return CorrespondenceAccessLogSerializer
+
+    def get_queryset(self):
+        from .models import CorrespondenceAccessLog
+        return CorrespondenceAccessLog.objects.select_related("correspondence", "user")
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)

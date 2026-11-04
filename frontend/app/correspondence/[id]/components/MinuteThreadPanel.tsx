@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -41,6 +42,20 @@ interface MinuteThreadPanelProps {
   scrollable?: boolean;
 }
 
+function isTopLevelParallelBranch(minute: Minute, minutesById: Map<string, Minute>): boolean {
+  if (!minute.isParallelBranch) return false;
+  if (!minute.toUserId && !minute.toOfficeId) return false;
+  if (!minute.parentMinuteId) return true;
+  const parent = minutesById.get(minute.parentMinuteId);
+  return !parent?.isParallelBranch;
+}
+
+function branchHeaderLabel(minute: Minute): string {
+  if (minute.toUserName) return minute.toUserName;
+  if (minute.toOfficeName) return minute.toOfficeName;
+  return 'Parallel branch';
+}
+
 export const MinuteThreadPanel = ({
   minutes,
   activeUserId,
@@ -71,6 +86,11 @@ export const MinuteThreadPanel = ({
     ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain'
     : 'min-h-0';
 
+  const minutesById = useMemo(
+    () => new Map(minutes.map((m) => [m.id, m])),
+    [minutes],
+  );
+
   return (
     <main className={panelClass}>
       <div className="px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-sm flex-shrink-0">
@@ -99,6 +119,7 @@ export const MinuteThreadPanel = ({
           ) : (
             <ol className="relative space-y-0">
               {minutes.map((minuteItem, idx) => {
+                const showBranchHeader = isTopLevelParallelBranch(minuteItem, minutesById);
                 const user = lookupUser(minuteItem.userId);
                 const ActionIcon = getActionIcon(minuteItem.actionType);
                 const isDownward = minuteItem.direction === 'downward';
@@ -123,7 +144,21 @@ export const MinuteThreadPanel = ({
                     (isOwn || isCurrentUserTurn));
 
                 return (
-                  <li key={minuteItem.id} className="relative flex gap-3">
+                  <li key={minuteItem.id} className="relative flex flex-col gap-0">
+                    {showBranchHeader && (
+                      <div className="mb-2 ml-11 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5">
+                        <Users className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className={cn(corrType.caption, 'font-medium text-primary')}>
+                          Branch → {branchHeaderLabel(minuteItem)}
+                        </span>
+                        {minuteItem.mergeStrategy && (
+                          <Badge variant="outline" className="text-[10px] h-5 ml-auto">
+                            {minuteItem.mergeStrategy === 'all' ? 'Wait for all' : minuteItem.mergeStrategy}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    <div className="relative flex gap-3">
                     {/* Timeline rail */}
                     <div className="relative flex w-8 flex-shrink-0 flex-col items-center">
                       {idx < minutes.length - 1 && (
@@ -383,6 +418,7 @@ export const MinuteThreadPanel = ({
                             )}
                         </div>
                       )}
+                    </div>
                     </div>
                   </li>
                 );

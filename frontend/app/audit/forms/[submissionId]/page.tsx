@@ -41,6 +41,11 @@ import { formatDateTime } from "@/lib/correspondence-helpers";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOrgUsers } from "@/hooks/use-org-users";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import {
+  AuditRouteDialog,
+  type AuditRouteSubmitPayload,
+} from "@/components/correspondence/AuditRouteDialog";
 import type {
   FormTemplate,
   FormSubmission,
@@ -303,12 +308,6 @@ export default function AuditFormFillPage() {
 
   const [signFormData, setSignFormData] = useState<Record<string, { signer_name: string; signer_pn: string; signer_designation: string }>>({});
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
-  const [forwardTargetOffice, setForwardTargetOffice] = useState("");
-  const [forwardAttentionUser, setForwardAttentionUser] = useState("");
-  const [forwardCc, setForwardCc] = useState("");
-  const [forwardDueDate, setForwardDueDate] = useState("");
-  const [forwardActionRequired, setForwardActionRequired] = useState(true);
-  const [forwardRequiredApprovalLevel, setForwardRequiredApprovalLevel] = useState("departmental");
   const [forwardSubject, setForwardSubject] = useState("");
   const [forwarding, setForwarding] = useState(false);
   const [caseId, setCaseId] = useState<string | null>(null);
@@ -316,13 +315,9 @@ export default function AuditFormFillPage() {
   const [caseMetadata, setCaseMetadata] = useState<Record<string, unknown> | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   // Office-centric routing state per spec
-  const { directorates, divisions, departments, offices } = useOrganization();
+  const { directorates, divisions, offices, officeMemberships } = useOrganization();
   const { users: orgUsers } = useOrgUsers();
-  const [routeType, setRouteType] = useState<"division" | "department" | "directorate" | "office">("division");
-  const [selectedDivisionId, setSelectedDivisionId] = useState("");
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
-  const [selectedDirectorateId, setSelectedDirectorateId] = useState("");
-  const [selectedOfficeId, setSelectedOfficeId] = useState("");
+  const { currentUser } = useCurrentUser();
 
   const fetchSubmission = useCallback(async () => {
     try {
@@ -445,27 +440,6 @@ export default function AuditFormFillPage() {
   useEffect(() => {
     void fetchSubmission();
   }, [fetchSubmission]);
-
-  // Resolve target office from routeType + selection — office is recipient per spec
-  const resolvedOffice = (() => {
-    if (routeType === "office" && selectedOfficeId) return offices.find((o) => o.id === selectedOfficeId) || null;
-    if (routeType === "division" && selectedDivisionId) {
-      // Prefer GM/division office for this division, fallback to any office with this division
-      return offices.find((o) => o.divisionId === selectedDivisionId && (o.officeType === "gm" || o.officeType === "division")) || offices.find((o) => o.divisionId === selectedDivisionId) || null;
-    }
-    if (routeType === "department" && selectedDepartmentId) {
-      return offices.find((o) => o.departmentId === selectedDepartmentId) || null;
-    }
-    if (routeType === "directorate" && selectedDirectorateId) {
-      return offices.find((o) => o.directorateId === selectedDirectorateId && (o.officeType === "ed" || o.officeType === "directorate")) || offices.find((o) => o.directorateId === selectedDirectorateId) || null;
-    }
-    return null;
-  })();
-
-  useEffect(() => {
-    if (resolvedOffice) setForwardTargetOffice(resolvedOffice.code || resolvedOffice.id);
-    else if (routeType === "office" && !selectedOfficeId) setForwardTargetOffice("");
-  }, [resolvedOffice, routeType, selectedOfficeId]);
 
   const getFields = (): AuditField[] => {
     if (!template?.structure?.fields) return [];
@@ -617,70 +591,48 @@ export default function AuditFormFillPage() {
     }
   };
 
-  const handleForwardViaCorrespondence = async () => {
-    const officeCode = (resolvedOffice?.code || resolvedOffice?.id || forwardTargetOffice.trim());
-    if (!officeCode || !forwardSubject.trim()) {
-      toast.error("Select destination and enter subject");
-      return;
-    }
+  const handleAuditRouteSubmit = async (payload: AuditRouteSubmitPayload) => {
     if (!caseId) {
       toast.error("Case not found for this submission — ensure audit case exists (CERTIFIED/AUTHORIZED)");
       return;
     }
-    // Office is recipient — Attention is optional per spec
-    const isValidOffice =
-      /^OFF_[A-Z0-9_]+$/i.test(officeCode) ||
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(officeCode);
-    if (!isValidOffice) {
-      toast.error("Resolved office invalid — select a valid Division/Department/Directorate");
-      return;
-    }
     setForwarding(true);
     try {
-      const dueDateValue = forwardDueDate.trim() ? forwardDueDate.trim() : null;
-      const ccList = forwardCc.trim() ? forwardCc.split(",").map((s) => s.trim()).filter(Boolean) : [];
-      const attentionUserValue = forwardAttentionUser.trim() || null;
-      const subject = forwardSubject.trim();
-      const bodyHtml = `<p>Audit query <strong>${template?.name ?? "Audit Query"}</strong> certified by GM Audit — forwarded for your explanation/action.</p><p>Form: ${submission?.id ?? ""}</p><p>PV: ${(formData as Record<string, unknown>)?.pv_no as string ?? ""}</p>`;
+      const body: Record<string, unknown> = {
+        action: "REFER",
+        subject: payload.subject,
+        body: payload.bodyHtml,
+        body_html: payload.bodyHtml,
+        attention: payload.attentionUserId,
+        attention_user: payload.attentionUserId,
+        cc: [...payload.ccUserIds, ...payload.ccOfficeIds],
+        action_required: payload.actionRequired,
+        due_date: payload.dueDate,
+        required_approval_level: payload.requiredApprovalLevel,
+      };
+      if (payload.parallelRecipients && payload.parallelRecipients.length >= 2) {
+        body.parallel_recipients = payload.parallelRecipients;
+        body.merge_strategy = payload.mergeStrategy ?? "all";
+      } else if (payload.targetOfficeId) {
+        const office = offices.find((o) => o.id === payload.targetOfficeId);
+        body.target_office = office?.code || payload.targetOfficeId;
+      } else {
+        toast.error("Select a route destination");
+        return;
+      }
 
-      // Wire via Case action REFER (atomically creates Correspondence + links + transitions)
       const result = await apiFetch<{ id: string; correspondence_id?: string; correspondence_reference?: string; audit_state?: string }>(
         `/correspondence/cases/${caseId}/actions/`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            action: "REFER",
-            subject,
-            body: bodyHtml,
-            body_html: bodyHtml,
-            target_office: officeCode,
-            attention: attentionUserValue,
-            attention_user: attentionUserValue,
-            cc: ccList,
-            action_required: forwardActionRequired,
-            due_date: dueDateValue,
-            required_approval_level: forwardRequiredApprovalLevel,
-          }),
-        }
+        { method: "POST", body: JSON.stringify(body) },
       );
-      const officeLabel = resolvedOffice ? `${resolvedOffice.name} (${resolvedOffice.code})` : officeCode;
-      toast.success(`Referred to ${officeLabel} via ${result.correspondence_reference ?? result.correspondence_id ?? "correspondence"} — office queue`);
+      const label = payload.parallelRecipients
+        ? `parallel (${payload.parallelRecipients.length} branches)`
+        : body.target_office;
+      toast.success(`Referred to ${label} via ${result.correspondence_reference ?? result.correspondence_id ?? "correspondence"}`);
       setForwardDialogOpen(false);
-      setForwardTargetOffice("");
-      setForwardAttentionUser("");
-      setForwardCc("");
-      setForwardDueDate("");
-      setForwardActionRequired(true);
-      setForwardRequiredApprovalLevel("departmental");
       setForwardSubject("");
-      setSelectedDivisionId("");
-      setSelectedDepartmentId("");
-      setSelectedDirectorateId("");
-      setSelectedOfficeId("");
-      // Refresh case state/banner; show updated state
       await fetchSubmission();
       if (result.correspondence_id) {
-        // Keep user on page but offer link — banner will show CORR-...
         toast.success(`Correspondence: ${result.correspondence_reference ?? result.correspondence_id}`);
       }
     } catch (err) {
@@ -691,6 +643,8 @@ export default function AuditFormFillPage() {
       setForwarding(false);
     }
   };
+
+  const defaultRouteBodyHtml = `<p>Audit query <strong>${template?.name ?? "Audit Query"}</strong> certified by GM Audit — forwarded for your explanation/action.</p><p>Form: ${submission?.id ?? ""}</p><p>PV: ${(formData as Record<string, unknown>)?.pv_no as string ?? ""}</p>`;
 
   const canSign = (sig: FormSignature): boolean => {
     if (sig.status !== "pending") return false;
@@ -1075,7 +1029,15 @@ export default function AuditFormFillPage() {
                 </Button>
               )}
               {(auditState === "CERTIFIED" || auditState === "AUTHORIZED") && (
-                <Button size="compact" onClick={() => setForwardDialogOpen(true)}>
+                <Button
+                  size="compact"
+                  onClick={() => {
+                    if (!forwardSubject.trim()) {
+                      setForwardSubject(`Re: ${template?.name ?? "Audit Query"} — ${submission?.id?.slice(0, 8)}`);
+                    }
+                    setForwardDialogOpen(true);
+                  }}
+                >
                   <Send className="mr-2 h-4 w-4" /> Route to Office
                 </Button>
               )}
@@ -1339,111 +1301,21 @@ export default function AuditFormFillPage() {
         </>
       )}
 
-      {/* Route Audit Query — office is recipient, Attention is optional per spec */}
-      {forwardDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-semibold">Route Audit Query</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Routes to destination office queue — Office members with access can act on this item. Attention is optional and does not change the primary recipient.</p>
-            <div className="mt-4 space-y-4">
-              {/* Route To — Division / Department / Directorate / Office */}
-              <div className="space-y-2">
-                <Label>Route To *</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["division","department","directorate","office"] as const).map((t) => (
-                    <label key={t} className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer ${routeType===t ? "border-primary bg-primary/5" : "border-border"}`}>
-                      <input type="radio" name="routeType" value={t} checked={routeType===t} onChange={() => setRouteType(t)} className="h-4 w-4" />
-                      <span className="text-sm capitalize">{t}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {routeType === "division" && (
-                <div className="space-y-2">
-                  <Label>Destination: Division *</Label>
-                  <select value={selectedDivisionId} onChange={(e) => setSelectedDivisionId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    <option value="">Select division</option>
-                    {divisions.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                  </select>
-                  {resolvedOffice && <p className="text-xs text-muted-foreground">Office: {resolvedOffice.name} ({resolvedOffice.code}) — Routes to {resolvedOffice.name} office queue</p>}
-                </div>
-              )}
-              {routeType === "department" && (
-                <div className="space-y-2">
-                  <Label>Destination: Department *</Label>
-                  <select value={selectedDepartmentId} onChange={(e) => setSelectedDepartmentId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    <option value="">Select department</option>
-                    {departments.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                  </select>
-                  {resolvedOffice && <p className="text-xs text-muted-foreground">Office: {resolvedOffice.name} ({resolvedOffice.code}) — office queue</p>}
-                </div>
-              )}
-              {routeType === "directorate" && (
-                <div className="space-y-2">
-                  <Label>Destination: Directorate *</Label>
-                  <select value={selectedDirectorateId} onChange={(e) => setSelectedDirectorateId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    <option value="">Select directorate</option>
-                    {directorates.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                  </select>
-                  {resolvedOffice && <p className="text-xs text-muted-foreground">Office: {resolvedOffice.name} ({resolvedOffice.code})</p>}
-                </div>
-              )}
-              {routeType === "office" && (
-                <div className="space-y-2">
-                  <Label>Destination: Office *</Label>
-                  <select value={selectedOfficeId} onChange={(e) => setSelectedOfficeId(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    <option value="">Select office</option>
-                    {offices.filter((o) => o.isActive).slice(0,100).map((o) => (<option key={o.id} value={o.id}>{o.name} ({o.code})</option>))}
-                  </select>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Attention — Optional</Label>
-                <select value={forwardAttentionUser} onChange={(e) => setForwardAttentionUser(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                  <option value="">None — office queue</option>
-                  {orgUsers.filter((u) => u.active !== false).slice(0,100).map((u) => (<option key={u.id} value={u.id}>{u.name} {u.email ? `— ${u.email}` : ""}</option>))}
-                </select>
-                <p className="text-xs text-muted-foreground">E.g. Finance Division → Attention: GM Finance — does not change primary recipient.</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Due Date</Label>
-                  <Input type="date" value={forwardDueDate} onChange={(e) => setForwardDueDate(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Action Required</Label>
-                  <select value={forwardActionRequired ? "explanation" : "information"} onChange={(e) => setForwardActionRequired(e.target.value==="explanation")} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                    <option value="explanation">Explanation / Response</option>
-                    <option value="information">For Information</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Correspondence Subject *</Label>
-                <Input value={forwardSubject} onChange={(e) => setForwardSubject(e.target.value)} placeholder={`Re: ${template?.name} — ${submission?.id?.slice(0,8)}`} />
-              </div>
-
-              {auditState && !["CERTIFIED","AUTHORIZED"].includes(auditState) && (
-                <p className="text-xs text-amber-600">REFER requires CERTIFIED or AUTHORIZED — current: {auditState}</p>
-              )}
-              {resolvedOffice && (
-                <p className="text-xs text-emerald-700">Routes to {resolvedOffice.name} ({resolvedOffice.code}) office. Office members with access can act on this item.</p>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setForwardDialogOpen(false)} disabled={forwarding}>Cancel</Button>
-                <Button onClick={handleForwardViaCorrespondence} disabled={forwarding || !resolvedOffice || !forwardSubject.trim()}>
-                  {forwarding ? "Routing..." : `Route to ${resolvedOffice ? resolvedOffice.code : "Office"}`}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AuditRouteDialog
+        open={forwardDialogOpen}
+        onClose={() => setForwardDialogOpen(false)}
+        onSubmit={handleAuditRouteSubmit}
+        submitting={forwarding}
+        defaultSubject={forwardSubject || `Re: ${template?.name ?? "Audit Query"} — ${submission?.id?.slice(0, 8)}`}
+        defaultBodyHtml={defaultRouteBodyHtml}
+        auditState={auditState}
+        directorates={directorates}
+        divisions={divisions}
+        offices={offices}
+        officeMemberships={officeMemberships}
+        users={orgUsers}
+        currentUserId={currentUser?.id}
+      />
     </div>
   );
 }

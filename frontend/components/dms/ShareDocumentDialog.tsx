@@ -642,9 +642,9 @@ const ShareDocumentDialogContent = ({
     // If already in review step, confirm and perform the share
     if (showReviewStep) {
       const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
-      const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
-      const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
-      await performShare(userIds, divisionIds, departmentIds);
+      const divisionIds: string[] = [];
+      const departmentIds: string[] = [];
+      await performShare(userIds, divisionIds, departmentIds, correspondenceRouteType === 'office' ? Array.from(directShareSelectedOfficeIds) : []);
       return;
     }
 
@@ -652,8 +652,8 @@ const ShareDocumentDialogContent = ({
     if ((document.sensitivity === 'restricted' || document.sensitivity === 'confidential') && !showSensitivityWarning) {
       setPendingShareAction(async () => {
         const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
-        const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
-        const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
+        const divisionIds: string[] = [];
+        const departmentIds: string[] = [];
 
         if (correspondenceRouteType === 'person' && userIds.length === 0) {
           toast.error('Select at least one person');
@@ -663,25 +663,22 @@ const ShareDocumentDialogContent = ({
           toast.error('Select at least one office');
           return;
         }
-        if (correspondenceRouteType === 'office' && divisionIds.length === 0 && departmentIds.length === 0) {
-          toast.error('Selected offices do not map to any division/department access');
-          return;
-        }
+
         const dupCount = countDuplicatesForTargets(userIds, divisionIds, departmentIds);
         if (dupCount > 0) {
           setDuplicateCount(dupCount);
           setShowDuplicateWarning(true);
           return;
         }
-        await performShare(userIds, divisionIds, departmentIds);
+        await performShare(userIds, divisionIds, departmentIds, correspondenceRouteType === 'office' ? Array.from(directShareSelectedOfficeIds) : []);
       });
       setShowSensitivityWarning(true);
       return;
     }
 
     const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
-    const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
-    const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
+    const divisionIds: string[] = [];
+    const departmentIds: string[] = [];
 
     if (correspondenceRouteType === 'person' && userIds.length === 0) {
       toast.error('Select at least one person');
@@ -691,10 +688,7 @@ const ShareDocumentDialogContent = ({
       toast.error('Select at least one office');
       return;
     }
-    if (correspondenceRouteType === 'office' && divisionIds.length === 0 && departmentIds.length === 0) {
-      toast.error('Selected offices do not map to any division/department access');
-      return;
-    }
+
 
     // Check for duplicates
     const dupCount = countDuplicatesForTargets(userIds, divisionIds, departmentIds);
@@ -711,7 +705,8 @@ const ShareDocumentDialogContent = ({
   const performShare = async (
     userIds: string[],
     divisionIds: string[],
-    departmentIds: string[]
+    departmentIds: string[],
+    officeIds: string[] = [],
   ) => {
     if (!document) return;
     if (!canShareDocument(document)) {
@@ -740,11 +735,12 @@ const ShareDocumentDialogContent = ({
       
       // Share with users, divisions, and departments via permissions
       let updated: DocumentRecord | undefined;
-      if (userIds.length > 0 || divisionIds.length > 0 || departmentIds.length > 0) {
+      if (userIds.length > 0 || divisionIds.length > 0 || departmentIds.length > 0 || officeIds.length > 0) {
         updated = await shareDocument(document.id, {
           userIds,
           divisionIds,
           departmentIds,
+          officeIds,
           access: accessLevel,
           note: note.trim(),
         });
@@ -822,12 +818,11 @@ const ShareDocumentDialogContent = ({
 
   // Detailed selection summary
   const selectionSummary = useMemo(() => {
-    const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
-    const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
     return {
       users: selectedUserIds.size,
-      divisions: divisionIds.length,
-      departments: departmentIds.length,
+      divisions: 0,
+      departments: 0,
+      offices: correspondenceRouteType === 'office' ? directShareSelectedOfficeIds.size : 0,
       directorates: 0,
       total: totalSelected,
     };
@@ -1081,9 +1076,9 @@ const ShareDocumentDialogContent = ({
                             <Building2 className="h-3 w-3" /> {selectionSummary.directorates} directorates
                           </Badge>
                         )}
-                        {selectionSummary.divisions > 0 && (
+                        {selectionSummary.offices > 0 && (
                           <Badge variant="secondary" className="gap-1">
-                            <Building2 className="h-3 w-3" /> {selectionSummary.divisions} divisions
+                            <Building2 className="h-3 w-3" /> {selectionSummary.offices} offices
                           </Badge>
                         )}
                         {selectionSummary.departments > 0 && (
@@ -1125,10 +1120,31 @@ const ShareDocumentDialogContent = ({
                   {accessLevel !== 'read' && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" />
-                      {accessLevel === 'admin' ? 'Full control over document' : 'Can edit document'}
+                      {accessLevel === 'admin' ? 'Can manage sharing and archive this document' : 'Can replace document versions'}
                     </p>
                   )}
                 </div>
+
+                {document.effectiveRights && (
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
+                    <Label className="text-xs text-muted-foreground">Current Document Protection</Label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className="capitalize">
+                        Access: {document.effectiveRights.access_level ?? 'None'}
+                      </Badge>
+                      {document.effectiveRights.view_only && <Badge variant="secondary">View only</Badge>}
+                      {document.effectiveRights.expired && <Badge variant="destructive">Expired</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {document.effectiveRights.allow_external_share
+                        ? 'Sharing is allowed by the current DRM policy.'
+                        : 'Sharing is blocked by the current DRM policy.'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Download: {document.effectiveRights.can_download ? 'Allowed' : 'Blocked'} · Print: {document.effectiveRights.can_print ? 'Allowed' : 'Blocked'}
+                    </p>
+                  </div>
+                )}
                 
                 {/* Existing Permissions Quick View */}
                 {existingPermissions.length > 0 && (
@@ -1801,9 +1817,9 @@ const ShareDocumentDialogContent = ({
             onClick={() => {
               setShowDuplicateWarning(false);
               const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
-              const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
-              const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
-              void performShare(userIds, divisionIds, departmentIds);
+              const divisionIds: string[] = [];
+              const departmentIds: string[] = [];
+              void performShare(userIds, divisionIds, departmentIds, correspondenceRouteType === 'office' ? Array.from(directShareSelectedOfficeIds) : []);
             }}
           >
             Continue Anyway

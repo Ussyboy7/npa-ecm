@@ -5,7 +5,7 @@ import { logError, logWarn } from '@/lib/client-logger';
 import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { toast } from "@/components/ui/sonner";
-import { MessageSquare, CheckCircle, Send, ArrowRightLeft } from 'lucide-react';
+import { MessageSquare, CheckCircle, Send } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -133,6 +133,35 @@ const CorrespondenceDetailContent = () => {
   const statusParam = searchParams?.get('status');
   const initialStatus = statusParam ?? cachedCorrespondence?.status;
   const correspondence = remoteCorrespondence ?? cachedCorrespondence;
+  // Audit Case detection for hard product rule: Case owns work, not Minute
+  const [caseAuditState, setCaseAuditState] = useState<string | null>(null);
+  const [isAuditCase, setIsAuditCase] = useState(false);
+  useEffect(() => {
+    if (!correspondence?.caseId) {
+      setIsAuditCase(false);
+      setCaseAuditState(null);
+      return;
+    }
+    let cancelled = false;
+    apiFetch(`/correspondence/cases/${correspondence.caseId}/`)
+      .then((caseData: unknown) => {
+        if (cancelled) return;
+        const data = caseData as Record<string, unknown>;
+        const caseType = (data.case_type as string) || (data.caseType as string) || '';
+        const isAudit = caseType === 'audit';
+        setIsAuditCase(isAudit);
+        const meta = data.metadata as Record<string, unknown> | undefined;
+        const auditState = (meta?.audit_state as string) || (data.audit_state as string) || (data.auditState as string) || null;
+        setCaseAuditState(auditState ? String(auditState).toUpperCase() : null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAuditCase(false);
+          setCaseAuditState(null);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [correspondence?.caseId]);
   // Closed = completed / dispatched / acknowledged / archived / withdrawn (not only status===completed)
   const isCompleted = isCorrespondenceClosed(remoteCorrespondence?.status ?? initialStatus ?? correspondence?.status);
 
@@ -544,7 +573,12 @@ const CorrespondenceDetailContent = () => {
     officeMemberships,
     lookupUser,
     getActionIcon,
+    isAuditCase,
+    caseAuditState,
+    onViewAuditCase: () => correspondence.caseId && router.push(`/cases/${correspondence.caseId}`),
     onOpenLinkCaseModal: () => openModal('link-case'),
+    canReassign,
+    onReassign: () => setShowReassign(true),
     onOpenMinuteModal: () => openModal('minute'),
     onOpenTreatmentModal: () => openModal('treatment'),
     onOpenCompletionModal: () => openModal('completion'),
@@ -593,28 +627,11 @@ const CorrespondenceDetailContent = () => {
         <div className="flex-shrink-0">
           <CorrespondenceHeader
             correspondence={correspondence}
-            minutes={minutes}
-            linkedDocuments={linkedDocuments}
-            onOpenPrimaryAction={
-              isCompleted && !isRecalledAndReverted
-                ? undefined
-                : () => openModal('minute')
-            }
-            primaryActionLabel={(() => {
-              const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
-              const isMD = activeUser.gradeLevel === 'MDCS' || activeUser.systemRole === 'Managing Director';
-              if (required === 'executive' && isMD) return 'Executive Approval';
-              if (required === 'executive') return 'Endorse';
-              if (required === 'departmental') return 'Departmental Approval';
-              return activeUser.gradeLevel === 'MDCS' ? 'Minute & Approve' : correspondence.direction === 'downward' ? 'Minute' : 'Endorse';
-            })()}
-            primaryActionDisabled={turnRestrictedDisabled}
+            isAuditCase={isAuditCase}
             onCaseUnlinked={async () => {
               await refreshData();
               await syncFromApi();
             }}
-            onOpenLinkCaseModal={() => openModal('link-case')}
-            onOpenPrintPreview={openPrintPreview}
             onDistributionShared={async () => {
               await refreshData();
               await syncFromApi();
@@ -628,15 +645,16 @@ const CorrespondenceDetailContent = () => {
           />
         </div>
 
-        {canReassign && !isCompleted && (
-          <div className="px-4 py-2 border-b border-border/40 flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => setShowReassign(true)}>
-              <ArrowRightLeft className="h-4 w-4 mr-2" />
-              Reassign
-            </Button>
+        {isAuditCase && correspondence?.caseId && (
+          <div className="px-4 py-2 bg-primary/[0.04] border-b border-primary/10 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-medium">
+              {caseAuditState ? `${caseAuditState} · ` : ''}Case {correspondence.caseId.slice(0,8)} — Audit Query
+            </span>
+            <span className="text-muted-foreground">
+              Owner: {correspondence.currentOfficeName || '—'} {correspondence.currentApproverId ? `· Attention: ${organizationUsers.find(u => u.id === correspondence.currentApproverId)?.name || String(correspondence.currentApproverId).slice(0,8)}` : '· Attention: —'}
+            </span>
           </div>
         )}
-
         <CompactStatusStrip
           status={correspondence.status}
           receivedDate={correspondence.receivedDate}

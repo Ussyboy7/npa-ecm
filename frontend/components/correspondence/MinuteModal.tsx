@@ -53,7 +53,8 @@ import {
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
-import { DistributionSelector } from './DistributionSelector';
+import { PrimaryRoutePanel } from './PrimaryRoutePanel';
+import { submitParallelRoute, submitCcDistribution } from '@/lib/parallel-routing';
 import { RoutingSection } from './RoutingSection';
 import { type SignatureTemplate } from '@/lib/api/signatures';
 import { useSignature } from '@/hooks/use-signature';
@@ -96,6 +97,13 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [hasDraft, setHasDraft] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<DistributionRecipient[]>([]);
+  const [routeMode, setRouteMode] = useState<'single' | 'parallel'>('single');
+  const [mergeStrategy, setMergeStrategy] = useState<'all' | 'any' | 'majority' | 'independent'>('all');
+  const [parallelUserIds, setParallelUserIds] = useState<string[]>([]);
+  const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
+  const [branchConfigs, setBranchConfigs] = useState<Record<string, { purpose: 'action' | 'information' | 'approval'; minuteText: string }>>({});
+  const [distributionUserIds, setDistributionUserIds] = useState<string[]>([]);
+  const [distributionOfficeIds, setDistributionOfficeIds] = useState<string[]>([]);
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
   const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward' | 'lateral'>(initialDirection);
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
@@ -721,8 +729,13 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       return false;
     }
 
-    // Must select either a person OR an office
-    if (!forwardTo && !targetOfficeId) {
+    // Must select either a person OR an office (single), or two+ parallel targets
+    if (actionType === 'minute' && routeMode === 'parallel') {
+      if (parallelUserIds.length + parallelOfficeIds.length < 2) {
+        setForwardToError('Parallel routing requires at least two people or offices');
+        return false;
+      }
+    } else if (!forwardTo && !targetOfficeId) {
       setForwardToError('Please select a person or office to forward to');
       return false;
     }
@@ -975,6 +988,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       });
 
       // Create minute via API
+      const isParallelMinute = actionType === 'minute' && routeMode === 'parallel';
       const minuteResponse = await apiFetch<Record<string, unknown>>('/correspondence/minutes/', {
         signal,
         method: 'POST',
@@ -987,15 +1001,16 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           direction: finalDirection,
           step_number: nextStep,
           from_office_id: currentUserOfficeId || undefined,
-          to_office_id: recipientOfficeId || targetOfficeId || undefined,  // Use recipient's office or explicitly selected office
-          to_user_id: forwardTo,  // Always set to_user when user is selected
+          to_office_id: isParallelMinute ? undefined : (recipientOfficeId || targetOfficeId || undefined),
+          to_user_id: isParallelMinute ? undefined : forwardTo || undefined,
           signature_payload: signaturePayload || undefined,
           purpose: purpose,
           requires_response: purpose === 'action' || purpose === 'approval',
         }),
       });
       
-      const createdMinuteId = minuteResponse?.id;
+      const createdMinuteId =
+        typeof minuteResponse?.id === 'string' ? minuteResponse.id : undefined;
 
       if (actionType === "approve") {
         const sealData = (minuteResponse?.seal_data as Record<string, unknown>) || null;
@@ -1020,248 +1035,96 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         distributionEntriesToCreate: newDistributionEntries.length,
       });
 
-      // Update correspondence via API
-      // Prevent setting current_approver to the current user
-      if (forwardTo === currentUser.id) {
-        toast.error('Cannot route correspondence to yourself. Please select a different recipient.');
-        setShowConfirmation(false);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      const correspondenceUpdatePayload: Record<string, unknown> = {
-        status: 'in-progress',
-        direction: finalDirection,
-      };
-      // Only set current_approver_id if a specific user was selected
-      // When routing to an office, the backend determines the correct recipient
-      if (forwardTo) {
-        correspondenceUpdatePayload.current_approver_id = forwardTo;
-      }
-      // Always update the office to the recipient's office (or explicitly selected office)
-      // Note: Backend also handles this automatically, but we update here for immediate UI feedback
-      const finalOfficeId = recipientOfficeId || targetOfficeId;
-      if (finalOfficeId) {
-        correspondenceUpdatePayload.current_office = finalOfficeId;
-      }
-      // Update correspondence - this is critical for routing
-      const updateResponse = await apiFetch<Record<string, unknown>>(`/correspondence/items/${correspondence.id}/`, {
-        method: 'PATCH',
-        body: JSON.stringify(correspondenceUpdatePayload),
-        signal,
-      });
-      
-      // Verify the update was successful
-      const expectedOfficeId = recipientOfficeId || targetOfficeId;
-      if (!updateResponse) {
-        logWarn('Correspondence update failed - no response received');
-      } else {
-        const actualApproverId = updateResponse.current_approver_id || updateResponse.current_approver;
-        const actualOfficeId = updateResponse.current_office_id || updateResponse.current_office;
-        
-        if (actualApproverId !== forwardTo) {
-          logWarn('Correspondence update may not have applied correctly', { actualApproverId, expected: forwardTo });
+      // Update correspondence via API (single route only — parallel sets workflow via API)
+      if (!isParallelMinute) {
+        if (forwardTo === currentUser.id) {
+          toast.error('Cannot route correspondence to yourself. Please select a different recipient.');
+          setShowConfirmation(false);
+          setIsSubmitting(false);
+          submittingRef.current = false;
+          return;
         }
-        
-        if (expectedOfficeId && actualOfficeId !== expectedOfficeId) {
-          logWarn('Correspondence office may not have been set correctly', { actualOfficeId, expected: expectedOfficeId });
+
+        const correspondenceUpdatePayload: Record<string, unknown> = {
+          status: 'in-progress',
+          direction: finalDirection,
+        };
+        if (forwardTo) {
+          correspondenceUpdatePayload.current_approver_id = forwardTo;
         }
+        const finalOfficeId = recipientOfficeId || targetOfficeId;
+        if (finalOfficeId) {
+          correspondenceUpdatePayload.current_office = finalOfficeId;
+        }
+        await apiFetch<Record<string, unknown>>(`/correspondence/items/${correspondence.id}/`, {
+          method: 'PATCH',
+          body: JSON.stringify(correspondenceUpdatePayload),
+          signal,
+        });
       }
 
-          // Handle distribution and parallel routing
-          if (canDistribute && newDistributionEntries.length > 0) {
-            try {
-              // Separate "For Action" recipients (parallel routing) from other distribution.
-              // Parallel routing now supports BOTH person (user) and office recipients.
-              const actionRecipients = newDistributionEntries.filter(
-                (r) => r.purpose === 'action'
-              );
-              const _otherDistribution = newDistributionEntries.filter(
-                (r) => r.purpose !== 'action'
-              );
-
-              // Create a map to track which parallel minute belongs to which recipient (defined outside if block for scope)
-              const recipientToMinuteMap = new Map<string, string>();
-
-              // Create parallel minutes for "For Action" recipients
-              const parallelMinuteIds: string[] = [];
-              if (actionRecipients.length === 1) {
-                toast.error('Parallel routing requires at least two recipients marked For Action.');
-              } else if (actionRecipients.length > 0) {
-                logInfo('[MinuteModal] Creating parallel minutes for action recipients', actionRecipients);
-                
-                // Generate parallel group ID for grouping parallel branches (UUID format)
-                // Use a simple UUID v4 generator
-                const generateUUID = () => {
-                  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                    const r = Math.random() * 16 | 0;
-                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                    return v.toString(16);
-                  });
-                };
-                const parallelGroupId = generateUUID();
-            
-            const parallelMinutes = await Promise.all(
-              actionRecipients.map(async (recipient) => {
-                // Resolve recipient identity + target office for both user and office branches
-                const isUserRecipient = recipient.type === 'user';
-                const recipientUserId = isUserRecipient ? (recipient.userId || recipient.id) : undefined;
-                const recipientOfficeInfo = isUserRecipient && recipientUserId ? getUserOfficeInfo(recipientUserId) : undefined;
-                const recipientOfficeId = isUserRecipient
-                  ? recipientOfficeInfo?.office?.id
-                  : recipient.type === 'office'
-                    ? (recipient.officeId || recipient.id)
-                    : undefined;
-                
-                const parallelMinutePayload = {
-                  correspondence: correspondence.id,
-                  user_id: currentUser.id, // Creator of the minute
-                  grade_level: currentUser.gradeLevel,
-                  action_type: actionType,
-                  minute_text: recipient.customMinuteText?.trim() || minuteText.trim(),
-                  direction: finalDirection,
-                  step_number: nextStep,
-                  from_office_id: currentUserOfficeId || undefined,
-                  to_office_id: recipientOfficeId || undefined,
-                  to_user_id: recipientUserId, // Recipient user (undefined for office branches)
-                  purpose: 'action',
-                  requires_response: true,
-                  routing_type: 'parallel',
-                  parallel_group_id: parallelGroupId,
-                  is_parallel_branch: true,
-                  parent_minute_id: createdMinuteId,
-                };
-                
-                logInfo('[MinuteModal] Creating parallel minute', {
-                  ...parallelMinutePayload,
-                  recipientUserId,
-                  recipientOfficeId,
-                });
-                
-                const parallelMinuteResponse = await apiFetch<Record<string, unknown>>('/correspondence/minutes/', {
-                  signal,
-                  method: 'POST',
-                  body: JSON.stringify(parallelMinutePayload),
-                });
-                
-                const rawMinuteId = parallelMinuteResponse?.id;
-                const minuteId =
-                  typeof rawMinuteId === 'string'
-                    ? rawMinuteId
-                    : typeof rawMinuteId === 'number'
-                      ? String(rawMinuteId)
-                      : undefined;
-                if (minuteId) {
-                  const mapKey = isUserRecipient
-                    ? (recipientUserId as string)
-                    : (recipient.officeId || recipient.id);
-                  recipientToMinuteMap.set(mapKey, minuteId);
-                }
-                
-                return minuteId;
-              }),
-            );
-            
-            parallelMinuteIds.push(...parallelMinutes.filter((id): id is string => Boolean(id) && typeof id === 'string'));
-            logInfo('[MinuteModal] Parallel minutes created', {
-              minuteIds: parallelMinuteIds,
-              recipientMap: Object.fromEntries(recipientToMinuteMap),
-            });
-            
-            // Update correspondence workflow_state to "parallel" if we created parallel branches
-            if (parallelMinuteIds.length > 0) {
-              try {
-                await apiFetch(`/correspondence/items/${correspondence.id}/`, {
-                  signal,
-                  method: 'PATCH',
-                  body: JSON.stringify({
-                    workflow_state: 'parallel',
-                    active_parallel_branches: parallelMinuteIds.length,
-                  }),
-                });
-                logInfo('[MinuteModal] Updated correspondence workflow_state to parallel');
-              } catch (error: unknown) {
-                logWarn('[MinuteModal] Failed to update workflow_state (non-critical)', error);
-                // Non-critical - backend might handle this automatically
-              }
-              
-              toast.success(`Created ${parallelMinuteIds.length} parallel routing branch(es).`);
-            }
-          }
-
-          // Create distribution entries (for all recipients, including action users)
-          const distributionResults = await Promise.all(
-            newDistributionEntries.map(async (recipient, _index) => {
-              // For action recipients, link to their parallel minute using the map
-              let linkedMinuteId = createdMinuteId;
-              if (recipient.purpose === 'action') {
-                const mapKey =
-                  recipient.type === 'user'
-                    ? (recipient.userId || recipient.id)
-                    : (recipient.officeId || recipient.id);
-                const parallelMinuteId = recipientToMinuteMap.get(mapKey);
-                if (parallelMinuteId) {
-                  linkedMinuteId = parallelMinuteId;
-                } else {
-                  logWarn('[MinuteModal] Could not find parallel minute for recipient', { mapKey });
-                }
-              }
-              
-              const distributionPayload = {
-                correspondence: correspondence.id,
-                recipient_type: recipient.type,
-                user: recipient.type === 'user' ? (recipient.userId || recipient.id) : null,
-                office: recipient.type === 'office' ? (recipient.officeId || recipient.id) : null,
-                directorate:
-                  recipient.type === 'directorate'
-                    ? recipient.directorateId ?? recipient.id
-                    : recipient.directorateId ?? null,
-                division:
-                  recipient.type === 'division'
-                    ? recipient.divisionId ?? recipient.id
-                    : recipient.divisionId ?? null,
-                department:
-                  recipient.type === 'department'
-                    ? recipient.departmentId ?? recipient.id
-                    : recipient.departmentId ?? null,
-                purpose: recipient.purpose ?? 'information',
-                added_by_id: recipient.addedById ?? currentUser.id,
-                minute_id: linkedMinuteId || undefined,  // Link distribution to the minute
-              };
-              
-              logInfo('[MinuteModal] Creating distribution', {
-                payload: distributionPayload,
-                minuteId: linkedMinuteId,
-                recipient,
-              });
-              
-              return apiFetch('/correspondence/distribution/', {
-                method: 'POST',
-                body: JSON.stringify(distributionPayload),
-              });
-            }),
-          );
-          
-          logInfo('[MinuteModal] Distribution created successfully', distributionResults);
-          if (distributionResults.length > 0) {
-            const actionCount = actionRecipients.length;
-            let message = `Distribution added: ${distributionResults.length} recipient(s) notified.`;
-            if (actionCount > 0) {
-              message += ` ${actionCount} parallel routing branch(es) created.`;
-            }
-            toast.success(message);
-          }
+      if (isParallelMinute && createdMinuteId) {
+        try {
+          await submitParallelRoute(apiFetch, {
+            correspondenceId: correspondence.id,
+            parallelUserIds,
+            parallelOfficeIds,
+            branchConfigs,
+            mergeStrategy,
+            defaultPurpose: purpose,
+            defaultMinuteText: minuteText.trim(),
+            parentMinuteId: createdMinuteId,
+            signal,
+          });
+          toast.success(`Created ${parallelUserIds.length + parallelOfficeIds.length} parallel branch(es).`);
         } catch (error: unknown) {
-          logError('[MinuteModal] Failed to create distribution/parallel routing', error);
-          const errorMessage = error instanceof Error ? error.message : ERROR_UNKNOWN;
-          logError('[MinuteModal] Distribution error details', {
-            error,
-            message: errorMessage,
-          });
-          // Don't fail the entire minute creation if distribution fails
-          toast.error(`Minute created, but failed to add distribution recipients: ${errorMessage}. Please add them manually.`, {
-            duration: 5000,
-          });
+          logError('[MinuteModal] Failed to create parallel route', error);
+          toast.error('Minute saved, but parallel branches failed. Please retry from the workflow tab.');
+        }
+      }
+
+      const ccUserIds = canDistribute ? distributionUserIds : [];
+      const ccOfficeIds = canDistribute ? distributionOfficeIds : [];
+      if (ccUserIds.length > 0 || ccOfficeIds.length > 0) {
+        try {
+          await submitCcDistribution(
+            apiFetch,
+            correspondence.id,
+            ccUserIds,
+            ccOfficeIds,
+            currentUser?.id,
+            createdMinuteId ?? undefined,
+          );
+          toast.success(`Distribution (CC): ${ccUserIds.length + ccOfficeIds.length} recipient(s) notified.`);
+        } catch (error: unknown) {
+          logError('[MinuteModal] Failed to create CC distribution', error);
+          toast.error('Minute created, but CC distribution failed.');
+        }
+      }
+
+      if (canDistribute && newDistributionEntries.length > 0) {
+        const infoOnlyEntries = newDistributionEntries.filter((r) => r.purpose !== 'action');
+        if (infoOnlyEntries.length > 0) {
+          try {
+            await Promise.all(
+              infoOnlyEntries.map((recipient) =>
+                apiFetch('/correspondence/distribution/', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    correspondence: correspondence.id,
+                    recipient_type: recipient.type,
+                    user: recipient.type === 'user' ? (recipient.userId || recipient.id) : null,
+                    office: recipient.type === 'office' ? (recipient.officeId || recipient.id) : null,
+                    purpose: 'information',
+                    added_by_id: recipient.addedById ?? currentUser.id,
+                    minute_id: createdMinuteId || undefined,
+                  }),
+                })
+              )
+            );
+          } catch (error: unknown) {
+            logWarn('[MinuteModal] Legacy distribution entries failed', error);
+          }
         }
       }
 
@@ -1290,6 +1153,12 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           setTargetOfficeId('');
           setRouteType('person');
           setActionType('minute');
+          setRouteMode('single');
+          setMergeStrategy('all');
+          setParallelUserIds([]);
+          setParallelOfficeIds([]);
+          setDistributionUserIds([]);
+          setDistributionOfficeIds([]);
           setDistribution([]);
           setHasDraft(false);
           setDraftId(null);
@@ -1757,69 +1626,121 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             </div>
           )}
 
-          {/* Route To - Using extracted RoutingSection component */}
-          <RoutingSection
-            routeType={routeType}
-            onRouteTypeChange={(v) => {
-              setRouteType(v);
-              if (v === 'office') {
+          {/* Route To — shared PrimaryRoutePanel for minutes; single RoutingSection for approvals */}
+          {actionType === 'approve' ? (
+            <RoutingSection
+              routeType={routeType}
+              onRouteTypeChange={(v) => {
+                setRouteType(v);
+                if (v === 'office') {
+                  setForwardTo('');
+                  setForwardToError('');
+                  setPersonSearchQuery('');
+                } else {
+                  setTargetOfficeId('');
+                  setOfficeSearchQuery('');
+                  setOfficeFilterDirectorate('all');
+                  setOfficeFilterDivision('all');
+                }
+              }}
+              forwardTo={forwardTo}
+              onForwardToChange={setForwardTo}
+              forwardToError={forwardToError}
+              personSearchQuery={personSearchQuery}
+              onPersonSearchQueryChange={setPersonSearchQuery}
+              targetOfficeId={targetOfficeId}
+              onTargetOfficeIdChange={(v) => {
+                setTargetOfficeId(v);
                 setForwardTo('');
-                setForwardToError('');
-                setPersonSearchQuery('');
-              } else {
-                setTargetOfficeId('');
-                setOfficeSearchQuery('');
-                setOfficeFilterDirectorate('all');
+              }}
+              officeSearchQuery={officeSearchQuery}
+              onOfficeSearchQueryChange={setOfficeSearchQuery}
+              officeFilterDirectorate={officeFilterDirectorate}
+              onOfficeFilterDirectorateChange={(v) => {
+                setOfficeFilterDirectorate(v);
                 setOfficeFilterDivision('all');
-              }
-            }}
-            forwardTo={forwardTo}
-            onForwardToChange={setForwardTo}
-            forwardToError={forwardToError}
-            personSearchQuery={personSearchQuery}
-            onPersonSearchQueryChange={setPersonSearchQuery}
-            targetOfficeId={targetOfficeId}
-            onTargetOfficeIdChange={(v) => {
-              setTargetOfficeId(v);
-              setForwardTo('');
-            }}
-            officeSearchQuery={officeSearchQuery}
-            onOfficeSearchQueryChange={setOfficeSearchQuery}
-            officeFilterDirectorate={officeFilterDirectorate}
-            onOfficeFilterDirectorateChange={(v) => {
-              setOfficeFilterDirectorate(v);
-              setOfficeFilterDivision('all');
-            }}
-            officeFilterDivision={officeFilterDivision}
-            onOfficeFilterDivisionChange={setOfficeFilterDivision}
-            purpose={purpose}
-            onPurposeChange={setPurpose}
-            offices={officeOptionsForRouting}
-            directorates={directorates}
-            divisions={divisions}
-            users={activeDirectoryUsers}
-            assistantList={assistantList}
-            approverList={approverList}
-            suggestedNext={suggestedNext}
-            findUserById={findUserById}
-            getUserOfficeInfo={getUserOfficeInfoForRouting}
-          />
-
-          {/* Distribution (CC) - Only for Management Level */}
-          {canDistribute && (
-            <>
-              <Separator />
-              <DistributionSelector
-                selectedDistribution={distribution}
-                onDistributionChange={setDistribution}
-                currentDivisionId={correspondence.divisionId}
-                currentDepartmentId={correspondence.departmentId}
-              />
-            </>
+              }}
+              officeFilterDivision={officeFilterDivision}
+              onOfficeFilterDivisionChange={setOfficeFilterDivision}
+              purpose={purpose}
+              onPurposeChange={setPurpose}
+              offices={officeOptionsForRouting}
+              directorates={directorates}
+              divisions={divisions}
+              users={activeDirectoryUsers}
+              assistantList={assistantList}
+              approverList={approverList}
+              suggestedNext={suggestedNext}
+              findUserById={findUserById}
+              getUserOfficeInfo={getUserOfficeInfoForRouting}
+            />
+          ) : (
+            <PrimaryRoutePanel
+              routeMode={routeMode}
+              onRouteModeChange={setRouteMode}
+              routeType={routeType}
+              onRouteTypeChange={(v) => {
+                setRouteType(v);
+                if (v === 'office') {
+                  setForwardTo('');
+                  setForwardToError('');
+                  setPersonSearchQuery('');
+                } else {
+                  setTargetOfficeId('');
+                  setOfficeSearchQuery('');
+                  setOfficeFilterDirectorate('all');
+                  setOfficeFilterDivision('all');
+                }
+              }}
+              forwardTo={forwardTo}
+              onForwardToChange={setForwardTo}
+              forwardToError={forwardToError}
+              personSearchQuery={personSearchQuery}
+              onPersonSearchQueryChange={setPersonSearchQuery}
+              targetOfficeId={targetOfficeId}
+              onTargetOfficeIdChange={(v) => {
+                setTargetOfficeId(v);
+                setForwardTo('');
+              }}
+              officeSearchQuery={officeSearchQuery}
+              onOfficeSearchQueryChange={setOfficeSearchQuery}
+              officeFilterDirectorate={officeFilterDirectorate}
+              onOfficeFilterDirectorateChange={(v) => {
+                setOfficeFilterDirectorate(v);
+                setOfficeFilterDivision('all');
+              }}
+              officeFilterDivision={officeFilterDivision}
+              onOfficeFilterDivisionChange={setOfficeFilterDivision}
+              purpose={purpose}
+              onPurposeChange={setPurpose}
+              parallelUserIds={parallelUserIds}
+              onParallelUserIdsChange={setParallelUserIds}
+              parallelOfficeIds={parallelOfficeIds}
+              onParallelOfficeIdsChange={setParallelOfficeIds}
+              mergeStrategy={mergeStrategy}
+              onMergeStrategyChange={setMergeStrategy}
+              branchConfigs={branchConfigs}
+              onBranchConfigsChange={setBranchConfigs}
+              defaultBranchText={minuteText.trim()}
+              distributionUserIds={distributionUserIds}
+              onDistributionUserIdsChange={setDistributionUserIds}
+              distributionOfficeIds={distributionOfficeIds}
+              onDistributionOfficeIdsChange={setDistributionOfficeIds}
+              showDistribution={canDistribute}
+              offices={officeOptionsForRouting}
+              directorates={directorates}
+              divisions={divisions}
+              users={activeDirectoryUsers.filter((u) => u.id !== currentUser?.id)}
+              assistantList={assistantList}
+              approverList={approverList}
+              suggestedNext={suggestedNext}
+              findUserById={findUserById}
+              getUserOfficeInfo={getUserOfficeInfoForRouting}
+            />
           )}
 
           {/* Preview */}
-          {minuteText && (forwardTo || targetOfficeId) && (
+          {minuteText && (routeMode === 'parallel' ? parallelUserIds.length + parallelOfficeIds.length >= 2 : (forwardTo || targetOfficeId)) && (
             <div className="rounded-xl border border-border/60 bg-muted/30 border-accent/20 p-4">
 <Label className="text-sm font-semibold mb-2 block">Preview</Label>
                 <div className="space-y-2 text-sm">

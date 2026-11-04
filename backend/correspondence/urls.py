@@ -4,6 +4,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .correspondence_views import (
+    CorrespondenceAccessLogViewSet,
     CorrespondenceAttachmentViewSet,
     CorrespondenceDelegationViewSet,
     CorrespondenceDistributionViewSet,
@@ -54,6 +55,7 @@ router.register(r"case-correspondence-links", CaseCorrespondenceLinkViewSet, bas
 router.register(r"case-workflow-rules", CaseWorkflowRuleViewSet, basename="case-workflow-rule")
 router.register(r"case-slas", CaseSLAViewSet, basename="case-sla")
 router.register(r"dispatch-records", DispatchRecordViewSet, basename="dispatch-record")
+router.register(r"access-logs", CorrespondenceAccessLogViewSet, basename="correspondence-access-log")
 router.register(r"external-entities", ExternalEntityViewSet, basename="external-entity")
 router.register(r"locations", LocationViewSet, basename="location")
 router.register(r"physical-documents", PhysicalDocumentViewSet, basename="physical-document")

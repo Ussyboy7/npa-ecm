@@ -220,6 +220,17 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
       reference_number: asString(item.parent_correspondence.reference_number),
       subject: asString(item.parent_correspondence.subject),
     } : null,
+    relatedResponses: Array.isArray(item.related_responses)
+      ? item.related_responses
+          .filter(isRecord)
+          .map((r) => ({
+            id: normalizeId(r.id) ?? '',
+            reference_number: asString(r.reference_number),
+            subject: asString(r.subject),
+            status: asString(r.status),
+            created_at: asStringOptional(r.created_at),
+          }))
+      : [],
     archiveLevel: asOneOfOptional(item.archive_level, ['department', 'division', 'directorate'] as const),
     linkedDocumentIds,
     completionPackage: completionPackage

@@ -16,6 +16,8 @@ import {
   Info,
   Share2,
   Undo2,
+  FolderTree,
+  ArrowRightLeft,
 } from "lucide-react";
 import { formatDateShort, canDispatchCorrespondence, canArchiveCorrespondence, isCorrespondenceOutward } from "@/lib/correspondence-helpers";
 import { cn } from "@/lib/utils";
@@ -31,6 +33,8 @@ interface ActionsPanelProps {
   minutes?: Minute[];
   activeUser?: User | null;
   onOpenLinkCaseModal?: () => void;
+  canReassign?: boolean;
+  onReassign?: () => void;
   isCompleted?: boolean;
   isCurrentUserTurn?: boolean;
   isForInformationOnly?: boolean;
@@ -53,6 +57,9 @@ interface ActionsPanelProps {
   compact?: boolean;
   /** Hide Minute/Endorse primary buttons when header/mobile already owns that CTA */
   hidePrimaryMinuteAction?: boolean;
+  isAuditCase?: boolean;
+  caseAuditState?: string | null;
+  onViewAuditCase?: () => void;
   [key: string]: unknown;
 }
 
@@ -77,10 +84,16 @@ export function ActionsPanel({
   onOpenCompletionModal,
   onOpenDelegateModal,
   onDownloadCompletionPackage,
+  onOpenLinkCaseModal,
+  canReassign = false,
+  onReassign,
   onSyncFromApi: _onSyncFromApi,
   distributionEntryId: distributionEntryIdProp,
   compact = false,
   hidePrimaryMinuteAction = false,
+  isAuditCase = false,
+  caseAuditState = null,
+  onViewAuditCase,
 }: ActionsPanelProps) {
   // Find the user's distribution entry ID for this correspondence (user-type or
   // office-type where the user is a member of that office). Prefer the value
@@ -191,10 +204,58 @@ export function ActionsPanel({
   const isCCRecipient = isCCInfo || isCCAction;
   const isRoutedUser = !isCCRecipient;
 
-  // Compute main action buttons based on user role and distribution purpose
+  // Audit Case: hard product rule — Case owns work, not Minute/Forward. Hide Forward/Circulate for audit.
   let mainActions: React.ReactNode = null;
-  
-  if (isCCInfo) {
+
+  if (isAuditCase) {
+    if (caseAuditState === 'RESPONSE_RECEIVED' || caseAuditState === 'AUDIT_REVIEW' || caseAuditState === 'CLOSED') {
+      mainActions = (
+        <div className={pairedActionsClass}>
+          <Button className={primaryButtonClass} variant="outline" onClick={onViewAuditCase}>
+            <FolderTree className="h-4 w-4 mr-2" />
+            View Audit Case
+          </Button>
+          {!isCompleted && caseAuditState !== 'CLOSED' && !isForInformationOnly && (
+            <Button
+              className={primaryButtonClass}
+              variant="secondary"
+              onClick={onOpenTreatmentModal}
+              disabled={turnRestrictedDisabled}
+            >
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Audit Review
+            </Button>
+          )}
+        </div>
+      );
+    } else if (isCurrentUserTurn && !isForInformationOnly) {
+      // AWAITING_RESPONSE at Finance — Minute for internal note + Respond to reply
+      mainActions = (
+        <div className={pairedActionsClass}>
+          <Button
+            className={primaryButtonClass}
+            variant="outline"
+            onClick={onOpenMinuteModal}
+            disabled={turnRestrictedDisabled}
+          >
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Minute
+          </Button>
+          <Button
+            className={primaryButtonClass}
+            variant="secondary"
+            onClick={onOpenTreatmentModal}
+            disabled={turnRestrictedDisabled}
+          >
+            <ArrowRight className="h-4 w-4 mr-2" />
+            Respond
+          </Button>
+        </div>
+      );
+    } else {
+      mainActions = null;
+    }
+  } else if (isCCInfo) {
     // CC for Information: Forward + Mark as Read
     mainActions = (
       <div className={pairedActionsClass}>
@@ -205,7 +266,7 @@ export function ActionsPanel({
           disabled={turnRestrictedDisabled}
         >
           <Share2 className="h-4 w-4 mr-2" />
-          Forward / Circulate
+          Minute / Route
         </Button>
         <Button
           className={primaryButtonClass}
@@ -229,7 +290,7 @@ export function ActionsPanel({
           disabled={turnRestrictedDisabled}
         >
           <Share2 className="h-4 w-4 mr-2" />
-          Forward / Circulate
+          Minute / Route
         </Button>
         <Button
           className={primaryButtonClass}
@@ -457,6 +518,28 @@ export function ActionsPanel({
         </div>
       )}
       {delegationNotice}
+      {canReassign && onReassign && (
+        <Button
+          variant={compact ? "ghost" : "outline"}
+          className={compact ? quietRowClass : "w-full justify-start"}
+          onClick={onReassign}
+          disabled={turnRestrictedDisabled}
+        >
+          <ArrowRightLeft className="h-4 w-4 mr-2 opacity-70" />
+          Reassign
+        </Button>
+      )}
+      {!correspondence.caseId && onOpenLinkCaseModal && (
+        <Button
+          variant={compact ? "ghost" : "outline"}
+          className={compact ? quietRowClass : "w-full justify-start"}
+          onClick={onOpenLinkCaseModal}
+          disabled={turnRestrictedDisabled}
+        >
+          <FolderTree className="h-4 w-4 mr-2 opacity-70" />
+          Link to case
+        </Button>
+      )}
       {!activeDelegation && (
         <Button
           variant={compact ? "ghost" : "outline"}

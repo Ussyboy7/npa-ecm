@@ -32,6 +32,7 @@ from correspondence.models import (
     Correspondence,
     CorrespondenceAttachment,
     CorrespondenceDocumentLink,
+    Minute,
 )
 from dms.models import Document, DocumentPermission, DocumentVersion
 from notifications.models import Notification
@@ -2803,8 +2804,28 @@ class MinuteRouterService:
                         office_id__in=user_office_ids,
                         is_active=True,
                     ).exists()
+            # Acting for office seat — office-only model: acting user may act on seat items
+            # where current_approver is the principal and current_office matches acting office.
+            is_acting = False
+            acting_appointment = getattr(correspondence, "acting_appointment_id", None)
+            if acting_appointment:
+                from organization.models import ActingAppointment as _AA
+                from django.db.models import Q as _Q
+                from django.utils import timezone as _tz
+                now = _tz.now()
+                office_id = getattr(correspondence, "current_office_id", None) or getattr(correspondence, "owning_office_id", None)
+                is_acting = _AA.objects.filter(  # type: ignore[attr-defined]
+                    id=acting_appointment,
+                    acting_user=user,
+                    is_active=True,
+                    starts_at__lte=now,
+                ).filter(
+                    _Q(ends_at__isnull=True) | _Q(ends_at__gte=now)
+                ).filter(
+                    office_id=office_id,
+                ).exists()
 
-            if not (is_current_turn or is_delegatee or is_cc):
+            if not (is_current_turn or is_delegatee or is_cc or is_acting):
                 from rest_framework.exceptions import PermissionDenied
                 from audit.services import AuditService
                 from audit.models import ActivityLog
@@ -3264,6 +3285,260 @@ class ParallelBranchService:
                     original_sender = parallel_group.created_by
 
         return parallel_group_completed, original_sender
+
+    @classmethod
+    def create_parallel_route(
+        cls,
+        correspondence,
+        user,
+        recipients,
+        merge_strategy="all",
+        parent_minute=None,
+        request=None,
+    ):
+        """Create a parallel routing group and branch minutes. Returns (group, minutes)."""
+        from rest_framework.exceptions import ValidationError
+        from correspondence.models import Minute, ParallelRoutingGroup
+        from notifications.models import Notification
+        from notifications.services import NotificationService
+        from audit.services import AuditService
+
+        if len(recipients) < 2:
+            raise ValidationError({"detail": "Parallel routing requires at least 2 recipients."})
+
+        recipient_keys = [
+            ("user", r.get("user_id")) if r.get("user_id") else ("office", r.get("office_id"))
+            for r in recipients
+        ]
+        if any(not value for _, value in recipient_keys):
+            raise ValidationError({
+                "detail": "Each parallel recipient must specify either user_id or office_id."
+            })
+        if len(recipient_keys) != len(set(recipient_keys)):
+            raise ValidationError({"detail": "Duplicate recipients are not allowed."})
+
+        parallel_group = ParallelRoutingGroup.objects.create(
+            correspondence=correspondence,
+            created_by=user,
+            merge_strategy=merge_strategy,
+            total_branches=len(recipients),
+        )
+
+        created_minutes = []
+        recipient_users = {}
+
+        for recipient_data in recipients:
+            purpose = recipient_data.get("purpose", "action")
+            office_id = recipient_data.get("office_id")
+            recipient_user_id = recipient_data.get("user_id")
+            minute_text = recipient_data.get("minute_text", "").strip()
+            if not minute_text:
+                raise ValidationError({
+                    "detail": "Minute text is required for each parallel branch recipient."
+                })
+
+            if recipient_user_id and recipient_user_id not in recipient_users:
+                try:
+                    recipient_users[recipient_user_id] = User.objects.get(id=recipient_user_id)
+                except User.DoesNotExist:
+                    raise ValidationError({
+                        "detail": f"Recipient user {recipient_user_id} not found."
+                    })
+
+            recipient_user = recipient_users.get(recipient_user_id) if recipient_user_id else None
+            office = None
+            if office_id:
+                try:
+                    office = Office.objects.get(id=office_id)
+                except Office.DoesNotExist:
+                    raise ValidationError({"detail": f"Recipient office {office_id} not found."})
+
+            if not office and recipient_user:
+                office_membership = OfficeMembership.objects.filter(
+                    user=recipient_user,
+                    is_active=True,
+                    is_primary=True,
+                ).select_related("office").first()
+                if office_membership:
+                    office = office_membership.office
+
+            if not recipient_user and not office:
+                raise ValidationError({
+                    "detail": "Parallel recipient could not be resolved to a user or office."
+                })
+
+            if office and recipient_user:
+                user_in_office = OfficeMembership.objects.filter(
+                    office=office,
+                    user=recipient_user,
+                    is_active=True,
+                ).exists()
+                if not user_in_office:
+                    raise ValidationError({
+                        "detail": (
+                            f"User {recipient_user.get_full_name() or recipient_user.username} "
+                            f"is not a member of {office.name}."
+                        )
+                    })
+
+            minute = Minute.objects.create(
+                correspondence=correspondence,
+                user=user,
+                minute_text=minute_text,
+                action_type=Minute.ActionType.MINUTE,
+                direction=correspondence.direction,
+                purpose=purpose,
+                requires_response=(purpose in ["action", "approval"]),
+                routing_type="parallel",
+                parallel_group_id=parallel_group.id,
+                is_parallel_branch=True,
+                merge_strategy=merge_strategy,
+                from_office=correspondence.current_office,
+                to_office=office,
+                to_user=recipient_user,
+                branch_originator=recipient_user or user,
+                parent_minute=parent_minute,
+            )
+            cls.set_branch_originator(minute)
+            cls.set_response_deadline(minute, correspondence)
+
+            notification_recipients = [recipient_user] if recipient_user else list(
+                User.objects.filter(
+                    office_memberships__office=office,
+                    office_memberships__is_active=True,
+                    is_active=True,
+                ).distinct()
+            )
+            for notification_recipient in notification_recipients:
+                target_label = (
+                    f"{recipient_user.get_full_name() or recipient_user.username}"
+                    if recipient_user
+                    else office.name
+                )
+                NotificationService.create_notification(
+                    recipient=notification_recipient,
+                    title=f"Parallel Route - {correspondence.reference_number}",
+                    message=(
+                        f"{user.get_full_name() or user.username} routed this correspondence to "
+                        f"{target_label} in parallel. Purpose: {purpose.replace('_', ' ').title()}."
+                    ),
+                    notification_type=Notification.NotificationType.CORRESPONDENCE,
+                    priority=(
+                        Notification.Priority.HIGH
+                        if correspondence.priority == Correspondence.Priority.URGENT
+                        else Notification.Priority.NORMAL
+                    ),
+                    sender=user,
+                    module="correspondence",
+                    related_object_type="correspondence",
+                    related_object_id=str(correspondence.id),
+                    action_url=f"/correspondence/{correspondence.id}",
+                    action_required=(purpose in ["action", "approval"]),
+                )
+            created_minutes.append(minute)
+
+        correspondence.workflow_state = "parallel"
+        correspondence.active_parallel_branches = len(created_minutes)
+        correspondence.save(update_fields=["workflow_state", "active_parallel_branches"])
+
+        if request is not None:
+            AuditService.log_correspondence_activity(
+                user=user,
+                action="parallel_route_created",
+                correspondence=correspondence,
+                request=request,
+                description=f"Created parallel route with {len(recipients)} branches",
+                metadata={
+                    "parallel_group_id": str(parallel_group.id),
+                    "merge_strategy": merge_strategy,
+                    "branch_count": len(recipients),
+                },
+            )
+
+        return parallel_group, created_minutes
+
+    @classmethod
+    def user_can_view_all_branches(cls, user, correspondence):
+        """Originators, parallel-group creators, and org-wide viewers see every branch."""
+        from organization.org_scope import user_can_view_all_correspondence
+        from correspondence.models import ParallelRoutingGroup
+
+        if getattr(user, "is_superuser", False):
+            return True
+        if user_can_view_all_correspondence(user):
+            return True
+        if correspondence.created_by_id == user.id:
+            return True
+        if ParallelRoutingGroup.objects.filter(correspondence=correspondence, created_by=user).exists():
+            return True
+        return False
+
+    @classmethod
+    def _resolve_branch_root_id(cls, minute, minutes_by_id):
+        """Return the top-level parallel branch root for a minute, if any."""
+        current = minute
+        visited = set()
+        while current and current.id not in visited:
+            visited.add(current.id)
+            if current.is_parallel_branch and cls.is_top_level_branch(current):
+                return current.id
+            parent_id = current.parent_minute_id
+            if not parent_id:
+                break
+            current = minutes_by_id.get(parent_id)
+        return None
+
+    @classmethod
+    def _user_owns_branch_root(cls, minute, user, user_office_ids):
+        if minute.to_user_id == user.id:
+            return True
+        if minute.to_user_id is None and minute.to_office_id in user_office_ids:
+            return True
+        if minute.branch_originator_id == user.id:
+            return True
+        return False
+
+    @classmethod
+    def filter_minutes_for_viewer(cls, minutes_qs, correspondence, user):
+        """Hide sibling parallel-branch minutes from ordinary branch recipients."""
+        if cls.user_can_view_all_branches(user, correspondence):
+            return minutes_qs
+
+        from organization.models import OfficeMembership
+
+        user_office_ids = list(
+            OfficeMembership.objects.filter(user=user, is_active=True).values_list("office_id", flat=True)
+        )
+
+        all_minutes = list(minutes_qs.select_related("parent_minute"))
+        if not all_minutes:
+            return minutes_qs
+
+        minutes_by_id = {m.id: m for m in all_minutes}
+        user_branch_root_ids = set()
+        fork_minute_ids = set()
+
+        for minute in all_minutes:
+            if minute.is_parallel_branch and cls.is_top_level_branch(minute):
+                if cls._user_owns_branch_root(minute, user, user_office_ids):
+                    user_branch_root_ids.add(minute.id)
+                if minute.parent_minute_id:
+                    fork_minute_ids.add(minute.parent_minute_id)
+
+        if not user_branch_root_ids:
+            return minutes_qs
+
+        visible_ids = set()
+        for minute in all_minutes:
+            root_id = cls._resolve_branch_root_id(minute, minutes_by_id)
+            if root_id is None:
+                visible_ids.add(minute.id)
+            elif root_id in user_branch_root_ids:
+                visible_ids.add(minute.id)
+            elif minute.id in fork_minute_ids:
+                visible_ids.add(minute.id)
+
+        return minutes_qs.filter(id__in=visible_ids)
 
 
 # ──────────────────────────────────────────────
