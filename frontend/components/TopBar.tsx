@@ -12,6 +12,7 @@ import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { hasTokens, logout, getOriginalTokens } from "@/lib/api-client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -62,25 +63,6 @@ export const TopBar = () => {
     window.location.assign('/login');
   };
 
-  // Handle Escape key to close the role switcher panel
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && roleSwitcherOpen) {
-        setRoleSwitcherOpen(false);
-      }
-    };
-    
-    if (roleSwitcherOpen) {
-      document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll when panel is open
-      document.body.style.overflow = 'hidden';
-    }
-    
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [roleSwitcherOpen]);
 
 
   const getUserInitials = () => {
@@ -302,38 +284,18 @@ export const TopBar = () => {
         </div>
       </div>
 
-      {/* Role Switcher - Custom Modal (no Radix UI) */}
-      {roleSwitcherOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-in fade-in-0 p-4" 
-          onClick={() => setRoleSwitcherOpen(false)}
-        >
-          <div 
-            className="w-full max-w-2xl max-h-[85vh] bg-background rounded-lg shadow-xl border animate-in zoom-in-95 duration-200 flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
-              <h2 className="text-lg font-semibold">Switch Role</h2>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setRoleSwitcherOpen(false)}
-                className="h-8 w-8"
-              >
-                <span className="sr-only">Close</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-                </svg>
-              </Button>
-            </div>
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <SimplifiedRoleSwitcher onClose={() => setRoleSwitcherOpen(false)} />
-            </div>
+      {/* Role Switcher */}
+      <Dialog open={roleSwitcherOpen} onOpenChange={setRoleSwitcherOpen}>
+        <DialogContent size="lg" height="scroll" density="flush">
+          <DialogHeader className="border-b p-4">
+            <DialogTitle>Switch Role</DialogTitle>
+            <DialogDescription className="sr-only">Choose a role to switch to.</DialogDescription>
+          </DialogHeader>
+          <div className="p-4">
+            <SimplifiedRoleSwitcher onClose={() => setRoleSwitcherOpen(false)} />
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       </header>
     </>

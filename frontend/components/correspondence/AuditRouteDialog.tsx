@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PrimaryRoutePanel } from "@/components/correspondence/PrimaryRoutePanel";
@@ -157,17 +158,17 @@ export function AuditRouteDialog({
     await onSubmit(payload);
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-2xl rounded-xl bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-        <h3 className="text-base font-semibold">Route Audit Query</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Uses the same Single / Parallel routing contract as correspondence. CC recipients are informational only.
-        </p>
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !submitting) onClose(); }}>
+      <DialogContent size="lg" height="scroll">
+        <DialogHeader>
+          <DialogTitle>Route Audit Query</DialogTitle>
+          <DialogDescription>
+            Uses the same Single / Parallel routing contract as correspondence. CC recipients are informational only.
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="mt-4 space-y-4">
+        <div className="space-y-4">
           <PrimaryRoutePanel
             routeMode={routeMode}
             onRouteModeChange={setRouteMode}
@@ -257,15 +258,15 @@ export function AuditRouteDialog({
           )}
         </div>
 
-        <div className="mt-6 flex justify-end gap-2">
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={submitting || !canSubmit}>
             {submitting ? "Routing..." : "Route via Correspondence"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
