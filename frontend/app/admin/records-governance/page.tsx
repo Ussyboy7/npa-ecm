@@ -19,13 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -469,6 +463,7 @@ function RecordsGovernanceContent() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New retention schedule</DialogTitle>
+<DialogDescription>Define a schedule for how long records are kept.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>
@@ -546,6 +541,7 @@ function RecordsGovernanceContent() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New legal hold</DialogTitle>
+          <DialogDescription>Enter the details of the new legal hold.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>

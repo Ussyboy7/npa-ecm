@@ -5,7 +5,7 @@ import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import {
@@ -603,6 +603,7 @@ export default function AdminPage() {
               Online Users ({onlineUsers.length})
             </DialogTitle>
           </DialogHeader>
+          <DialogDescription>Users currently signed in to the system.</DialogDescription>
           <div className="overflow-y-auto space-y-2 flex-1">
             {onlineUsersLoading ? (
               <div className="flex items-center justify-center py-8">

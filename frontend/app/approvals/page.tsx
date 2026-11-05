@@ -55,6 +55,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 
@@ -732,6 +733,7 @@ function ApprovalsForm() {
         <DialogContent size="2xl" height="fill">
           <DialogHeader>
             <DialogTitle className="truncate pr-8">{pdfPreview?.title || 'Approval PDF'}</DialogTitle>
+            <DialogDescription className="sr-only">Preview of the approval PDF.</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-auto border border-border rounded-lg bg-muted/20">
             {pdfPreview ? (

@@ -47,12 +47,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   loadTemplates,
   type DocumentTemplate,
@@ -776,6 +771,7 @@ function TemplatesHubForm() {
         <DialogContent size="md" height="scroll">
           <DialogHeader>
             <DialogTitle>{workflowPreview.name}</DialogTitle>
+            <DialogDescription>Preview the steps of this workflow template.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {workflowPreview.description ? (
@@ -850,6 +846,7 @@ function TemplatesHubForm() {
         <DialogContent size="md" height="scroll">
           <DialogHeader>
             <DialogTitle>{formPreview.name}</DialogTitle>
+            <DialogDescription>Preview the fields of this form template.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {formPreview.description ? (
@@ -1037,6 +1034,7 @@ function TemplatesHubForm() {
                       : createLabel}
                   </DialogTitle>
                 </DialogHeader>
+                  <DialogDescription>Enter the template details and content.</DialogDescription>
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-4 pr-1">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
@@ -1463,6 +1461,7 @@ function TemplatesHubForm() {
           <DialogContent size="sm">
             <DialogHeader>
               <DialogTitle>Create Form Template</DialogTitle>
+              <DialogDescription>Enter a name for the new form template.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">

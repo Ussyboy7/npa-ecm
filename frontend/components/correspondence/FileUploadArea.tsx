@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Upload, File, X, Eye, FileText, Image as ImageIcon, FileType } from 'lucide-react';
 import { useFileUpload, type UploadedFile } from '@/hooks/use-file-upload';
@@ -261,6 +261,7 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
               {previewFile?.name}
             </DialogTitle>
           </DialogHeader>
+          <DialogDescription className="sr-only">Preview of the selected file.</DialogDescription>
           
           <ScrollArea className="flex-1 mt-4">
             <div className="min-h-[400px]">

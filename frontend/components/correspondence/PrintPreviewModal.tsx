@@ -3,7 +3,7 @@
 import React from 'react';
 import { logError } from '@/lib/client-logger';
 import { useState, useEffect, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
 import { generateDocumentHTML } from '@/lib/document-generator';
@@ -131,6 +131,7 @@ const PrintPreviewModalContent = ({
             Print Preview
           </DialogTitle>
         </DialogHeader>
+        <DialogDescription>Review the document before printing.</DialogDescription>
 
         <div className="flex-1 overflow-auto border border-border rounded-lg bg-background">
           {printRef ? (

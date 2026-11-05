@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logError } from '@/lib/client-logger';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -136,6 +136,7 @@ export function SignatureWorkflowDialog({
       <DialogContent size="xl" height="fill">
         <DialogHeader>
           <DialogTitle>Route Form for Signatures</DialogTitle>
+          <DialogDescription>Choose the signers and the order in which the form is routed.</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="max-h-[60vh] pr-4">

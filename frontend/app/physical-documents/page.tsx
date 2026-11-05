@@ -612,6 +612,7 @@ function PhysicalDocumentsForm() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Check Out Document</DialogTitle>
+              <DialogDescription>Enter the details for checking out this document.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div>

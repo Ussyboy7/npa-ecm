@@ -9,13 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -186,6 +180,7 @@ export default function DrmPoliciesPage() {
           <DialogContent size="md">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Policy" : "New Policy"}</DialogTitle>
+<DialogDescription>Set the name and details of this policy.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -289,6 +284,7 @@ export default function DrmPoliciesPage() {
                           <DialogContent size="md">
                             <DialogHeader>
                               <DialogTitle>{policy.name}</DialogTitle>
+              <DialogDescription>Details of this policy.</DialogDescription>
                             </DialogHeader>
                             {policy.description && (
                               <p className="text-sm text-muted-foreground -mt-1 mb-3">{policy.description}</p>

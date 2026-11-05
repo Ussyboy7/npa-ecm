@@ -7,13 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DigitalSealPreview, type DigitalSealPreviewHandle } from "@/components/seals/DigitalSealPreview";
 import Link from "next/link";
@@ -156,6 +150,7 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
             Digital Executive Seal
           </DialogTitle>
         </DialogHeader>
+          <DialogDescription>Verify this executive's digital seal.</DialogDescription>
         <div className="flex-1 overflow-y-auto pr-2 space-y-5">
           {/* Seal Preview - Centered */}
           <div className="flex justify-center p-3 doc-paper rounded-lg border border-emerald-200 dark:border-emerald-800">

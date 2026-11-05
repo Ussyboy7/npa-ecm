@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -82,6 +82,7 @@ export const DirectorateFormModal = ({ open, onOpenChange, directorate }: Direct
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{directorate ? 'Edit Directorate' : 'Create Directorate'}</DialogTitle>
+          <DialogDescription>Enter the directorate's details.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

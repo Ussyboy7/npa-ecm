@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { FormData } from '../register-utils';
 import { validateFile } from '../register-utils';
 import { toast } from "@/components/ui/sonner";
@@ -284,6 +284,7 @@ export const DocumentsStep = memo(function DocumentsStep({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Select from My Documents</DialogTitle>
+            <DialogDescription>Pick one of your existing documents to attach.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {hasUploads && (

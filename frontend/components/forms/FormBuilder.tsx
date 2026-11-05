@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, GripVertical, X } from "lucide-react";
 import type { FormField, FormFieldType } from "@/lib/types/forms";
@@ -285,6 +285,7 @@ export function FormBuilder({ fields, onChange }: FormBuilderProps) {
         <DialogContent size="lg" height="fill">
           <DialogHeader>
             <DialogTitle>{editingField ? "Edit Field" : "Add Field"}</DialogTitle>
+            <DialogDescription>Configure the field's label, type and validation.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">

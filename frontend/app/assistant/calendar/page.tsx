@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, MapPin, Plus, RefreshCw, Trash2 } from "lucide-react";
@@ -239,6 +240,7 @@ export default function AssistantCalendarPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Schedule event</DialogTitle>
+            <DialogDescription>Add a calendar event to your schedule.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>

@@ -7,7 +7,7 @@ import { CorrespondenceProvider, useCorrespondence } from '@/contexts/Correspond
 import { toast } from "@/components/ui/sonner";
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -710,6 +710,7 @@ const CorrespondenceDetailContent = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reassign correspondence</DialogTitle>
+            <DialogDescription>Choose a new assignee for this correspondence.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">

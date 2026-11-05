@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -274,6 +275,7 @@ export default function ActingAppointmentsPage() {
             <DialogContent size="md">
               <DialogHeader>
                 <DialogTitle>Appoint acting officer</DialogTitle>
+                <DialogDescription>Choose who will act in this role and the period it applies to.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 <div className="space-y-2">

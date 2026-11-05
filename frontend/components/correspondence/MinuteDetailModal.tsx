@@ -1086,6 +1086,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
               <Paperclip className="h-5 w-5" />
               {previewAttachment?.fileName}
             </DialogTitle>
+            <DialogDescription className="sr-only">Preview of this attachment.</DialogDescription>
           </DialogHeader>
           
           <ScrollArea className="flex-1 mt-4">
@@ -1140,6 +1141,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
             <DialogTitle className="text-sm font-medium truncate">
               {viewAttachment?.fileName || 'Document'}
             </DialogTitle>
+            <DialogDescription className="sr-only">Preview of this document.</DialogDescription>
           </DialogHeader>
 
           <div className="flex-1 border-t overflow-y-auto">

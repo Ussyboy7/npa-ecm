@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -150,6 +150,7 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{assignment ? 'Edit Assignment' : 'Assign Assistant'}</DialogTitle>
+          <DialogDescription>Choose the assistant and the executive they support.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

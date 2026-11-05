@@ -30,13 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { useOrganization, type Directorate, type Division, type Department, type Office } from "@/contexts/OrganizationContext";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -909,6 +903,7 @@ const OrganizationStructureContent = () => {
                                 <DialogContent size="sm">
                                   <DialogHeader>
                                     <DialogTitle>Edit {office.name}</DialogTitle>
+<DialogDescription>Update this office's details.</DialogDescription>
                                   </DialogHeader>
                                   <div className="space-y-4 py-4">
                                     <div className="space-y-2">
@@ -998,6 +993,7 @@ const OrganizationStructureContent = () => {
                       <DialogContent size="sm">
                         <DialogHeader>
                           <DialogTitle>{editingLocation ? "Edit Location" : "New Location"}</DialogTitle>
+                                    <DialogDescription>Enter the building, floor and room for this location.</DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                           <div className="space-y-2">

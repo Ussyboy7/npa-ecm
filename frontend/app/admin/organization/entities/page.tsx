@@ -23,6 +23,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -284,6 +285,7 @@ export default function ExternalEntitiesPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Entity" : "Add External Entity"}</DialogTitle>
+              <DialogDescription>Enter the external entity's details.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">

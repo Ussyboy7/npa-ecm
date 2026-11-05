@@ -3,12 +3,7 @@
 import Image from 'next/image';
 import { logError, logInfo } from '@/lib/client-logger';
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download, FileText, Edit2, Save, X } from "lucide-react";
 import type { DocumentVersion, DocumentRecord } from "@/lib/api/dms";
@@ -250,6 +245,7 @@ export const DocumentVersionPreviewModal = ({
             {version.fileName || 'Document'} · v{version.versionNumber}
           </DialogTitle>
         </DialogHeader>
+          <DialogDescription className="sr-only">Preview of this document version.</DialogDescription>
 
         <div
           className={`flex-1 border-t overflow-y-auto ${allowCopyText ? "" : "select-none"}`}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logError } from '@/lib/client-logger';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -146,6 +146,7 @@ export function WorkflowStepForm({
       <DialogContent size="lg" height="fill">
         <DialogHeader>
           <DialogTitle>{step ? "Edit Workflow Step" : "Add Workflow Step"}</DialogTitle>
+          <DialogDescription>Configure the step's name, assignee and order in the workflow.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">

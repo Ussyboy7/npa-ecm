@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,7 @@ export function DispatchModal({ correspondenceId, onSuccess }: DispatchModalProp
       <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Dispatch Correspondence</DialogTitle>
+          <DialogDescription>Record how this correspondence is dispatched.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">

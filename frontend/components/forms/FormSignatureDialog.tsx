@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { logError } from '@/lib/client-logger';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -93,6 +93,7 @@ export function FormSignatureDialog({
       <DialogContent size="lg" height="fill">
         <DialogHeader>
           <DialogTitle>Sign Form: {signature.field_label}</DialogTitle>
+          <DialogDescription>Review the form and add your signature.</DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
