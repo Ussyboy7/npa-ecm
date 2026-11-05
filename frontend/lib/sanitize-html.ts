@@ -91,6 +91,7 @@ const PASTE_STYLE_ALLOW = new Set([
   'width',
   'min-width',
   'max-width',
+  'height',
   'vertical-align',
   'border',
   'border-top',
@@ -103,6 +104,16 @@ const PASTE_STYLE_ALLOW = new Set([
   'border-style',
   'background-color',
   'padding',
+  'padding-bottom',
+  // Word-feel Phase 2: indent, spacing, picture wrap theater
+  'margin',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'text-indent',
+  'float',
+  'display',
 ]);
 
 const EXCEL_PASTE_RE =

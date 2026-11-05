@@ -82,6 +82,21 @@ describe('Office paste cleanup', () => {
     expect(result).toMatch(/text/i);
   });
 
+  it('keeps indent and picture wrap theater styles from Word-like paste', () => {
+    const input = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office">
+      <body>
+        <p class="MsoNormal" style="margin-left:36px;text-indent:18px;margin-top:8px">Indented</p>
+        <img src="cid:x" style="float:left;width:50%;margin-right:0.75rem" alt="pic" />
+      </body>
+      </html>`;
+    const cleaned = sanitizePastedRichText(input);
+    expect(cleaned).toMatch(/margin-left:\s*36px/i);
+    expect(cleaned).toMatch(/text-indent:\s*18px/i);
+    expect(cleaned).toMatch(/float:\s*left/i);
+    expect(cleaned).toMatch(/width:\s*50%/i);
+  });
+
   it('realistic Excel clipboard keeps grid + class-driven borders after TipTap load', () => {
     expect(looksLikeExcelPaste(REALISTIC_EXCEL)).toBe(true);
 

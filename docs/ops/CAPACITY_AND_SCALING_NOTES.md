@@ -18,11 +18,10 @@ In-app rights while documents live in ECM:
 
 **Not claimed:** enterprise IRM (native Word/Acrobat rights, offline file crypto, full screenshot prevention). Browser DRM cannot stop photos of the screen or determined DevTools exfiltration.
 
-### OnlyOffice — deferred
-- TipTap remains for HTML memos / compose.
-- OnlyOffice Docs Community (Docker) is a later option for real DOCX/XLSX in-browser edit.
-- Plan OnlyOffice as a **sidecar**, not a replacement for ECM or DRM.
-- Concurrent **editors** ≠ concurrent **ECM users**. Do not size OnlyOffice as “3k everyone editing at once” on one Community container.
+### OnlyOffice — not required for Word-feel compose
+- Primary compose path is **TipTap** (unlimited ECM users; Word-like ribbon/styles/page layout).
+- OnlyOffice Docs would only return if native DOCX/XLSX in-browser edit is mandated.
+- If revisited: plan as a **sidecar**, not a replacement for ECM or DRM; concurrent **office editors** ≠ concurrent **ECM users**.
 
 ---
 

@@ -1,15 +1,16 @@
 # TipTap Migration Specification (NPA ECMS)
 
 **Status:** Phase 5 complete — TipTap-only behind `RichTextEditor`; Legacy retired  
-**Product decision:** Option A — NPA-native editor (TipTap OSS). Word/Excel remain desktop prep tools (paste + attach originals). ONLYOFFICE deferred unless full Office fidelity is required later.
+**Product decision:** Option A — NPA-native editor (TipTap OSS). Deepen TipTap toward a Word-like compose feel (ribbon, styles, page layout, colors, indent, borders, ruler, picture wrap theater). Word/Excel remain desktop prep tools (paste + attach originals). **OnlyOffice not planned** unless native DOCX/XLSX in-browser editing is mandated later.
 
 ## Working decisions
 
 1. TipTap OSS is the editing engine, not approval or records management.
 2. Word and Excel remain desktop preparation tools; ECMS supports paste and original-file attachments.
-3. Django remains authoritative for versions, routing, approvals, signatures, and audit.
-4. PDF generation is a separate finalisation process.
-5. **`RichTextEditor` is the public façade.** Internally it always mounts TipTap. Persistence remains HTML only (`DocumentVersion.content_html` / template `content_html`). No compose-screen engine picker. No mid-session engine switching. No JSON dual-write.
+3. Prefer TipTap Word-feel improvements over embedding OnlyOffice for day-to-day memo/DMS compose.
+4. Django remains authoritative for versions, routing, approvals, signatures, and audit.
+5. PDF generation is a separate finalisation process.
+6. **`RichTextEditor` is the public façade.** Internally it always mounts TipTap. Persistence remains HTML only (`DocumentVersion.content_html` / template `content_html`). No compose-screen engine picker. No mid-session engine switching. No JSON dual-write.
 
 ## Engine selection (Phase 5)
 

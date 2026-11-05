@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -54,27 +55,58 @@ export const getPageDimensions = (settings: PageSettings) => {
   };
 };
 
+export type ComposePrintChrome = {
+  /** Plain text; escaped into the sheet header band. */
+  headerText?: string;
+  /** Plain text; escaped into the sheet footer band. */
+  footerText?: string;
+  /** Show page label in the footer (explicit text — CSS counters are unreliable). */
+  showPageNumbers?: boolean;
+  /** Estimated / known page count for the page label. */
+  pageCount?: number;
+};
+
 /**
- * Build a print-ready HTML document for compose preview (modal iframe or popup).
+ * Build a print-ready HTML document matching the compose editor sheet.
+ * Tip: in the system print dialog, turn off “Headers and footers” so the browser
+ * does not add date/URL/title around the page.
  */
 export function buildComposePrintHtml(
   html: string,
   settings: PageSettings,
   title = "Document",
   darkChrome = false,
+  chrome: ComposePrintChrome = {},
 ): string {
   const dims = getPageDimensions(settings);
   const paperLabel = settings.paperSize.toUpperCase();
-  const safeTitle = title.replace(/[<>&"]/g, "");
+  // Keep title short/blank-ish so Chrome’s optional print header is less noisy.
+  const safeTitle = (title || "Document").replace(/[<>&"]/g, "");
   const bodyHtml = html.trim()
     ? html
     : `<p style="color:${DOC_PAPER.muted};margin:0;">No content to preview. Add text in the editor first.</p>`;
   const { surroundBg, surroundColor } = getPrintPreviewChrome(darkChrome);
 
+  const headerRaw = (chrome.headerText || "").trim();
+  const footerRaw = (chrome.footerText || "").trim();
+  const showPageNumbers = chrome.showPageNumbers === true;
+  const pageCount = Math.max(1, Math.floor(chrome.pageCount || 1));
+  const escape = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const headerHtml = headerRaw ? escape(headerRaw) : "";
+  const footerHtml = footerRaw ? escape(footerRaw) : "";
+  const hasHeader = Boolean(headerHtml);
+  const hasFooter = Boolean(footerHtml) || showPageNumbers;
+  const pageLabel = showPageNumbers ? `Page 1 of ${pageCount}` : "";
+
+  // Margins on the sheet (@page margin 0). Header/footer are absolutely pinned
+  // into the top/bottom margin zones so the page label stays at the page bottom.
+  const footerBottomMm = Math.max(6, Math.min(12, settings.marginBottom * 0.35));
+  const headerTopMm = Math.max(6, Math.min(12, settings.marginTop * 0.35));
   const pageCss = `
     @page {
       size: ${paperLabel} ${settings.orientation};
-      margin: ${settings.marginTop}mm ${settings.marginRight}mm ${settings.marginBottom}mm ${settings.marginLeft}mm;
+      margin: 0;
     }
     html, body {
       margin: 0;
@@ -94,15 +126,45 @@ export function buildComposePrintHtml(
       background: ${DOC_PAPER.background};
       color: ${DOC_PAPER.foreground};
       box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+      position: relative;
     }
-    .sheet img { max-width: 100%; }
+    .doc-header, .doc-footer {
+      font-size: 9pt;
+      color: ${DOC_PAPER.muted};
+      line-height: 1.2;
+      position: absolute;
+      left: ${settings.marginLeft}mm;
+      right: ${settings.marginRight}mm;
+      white-space: pre-wrap;
+      box-sizing: border-box;
+    }
+    .doc-header {
+      top: ${headerTopMm}mm;
+    }
+    .doc-body {
+      position: relative;
+      z-index: 1;
+    }
+    .doc-footer {
+      bottom: ${footerBottomMm}mm;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .doc-footer .page-num { white-space: nowrap; flex-shrink: 0; margin-left: auto; }
+    .sheet img { max-width: 100%; height: auto; }
     .sheet p { margin: 0; }
     .sheet table { width: 100%; border-collapse: collapse; }
-    .sheet td, .sheet th { border: 1px solid ${DOC_PAPER.border}; padding: 8px; }
+    .sheet td, .sheet th { border: 1px solid ${DOC_PAPER.border}; padding: 8px; vertical-align: top; }
     .sheet table[style*="border: none"] td,
     .sheet table[style*="border:none"] td,
     .sheet table[style*="border: none"] th,
-    .sheet table[style*="border:none"] th {
+    .sheet table[style*="border:none"] th,
+    .sheet td[style*="border: none"],
+    .sheet td[style*="border:none"],
+    .sheet th[style*="border: none"],
+    .sheet th[style*="border:none"] {
       border: none !important;
       background: transparent;
       padding-left: 0;
@@ -111,16 +173,25 @@ export function buildComposePrintHtml(
     .sheet ul { list-style: disc; padding-left: 1.5rem; }
     .sheet ol { list-style: decimal; padding-left: 1.5rem; }
     @media print {
-      html, body { background: ${DOC_PAPER.background}; }
+      html, body { background: ${DOC_PAPER.background} !important; }
       .sheet {
         margin: 0;
         box-shadow: none;
-        width: auto;
-        min-height: auto;
-        padding: 0;
+        width: ${dims.widthMm}mm;
+        min-height: ${dims.heightMm}mm;
+        padding: ${settings.marginTop}mm ${settings.marginRight}mm ${settings.marginBottom}mm ${settings.marginLeft}mm;
       }
     }
   `;
+
+  const headerBlock = hasHeader ? `<div class="doc-header">${headerHtml}</div>` : "";
+  const footerBlock = hasFooter
+    ? `<div class="doc-footer"><span class="footer-text">${footerHtml}</span>${
+        showPageNumbers
+          ? `<span class="page-num" aria-label="Page number">${escape(pageLabel)}</span>`
+          : ""
+      }</div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -131,7 +202,11 @@ export function buildComposePrintHtml(
   <style>${pageCss}</style>
 </head>
 <body>
-  <div class="sheet">${bodyHtml}</div>
+  <div class="sheet">
+    ${headerBlock}
+    <div class="doc-body">${bodyHtml}</div>
+    ${footerBlock}
+  </div>
 </body>
 </html>`;
 }
@@ -165,19 +240,28 @@ interface PageSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   settings: PageSettings;
-  onApply: (settings: PageSettings) => void;
+  showPageNumbers?: boolean;
+  onApply: (settings: PageSettings, extras?: { showPageNumbers: boolean }) => void;
 }
 
 export function PageSetupDialog({
   open,
   onOpenChange,
   settings,
+  showPageNumbers = true,
   onApply,
 }: PageSetupDialogProps) {
   const [draft, setDraft] = useState<PageSettings>(settings);
+  const [draftPageNumbers, setDraftPageNumbers] = useState(showPageNumbers);
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft(settings);
+    setDraftPageNumbers(showPageNumbers);
+  }, [open, settings, showPageNumbers]);
 
   const handleApply = () => {
-    onApply(draft);
+    onApply(draft, { showPageNumbers: draftPageNumbers });
     onOpenChange(false);
   };
 
@@ -193,7 +277,7 @@ export function PageSetupDialog({
             Page Setup
           </DialogTitle>
           <DialogDescription>
-            Configure page size, orientation, and margins.
+            Configure page size, orientation, margins, and page numbers.
           </DialogDescription>
         </DialogHeader>
 
@@ -255,6 +339,21 @@ export function PageSetupDialog({
               </div>
             ))}
           </div>
+
+          <label className="flex items-start gap-2 rounded border border-border/60 bg-muted/30 px-3 py-2 cursor-pointer">
+            <Checkbox
+              checked={draftPageNumbers}
+              onCheckedChange={(v) => setDraftPageNumbers(v === true)}
+              className="mt-0.5"
+              aria-label="Show page numbers"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-xs font-medium text-foreground">Show page numbers</span>
+              <span className="block text-[11px] text-muted-foreground leading-snug">
+                Prints “Page 1 of N” in the bottom-right. Uncheck to hide.
+              </span>
+            </span>
+          </label>
 
           <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2 space-y-1">
             <p><strong>Paper:</strong> {paper.widthIn} × {paper.heightIn} ({draft.paperSize.toUpperCase()})</p>

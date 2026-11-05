@@ -5,11 +5,18 @@
  * HTML in/out via sanitizeRichText; reuses PageSetupDialog / print HTML builders.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
@@ -30,9 +37,6 @@ import {
   Link2,
   Image as ImageIcon,
   Table2,
-  Heading1,
-  Heading2,
-  Heading3,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -51,6 +55,11 @@ import {
   Rows3,
   Trash2,
   ClipboardPaste,
+  RemoveFormatting,
+  IndentIncrease,
+  IndentDecrease,
+  Baseline,
+  PaintBucket,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -88,12 +97,36 @@ import {
   selectTiptapMatch,
 } from "@/lib/tiptap-find-replace";
 import {
+  Color,
   FontSize,
-  LineHeight,
   FONT_FAMILIES,
-  FONT_SIZES,
   LINE_HEIGHTS,
+  DOCUMENT_STYLES,
+  nextFontSize,
+  parseFontSizePt,
+  formatFontSizePt,
+  type DocumentStyleId,
 } from "@/lib/tiptap-text-styles";
+import {
+  ParagraphLayout,
+  PARAGRAPH_SPACING_PRESETS,
+  PARAGRAPH_BORDER_PRESETS,
+  TEXT_COLOR_SWATCHES,
+  HIGHLIGHT_COLOR_SWATCHES,
+  formatPx,
+  getBlockMarginLeftPx,
+  getBlockTextIndentPx,
+  getBlockLineHeight,
+  resolveSpacingPresetId,
+  resolveBorderPresetId,
+} from "@/lib/tiptap-paragraph-kit";
+import {
+  NpaImage,
+  IMAGE_WIDTH_PRESETS,
+  isImageSelected,
+  getSelectedImageAttrs,
+  type ImageFloat,
+} from "@/lib/tiptap-image-kit";
 import { NpaTableCell, NpaTableHeader } from "@/lib/tiptap-table-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,6 +139,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -121,6 +159,15 @@ import {
   getPageDimensions,
   buildComposePrintHtml,
 } from "../PageSetupDialog";
+import {
+  bodyContentHeightPx,
+  estimateCurrentPage,
+  estimatePageCount,
+  pageBreakOffsetsPx,
+  pageHeightPx,
+} from "@/lib/compose-page-theater";
+import { EditorPageRuler } from "./EditorPageRuler";
+import { HeaderFooterBand } from "./HeaderFooterBand";
 import type { RichTextEditorProps } from "./types";
 
 /** Match NPA Word memo headers: ~1" margins on A4. */
@@ -150,6 +197,105 @@ type PromptDialogState =
   | { type: "table"; rows: string; cols: string }
   | null;
 
+/** Word-style ribbon cluster: controls on top, quiet label under. */
+function RibbonGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-stretch gap-0.5 px-2 py-1.5 border-r border-border/70 last:border-r-0 min-w-0">
+      <div className="flex flex-wrap items-center gap-1 min-h-8">{children}</div>
+      <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/80 text-center leading-none pt-0.5">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function ColorSwatchPopover({
+  label,
+  icon,
+  value,
+  swatches,
+  onPick,
+  onClear,
+  toolbarBtnClass,
+}: {
+  label: string;
+  icon: ReactNode;
+  value: string;
+  swatches: readonly string[];
+  onPick: (color: string) => void;
+  onClear: () => void;
+  toolbarBtnClass: string;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(toolbarBtnClass, "flex-col gap-0.5 py-0.5")}
+          aria-label={label}
+          title={label}
+        >
+          {icon}
+          <span
+            className="block h-0.5 w-3.5 rounded-sm"
+            style={{ backgroundColor: value || "transparent" }}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" align="start">
+        <div className="grid grid-cols-4 gap-1.5">
+          {swatches.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className="h-6 w-6 rounded border border-border hover:ring-2 hover:ring-primary/40"
+              style={{ backgroundColor: color }}
+              aria-label={color}
+              onClick={() => onPick(color)}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          className="mt-2 w-full h-7 text-xs border rounded-md hover:bg-muted"
+          onClick={onClear}
+        >
+          Clear
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function resolveDocumentStyleId(editor: Editor): DocumentStyleId {
+  if (editor.isActive("heading", { level: 1 })) return "h1";
+  if (editor.isActive("heading", { level: 2 })) return "h2";
+  if (editor.isActive("heading", { level: 3 })) return "h3";
+  return "normal";
+}
+
+function applyDocumentStyle(editor: Editor, styleId: DocumentStyleId) {
+  const style = DOCUMENT_STYLES.find((item) => item.id === styleId);
+  if (!style) return;
+  if ("level" in style) {
+    editor
+      .chain()
+      .focus()
+      .setHeading({ level: style.level })
+      .setFontSize(style.fontSize)
+      .setBold()
+      .run();
+    return;
+  }
+  editor.chain().focus().setParagraph().setFontSize(style.fontSize).unsetBold().run();
+}
+
 export function TiptapRichTextEditor({
   value = "",
   onChange,
@@ -160,7 +306,7 @@ export function TiptapRichTextEditor({
   showHeader = true,
   signatureImageUrl,
   showPageSetup = true,
-  showPageNumbers = true,
+  showPageNumbers: showPageNumbersProp = true,
 }: RichTextEditorProps) {
   const { resolvedTheme } = useTheme();
   const labelId = useId();
@@ -170,10 +316,18 @@ export function TiptapRichTextEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const printFrameRef = useRef<HTMLIFrameElement>(null);
+  const paperScrollRef = useRef<HTMLDivElement>(null);
+  const bodyMeasureRef = useRef<HTMLDivElement>(null);
   const findIndexRef = useRef(0);
 
   const [htmlSnapshot, setHtmlSnapshot] = useState(value ?? "");
   const [pageSettings, setPageSettings] = useState<PageSettings>(DEFAULT_PAGE_SETTINGS);
+  const [showPageNumbers, setShowPageNumbers] = useState(showPageNumbersProp);
+  const [headerText, setHeaderText] = useState("");
+  const [footerText, setFooterText] = useState("");
+  const [hfEditMode, setHfEditMode] = useState<null | "header" | "footer">(null);
+  /** Local draft while typing font size — avoids controlled input fighting mid-edit. */
+  const [fontSizeDraft, setFontSizeDraft] = useState<string | null>(null);
   const [showPageSetupDialog, setShowPageSetupDialog] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [printPreviewHtml, setPrintPreviewHtml] = useState("");
@@ -219,9 +373,10 @@ export function TiptapRichTextEditor({
       }),
       Underline,
       TextStyle,
+      Color,
       FontFamily,
       FontSize,
-      LineHeight,
+      ParagraphLayout,
       TextAlign.configure({
         types: ["heading", "paragraph"],
       }),
@@ -232,7 +387,7 @@ export function TiptapRichTextEditor({
         openOnClick: false,
         HTMLAttributes: { rel: "noopener noreferrer" },
       }),
-      Image.configure({
+      NpaImage.configure({
         inline: false,
         // Signature uploads and drawn pads are data URLs; without this TipTap
         // rejects <img src="data:…"> and insertContent falls back to raw HTML text.
@@ -258,7 +413,7 @@ export function TiptapRichTextEditor({
         "aria-multiline": "true",
         ...(showHeader
           ? { "aria-labelledby": labelId }
-          : { "aria-label": "Rich text editor (TipTap)" }),
+          : { "aria-label": "Document editor" }),
       },
       handlePaste: (_view, event) => {
         const html = event.clipboardData?.getData("text/html") || "";
@@ -344,14 +499,24 @@ export function TiptapRichTextEditor({
 
   useEffect(() => {
     if (!showPageSetup) return;
-    const pageHeight = Math.max(pageDims.contentHeightPx, 1);
-    // Approximate pages from rendered HTML length / page height heuristic via DOM after paint.
-    const el = document.querySelector(".npa-tiptap-surface") as HTMLElement | null;
-    const totalHeight = el?.scrollHeight ?? pageHeight;
-    const pages = Math.max(1, Math.ceil(totalHeight / pageHeight));
+    const el =
+      bodyMeasureRef.current?.querySelector(".npa-tiptap-surface") as HTMLElement | null;
+    const totalHeight = el?.scrollHeight ?? bodyContentHeightPx(pageSettings, true);
+    const pages = estimatePageCount(totalHeight, pageSettings, true);
     setTotalPages(pages);
     setCurrentPage((p) => Math.min(p, pages));
-  }, [htmlSnapshot, pageDims, showPageSetup]);
+  }, [htmlSnapshot, pageSettings, showPageSetup, headerText, footerText]);
+
+  const breakOffsets = useMemo(
+    () => (showPageSetup ? pageBreakOffsetsPx(totalPages, pageSettings, true) : []),
+    [showPageSetup, totalPages, pageSettings],
+  );
+
+  const handlePaperScroll = () => {
+    if (!showPageSetup || !paperScrollRef.current) return;
+    const next = estimateCurrentPage(paperScrollRef.current.scrollTop, pageSettings, true);
+    setCurrentPage(Math.min(next, totalPages));
+  };
 
   const counts = useMemo(
     () => stripHtmlToPlainLength(htmlSnapshot || value || ""),
@@ -363,19 +528,36 @@ export function TiptapRichTextEditor({
       "h-8 w-8 inline-flex items-center justify-center text-xs border rounded-md hover:bg-muted",
       active && "bg-muted border-border text-foreground",
     );
-  const groupClass = "flex items-center gap-1 rounded-md border border-border bg-background p-1";
+
+  const buildEditorPrintHtml = useCallback(() => {
+    const raw = editor?.getHTML() || htmlSnapshot || "";
+    return buildComposePrintHtml(
+      sanitizeRichText(raw),
+      pageSettings,
+      // Blank title → Chrome has nothing to put in its optional top header.
+      "\u00a0",
+      resolvedTheme === "dark",
+      {
+        headerText,
+        footerText,
+        showPageNumbers,
+        pageCount: totalPages,
+      },
+    );
+  }, [
+    editor,
+    htmlSnapshot,
+    pageSettings,
+    resolvedTheme,
+    headerText,
+    footerText,
+    showPageNumbers,
+    totalPages,
+  ]);
 
   const handlePrintPreview = () => {
     try {
-      const raw = editor?.getHTML() || htmlSnapshot || "";
-      setPrintPreviewHtml(
-        buildComposePrintHtml(
-          sanitizeRichText(raw),
-          pageSettings,
-          "Compose preview",
-          resolvedTheme === "dark",
-        ),
-      );
+      setPrintPreviewHtml(buildEditorPrintHtml());
       setShowPrintPreview(true);
     } catch (error) {
       logEditorDiagnostic({
@@ -389,13 +571,32 @@ export function TiptapRichTextEditor({
   };
 
   const printFromPreviewModal = () => {
-    const frameWindow = printFrameRef.current?.contentWindow;
-    if (!frameWindow) {
+    const frame = printFrameRef.current;
+    const frameWindow = frame?.contentWindow;
+    const frameDoc = frame?.contentDocument;
+    if (!frameWindow || !frameDoc) {
       toast.error("Print preview is still loading");
       return;
     }
-    frameWindow.focus();
-    frameWindow.print();
+    // Refresh from editor so print matches current content; keep title blank.
+    try {
+      const html = buildEditorPrintHtml();
+      setPrintPreviewHtml(html);
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+      frameDoc.title = "";
+    } catch {
+      // Fall through and print whatever is already in the iframe.
+    }
+    toast.message("Turn off “Headers and footers” in the print dialog", {
+      description: "Otherwise Chrome adds date, title, URL, and its own page numbers.",
+      duration: 7000,
+    });
+    window.setTimeout(() => {
+      frameWindow.focus();
+      frameWindow.print();
+    }, 50);
   };
 
   const insertSignature = () => {
@@ -498,14 +699,19 @@ export function TiptapRichTextEditor({
   }
 
   const inTable = editor.isActive("table");
+  const imageSelected = isImageSelected(editor);
+  const imageAttrs = imageSelected ? getSelectedImageAttrs(editor) : null;
   const currentFontFamily =
     (editor.getAttributes("textStyle").fontFamily as string | undefined) || FONT_FAMILIES[0].value;
   const currentFontSize =
     (editor.getAttributes("textStyle").fontSize as string | undefined) || "12pt";
-  const currentLineHeight =
-    (editor.getAttributes("paragraph").lineHeight as string | undefined) ||
-    (editor.getAttributes("heading").lineHeight as string | undefined) ||
-    "1.5";
+  const currentLineHeight = getBlockLineHeight(editor);
+  const currentTextColor =
+    (editor.getAttributes("textStyle").color as string | undefined) || "#000000";
+  const currentHighlight =
+    (editor.getAttributes("highlight").color as string | undefined) || "";
+  const indentLeftPx = getBlockMarginLeftPx(editor);
+  const indentFirstPx = getBlockTextIndentPx(editor);
 
   const setCellAttr = (attrs: Record<string, string | null>) => {
     const nodeType = editor.isActive("tableHeader") ? "tableHeader" : "tableCell";
@@ -619,6 +825,16 @@ export function TiptapRichTextEditor({
           max-height: 80px;
           width: auto;
         }
+        /* Picture wrap theater (CSS float — not Word absolute positioning) */
+        .npa-tiptap-surface img.ProseMirror-selectednode {
+          outline: 2px solid hsl(var(--primary) / 0.55);
+          outline-offset: 2px;
+        }
+        .npa-tiptap-surface::after {
+          content: "";
+          display: table;
+          clear: both;
+        }
         .npa-tiptap-surface p.is-editor-empty:first-child::before {
           color: hsl(var(--muted-foreground));
           content: attr(data-placeholder);
@@ -633,7 +849,7 @@ export function TiptapRichTextEditor({
       {showHeader && (
         <div className="bg-muted/30 px-4 py-2 border-b border-border flex items-center justify-between">
           <span id={labelId} className="text-sm text-muted-foreground">
-            Rich text editor (TipTap)
+            Document
           </span>
           {showCharacterCount && (
             <span className="text-xs text-muted-foreground" aria-live="polite">
@@ -644,11 +860,165 @@ export function TiptapRichTextEditor({
       )}
 
       <div
-        className="flex flex-wrap items-center gap-1.5 p-2 border-b border-border bg-muted/20"
+        className="flex flex-wrap items-stretch border-b border-border bg-muted/15"
         role="toolbar"
-        aria-label="Formatting"
+        aria-label="Home"
       >
-        <div className={groupClass}>
+        <RibbonGroup label="Clipboard">
+          <button
+            type="button"
+            className={toolbarBtn(false)}
+            aria-label="Undo"
+            title="Undo"
+            onClick={() => editor.chain().focus().undo().run()}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className={toolbarBtn(false)}
+            aria-label="Redo"
+            title="Redo"
+            onClick={() => editor.chain().focus().redo().run()}
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className={toolbarBtn(false)}
+            aria-label="Paste as picture"
+            title="Paste clipboard as a picture (Excel: Copy as Picture, or Alt+Paste)"
+            onClick={() => {
+              void readClipboardAsPictureDataUrl()
+                .then(({ dataUrl }) => {
+                  editor.chain().focus().setImage({ src: dataUrl, alt: "Pasted picture" }).run();
+                  toast.success("Pasted as picture");
+                })
+                .catch(() =>
+                  toast.error(
+                    "Copy the BOQ in Excel first — use Copy as Picture, or copy cells then click Paste as picture",
+                  ),
+                );
+            }}
+          >
+            <ClipboardPaste className="h-3.5 w-3.5" />
+          </button>
+        </RibbonGroup>
+
+        <RibbonGroup label="Font">
+          <Select
+            value={resolveDocumentStyleId(editor)}
+            onValueChange={(value) => applyDocumentStyle(editor, value as DocumentStyleId)}
+          >
+            <SelectTrigger className="h-8 w-[7.5rem] text-xs" aria-label="Style">
+              <SelectValue placeholder="Style" />
+            </SelectTrigger>
+            <SelectContent>
+              {DOCUMENT_STYLES.map((style) => (
+                <SelectItem key={style.id} value={style.id} className="text-xs">
+                  {style.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={currentFontFamily}
+            onValueChange={(value) => editor.chain().focus().setFontFamily(value).run()}
+          >
+            <SelectTrigger className="h-8 w-[9.5rem] text-xs" aria-label="Font family">
+              <SelectValue placeholder="Font" />
+            </SelectTrigger>
+            <SelectContent>
+              {FONT_FAMILIES.map((font) => (
+                <SelectItem key={font.value} value={font.value} className="text-xs">
+                  {font.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="inline-flex h-8 items-center rounded-md border border-border bg-background overflow-hidden shrink-0">
+            <button
+              type="button"
+              className="h-8 w-7 inline-flex items-center justify-center hover:bg-muted border-r border-border"
+              aria-label="Decrease font size"
+              title="Decrease font size (1pt)"
+              onClick={() => {
+                setFontSizeDraft(null);
+                editor
+                  .chain()
+                  .focus()
+                  .setFontSize(nextFontSize(currentFontSize, -1))
+                  .run();
+              }}
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <Input
+              type="text"
+              inputMode="numeric"
+              className="h-8 w-11 border-0 rounded-none px-1 text-xs text-center shadow-none focus-visible:ring-0"
+              aria-label="Font size in points"
+              title="Font size 1–72 pt"
+              value={
+                fontSizeDraft ??
+                String(Math.round(parseFontSizePt(currentFontSize)))
+              }
+              onFocus={(e) => {
+                setFontSizeDraft(String(Math.round(parseFontSizePt(currentFontSize))));
+                e.target.select();
+              }}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^\d.]/g, "");
+                setFontSizeDraft(raw);
+              }}
+              onBlur={() => {
+                const n = Number.parseFloat(fontSizeDraft ?? "");
+                const next = formatFontSizePt(Number.isFinite(n) ? n : 12);
+                setFontSizeDraft(null);
+                editor.chain().focus().setFontSize(next).run();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setFontSizeDraft(null);
+                  editor
+                    .chain()
+                    .focus()
+                    .setFontSize(nextFontSize(currentFontSize, 1))
+                    .run();
+                }
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setFontSizeDraft(null);
+                  editor
+                    .chain()
+                    .focus()
+                    .setFontSize(nextFontSize(currentFontSize, -1))
+                    .run();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="h-8 w-7 inline-flex items-center justify-center hover:bg-muted border-l border-border"
+              aria-label="Increase font size"
+              title="Increase font size (1pt)"
+              onClick={() => {
+                setFontSizeDraft(null);
+                editor
+                  .chain()
+                  .focus()
+                  .setFontSize(nextFontSize(currentFontSize, 1))
+                  .run();
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
           <button
             type="button"
             className={toolbarBtn(editor.isActive("bold"))}
@@ -685,15 +1055,24 @@ export function TiptapRichTextEditor({
           >
             <Strikethrough className="h-3.5 w-3.5" />
           </button>
-          <button
-            type="button"
-            className={toolbarBtn(editor.isActive("highlight"))}
-            aria-label="Highlight"
-            aria-pressed={editor.isActive("highlight")}
-            onClick={() => editor.chain().focus().toggleHighlight({ color: "#fff59d" }).run()}
-          >
-            <Highlighter className="h-3.5 w-3.5" />
-          </button>
+          <ColorSwatchPopover
+            label="Font color"
+            icon={<Baseline className="h-3.5 w-3.5" />}
+            value={currentTextColor}
+            swatches={TEXT_COLOR_SWATCHES}
+            toolbarBtnClass={toolbarBtn(Boolean(editor.getAttributes("textStyle").color))}
+            onPick={(color) => editor.chain().focus().setColor(color).run()}
+            onClear={() => editor.chain().focus().unsetColor().run()}
+          />
+          <ColorSwatchPopover
+            label="Highlight"
+            icon={<Highlighter className="h-3.5 w-3.5" />}
+            value={currentHighlight || "#fff59d"}
+            swatches={HIGHLIGHT_COLOR_SWATCHES}
+            toolbarBtnClass={toolbarBtn(editor.isActive("highlight"))}
+            onPick={(color) => editor.chain().focus().toggleHighlight({ color }).run()}
+            onClear={() => editor.chain().focus().unsetHighlight().run()}
+          />
           <button
             type="button"
             className={toolbarBtn(editor.isActive("subscript"))}
@@ -712,84 +1091,18 @@ export function TiptapRichTextEditor({
           >
             <SuperscriptIcon className="h-3.5 w-3.5" />
           </button>
-        </div>
+          <button
+            type="button"
+            className={toolbarBtn(false)}
+            aria-label="Clear formatting"
+            title="Clear formatting"
+            onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+          >
+            <RemoveFormatting className="h-3.5 w-3.5" />
+          </button>
+        </RibbonGroup>
 
-        <div className={groupClass}>
-          <Select
-            value={currentFontFamily}
-            onValueChange={(value) => editor.chain().focus().setFontFamily(value).run()}
-          >
-            <SelectTrigger className="h-8 w-[9.5rem] text-xs" aria-label="Font family">
-              <SelectValue placeholder="Font" />
-            </SelectTrigger>
-            <SelectContent>
-              {FONT_FAMILIES.map((font) => (
-                <SelectItem key={font.value} value={font.value} className="text-xs">
-                  {font.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={currentFontSize}
-            onValueChange={(value) => editor.chain().focus().setFontSize(value).run()}
-          >
-            <SelectTrigger className="h-8 w-[4.5rem] text-xs" aria-label="Font size">
-              <SelectValue placeholder="Size" />
-            </SelectTrigger>
-            <SelectContent>
-              {FONT_SIZES.map((size) => (
-                <SelectItem key={size} value={size} className="text-xs">
-                  {size.replace("px", "")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={currentLineHeight}
-            onValueChange={(value) => editor.chain().focus().setLineHeight(value).run()}
-          >
-            <SelectTrigger className="h-8 w-[5.5rem] text-xs" aria-label="Line height">
-              <SelectValue placeholder="Line" />
-            </SelectTrigger>
-            <SelectContent>
-              {LINE_HEIGHTS.map((item) => (
-                <SelectItem key={item.value} value={item.value} className="text-xs">
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className={groupClass}>
-          <button
-            type="button"
-            className={toolbarBtn(editor.isActive("heading", { level: 1 }))}
-            aria-label="Heading 1"
-            aria-pressed={editor.isActive("heading", { level: 1 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          >
-            <Heading1 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={toolbarBtn(editor.isActive("heading", { level: 2 }))}
-            aria-label="Heading 2"
-            aria-pressed={editor.isActive("heading", { level: 2 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          >
-            <Heading2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={toolbarBtn(editor.isActive("heading", { level: 3 }))}
-            aria-label="Heading 3"
-            aria-pressed={editor.isActive("heading", { level: 3 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          >
-            <Heading3 className="h-3.5 w-3.5" />
-          </button>
+        <RibbonGroup label="Paragraph">
           <button
             type="button"
             className={toolbarBtn(editor.isActive("bulletList"))}
@@ -808,9 +1121,24 @@ export function TiptapRichTextEditor({
           >
             <ListOrdered className="h-3.5 w-3.5" />
           </button>
-        </div>
-
-        <div className={groupClass}>
+          <button
+            type="button"
+            className={toolbarBtn(false)}
+            aria-label="Decrease indent"
+            title="Decrease indent"
+            onClick={() => editor.chain().focus().decreaseIndent().run()}
+          >
+            <IndentDecrease className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className={toolbarBtn(false)}
+            aria-label="Increase indent"
+            title="Increase indent"
+            onClick={() => editor.chain().focus().increaseIndent().run()}
+          >
+            <IndentIncrease className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             className={toolbarBtn(editor.isActive({ textAlign: "left" }))}
@@ -847,9 +1175,66 @@ export function TiptapRichTextEditor({
           >
             <AlignJustify className="h-3.5 w-3.5" />
           </button>
-        </div>
+          <Select
+            value={currentLineHeight}
+            onValueChange={(value) => editor.chain().focus().setLineHeight(value).run()}
+          >
+            <SelectTrigger className="h-8 w-[5.5rem] text-xs" aria-label="Line spacing">
+              <SelectValue placeholder="Line" />
+            </SelectTrigger>
+            <SelectContent>
+              {LINE_HEIGHTS.map((item) => (
+                <SelectItem key={item.value} value={item.value} className="text-xs">
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={resolveSpacingPresetId(editor)}
+            onValueChange={(value) => {
+              const preset = PARAGRAPH_SPACING_PRESETS.find((p) => p.id === value);
+              if (!preset) return;
+              editor
+                .chain()
+                .focus()
+                .setParagraphSpacing(preset.before, preset.after)
+                .run();
+            }}
+          >
+            <SelectTrigger className="h-8 w-[6.5rem] text-xs" aria-label="Paragraph spacing">
+              <SelectValue placeholder="Spacing" />
+            </SelectTrigger>
+            <SelectContent>
+              {PARAGRAPH_SPACING_PRESETS.map((item) => (
+                <SelectItem key={item.id} value={item.id} className="text-xs">
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={resolveBorderPresetId(editor)}
+            onValueChange={(value) => {
+              const preset = PARAGRAPH_BORDER_PRESETS.find((p) => p.id === value);
+              if (!preset) return;
+              editor.chain().focus().setParagraphBorderStyle(preset.style).run();
+            }}
+          >
+            <SelectTrigger className="h-8 w-[7rem] text-xs" aria-label="Paragraph border">
+              <SelectValue placeholder="Border" />
+            </SelectTrigger>
+            <SelectContent>
+              {PARAGRAPH_BORDER_PRESETS.map((item) => (
+                <SelectItem key={item.id} value={item.id} className="text-xs">
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </RibbonGroup>
 
-        <div className={groupClass}>
+        <RibbonGroup label="Insert">
           <button
             type="button"
             className={toolbarBtn(editor.isActive("link"))}
@@ -873,26 +1258,6 @@ export function TiptapRichTextEditor({
           </button>
           <button
             type="button"
-            className={toolbarBtn(false)}
-            aria-label="Paste as picture"
-            title="Paste clipboard as a picture (Excel: Copy as Picture, or Alt+Paste)"
-            onClick={() => {
-              void readClipboardAsPictureDataUrl()
-                .then(({ dataUrl }) => {
-                  editor.chain().focus().setImage({ src: dataUrl, alt: "Pasted picture" }).run();
-                  toast.success("Pasted as picture");
-                })
-                .catch(() =>
-                  toast.error(
-                    "Copy the BOQ in Excel first — use Copy as Picture, or copy cells then click Paste as picture",
-                  ),
-                );
-            }}
-          >
-            <ClipboardPaste className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
             className={toolbarBtn(inTable)}
             aria-label="Insert table"
             onClick={() => setPromptDialog({ type: "table", rows: "2", cols: "2" })}
@@ -913,9 +1278,6 @@ export function TiptapRichTextEditor({
               Table
             </button>
           )}
-        </div>
-
-        <div className={groupClass}>
           {signatureImageUrl && (
             <button
               type="button"
@@ -928,6 +1290,88 @@ export function TiptapRichTextEditor({
               Signature
             </button>
           )}
+          {tokens.length > 0 && (
+            <button
+              type="button"
+              className={cn(
+                "h-8 px-2 inline-flex items-center text-xs border rounded-md hover:bg-muted",
+                showTokenTools && "bg-muted",
+              )}
+              aria-pressed={showTokenTools}
+              aria-label="Insert document fields"
+              title="Insert fields like title, recipient, or date"
+              onClick={() => setShowTokenTools((v) => !v)}
+            >
+              Fields
+            </button>
+          )}
+        </RibbonGroup>
+
+        {imageSelected && (
+          <RibbonGroup label="Picture">
+            {IMAGE_WIDTH_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={cn(
+                  "h-8 px-2 text-xs border rounded-md hover:bg-muted",
+                  imageAttrs?.width === preset.width && "bg-muted",
+                )}
+                aria-label={`Image width ${preset.label}`}
+                onClick={() => editor.chain().focus().setImageWidth(preset.width).run()}
+              >
+                {preset.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={toolbarBtn(imageAttrs?.align === "left" && imageAttrs.float === "none")}
+              aria-label="Align image left"
+              onClick={() => editor.chain().focus().setImageAlign("left").run()}
+            >
+              <AlignLeft className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={toolbarBtn(imageAttrs?.align === "center")}
+              aria-label="Align image center"
+              onClick={() => editor.chain().focus().setImageAlign("center").run()}
+            >
+              <AlignCenter className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={toolbarBtn(imageAttrs?.align === "right" && imageAttrs.float === "none")}
+              aria-label="Align image right"
+              onClick={() => editor.chain().focus().setImageAlign("right").run()}
+            >
+              <AlignRight className="h-3.5 w-3.5" />
+            </button>
+            <Select
+              value={imageAttrs?.float || "none"}
+              onValueChange={(value) =>
+                editor.chain().focus().setImageFloat(value as ImageFloat).run()
+              }
+            >
+              <SelectTrigger className="h-8 w-[7.5rem] text-xs" aria-label="Text wrap">
+                <SelectValue placeholder="Wrap" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-xs">
+                  In line
+                </SelectItem>
+                <SelectItem value="left" className="text-xs">
+                  Square left
+                </SelectItem>
+                <SelectItem value="right" className="text-xs">
+                  Square right
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </RibbonGroup>
+        )}
+
+        <RibbonGroup label="Layout">
           {showPageSetup && (
             <button
               type="button"
@@ -959,44 +1403,10 @@ export function TiptapRichTextEditor({
           >
             <Search className="h-3.5 w-3.5" />
           </button>
-          <button
-            type="button"
-            className={toolbarBtn(false)}
-            aria-label="Undo"
-            onClick={() => editor.chain().focus().undo().run()}
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            className={toolbarBtn(false)}
-            aria-label="Redo"
-            onClick={() => editor.chain().focus().redo().run()}
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        {tokens.length > 0 && (
-          <div className={groupClass}>
-            <button
-              type="button"
-              className={cn(
-                "h-8 px-2 inline-flex items-center text-xs border rounded-md hover:bg-muted",
-                showTokenTools && "bg-muted",
-              )}
-              aria-pressed={showTokenTools}
-              aria-label="Insert document fields"
-              title="Insert fields like title, recipient, or date"
-              onClick={() => setShowTokenTools((v) => !v)}
-            >
-              Fields
-            </button>
-          </div>
-        )}
+        </RibbonGroup>
 
         {!showHeader && showCharacterCount && (
-          <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
+          <span className="ml-auto self-center px-3 text-xs text-muted-foreground whitespace-nowrap" aria-live="polite">
             {counts.words} words · {counts.chars} characters
           </span>
         )}
@@ -1127,6 +1537,27 @@ export function TiptapRichTextEditor({
               </button>
               <button
                 type="button"
+                className="h-7 px-2 inline-flex items-center gap-1 text-[11px] border rounded-md hover:bg-muted"
+                onClick={() => setCellAttr({ border: "1px solid #333333" })}
+              >
+                Cell border
+              </button>
+              <button
+                type="button"
+                className="h-7 px-2 inline-flex items-center gap-1 text-[11px] border rounded-md hover:bg-muted"
+                onClick={() => setCellAttr({ border: "none" })}
+              >
+                No border
+              </button>
+              <button
+                type="button"
+                className="h-7 px-2 inline-flex items-center gap-1 text-[11px] border rounded-md hover:bg-muted"
+                onClick={() => setCellAttr({ backgroundColor: "#f5f5f5" })}
+              >
+                <PaintBucket className="h-3 w-3" /> Shade
+              </button>
+              <button
+                type="button"
                 className="h-7 px-2 inline-flex items-center gap-1 text-[11px] border rounded-md hover:bg-muted disabled:opacity-40"
                 title="Select several cells first (click and drag), then merge"
                 disabled={!editor.can().mergeCells()}
@@ -1158,29 +1589,188 @@ export function TiptapRichTextEditor({
       )}
 
       <div
+        ref={paperScrollRef}
         className="bg-muted/30 overflow-auto"
         style={{ maxHeight: "min(78vh, 960px)" }}
+        onScroll={handlePaperScroll}
+        onMouseDown={(e) => {
+          // Clicking the gray surround / body exits header-footer edit mode.
+          if (hfEditMode && !(e.target as HTMLElement).closest("[data-hf-band]")) {
+            setHfEditMode(null);
+          }
+        }}
       >
         <div
-          className="mx-auto my-4 bg-background shadow-sm border border-border/60"
+          className={cn("mx-auto", showPageSetup ? "pt-3 pb-4 px-2" : "my-4")}
           style={{
-            width: `${pageDims.widthMm}mm`,
-            minHeight: `${Math.max(pageDims.contentHeightPx, 520)}px`,
+            width: showPageSetup
+              ? `calc(${pageDims.widthMm}mm + 20px)`
+              : `${pageDims.widthMm}mm`,
             maxWidth: "100%",
           }}
         >
-          <div
-            style={{
-              minHeight: `${Math.max(pageDims.contentHeightPx, 520)}px`,
-              padding: `${(pageSettings.marginTop / 25.4) * 96}px ${(pageSettings.marginRight / 25.4) * 96}px ${(pageSettings.marginBottom / 25.4) * 96}px ${(pageSettings.marginLeft / 25.4) * 96}px`,
-              fontFamily: "Verdana, Geneva, sans-serif",
-              /* Word memo body is 12pt (not 12px) */
-              fontSize: "12pt",
-              lineHeight: "1.15",
-            }}
-          >
-            <EditorContent editor={editor} />
-          </div>
+          {(() => {
+            const stackH = Math.max(
+              pageHeightPx(pageSettings) * totalPages,
+              pageHeightPx(pageSettings),
+            );
+            const paper = (
+              <div
+                className={cn(
+                  "doc-paper shadow-md border border-border/50 relative overflow-hidden",
+                  showPageSetup && "rounded-br-sm border-l-0 sm:border-l",
+                )}
+                style={{
+                  width: "100%",
+                  minHeight: `${stackH}px`,
+                }}
+                onMouseDown={() => {
+                  if (hfEditMode) setHfEditMode(null);
+                }}
+              >
+                {showPageSetup && (
+                  <>
+                    <div
+                      data-hf-band
+                      className="absolute z-20"
+                      style={{
+                        top: 4,
+                        left: `${(pageSettings.marginLeft / 25.4) * 96}px`,
+                        right: `${(pageSettings.marginRight / 25.4) * 96}px`,
+                        height: `${Math.max(28, (pageSettings.marginTop / 25.4) * 96 - 8)}px`,
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <HeaderFooterBand
+                        kind="header"
+                        value={headerText}
+                        editing={hfEditMode === "header"}
+                        onStartEdit={() => setHfEditMode("header")}
+                        onChange={setHeaderText}
+                        onEndEdit={() => setHfEditMode(null)}
+                        className="h-full"
+                      />
+                    </div>
+                    {Array.from({ length: totalPages }, (_, pageIndex) => {
+                      const pageH = pageHeightPx(pageSettings);
+                      const marginBottomPx = (pageSettings.marginBottom / 25.4) * 96;
+                      // Pin into the bottom margin, close to the page edge (Word-like).
+                      const bandH = Math.max(22, Math.min(36, marginBottomPx * 0.45));
+                      const bottomInset = Math.max(8, Math.min(14, marginBottomPx * 0.2));
+                      const top = (pageIndex + 1) * pageH - bottomInset - bandH;
+                      const editable = pageIndex === 0;
+                      const pageLabel = showPageNumbers
+                        ? `Page ${pageIndex + 1} of ${totalPages}`
+                        : "";
+                      return (
+                        <div
+                          key={`footer-${pageIndex}`}
+                          data-hf-band={editable ? true : undefined}
+                          className="absolute z-20 flex items-end gap-2"
+                          style={{
+                            top,
+                            left: `${(pageSettings.marginLeft / 25.4) * 96}px`,
+                            right: `${(pageSettings.marginRight / 25.4) * 96}px`,
+                            height: `${bandH}px`,
+                          }}
+                          onMouseDown={(e) => editable && e.stopPropagation()}
+                        >
+                          {editable ? (
+                            <HeaderFooterBand
+                              kind="footer"
+                              value={footerText}
+                              editing={hfEditMode === "footer"}
+                              onStartEdit={() => setHfEditMode("footer")}
+                              onChange={setFooterText}
+                              onEndEdit={() => setHfEditMode(null)}
+                              className="h-full flex-1 min-w-0"
+                            />
+                          ) : (
+                            <div
+                              className="flex-1 min-w-0 h-full px-1 py-0.5 text-[9pt] text-muted-foreground/50 line-clamp-2 whitespace-pre-wrap"
+                              aria-hidden
+                            >
+                              {footerText.trim()}
+                            </div>
+                          )}
+                          {pageLabel ? (
+                            <span
+                              className="shrink-0 self-end pb-0.5 pr-0.5 text-[9pt] text-muted-foreground tabular-nums"
+                              aria-hidden={!editable}
+                            >
+                              {pageLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+                <div
+                  style={{
+                    minHeight: `${bodyContentHeightPx(pageSettings, showPageSetup) * totalPages}px`,
+                    padding: `${(pageSettings.marginTop / 25.4) * 96}px ${(pageSettings.marginRight / 25.4) * 96}px ${(pageSettings.marginBottom / 25.4) * 96}px ${(pageSettings.marginLeft / 25.4) * 96}px`,
+                    fontFamily: "Verdana, Geneva, sans-serif",
+                    fontSize: "12pt",
+                    lineHeight: "1.15",
+                  }}
+                  onMouseDown={() => {
+                    if (hfEditMode) setHfEditMode(null);
+                  }}
+                >
+                  <div ref={bodyMeasureRef} className="relative">
+                    {showPageSetup &&
+                      breakOffsets.map((offset) => (
+                        <div
+                          key={offset}
+                          className="pointer-events-none absolute left-0 right-0 z-10 flex items-center gap-2"
+                          style={{ top: offset }}
+                          aria-hidden
+                        >
+                          <div className="flex-1 border-t border-dashed border-primary/35" />
+                          <span className="text-[9px] uppercase tracking-wide text-primary/50 bg-muted/80 px-1 rounded">
+                            Page break
+                          </span>
+                          <div className="flex-1 border-t border-dashed border-primary/35" />
+                        </div>
+                      ))}
+                    <EditorContent editor={editor} />
+                  </div>
+                </div>
+              </div>
+            );
+
+            if (!showPageSetup) return paper;
+
+            return (
+              <EditorPageRuler
+                pageSettings={pageSettings}
+                marginLeftPx={indentLeftPx}
+                textIndentPx={indentFirstPx}
+                paperHeightPx={stackH}
+                onMarginLeftPx={(px) =>
+                  editor.chain().focus().setParagraphMarginLeft(formatPx(px)).run()
+                }
+                onTextIndentPx={(px) =>
+                  editor.chain().focus().setParagraphTextIndent(formatPx(px)).run()
+                }
+                onMarginTopMm={(mm) =>
+                  setPageSettings((prev) => ({ ...prev, marginTop: mm }))
+                }
+                onMarginBottomMm={(mm) =>
+                  setPageSettings((prev) => ({ ...prev, marginBottom: mm }))
+                }
+                onMarginLeftMm={(mm) =>
+                  setPageSettings((prev) => ({ ...prev, marginLeft: mm }))
+                }
+                onMarginRightMm={(mm) =>
+                  setPageSettings((prev) => ({ ...prev, marginRight: mm }))
+                }
+              >
+                {paper}
+              </EditorPageRuler>
+            );
+          })()}
         </div>
       </div>
 
@@ -1204,7 +1794,13 @@ export function TiptapRichTextEditor({
           open={showPageSetupDialog}
           onOpenChange={setShowPageSetupDialog}
           settings={pageSettings}
-          onApply={setPageSettings}
+          showPageNumbers={showPageNumbers}
+          onApply={(next, extras) => {
+            setPageSettings(next);
+            if (extras && typeof extras.showPageNumbers === "boolean") {
+              setShowPageNumbers(extras.showPageNumbers);
+            }
+          }}
         />
       )}
 
@@ -1213,8 +1809,10 @@ export function TiptapRichTextEditor({
           <DialogHeader className="px-4 py-3 border-b shrink-0 space-y-1">
             <DialogTitle>Print preview</DialogTitle>
             <DialogDescription>
-              {pageSettings.paperSize.toUpperCase()} · {pageSettings.orientation}. Use Print / Save
-              PDF for the system dialog.
+              {pageSettings.paperSize.toUpperCase()} · {pageSettings.orientation}. Only the editor
+              page should print. When the system dialog opens, turn off{" "}
+              <strong>Headers and footers</strong> so Chrome does not add date, time, URL, or extra
+              page numbers.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0 bg-muted/40">
