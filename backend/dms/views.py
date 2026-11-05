@@ -60,6 +60,7 @@ from .drm import (
     assert_download_allowed,
     assert_print_allowed,
     assert_share_allowed,
+    assert_plaintext_extraction_allowed,
     assert_view_allowed,
     resolve_document_rights,
 )
@@ -1027,7 +1028,8 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
     def run_ocr(self, request, pk=None):
         """Run OCR on a specific version, or extract text from HTML content."""
         version = self.get_object()
-        
+        assert_plaintext_extraction_allowed(version.document, request.user)
+
         # If version has HTML content, extract text directly
         # Check both content_html and content_text fields
         has_html_content = (version.content_html and version.content_html.strip()) or (version.content_text and version.content_text.strip())

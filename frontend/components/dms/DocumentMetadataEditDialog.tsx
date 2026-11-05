@@ -225,10 +225,11 @@ export const DocumentMetadataEditDialog = ({
     return () => clearTimeout(timeoutId);
   }, [metadataDraft.referenceNumber, document]);
 
-  // Track unsaved changes
+  // Track unsaved changes (must include every editable field, including DRM)
   useEffect(() => {
     if (!document || !open) return;
 
+    const attachedPolicyId = document.drmRights?.policy_id ?? null;
     const hasChanges =
       metadataDraft.title !== document.title ||
       metadataDraft.description !== (document.description ?? '') ||
@@ -238,7 +239,8 @@ export const DocumentMetadataEditDialog = ({
       metadataDraft.departmentId !== document.departmentId ||
       metadataDraft.tags !== document.tags.join(', ') ||
       metadataDraft.sensitivity !== document.sensitivity ||
-      metadataDraft.status !== document.status;
+      metadataDraft.status !== document.status ||
+      metadataDraft.drmPolicyId !== attachedPolicyId;
 
     setHasUnsavedChanges(hasChanges);
   }, [metadataDraft, document, open]);
@@ -305,6 +307,7 @@ export const DocumentMetadataEditDialog = ({
       metadataDraft.title !== document.title ||
       metadataDraft.description !== (document.description ?? '') ||
       metadataDraft.referenceNumber !== (document.referenceNumber ?? '') ||
+      metadataDraft.documentType !== (document.documentType ?? 'other') ||
       metadataDraft.divisionId !== document.divisionId ||
       metadataDraft.departmentId !== document.departmentId ||
       metadataDraft.tags !== document.tags.join(', ') ||
@@ -631,10 +634,10 @@ export const DocumentMetadataEditDialog = ({
                   </Select>
                   {metadataDraft.drmPolicyId === null && (
                     <p className="text-[11px] text-muted-foreground">
-                      {metadataDraft.sensitivity === 'public' && 'Default: Download and share.'}
-                      {metadataDraft.sensitivity === 'internal' && 'Default: Authenticated internal access.'}
-                      {metadataDraft.sensitivity === 'confidential' && 'Default: Restricted access + watermark.'}
-                      {metadataDraft.sensitivity === 'restricted' && 'Default: Strict access + view-only.'}
+                      {metadataDraft.sensitivity === 'public' && 'Default: Public Record — download and share.'}
+                      {metadataDraft.sensitivity === 'internal' && 'Default: Internal — download allowed + INTERNAL USE ONLY watermark.'}
+                      {metadataDraft.sensitivity === 'confidential' && 'Default: Confidential — view only + CONFIDENTIAL watermark.'}
+                      {metadataDraft.sensitivity === 'restricted' && 'Default: Strictly Confidential — Time-Limited (view only, STRICTLY CONFIDENTIAL watermark, expires in 30 days).'}
                     </p>
                   )}
                 </div>
@@ -838,40 +841,41 @@ export const DocumentMetadataEditDialog = ({
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2 border-t gap-2 sm:gap-0">
-              {hasUnsavedChanges && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <AlertTriangle className="h-4 w-4 text-warning" />
-                  <span>You have unsaved changes</span>
-                </div>
-              )}
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:ml-auto">
-                {hasUnsavedChanges && (
-                  <Button variant="outline" onClick={handleDiscard} aria-label="Discard changes" className="w-full sm:w-auto">
-                    Discard
-                  </Button>
-                )}
-                <Button
-                  onClick={handleSave}
-                  disabled={!hasUnsavedChanges || savingMetadata}
-                  aria-label="Save document changes"
-                  className="w-full sm:w-auto"
-                >
-                  {savingMetadata ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      <span className="hidden sm:inline">Saving...</span>
-                      <span className="sm:hidden">Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      <span className="hidden sm:inline">Save Changes</span>
-                      <span className="sm:hidden">Save</span>
-                    </>
-                  )}
-                </Button>
+          </div>
+
+          <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between border-t border-border/60 pt-4 mt-2 gap-2 sm:gap-0">
+            {hasUnsavedChanges ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                <span>You have unsaved changes</span>
               </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">No unsaved changes</span>
+            )}
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:ml-auto">
+              {hasUnsavedChanges && (
+                <Button variant="outline" onClick={handleDiscard} aria-label="Discard changes" className="w-full sm:w-auto">
+                  Discard
+                </Button>
+              )}
+              <Button
+                onClick={handleSave}
+                disabled={!hasUnsavedChanges || savingMetadata}
+                aria-label="Save document changes"
+                className="w-full sm:w-auto"
+              >
+                {savingMetadata ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </DialogContent>

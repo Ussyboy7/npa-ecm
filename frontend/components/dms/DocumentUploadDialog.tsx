@@ -915,8 +915,8 @@ export const DocumentUploadDialog = ({
                   <p className="text-[10px] text-muted-foreground mt-1">
                     {sensitivity === 'public' && 'Default: Download and share.'}
                     {sensitivity === 'internal' && 'Default: Authenticated internal access.'}
-                    {sensitivity === 'confidential' && 'Default: Restricted + watermark.'}
-                    {sensitivity === 'restricted' && 'Default: Strict view-only.'}
+                    {sensitivity === 'confidential' && 'Default: Confidential — view only + CONFIDENTIAL watermark.'}
+                    {sensitivity === 'restricted' && 'Default: Time-limited view only + STRICTLY CONFIDENTIAL watermark (30 days).'}
                   </p>
                 )}
               </div>

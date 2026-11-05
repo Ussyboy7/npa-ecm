@@ -313,9 +313,14 @@ export const fetchDocumentVersionPrint = async (versionId: string): Promise<Blob
   });
 };
 
+/** Prefer effectiveRights (includes classification inherit) over attached drmRights. */
+function resolveClientDrmRights(document: DocumentRecord) {
+  return document.effectiveRights ?? document.drmRights ?? null;
+}
+
 export const canDownloadDocument = (document: DocumentRecord | null | undefined): boolean => {
   if (!document) return false;
-  const rights = document.drmRights;
+  const rights = resolveClientDrmRights(document);
   if (!rights) return true;
   if (rights.expired || rights.view_only) return false;
   return rights.allow_download !== false;
@@ -323,7 +328,7 @@ export const canDownloadDocument = (document: DocumentRecord | null | undefined)
 
 export const canPrintDocument = (document: DocumentRecord | null | undefined): boolean => {
   if (!document) return false;
-  const rights = document.drmRights;
+  const rights = resolveClientDrmRights(document);
   if (!rights) return true;
   if (rights.expired || rights.view_only) return false;
   return rights.allow_print !== false;
@@ -331,11 +336,35 @@ export const canPrintDocument = (document: DocumentRecord | null | undefined): b
 
 export const canShareDocument = (document: DocumentRecord | null | undefined): boolean => {
   if (!document) return false;
-  const rights = document.drmRights;
+  const rights = resolveClientDrmRights(document);
   if (!rights) return true;
+  // Internal ACL share (users/offices) stays allowed under view-only DRM.
+  // allow_external_share gates off-platform release, not in-app grants.
+  // Expired documents cannot be shared.
   if (rights.expired) return false;
-  return rights.allow_external_share !== false;
+  return true;
 };
+
+/**
+ * OCR / extracted plain text + clipboard copy from preview.
+ * Blocked for Confidential/Restricted and view-only / expired DRM.
+ */
+export const blocksPlaintextExtraction = (
+  document: DocumentRecord | null | undefined,
+): boolean => {
+  if (!document) return false;
+  const rights = resolveClientDrmRights(document);
+  if (rights?.expired || rights?.view_only) return true;
+  return document.sensitivity === 'confidential' || document.sensitivity === 'restricted';
+};
+
+export const canCopyDocumentText = (
+  document: DocumentRecord | null | undefined,
+): boolean => !blocksPlaintextExtraction(document);
+
+export const canAccessExtractedText = (
+  document: DocumentRecord | null | undefined,
+): boolean => !blocksPlaintextExtraction(document);
 
 /** True when version bytes must be loaded via /content|download (no raw media URL). */
 export const versionRequiresApiDelivery = (version: { fileUrl?: string; drmDelivery?: string; hasFile?: boolean } | null | undefined): boolean => {

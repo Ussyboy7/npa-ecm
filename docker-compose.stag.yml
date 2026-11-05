@@ -1,24 +1,44 @@
 # Staging stack — intended for the staging SERVER (172.16.0.46), not day-to-day Mac dev.
 # On Mac: use docker-compose.local.yml (or `docker compose up` via compose.yaml).
 # To run staging locally for a one-off test: ECM_ALLOW_LOCAL_STAG=1 scripts/staging/env-manager.sh start
+#
+# Scaled like prod (smaller defaults). Scale via BACKEND_REPLICAS / CELERY_REPLICAS / FRONTEND_REPLICAS.
 name: npa-ecm-stag
 
 networks:
   ecm_stag_network:
     driver: bridge
 
+x-backend-image: &backend-image
+  build:
+    context: ./backend
+    dockerfile: Dockerfile.prod
+  env_file:
+    - ./backend/env/stag.env
+  volumes:
+    - ./backend/media:/app/media
+    - ./backend/staticfiles:/app/staticfiles
+  networks:
+    - ecm_stag_network
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: ecm-postgres-stag
     environment:
-      POSTGRES_DB: npa_ecm_stag
-      POSTGRES_USER: ecmadmin
-      POSTGRES_PASSWORD: ecmadmin
+      POSTGRES_DB: ${DB_NAME:-npa_ecm_stag}
+      POSTGRES_USER: ${DB_USER:-ecmadmin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ecmadmin}
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
     volumes:
       - postgres_stag_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ecmadmin -d npa_ecm_stag"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ecmadmin} -d ${DB_NAME:-npa_ecm_stag}"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -26,10 +46,39 @@ services:
       - ecm_stag_network
     restart: unless-stopped
 
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.23.1-p1
+    container_name: ecm-pgbouncer-stag
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-ecmadmin}
+      DB_PASSWORD: ${DB_PASSWORD:-ecmadmin}
+      DB_NAME: ${DB_NAME:-npa_ecm_stag}
+      POOL_MODE: session
+      MAX_CLIENT_CONN: "2000"
+      DEFAULT_POOL_SIZE: "40"
+      MIN_POOL_SIZE: "10"
+      RESERVE_POOL_SIZE: "10"
+      LISTEN_PORT: "5432"
+      AUTH_TYPE: scram-sha-256
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "printf 'QUIT\\n' | nc -w 1 127.0.0.1 5432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - ecm_stag_network
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     container_name: ecm-redis-stag
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxclients 10000
     volumes:
       - redis_stag_data:/data
     networks:
@@ -41,18 +90,33 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: ecm-backend-stag
-    env_file:
-      - ./backend/env/stag.env
-    volumes:
-      - ./backend/media:/app/media
-      - ./backend/staticfiles:/app/staticfiles
+  migrate:
+    <<: *backend-image
+    container_name: ecm-migrate-stag
+    environment:
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+    entrypoint: ["/app/scripts/docker-migrate.sh"]
     depends_on:
-      postgres:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    <<: *backend-image
+    environment:
+      SKIP_ENTRYPOINT_SETUP: "true"
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_CONN_MAX_AGE: "60"
+    expose:
+      - "8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -62,46 +126,47 @@ services:
       timeout: 5s
       retries: 6
       start_period: 30s
-    networks:
-      - ecm_stag_network
     restart: unless-stopped
 
   celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: ecm-celery-worker-stag
-    env_file:
-      - ./backend/env/stag.env
-    command: celery -A ecm_backend worker -l info
+    <<: *backend-image
+    environment:
+      SKIP_ENTRYPOINT_SETUP: "true"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+    command: celery -A ecm_backend worker -l info --concurrency=${CELERY_CONCURRENCY:-2}
     volumes:
       - ./backend:/app
+      - ./backend/media:/app/media
+      - ./backend/staticfiles:/app/staticfiles
     depends_on:
-      backend:
-        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - ecm_stag_network
     restart: unless-stopped
 
   celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    <<: *backend-image
     container_name: ecm-celery-beat-stag
-    env_file:
-      - ./backend/env/stag.env
+    environment:
+      SKIP_ENTRYPOINT_SETUP: "true"
+      DB_HOST: postgres
+      DB_PORT: "5432"
     command: celery -A ecm_backend beat -l info
     volumes:
       - ./backend:/app
+      - ./backend/media:/app/media
+      - ./backend/staticfiles:/app/staticfiles
     depends_on:
-      backend:
-        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - ecm_stag_network
     restart: unless-stopped
 
   frontend:
@@ -111,13 +176,14 @@ services:
       args:
         NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
         NEXT_PUBLIC_ENVIRONMENT: staging
-    container_name: ecm-frontend-stag
     environment:
       NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
       NEXT_PUBLIC_ENVIRONMENT: staging
+    expose:
+      - "3000"
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     networks:
       - ecm_stag_network
     restart: unless-stopped
@@ -137,7 +203,7 @@ services:
       frontend:
         condition: service_started
       backend:
-        condition: service_started
+        condition: service_healthy
     networks:
       - ecm_stag_network
     restart: unless-stopped

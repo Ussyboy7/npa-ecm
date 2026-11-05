@@ -21,7 +21,7 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
-RUN chmod +x /app/scripts/docker-entrypoint.sh
+RUN chmod +x /app/scripts/docker-entrypoint.sh /app/scripts/docker-migrate.sh
 
 # Use Daphne for ASGI support (WebSockets + HTTP)
 # Daphne can handle both HTTP and WebSocket connections

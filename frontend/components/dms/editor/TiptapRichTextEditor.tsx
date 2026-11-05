@@ -123,13 +123,14 @@ import {
 } from "../PageSetupDialog";
 import type { RichTextEditorProps } from "./types";
 
+/** Match NPA Word memo headers: ~1" margins on A4. */
 const DEFAULT_PAGE_SETTINGS: PageSettings = {
   paperSize: "a4",
   orientation: "portrait",
-  marginTop: 15,
-  marginBottom: 15,
-  marginLeft: 15,
-  marginRight: 15,
+  marginTop: 25,
+  marginBottom: 25,
+  marginLeft: 25,
+  marginRight: 25,
 };
 
 function stripHtmlToPlainLength(html: string): { chars: number; words: number } {
@@ -500,7 +501,7 @@ export function TiptapRichTextEditor({
   const currentFontFamily =
     (editor.getAttributes("textStyle").fontFamily as string | undefined) || FONT_FAMILIES[0].value;
   const currentFontSize =
-    (editor.getAttributes("textStyle").fontSize as string | undefined) || "12px";
+    (editor.getAttributes("textStyle").fontSize as string | undefined) || "12pt";
   const currentLineHeight =
     (editor.getAttributes("paragraph").lineHeight as string | undefined) ||
     (editor.getAttributes("heading").lineHeight as string | undefined) ||
@@ -560,9 +561,34 @@ export function TiptapRichTextEditor({
           white-space: normal;
           word-break: break-word;
         }
+        /* Memo To/Date tables: honor borderless Word-style layout */
+        .npa-tiptap-surface table[style*="border: none"] td,
+        .npa-tiptap-surface table[style*="border:none"] td,
+        .npa-tiptap-surface table[style*="border: none"] th,
+        .npa-tiptap-surface table[style*="border:none"] th,
+        .npa-tiptap-surface td[style*="border: none"],
+        .npa-tiptap-surface td[style*="border:none"],
+        .npa-tiptap-surface th[style*="border: none"],
+        .npa-tiptap-surface th[style*="border:none"] {
+          border: none !important;
+          background: transparent;
+          padding-left: 0;
+          padding-right: 0;
+        }
         .npa-tiptap-surface th {
           font-weight: 600;
           background: hsl(var(--muted) / 0.4);
+        }
+        /* Don't let Tailwind prose inflate headings over memo inline sizes */
+        .npa-tiptap-surface.prose :where(h1, h2, h3, h4) {
+          font-size: inherit;
+          font-weight: inherit;
+          line-height: inherit;
+          margin: 0;
+          color: inherit;
+        }
+        .npa-tiptap-surface.prose :where(p) {
+          margin: 0;
         }
         /* ProseMirror CellSelection — without this, multi-cell drag looks broken */
         .npa-tiptap-surface td.selectedCell,
@@ -1133,23 +1159,24 @@ export function TiptapRichTextEditor({
 
       <div
         className="bg-muted/30 overflow-auto"
-        style={{ maxHeight: "min(70vh, 720px)" }}
+        style={{ maxHeight: "min(78vh, 960px)" }}
       >
         <div
           className="mx-auto my-4 bg-background shadow-sm border border-border/60"
           style={{
             width: `${pageDims.widthMm}mm`,
-            minHeight: `${Math.max(pageDims.contentHeightPx, 420)}px`,
+            minHeight: `${Math.max(pageDims.contentHeightPx, 520)}px`,
             maxWidth: "100%",
           }}
         >
           <div
             style={{
-              minHeight: `${Math.max(pageDims.contentHeightPx, 420)}px`,
+              minHeight: `${Math.max(pageDims.contentHeightPx, 520)}px`,
               padding: `${(pageSettings.marginTop / 25.4) * 96}px ${(pageSettings.marginRight / 25.4) * 96}px ${(pageSettings.marginBottom / 25.4) * 96}px ${(pageSettings.marginLeft / 25.4) * 96}px`,
               fontFamily: "Verdana, Geneva, sans-serif",
-              fontSize: "12px",
-              lineHeight: "1.5",
+              /* Word memo body is 12pt (not 12px) */
+              fontSize: "12pt",
+              lineHeight: "1.15",
             }}
           >
             <EditorContent editor={editor} />

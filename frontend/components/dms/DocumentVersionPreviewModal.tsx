@@ -15,6 +15,7 @@ import type { DocumentVersion, DocumentRecord } from "@/lib/api/dms";
 import { createDocumentVersion } from "@/lib/api/dms";
 import { downloadCanonicalDocument, fetchCanonicalContent } from "@/lib/canonical-document";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
+import { DrmWatermarkOverlay } from "@/components/dms/DrmWatermarkOverlay";
 import { convertDocxArrayBufferToHtml } from "@/lib/docx-to-html";
 import { sanitizeRichText } from "@/lib/sanitize-html";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,6 +30,11 @@ interface DocumentVersionPreviewModalProps {
   documentId?: string;
   onVersionCreated?: (updatedDocument: DocumentRecord) => void;
   allowDownload?: boolean;
+  /** When false, hide OCR tab and block editing extracted text. */
+  allowExtractedText?: boolean;
+  /** When false, prevent clipboard copy from the preview surface. */
+  allowCopyText?: boolean;
+  watermarkText?: string | null;
 }
 
 export const DocumentVersionPreviewModal = ({ 
@@ -38,6 +44,9 @@ export const DocumentVersionPreviewModal = ({
   documentId,
   onVersionCreated,
   allowDownload = true,
+  allowExtractedText = true,
+  allowCopyText = true,
+  watermarkText = null,
 }: DocumentVersionPreviewModalProps) => {
   const [imageBlobUrl, setImageBlobUrl] = useState<string | null>(null);
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
@@ -242,9 +251,26 @@ export const DocumentVersionPreviewModal = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 border-t overflow-y-auto">
-          {/* Show tabs if OCR text is available */}
-          {version.ocrText && version.ocrText.trim() !== '' ? (
+        <div
+          className={`flex-1 border-t overflow-y-auto ${allowCopyText ? "" : "select-none"}`}
+          onCopy={
+            allowCopyText
+              ? undefined
+              : (event) => {
+                  event.preventDefault();
+                  toast.error("Copying text is blocked by DRM / classification policy");
+                }
+          }
+          onCut={
+            allowCopyText
+              ? undefined
+              : (event) => {
+                  event.preventDefault();
+                }
+          }
+        >
+          {/* Show tabs if OCR text is available and classification allows it */}
+          {allowExtractedText && version.ocrText && version.ocrText.trim() !== '' ? (
             <Tabs defaultValue="preview" className="h-full flex flex-col">
               <TabsList className="mx-6 mt-4">
                 <TabsTrigger value="preview">Preview</TabsTrigger>
@@ -256,45 +282,49 @@ export const DocumentVersionPreviewModal = ({
               <TabsContent value="preview" className="flex-1 overflow-y-auto mt-0">
                 {version.contentHtml && version.contentHtml.trim() !== '' ? (
                   // Priority 1: Show HTML content from editor (sanitized)
-                  <div
-                    className="document-print-area doc-paper"
-                    style={{
-                      fontFamily: "Verdana, Geneva, sans-serif",
-                      fontSize: "12px",
-                      lineHeight: "1.5",
-                      padding: "40px",
-                      maxWidth: "800px",
-                      margin: "0 auto",
-                      textAlign: "left",
-                    }}
-                  >
-                    <style>{`
-                      font[size="6"] { font-size: 20px; }
-                      span[style*="font-size: large"] { font-size: 12px !important; }
-                      h1, h2, h3, h4, h5, h6 { margin: 0; }
-                      header { text-align: center; }
-                    `}</style>
+                  <div className="relative min-h-[600px]">
+                    <DrmWatermarkOverlay text={watermarkText} />
                     <div
-                      dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml) }}
-                      aria-label="Document content"
-                    />
+                      className="document-print-area doc-paper relative z-0"
+                      style={{
+                        fontFamily: "Verdana, Geneva, sans-serif",
+                        fontSize: "12px",
+                        lineHeight: "1.5",
+                        padding: "40px",
+                        maxWidth: "800px",
+                        margin: "0 auto",
+                        textAlign: "left",
+                      }}
+                    >
+                      <style>{`
+                        font[size="6"] { font-size: 20px; }
+                        span[style*="font-size: large"] { font-size: 12px !important; }
+                        h1, h2, h3, h4, h5, h6 { margin: 0; }
+                        header { text-align: center; }
+                      `}</style>
+                      <div
+                        dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml) }}
+                        aria-label="Document content"
+                      />
+                    </div>
                   </div>
                 ) : version.id ? (
                   <>
                     {isPDF ? (
-                      <div className="w-full h-full min-h-[600px]">
+                      <div className="relative w-full h-full min-h-[600px]">
+                        <DrmWatermarkOverlay text={watermarkText} />
                         {loading ? (
-                          <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+                          <div className="relative z-0 flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                             <p className="text-sm text-muted-foreground">Loading PDF...</p>
                           </div>
                         ) : error ? (
-                          <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+                          <div className="relative z-0 flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                             <p className="text-lg font-medium mb-4 text-destructive">Error loading PDF</p>
                             <p className="text-sm text-muted-foreground mb-4">{error}</p>
                             {downloadAction('Download PDF')}
                           </div>
                         ) : pdfBytes ? (
-                          <div className="w-full h-full min-h-[600px] overflow-auto">
+                          <div className="relative z-0 w-full h-full min-h-[600px] overflow-auto">
                             {!allowDownload ? (
                               <p className="px-4 pt-3 text-xs text-muted-foreground">
                                 View-only — download is disabled by DRM policy.
@@ -303,7 +333,7 @@ export const DocumentVersionPreviewModal = ({
                             <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-[560px]" />
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+                          <div className="relative z-0 flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                             <p className="text-lg font-medium mb-4">Loading PDF preview...</p>
                             <p className="text-sm text-muted-foreground mb-4">
                               If the preview doesn't load, you can download the file instead.
@@ -313,18 +343,19 @@ export const DocumentVersionPreviewModal = ({
                         )}
                       </div>
                     ) : isImage ? (
-                      <div className="flex items-center justify-center p-6 min-h-[600px]">
+                      <div className="relative flex items-center justify-center p-6 min-h-[600px]">
+                        <DrmWatermarkOverlay text={watermarkText} />
                         {imageBlobUrl ? (
                           <Image
                             src={imageBlobUrl}
                             alt={version.fileName || 'Document'}
                             width={800}
                             height={600}
-                            className="max-w-full max-h-[70vh] object-contain"
+                            className="relative z-0 max-w-full max-h-[70vh] object-contain"
                             unoptimized
                           />
                         ) : (
-                          <p className="text-sm text-muted-foreground">Loading image…</p>
+                          <p className="relative z-0 text-sm text-muted-foreground">Loading image…</p>
                         )}
                       </div>
                     ) : isWordDocx ? (
@@ -340,8 +371,11 @@ export const DocumentVersionPreviewModal = ({
                             {downloadAction('Download Word document')}
                           </div>
                         ) : wordHtml ? (
-                          <div className="prose prose-base dark:prose-invert max-w-none p-6">
-                            <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
+                          <div className="relative min-h-[600px]">
+                            <DrmWatermarkOverlay text={watermarkText} />
+                            <div className="relative z-0 prose prose-base dark:prose-invert max-w-none p-6">
+                              <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
+                            </div>
                           </div>
                         ) : null}
                       </>
@@ -378,7 +412,9 @@ export const DocumentVersionPreviewModal = ({
               </TabsContent>
               <TabsContent value="ocr" className="flex-1 overflow-y-auto mt-0">
                 <ScrollArea className="h-full">
-                  <div className="p-6 space-y-4">
+                  <div className="relative p-6 space-y-4">
+                    <DrmWatermarkOverlay text={watermarkText} />
+                    <div className="relative z-0 space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-sm font-semibold mb-2">Extracted Text</h3>
@@ -436,52 +472,57 @@ export const DocumentVersionPreviewModal = ({
                         </pre>
                       </div>
                     )}
+                    </div>
                   </div>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
           ) : version.contentHtml && version.contentHtml.trim() !== '' ? (
             // Priority 1: Show HTML content from editor (sanitized)
-            <div
-              className="document-print-area doc-paper"
-              style={{
-                fontFamily: "Verdana, Geneva, sans-serif",
-                fontSize: "12px",
-                lineHeight: "1.5",
-                padding: "40px",
-                maxWidth: "800px",
-                margin: "0 auto",
-                textAlign: "left",
-              }}
-            >
-              <style>{`
-                font[size="6"] { font-size: 20px; }
-                span[style*="font-size: large"] { font-size: 12px !important; }
-                h1, h2, h3, h4, h5, h6 { margin: 0; }
-                header { text-align: center; }
-              `}</style>
+            <div className="relative min-h-[600px]">
+              <DrmWatermarkOverlay text={watermarkText} />
               <div
-                dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml) }}
-                aria-label="Document content"
-              />
+                className="document-print-area doc-paper relative z-0"
+                style={{
+                  fontFamily: "Verdana, Geneva, sans-serif",
+                  fontSize: "12px",
+                  lineHeight: "1.5",
+                  padding: "40px",
+                  maxWidth: "800px",
+                  margin: "0 auto",
+                  textAlign: "left",
+                }}
+              >
+                <style>{`
+                  font[size="6"] { font-size: 20px; }
+                  span[style*="font-size: large"] { font-size: 12px !important; }
+                  h1, h2, h3, h4, h5, h6 { margin: 0; }
+                  header { text-align: center; }
+                `}</style>
+                <div
+                  dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml) }}
+                  aria-label="Document content"
+                />
+              </div>
             </div>
           ) : version.id ? (
             // Priority 2: Show uploaded file via canonical content API
             <>
               {isPDF ? (
-                <div className="w-full h-full min-h-[600px]">
+                <div className="relative w-full h-full min-h-[600px]">
+                  <DrmWatermarkOverlay text={watermarkText} />
                   {loading ? (
-                    <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+                    <div className="relative z-0 flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                       <p className="text-sm text-muted-foreground">Loading PDF...</p>
                     </div>
                   ) : error ? (
-                    <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+                    <div className="relative z-0 flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                       <p className="text-lg font-medium mb-4 text-destructive">Error loading PDF</p>
                       <p className="text-sm text-muted-foreground mb-4">{error}</p>
                       {downloadAction('Download PDF')}
                     </div>
                   ) : pdfBytes ? (
-                    <div className="w-full h-full min-h-[600px] overflow-auto">
+                    <div className="relative z-0 w-full h-full min-h-[600px] overflow-auto">
                       {!allowDownload ? (
                         <p className="px-4 pt-3 text-xs text-muted-foreground">
                           View-only — download is disabled by DRM policy.
@@ -490,7 +531,7 @@ export const DocumentVersionPreviewModal = ({
                       <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-[560px]" />
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+                    <div className="relative z-0 flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                       <p className="text-lg font-medium mb-4">Loading PDF preview...</p>
                       <p className="text-sm text-muted-foreground mb-4">
                         If the preview doesn't load, you can download the file instead.
@@ -500,18 +541,19 @@ export const DocumentVersionPreviewModal = ({
                   )}
                 </div>
               ) : isImage ? (
-                <div className="flex items-center justify-center p-6 min-h-[600px]">
+                <div className="relative flex items-center justify-center p-6 min-h-[600px]">
+                  <DrmWatermarkOverlay text={watermarkText} />
                   {imageBlobUrl ? (
                     <Image
                       src={imageBlobUrl}
                       alt={version.fileName || 'Document'}
                       width={800}
                       height={600}
-                      className="max-w-full max-h-[70vh] object-contain"
+                      className="relative z-0 max-w-full max-h-[70vh] object-contain"
                       unoptimized
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">Loading image…</p>
+                    <p className="relative z-0 text-sm text-muted-foreground">Loading image…</p>
                   )}
                 </div>
               ) : isWordDocx ? (
@@ -527,8 +569,11 @@ export const DocumentVersionPreviewModal = ({
                       {downloadAction('Download Word document')}
                     </div>
                   ) : wordHtml ? (
-                    <div className="prose prose-base dark:prose-invert max-w-none p-6">
-                      <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
+                    <div className="relative min-h-[600px]">
+                      <DrmWatermarkOverlay text={watermarkText} />
+                      <div className="relative z-0 prose prose-base dark:prose-invert max-w-none p-6">
+                        <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
+                      </div>
                     </div>
                   ) : null}
                 </>

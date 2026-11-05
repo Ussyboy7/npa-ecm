@@ -2463,10 +2463,11 @@ class Command(BaseCommand):
     def _ensure_drm_policies(self):
         self.stdout.write(self.style.MIGRATE_HEADING("Ensuring DRM policies"))
 
+        # Names must match dms.drm.SENSITIVITY_DEFAULT_POLICY_NAMES for inherit.
         policies_data = [
             {
                 "name": "Confidential — View Only",
-                "description": "Document is view-only; download and print are disabled. A watermark is applied.",
+                "description": "Default for Confidential classification. View-only; download and print disabled. Watermark applied.",
                 "allow_download": False,
                 "allow_print": False,
                 "allow_external_share": False,
@@ -2475,8 +2476,18 @@ class Command(BaseCommand):
                 "expires_after_days": None,
             },
             {
+                "name": "Restricted — View Only",
+                "description": "Optional explicit policy. Restricted classification inherits Strictly Confidential — Time-Limited by default.",
+                "allow_download": False,
+                "allow_print": False,
+                "allow_external_share": False,
+                "view_only": True,
+                "watermark_text": "RESTRICTED",
+                "expires_after_days": None,
+            },
+            {
                 "name": "Internal — Download Allowed",
-                "description": "Standard internal document. Download and print allowed; PDF downloads are watermarked.",
+                "description": "Default for Internal classification. Download and print allowed; PDFs/previews watermarked.",
                 "allow_download": True,
                 "allow_print": True,
                 "allow_external_share": False,
@@ -2486,17 +2497,17 @@ class Command(BaseCommand):
             },
             {
                 "name": "External Sharing — Controlled",
-                "description": "Download and print allowed, but external sharing is restricted. Expires after 180 days.",
+                "description": "Controlled release. Download and print allowed; external sharing blocked. Watermarked. Expires after 180 days.",
                 "allow_download": True,
                 "allow_print": True,
                 "allow_external_share": False,
                 "view_only": False,
-                "watermark_text": "",
+                "watermark_text": "CONTROLLED",
                 "expires_after_days": 180,
             },
             {
                 "name": "Strictly Confidential — Time-Limited",
-                "description": "Highest restriction. View-only, watermarked, expires after 30 days. After expiry, only the author and superadmin can view.",
+                "description": "Default for Restricted classification. View-only, watermarked, expires after 30 days. After expiry, only the author and superadmin can view.",
                 "allow_download": False,
                 "allow_print": False,
                 "allow_external_share": False,
@@ -2506,7 +2517,7 @@ class Command(BaseCommand):
             },
             {
                 "name": "Public Record",
-                "description": "No restrictions. Full download, print, and external sharing permitted.",
+                "description": "Default for Public classification. No restrictions. Full download, print, and external sharing permitted.",
                 "allow_download": True,
                 "allow_print": True,
                 "allow_external_share": True,
@@ -2849,37 +2860,30 @@ class Command(BaseCommand):
             self.stdout.write(f"  {'Created' if created else 'Already exists'}: {obj.name}")
 
     def _ensure_correspondence_templates(self):
-        """Ensure NPA memo templates are Verdana 22/18/16, table, no box, spread."""
+        """Ensure NPA memo templates match Memo Headers.docx (Verdana 20pt/12pt)."""
         self.stdout.write(self.style.MIGRATE_HEADING("Ensuring correspondence templates"))
         from correspondence.models import CorrespondenceTemplate
 
-        dept_html = """<section style="font-family: Verdana, Geneva, sans-serif; line-height: 1.5; color: #000; max-width: 800px; margin: 0 auto; padding: 24px 16px;">
-  <header style="text-align: center; margin-bottom: 32px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</h1>
-    <h2 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; text-transform: uppercase; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</h2>
-    <h3 style="margin: 4px 0 0; font-size: 16px; font-weight: bold; font-family: Verdana, Geneva, sans-serif;">{{department.name}}</h3>
-    <h4 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; font-family: Verdana, Geneva, sans-serif;">Departmental Memorandum</h4>
-  </header>
-  <section style="margin-bottom: 24px;">
-    <table style="width: 100%; border: none; border-collapse: collapse; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
-      <tr>
-        <td style="padding: 4px 0; width: 50%; border: none;"><strong>To:</strong> {{recipient.name}}</td>
-        <td style="padding: 4px 0; width: 50%; text-align: right; border: none;"><strong>Date:</strong> {{date.today}}</td>
-      </tr>
-      <tr>
-        <td style="padding: 4px 0; border: none;"><strong>From:</strong> {{sender.name}}</td>
-        <td style="padding: 4px 0; text-align: right; word-break: break-word; border: none;"><strong>Ref.:</strong> {{document.reference}}</td>
-      </tr>
-    </table>
-  </section>
-  <section style="margin-bottom: 24px;">
-    <p style="font-size: 14px; font-family: Verdana, Geneva, sans-serif;"><strong>RE: {{document.title}}</strong></p>
-  </section>
-  <section style="margin-bottom: 32px; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
-    <p><strong>- [SUBTITLE]</strong></p>
-    <p>[Insert body content here]</p>
-  </section>
-</section>"""
+        # Keep in sync with correspondence.migrations.0063_align_memo_templates_word_headers
+        dept_html = """<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 20pt; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</span></strong></p>
+<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</span></strong></p>
+<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{department.name}}</span></strong></p>
+<p style="text-align: center; margin: 0 0 12pt 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">Departmental Memorandum</span></strong></p>
+<table style="width: 100%; border: none; border-collapse: collapse; table-layout: fixed; margin: 0 0 12pt 0; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;">
+  <tbody>
+    <tr>
+      <td style="width: 55%; border: none; padding: 0 8pt 4pt 0; vertical-align: top;"><strong>To:</strong> {{recipient.name}}</td>
+      <td style="width: 45%; border: none; padding: 0 0 4pt 0; text-align: right; vertical-align: top;"><strong>Date:</strong> {{date.today}}</td>
+    </tr>
+    <tr>
+      <td style="border: none; padding: 0 8pt 0 0; vertical-align: top;"><strong>From:</strong> {{sender.name}}</td>
+      <td style="border: none; padding: 0; text-align: right; vertical-align: top; word-break: break-word;"><strong>Ref.:</strong> {{document.reference}}</td>
+    </tr>
+  </tbody>
+</table>
+<p style="margin: 12pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">RE: {{document.title}}</span></strong></p>
+<p style="margin: 6pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">- [SUBTITLE]</span></strong></p>
+<p style="margin: 12pt 0 0 0; line-height: 1.15;"><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">[Insert body content here]</span></p>"""
         dept_text = """NIGERIAN PORTS AUTHORITY
 {{division.name}}
 {{department.name}}
@@ -2891,34 +2895,27 @@ From: {{sender.name}}\t\tRef.: {{document.reference}}
 RE: {{document.title}}
 
 - [SUBTITLE]
+
 [Insert body content here]"""
 
-        internal_html = """<section style="font-family: Verdana, Geneva, sans-serif; line-height: 1.5; color: #000; max-width: 800px; margin: 0 auto; padding: 24px 16px;">
-  <header style="text-align: center; margin-bottom: 32px;">
-    <h1 style="margin: 0; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</h1>
-    <h2 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; text-transform: uppercase; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</h2>
-    <h3 style="margin: 4px 0 0; font-size: 18px; font-weight: bold; font-family: Verdana, Geneva, sans-serif;">Internal Memorandum</h3>
-  </header>
-  <section style="margin-bottom: 24px;">
-    <table style="width: 100%; border: none; border-collapse: collapse; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
-      <tr>
-        <td style="padding: 4px 0; width: 50%; border: none;"><strong>To:</strong> {{recipient.name}}</td>
-        <td style="padding: 4px 0; width: 50%; text-align: right; border: none;"><strong>Date:</strong> {{date.today}}</td>
-      </tr>
-      <tr>
-        <td style="padding: 4px 0; border: none;"><strong>From:</strong> {{sender.name}}</td>
-        <td style="padding: 4px 0; text-align: right; word-break: break-word; border: none;"><strong>Ref.:</strong> {{document.reference}}</td>
-      </tr>
-    </table>
-  </section>
-  <section style="margin-bottom: 24px;">
-    <p style="font-size: 14px; font-family: Verdana, Geneva, sans-serif;"><strong>RE: {{document.title}}</strong></p>
-  </section>
-  <section style="margin-bottom: 32px; font-size: 14px; font-family: Verdana, Geneva, sans-serif;">
-    <p><strong>- [SUBTITLE]</strong></p>
-    <p>[Insert body content here]</p>
-  </section>
-</section>"""
+        internal_html = """<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 20pt; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</span></strong></p>
+<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</span></strong></p>
+<p style="text-align: center; margin: 0 0 12pt 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">Internal Memorandum</span></strong></p>
+<table style="width: 100%; border: none; border-collapse: collapse; table-layout: fixed; margin: 0 0 12pt 0; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;">
+  <tbody>
+    <tr>
+      <td style="width: 55%; border: none; padding: 0 8pt 4pt 0; vertical-align: top;"><strong>To:</strong> {{recipient.name}}</td>
+      <td style="width: 45%; border: none; padding: 0 0 4pt 0; text-align: right; vertical-align: top;"><strong>Date:</strong> {{date.today}}</td>
+    </tr>
+    <tr>
+      <td style="border: none; padding: 0 8pt 0 0; vertical-align: top;"><strong>From:</strong> {{sender.name}}</td>
+      <td style="border: none; padding: 0; text-align: right; vertical-align: top; word-break: break-word;"><strong>Ref.:</strong> {{document.reference}}</td>
+    </tr>
+  </tbody>
+</table>
+<p style="margin: 12pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">RE: {{document.title}}</span></strong></p>
+<p style="margin: 6pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">- [SUBTITLE]</span></strong></p>
+<p style="margin: 12pt 0 0 0; line-height: 1.15;"><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">[Insert body content here]</span></p>"""
         internal_text = """NIGERIAN PORTS AUTHORITY
 {{division.name}}
 Internal Memorandum
@@ -2929,11 +2926,26 @@ From: {{sender.name}}\t\tRef.: {{document.reference}}
 RE: {{document.title}}
 
 - [SUBTITLE]
+
 [Insert body content here]"""
 
-        for title, html, text in [
-            ("NPA Departmental Memorandum", dept_html, dept_text),
-            ("NPA Internal Memorandum", internal_html, internal_text),
+        removed, _ = CorrespondenceTemplate.objects.filter(title="NPA Referral Letter").delete()
+        if removed:
+            self.stdout.write(f"  Removed: NPA Referral Letter ({removed})")
+
+        for title, html, text, description in [
+            (
+                "NPA Departmental Memorandum",
+                dept_html,
+                dept_text,
+                "Standard template for inter-departmental correspondence within NPA divisions.",
+            ),
+            (
+                "NPA Internal Memorandum",
+                internal_html,
+                internal_text,
+                "Standard template for internal correspondence within NPA divisions.",
+            ),
         ]:
             obj, created = CorrespondenceTemplate.objects.update_or_create(
                 title=title,
@@ -2941,7 +2953,7 @@ RE: {{document.title}}
                 scope_id=None,
                 template_type="document",
                 defaults={
-                    "description": "Standard template for inter-departmental correspondence within NPA divisions." if "Departmental" in title else "Standard template for internal correspondence within NPA divisions.",
+                    "description": description,
                     "content_html": html,
                     "content_text": text,
                     "is_active": True,

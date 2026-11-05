@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+# Scaled replicas set SKIP_ENTRYPOINT_SETUP=true; the compose `migrate` service
+# owns migrate/collectstatic so replicas do not race.
+if [ "${SKIP_ENTRYPOINT_SETUP:-false}" = "true" ]; then
+  echo "[entrypoint] Skipping setup (migrate service owns DB/static bootstrap)"
+  echo "[entrypoint] Starting application: $*"
+  exec "$@"
+fi
+
 echo "[entrypoint] Applying database migrations..."
 python manage.py migrate --noinput
 

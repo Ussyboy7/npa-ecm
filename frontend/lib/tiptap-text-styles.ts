@@ -100,7 +100,17 @@ export const FONT_FAMILIES = [
   { label: "Georgia", value: "Georgia, serif" },
 ] as const;
 
-export const FONT_SIZES = ["10px", "11px", "12px", "14px", "16px", "18px", "24px"] as const;
+export const FONT_SIZES = [
+  "10pt",
+  "11pt",
+  "12pt",
+  "14pt",
+  "16pt",
+  "18pt",
+  "20pt",
+  "22pt",
+  "24pt",
+] as const;
 
 export const LINE_HEIGHTS = [
   { label: "Single", value: "1" },

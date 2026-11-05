@@ -82,8 +82,8 @@ export function buildComposePrintHtml(
       background: ${surroundBg};
       color: ${surroundColor};
       font-family: Verdana, Geneva, sans-serif;
-      font-size: 12px;
-      line-height: 1.5;
+      font-size: 12pt;
+      line-height: 1.15;
     }
     .sheet {
       box-sizing: border-box;
@@ -96,8 +96,18 @@ export function buildComposePrintHtml(
       box-shadow: 0 1px 4px rgba(0,0,0,0.12);
     }
     .sheet img { max-width: 100%; }
+    .sheet p { margin: 0; }
     .sheet table { width: 100%; border-collapse: collapse; }
     .sheet td, .sheet th { border: 1px solid ${DOC_PAPER.border}; padding: 8px; }
+    .sheet table[style*="border: none"] td,
+    .sheet table[style*="border:none"] td,
+    .sheet table[style*="border: none"] th,
+    .sheet table[style*="border:none"] th {
+      border: none !important;
+      background: transparent;
+      padding-left: 0;
+      padding-right: 0;
+    }
     .sheet ul { list-style: disc; padding-left: 1.5rem; }
     .sheet ol { list-style: decimal; padding-left: 1.5rem; }
     @media print {

@@ -21,6 +21,10 @@ export interface EffectiveDocumentRights {
   expired: boolean;
   watermark_text: string;
   message: string;
+  policy_id?: string | null;
+  effective_policy_id?: string | null;
+  policy_name?: string | null;
+  inherited?: boolean;
 }
 
 export interface DocumentPermission {
@@ -102,7 +106,9 @@ export interface DocumentRecord {
   activeEditors: DocumentCollaborator[];
   drmRights?: {
     policy_id?: string | null;
+    effective_policy_id?: string | null;
     policy_name?: string | null;
+    inherited?: boolean;
     allow_download: boolean;
     allow_print: boolean;
     allow_external_share: boolean;
@@ -501,7 +507,11 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
     drmRights: isRecord(item.drm_rights)
       ? {
           policy_id: item.drm_rights.policy_id ? String(item.drm_rights.policy_id) : null,
+          effective_policy_id: item.drm_rights.effective_policy_id
+            ? String(item.drm_rights.effective_policy_id)
+            : null,
           policy_name: item.drm_rights.policy_name ? String(item.drm_rights.policy_name) : null,
+          inherited: Boolean(item.drm_rights.inherited),
           allow_download: Boolean(item.drm_rights.allow_download),
           allow_print: Boolean(item.drm_rights.allow_print),
           allow_external_share: Boolean(item.drm_rights.allow_external_share),
@@ -529,6 +539,14 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
           expired: Boolean(item.effective_rights.expired),
           watermark_text: String(item.effective_rights.watermark_text ?? ''),
           message: String(item.effective_rights.message ?? ''),
+          policy_id: item.effective_rights.policy_id ? String(item.effective_rights.policy_id) : null,
+          effective_policy_id: item.effective_rights.effective_policy_id
+            ? String(item.effective_rights.effective_policy_id)
+            : null,
+          policy_name: item.effective_rights.policy_name
+            ? String(item.effective_rights.policy_name)
+            : null,
+          inherited: Boolean(item.effective_rights.inherited),
         }
       : undefined,
     correspondence_links: Array.isArray(item.correspondence_links)

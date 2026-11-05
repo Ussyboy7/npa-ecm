@@ -1,3 +1,18 @@
+# Production stack — scaled for high concurrent ECMS load.
+# Scale at deploy via BACKEND_REPLICAS / CELERY_REPLICAS / FRONTEND_REPLICAS
+# (see scripts/ops/env-manager.sh). Do not set container_name on scaled services.
+name: npa-ecm-prod
+
+x-backend-image: &backend-image
+  build:
+    context: ./backend
+    dockerfile: Dockerfile.prod
+  env_file:
+    - ./backend/env/prod.env
+  volumes:
+    - media-data:/app/media
+    - static-data:/app/staticfiles
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,6 +21,20 @@ services:
       POSTGRES_DB: ${DB_NAME:-npa_ecm_prod}
       POSTGRES_USER: ${DB_USER:-npa_ecm_prod}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me}
+    command:
+      - postgres
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_buffers=16MB
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -15,10 +44,37 @@ services:
       retries: 5
     restart: always
 
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.23.1-p1
+    container_name: ecm-pgbouncer-prod
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-npa_ecm_prod}
+      DB_PASSWORD: ${DB_PASSWORD:-change_me}
+      DB_NAME: ${DB_NAME:-npa_ecm_prod}
+      POOL_MODE: session
+      MAX_CLIENT_CONN: "5000"
+      DEFAULT_POOL_SIZE: "80"
+      MIN_POOL_SIZE: "20"
+      RESERVE_POOL_SIZE: "20"
+      LISTEN_PORT: "5432"
+      AUTH_TYPE: scram-sha-256
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "printf 'QUIT\\n' | nc -w 1 127.0.0.1 5432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: always
+
   redis:
     image: redis:7-alpine
     container_name: ecm-redis-prod
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxclients 20000
     volumes:
       - redis-data:/data
     healthcheck:
@@ -28,20 +84,33 @@ services:
       retries: 5
     restart: always
 
+  migrate:
+    <<: *backend-image
+    container_name: ecm-migrate-prod
+    environment:
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+    entrypoint: ["/app/scripts/docker-migrate.sh"]
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: "no"
+
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: ecm-backend-prod
-    env_file:
-      - ./backend/env/prod.env
-    volumes:
-      - media-data:/app/media
-      - static-data:/app/staticfiles
+    <<: *backend-image
+    environment:
+      SKIP_ENTRYPOINT_SETUP: "true"
+      DB_HOST: pgbouncer
+      DB_PORT: "5432"
+      DB_CONN_MAX_AGE: "60"
     expose:
       - "8000"
     depends_on:
-      postgres:
+      migrate:
+        condition: service_completed_successfully
+      pgbouncer:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -54,42 +123,36 @@ services:
     restart: always
 
   celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: ecm-celery-worker-prod
-    env_file:
-      - ./backend/env/prod.env
-    command: celery -A ecm_backend worker -l info
-    volumes:
-      - media-data:/app/media
-      - static-data:/app/staticfiles
+    <<: *backend-image
+    environment:
+      SKIP_ENTRYPOINT_SETUP: "true"
+      # Celery/beat use direct Postgres to avoid pooler edge cases on long tasks
+      DB_HOST: postgres
+      DB_PORT: "5432"
+    command: celery -A ecm_backend worker -l info --concurrency=${CELERY_CONCURRENCY:-4}
     depends_on:
-      backend:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     restart: always
 
   celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    <<: *backend-image
     container_name: ecm-celery-beat-prod
-    env_file:
-      - ./backend/env/prod.env
+    environment:
+      SKIP_ENTRYPOINT_SETUP: "true"
+      DB_HOST: postgres
+      DB_PORT: "5432"
     command: celery -A ecm_backend beat -l info
-    volumes:
-      - media-data:/app/media
-      - static-data:/app/staticfiles
     depends_on:
-      backend:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     restart: always
 
@@ -100,9 +163,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm.nigerianports.gov.ng/api}
         NEXT_PUBLIC_ENVIRONMENT: production
-    container_name: ecm-frontend-prod
     environment:
-      # NOTE: NEXT_PUBLIC_* is baked at build time; keep this for transparency/logging only
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm.nigerianports.gov.ng/api}
       NODE_ENV: production
     expose:
@@ -134,10 +195,3 @@ volumes:
   redis-data:
   media-data:
   static-data:
-
-
-
-
-
-
-

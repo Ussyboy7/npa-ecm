@@ -968,69 +968,113 @@ const ShareDocumentDialogContent = ({
     }
   };
 
+  const shareBlocked = Boolean(document && !canShareDocument(document));
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl" height="screen" density="flush">
-        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            Share Document
-            {existingPermissions.length > 0 && (
-              <Badge variant="secondary" className="ml-2 text-xs">
+      <DialogContent
+        size={shareBlocked ? "md" : "2xl"}
+        height={shareBlocked ? "auto" : "screen"}
+        density="flush"
+        className="overflow-x-hidden"
+      >
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 min-w-0 pr-8">
+            <Shield className="h-5 w-5 text-primary shrink-0" />
+            <span className="truncate">Share Document</span>
+            {!shareBlocked && existingPermissions.length > 0 && (
+              <Badge variant="secondary" className="ml-2 text-xs shrink-0">
                 {existingPermissions.length} permission{existingPermissions.length !== 1 ? 's' : ''}
               </Badge>
             )}
           </DialogTitle>
           <DialogDescription>
-            Share this document with users or offices
+            {shareBlocked
+              ? "Sharing is disabled for this document"
+              : "Share this document with users or offices"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
-        {document && !canShareDocument(document) ? (
-          <Alert className="mx-4 sm:mx-6 mt-4 border-amber-500/40 bg-amber-500/10">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Sharing is blocked by DRM policy
-              {document.drmRights?.policy_name ? ` (${document.drmRights.policy_name})` : ""}.
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {document && (
-          <div className="space-y-6 px-4 sm:px-6 py-4">
-            {/* Document Summary - Like Minute Modal */}
+        {shareBlocked && document ? (
+          <div className="space-y-4 px-4 sm:px-6 py-4 overflow-x-hidden">
+            <Alert className="border-amber-500/40 bg-amber-500/10">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm break-words">
+                Sharing is blocked by DRM policy
+                {document.drmRights?.policy_name || document.effectiveRights?.policy_name
+                  ? ` (${document.drmRights?.policy_name || document.effectiveRights?.policy_name})`
+                  : ""}
+                .
+              </AlertDescription>
+            </Alert>
             <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
-<div className="flex items-start gap-3">
-                  <FileText className="h-5 w-5 text-primary mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm mb-1">{document.title}</p>
-                    <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                      <span>Status: {document.status}</span>
-                      {document.sensitivity && (
-                        <>
-                          <span>•</span>
-                          <span className="capitalize">{document.sensitivity}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-start gap-3 min-w-0">
+                <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0 space-y-2">
+                  <p className="font-semibold text-sm truncate">{document.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="outline" className="text-[10px] capitalize">
                       {document.status}
                     </Badge>
-                    {(document.sensitivity === 'restricted' || document.sensitivity === 'confidential') && (
-                      <Badge variant="destructive" className="text-[10px]">
-                        <AlertTriangle className="h-3 w-3 mr-1" />
+                    {document.sensitivity && (
+                      <Badge
+                        variant={
+                          document.sensitivity === "restricted" || document.sensitivity === "confidential"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                        className="text-[10px] capitalize"
+                      >
                         {document.sensitivity}
                       </Badge>
                     )}
+                  </div>
+                  {document.effectiveRights && (
+                    <p className="text-xs text-muted-foreground">
+                      Download: {document.effectiveRights.can_download ? "Allowed" : "Blocked"}
+                      {" · "}
+                      Print: {document.effectiveRights.can_print ? "Allowed" : "Blocked"}
+                      {document.effectiveRights.view_only ? " · View only" : ""}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        {document && (
+          <div className="space-y-5 px-4 sm:px-6 py-4 min-w-0">
+            {/* Document Summary - Like Minute Modal */}
+            <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
+<div className="flex items-start gap-3 min-w-0">
+                  <FileText className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm mb-1 truncate">{document.title}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="text-[10px] capitalize">
+                        {document.status}
+                      </Badge>
+                      {document.sensitivity && (
+                        <Badge
+                          variant={
+                            document.sensitivity === 'restricted' || document.sensitivity === 'confidential'
+                              ? 'destructive'
+                              : 'secondary'
+                          }
+                          className="text-[10px] capitalize"
+                        >
+                          {document.sensitivity}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
 </div>
 
             {/* Share Form (always rendered so footer submit button works on review step) */}
-            <form id="share-form" onSubmit={handleSubmit}>
+            <form id="share-form" onSubmit={handleSubmit} className="min-w-0">
             {showReviewStep ? (
               /* Review Step Confirmation */
               <div className="space-y-4">
@@ -1101,8 +1145,8 @@ const ShareDocumentDialogContent = ({
               /* Main Form Fields */
               <div className="space-y-6">
               {/* Access Level Section */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
+                <div className="space-y-2 min-w-0">
                   <Label htmlFor="access-level" className="flex items-center gap-2">
                     <Shield className="h-4 w-4 text-muted-foreground" />
                     Access Level *
@@ -1119,14 +1163,14 @@ const ShareDocumentDialogContent = ({
                   </Select>
                   {accessLevel !== 'read' && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
                       {accessLevel === 'admin' ? 'Can manage sharing and archive this document' : 'Can replace document versions'}
                     </p>
                   )}
                 </div>
 
                 {document.effectiveRights && (
-                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3 min-w-0">
                     <Label className="text-xs text-muted-foreground">Current Document Protection</Label>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant="outline" className="capitalize">
@@ -1135,14 +1179,16 @@ const ShareDocumentDialogContent = ({
                       {document.effectiveRights.view_only && <Badge variant="secondary">View only</Badge>}
                       {document.effectiveRights.expired && <Badge variant="destructive">Expired</Badge>}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {document.effectiveRights.allow_external_share
-                        ? 'Sharing is allowed by the current DRM policy.'
-                        : 'Sharing is blocked by the current DRM policy.'}
+                    <p className="text-xs text-muted-foreground break-words">
+                      Download: {document.effectiveRights.can_download ? 'Allowed' : 'Blocked'}
+                      {" · "}
+                      Print: {document.effectiveRights.can_print ? 'Allowed' : 'Blocked'}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      Download: {document.effectiveRights.can_download ? 'Allowed' : 'Blocked'} · Print: {document.effectiveRights.can_print ? 'Allowed' : 'Blocked'}
-                    </p>
+                    {!document.effectiveRights.allow_external_share && (
+                      <p className="text-xs text-muted-foreground">
+                        You can grant access to NPA users/offices. Recipients stay under this DRM (no download/print if view-only).
+                      </p>
+                    )}
                   </div>
                 )}
                 
@@ -1468,8 +1514,8 @@ const ShareDocumentDialogContent = ({
                                     className="pl-9 h-9"
                                   />
                                 </div>
-                                <ScrollArea className="h-[280px] border rounded-md p-2">
-                                  <div className="space-y-1.5">
+                                <ScrollArea className="h-[min(420px,42vh)] border rounded-md p-2">
+                                  <div className="space-y-1.5 min-w-0 pr-2">
                                     {loadingFallbackRecipients && correspondenceFilteredUsers.length === 0 ? (
                                       <div className="p-3 text-xs text-muted-foreground flex items-center gap-2">
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1487,7 +1533,7 @@ const ShareDocumentDialogContent = ({
                                             key={user.id}
                                             role="button"
                                             tabIndex={0}
-                                            className={`w-full text-left flex items-start gap-2 p-2 rounded border ${selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                                            className={`w-full max-w-full text-left flex items-start gap-2 p-2 rounded border min-w-0 ${selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
                                             onClick={() => handleToggleDirectSharePerson(user.id)}
                                             onKeyDown={(event) => {
                                               if (event.key === 'Enter' || event.key === ' ') {
@@ -1504,7 +1550,7 @@ const ShareDocumentDialogContent = ({
                                             >
                                               {selected ? <CheckCircle2 className="h-3 w-3" /> : null}
                                             </span>
-                                            <div className="min-w-0">
+                                            <div className="min-w-0 flex-1 overflow-hidden">
                                               <p className="text-sm font-medium truncate">{user.name}</p>
                                               <p className="text-xs text-muted-foreground truncate">
                                                 {user.email} • {user.gradeLevel || user.systemRole || 'User'}
@@ -1649,54 +1695,68 @@ const ShareDocumentDialogContent = ({
           </div>
         )}
         </div>
+        )}
 
-        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t px-4 sm:px-6 py-3">
-          <div className="text-xs text-muted-foreground">
-            {activeTab === 'correspondence' ? (
-              <span>Use <span className="font-medium text-foreground">Send via Correspondence</span> below the notes field.</span>
-            ) : totalSelected > 0 ? (
-              <span>
-                {`${totalSelected} selected`}
-                {' • '}<span className="capitalize">{accessLevel}</span> access
-              </span>
-            ) : (
-              <span>Select recipients above</span>
-            )}
-          </div>
-          <div className="flex gap-3">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            {activeTab !== 'correspondence' && (
-              <Button
-                type="submit"
-                form="share-form"
-                disabled={
-                  isSubmitting ||
-                  totalSelected === 0 ||
-                  !canShareDocument(document)
-                }
-                className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Sharing...
-                  </>
-                ) : (
-                  <>
-                    <Users className="h-4 w-4" />
-                    Share Document
-                  </>
-                )}
+        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t px-4 sm:px-6 py-3 shrink-0">
+          {shareBlocked ? (
+            <>
+              <div className="text-xs text-muted-foreground">
+                Change the DRM policy to allow sharing.
+              </div>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Close
               </Button>
-            )}
-          </div>
+            </>
+          ) : (
+            <>
+              <div className="text-xs text-muted-foreground min-w-0">
+                {activeTab === 'correspondence' ? (
+                  <span>Use <span className="font-medium text-foreground">Send via Correspondence</span> below the notes field.</span>
+                ) : totalSelected > 0 ? (
+                  <span>
+                    {`${totalSelected} selected`}
+                    {' • '}<span className="capitalize">{accessLevel}</span> access
+                  </span>
+                ) : (
+                  <span>Select recipients above</span>
+                )}
+              </div>
+              <div className="flex gap-3 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                {activeTab !== 'correspondence' && (
+                  <Button
+                    type="submit"
+                    form="share-form"
+                    disabled={
+                      isSubmitting ||
+                      totalSelected === 0 ||
+                      !canShareDocument(document)
+                    }
+                    className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Sharing...
+                      </>
+                    ) : (
+                      <>
+                        <Users className="h-4 w-4" />
+                        Share Document
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

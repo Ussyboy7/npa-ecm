@@ -73,7 +73,7 @@ if [[ "$ASSUME_YES" -ne 1 ]]; then
 fi
 
 log "Stopping backend services"
-stack_compose stop "$STACK_BACKEND_SERVICE" celery-worker celery-beat celery_worker_stag celery_beat_stag 2>/dev/null || true
+stack_compose stop "$STACK_BACKEND_SERVICE" celery-worker celery-beat 2>/dev/null || true
 
 log "Restoring database"
 stack_compose up -d "$PG_SERVICE"

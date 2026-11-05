@@ -47,6 +47,7 @@ import { apiFetch } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { SecurePdfCanvasPreview } from '@/components/dms/SecurePdfCanvasPreview';
+import { DrmWatermarkOverlay } from '@/components/dms/DrmWatermarkOverlay';
 import {
   canDownloadDocument,
   canPrintDocument,
@@ -1021,17 +1022,7 @@ export const DocumentPreviewPanel = ({
                 const canDlLinked = linkedDoc ? canDownloadDocument(linkedDoc) : true;
                 const watermarkText = (linkedDoc as unknown as { effectiveRights?: { watermark_text?: string | null }; drmRights?: { watermark_text?: string | null } })?.effectiveRights?.watermark_text || (linkedDoc as unknown as { drmRights?: { watermark_text?: string | null } })?.drmRights?.watermark_text || null;
                 const watermarkOverlay = watermarkText ? (
-                  <div aria-hidden className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
-                    <span
-                      className="select-none whitespace-nowrap font-semibold uppercase tracking-[0.2em] text-[#555] opacity-[0.12]"
-                      style={{
-                        transform: 'rotate(-30deg)',
-                        fontSize: 'clamp(28px, 7vw, 64px)',
-                      }}
-                    >
-                      {watermarkText}
-                    </span>
-                  </div>
+                  <DrmWatermarkOverlay text={watermarkText} />
                 ) : null;
 
                 if (documentPreviewLoading && !previewLinkedDoc) {

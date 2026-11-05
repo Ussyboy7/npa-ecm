@@ -76,6 +76,7 @@ Staging deploy (server only): `scripts/staging/env-manager.sh deploy`
 |-------|------|
 | Quick start / routes | `docs/guides/QUICK_START.md` |
 | UI design language | `docs/guides/DESIGN.md` |
+| Capacity / 2-server / scale | `docs/ops/CAPACITY_AND_SCALING_NOTES.md` |
 | Backlog & Phase 9–11 | `docs/procurement/REMAINING_WORK_BACKLOG.md` |
 | Feature areas | `docs/features/` (incl. `rich-text-editor.md`, `cases.md`) |
 | Rollout & helpdesk | `docs/rollout/` |

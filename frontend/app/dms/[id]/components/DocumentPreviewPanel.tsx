@@ -2,7 +2,7 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { highlightText, isOcrMatchField } from "@/lib/search-highlight";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type ComponentProps } from "react";
 import {
   FileText,
   Download,
@@ -21,9 +21,10 @@ import type { DocumentRecord, DocumentVersion } from "@/lib/api/dms";
 import { DmsVersionPreviewContent } from "./DmsVersionPreviewContent";
 import { DocumentVersionStrip } from "./DocumentVersionStrip";
 import { DocumentVersionsPanel } from "./DocumentVersionsPanel";
+import { DrmWatermarkOverlay } from "@/components/dms/DrmWatermarkOverlay";
 import { detailType } from "@/lib/detail-type";
 import { cn } from "@/lib/utils";
-import { downloadDocumentVersion } from "@/lib/dms-documents";
+import { canAccessExtractedText, canCopyDocumentText, downloadDocumentVersion } from "@/lib/dms-documents";
 import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
 
@@ -74,10 +75,15 @@ export function DocumentPreviewPanel({
   highlightQuery = "",
   matchField = "",
 }: DocumentPreviewPanelProps) {
-  const watermarkText = document.effectiveRights?.watermark_text || document.drmRights?.watermark_text || null;
+  const watermarkText =
+    document.effectiveRights?.watermark_text ||
+    document.drmRights?.watermark_text ||
+    null;
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [documentSurface, setDocumentSurface] = useState<"preview" | "manage">("preview");
+  const allowExtractedTextEarly = canAccessExtractedText(document);
   const preferOcr =
+    allowExtractedTextEarly &&
     Boolean(highlightQuery.trim()) &&
     isOcrMatchField(matchField) &&
     Boolean(selectedVersion?.ocrText?.trim());
@@ -86,6 +92,7 @@ export function DocumentPreviewPanel({
 
   useEffect(() => {
     if (preferOcr) setPreviewTab("ocr");
+    else setPreviewTab("preview");
   }, [preferOcr, highlightQuery, matchField, selectedVersion?.id]);
 
   useEffect(() => {
@@ -102,8 +109,16 @@ export function DocumentPreviewPanel({
   const isForm = document.documentType === "form";
   const showVersionStrip = versions.length > 1 || Boolean(versionsManage);
   const isManageMode = documentSurface === "manage" && Boolean(versionsManage) && !isForm;
-  const hasOcr = Boolean(selectedVersion?.ocrText?.trim());
+  const allowExtractedText = allowExtractedTextEarly;
+  const allowCopyText = canCopyDocumentText(document);
+  const hasOcr = allowExtractedText && Boolean(selectedVersion?.ocrText?.trim());
   const showOcrTab = hasOcr;
+
+  const handleProtectedCopy = (event: ClipboardEvent) => {
+    if (allowCopyText) return;
+    event.preventDefault();
+    toast.error("Copying text is blocked by DRM / classification policy");
+  };
 
   const handleDownload = () => {
     if (!selectedVersion || !canDownload) return;
@@ -289,7 +304,11 @@ export function DocumentPreviewPanel({
                   </div>
                 )}
 
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                <div
+                  className={`flex-1 min-h-0 overflow-y-auto overscroll-contain ${allowCopyText ? "" : "select-none"}`}
+                  onCopy={handleProtectedCopy}
+                  onCut={handleProtectedCopy}
+                >
                   {selectedVersion ? (
                     showOcrTab ? (
                       <Tabs
@@ -309,16 +328,20 @@ export function DocumentPreviewPanel({
                             version={selectedVersion}
                             expanded={isPreviewFullscreen}
                             allowDownload={canDownload}
+                            allowCopyText={allowCopyText}
                             highlightQuery={isOcrMatchField(matchField) ? "" : highlightQuery}
                             watermarkText={watermarkText}
                           />
                         </TabsContent>
                         <TabsContent value="ocr" className="mt-0 min-h-0 flex-1 overflow-y-auto">
-                          <div
-                            ref={ocrPaneRef}
-                            className="whitespace-pre-wrap p-4 text-sm leading-relaxed text-foreground"
-                          >
-                            {highlightText(selectedVersion.ocrText || "", highlightQuery)}
+                          <div className="relative min-h-full">
+                            <DrmWatermarkOverlay text={watermarkText} />
+                            <div
+                              ref={ocrPaneRef}
+                              className="relative z-0 whitespace-pre-wrap p-4 text-sm leading-relaxed text-foreground"
+                            >
+                              {highlightText(selectedVersion.ocrText || "", highlightQuery)}
+                            </div>
                           </div>
                         </TabsContent>
                       </Tabs>
@@ -327,6 +350,7 @@ export function DocumentPreviewPanel({
                         version={selectedVersion}
                         expanded={isPreviewFullscreen}
                         allowDownload={canDownload}
+                        allowCopyText={allowCopyText}
                         highlightQuery={highlightQuery}
                         watermarkText={watermarkText}
                       />

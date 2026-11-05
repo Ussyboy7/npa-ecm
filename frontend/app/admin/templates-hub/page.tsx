@@ -1029,15 +1029,15 @@ function TemplatesHubForm() {
             )}
 
             <Dialog open={templateEditorOpen} onOpenChange={(open) => { if (!open) { setTemplateEditorOpen(false); setSelectedTemplateId(null); } }}>
-              <DialogContent size="lg" height="scroll">
-                <DialogHeader>
+              <DialogContent size="full" height="screen">
+                <DialogHeader className="shrink-0">
                   <DialogTitle>
                     {selectedTemplateId
                       ? `Edit ${isMinute ? "minute" : "document"} template`
                       : createLabel}
                   </DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-4 pr-1">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Title</Label>
@@ -1054,18 +1054,22 @@ function TemplatesHubForm() {
                       <Textarea
                         value={contentHtml}
                         onChange={(e) => setContentHtml(e.target.value)}
-                        rows={5}
+                        rows={12}
                         placeholder="Enter minute template text..."
-                        className="min-h-[120px]"
+                        className="min-h-[240px]"
                       />
                     ) : (
-                      <div className="border rounded-lg bg-background">
-                        <RichTextEditor value={contentHtml} onChange={(html) => setContentHtml(html)} showCharacterCount={false} />
-                      </div>
+                      <RichTextEditor
+                        value={contentHtml}
+                        onChange={(html) => setContentHtml(html)}
+                        showCharacterCount={false}
+                        showHeader={false}
+                        className="min-h-[70vh]"
+                      />
                     )}
                   </div>
                 </div>
-                <div className="flex justify-between pt-2">
+                <div className="flex justify-between shrink-0 border-t border-border/60 pt-4 mt-2">
                   <div>
                     {selectedTemplateId ? (
                       <Button variant="outline" size="sm" onClick={handleDeleteDocTemplate} className="text-destructive">

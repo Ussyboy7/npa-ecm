@@ -28,7 +28,11 @@ import type { User } from "@/lib/npa-structure";
 import type { CaptureJob } from "@/lib/api/capture";
 import { DocumentVersionDiffDialog } from "@/components/dms/DocumentVersionDiffDialog";
 import { fetchDocumentVersionDiff, type DocumentVersionDiff } from "@/lib/dms-version-diff";
-import { canDownloadDocument, downloadDocumentVersion } from "@/lib/dms-documents";
+import {
+  canAccessExtractedText,
+  canDownloadDocument,
+  downloadDocumentVersion,
+} from "@/lib/dms-documents";
 import { logError } from "@/lib/client-logger";
 import { toast } from "@/components/ui/sonner";
 
@@ -70,6 +74,7 @@ export function DocumentVersionsPanel({
   const [diffLoading, setDiffLoading] = useState(false);
   const [versionDiff, setVersionDiff] = useState<DocumentVersionDiff | null>(null);
   const canDownload = canDownloadDocument(document);
+  const allowExtractedText = canAccessExtractedText(document);
 
   const handleDownload = async (version: DocumentVersion) => {
     if (!canDownload) {
@@ -154,9 +159,11 @@ export function DocumentVersionsPanel({
           const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
           const versionOCR = ocrState?.[version.id];
           const isProcessing = versionOCR?.isProcessing || false;
-          const hasOCRText = Boolean(version.ocrText && version.ocrText.trim() !== "");
+          const hasOCRText =
+            allowExtractedText && Boolean(version.ocrText && version.ocrText.trim() !== "");
           const canShowOCR =
-            ((version.hasFile || Boolean(version.id)) &&
+            allowExtractedText &&
+            (((version.hasFile || Boolean(version.id)) &&
               (version.fileType?.startsWith("image/") ||
                 version.fileType === "application/pdf" ||
                 version.fileType ===
@@ -164,7 +171,7 @@ export function DocumentVersionsPanel({
                 version.fileType === "application/msword" ||
                 version.fileName?.toLowerCase().endsWith(".docx") ||
                 version.fileName?.toLowerCase().endsWith(".doc"))) ||
-            Boolean(version.contentHtml && version.contentHtml.trim() !== "");
+              Boolean(version.contentHtml && version.contentHtml.trim() !== ""));
           const olderVersion = index < versions.length - 1 ? versions[index + 1] : null;
 
           return (

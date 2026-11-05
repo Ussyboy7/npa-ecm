@@ -15,10 +15,12 @@ export interface DocumentRightsPolicy {
 
 export interface DocumentDrmRights {
   policy_id?: string | null;
+  effective_policy_id?: string | null;
   policy_name?: string | null;
-  allow_download: boolean;
-  allow_print: boolean;
-  allow_external_share: boolean;
+  inherited?: boolean;
+  allow_download?: boolean;
+  allow_print?: boolean;
+  allow_external_share?: boolean;
   view_only: boolean;
   watermark_text: string;
   expired: boolean;

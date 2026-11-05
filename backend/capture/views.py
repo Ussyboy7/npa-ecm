@@ -200,6 +200,16 @@ class CaptureViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        from dms.drm import blocks_plaintext_extraction
+
+        if blocks_plaintext_extraction(document, request.user):
+            return Response(
+                {
+                    "error": "Text extraction and OCR are disabled for this document under DRM / classification policy.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         try:
             capture_job, created = queue_ocr_job(
                 document=document,

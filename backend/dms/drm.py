@@ -2,26 +2,113 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
+# When document.drm_policy is null ("Inherit from classification"), use these
+# seeded DocumentRightsPolicy names. Keep in sync with seed_demo_data.
+SENSITIVITY_DEFAULT_POLICY_NAMES: dict[str, str] = {
+    "public": "Public Record",
+    "internal": "Internal — Download Allowed",
+    "confidential": "Confidential — View Only",
+    # Stricter than Confidential: view-only + watermark + 30-day expiry
+    "restricted": "Strictly Confidential — Time-Limited",
+}
+
+
+@lru_cache(maxsize=16)
+def _policy_id_by_name(name: str) -> str | None:
+    from .models import DocumentRightsPolicy
+
+    policy = (
+        DocumentRightsPolicy.objects.filter(name=name, is_active=True)
+        .only("id")
+        .first()
+    )
+    return str(policy.id) if policy else None
+
+
+def clear_policy_name_cache() -> None:
+    """Test helper — call after creating/renaming seeded policies."""
+    _policy_id_by_name.cache_clear()
+
+
+def get_default_policy_for_sensitivity(sensitivity: str | None):
+    """Return the active DocumentRightsPolicy for a sensitivity, or None."""
+    from .models import DocumentRightsPolicy
+
+    name = SENSITIVITY_DEFAULT_POLICY_NAMES.get((sensitivity or "").strip().lower())
+    if not name:
+        return None
+    policy_id = _policy_id_by_name(name)
+    if not policy_id:
+        return None
+    return DocumentRightsPolicy.objects.filter(id=policy_id, is_active=True).first()
+
+
+def resolve_document_policy(document) -> tuple[object | None, bool]:
+    """
+    Return (policy, inherited).
+
+    Explicit document.drm_policy wins. Otherwise inherit from sensitivity.
+    """
+    attached = getattr(document, "drm_policy", None)
+    if attached is not None and getattr(attached, "is_active", True):
+        return attached, False
+    inherited = get_default_policy_for_sensitivity(getattr(document, "sensitivity", None))
+    return inherited, bool(inherited)
+
+
+def _rights_payload(
+    *,
+    policy,
+    inherited: bool,
+    expired: bool,
+    view_only: bool,
+    allow_download: bool,
+    allow_print: bool,
+    allow_external_share: bool,
+    watermark_text: str,
+    message: str,
+) -> dict:
+    return {
+        # policy_id is only the *attached* FK — null means UI "Inherit"
+        "policy_id": (
+            None
+            if inherited
+            else (str(policy.id) if policy else None)
+        ),
+        "effective_policy_id": str(policy.id) if policy else None,
+        "policy_name": policy.name if policy else None,
+        "inherited": inherited,
+        "allow_download": allow_download,
+        "allow_print": allow_print,
+        "allow_external_share": allow_external_share,
+        "view_only": view_only,
+        "watermark_text": watermark_text,
+        "expired": expired,
+        "message": message,
+    }
+
 
 def resolve_document_rights(document, user=None) -> dict:
-    """Return effective DRM restrictions for a document."""
-    policy = getattr(document, "drm_policy", None)
-    if not policy or not policy.is_active:
-        return {
-            "policy_id": None,
-            "policy_name": None,
-            "allow_download": True,
-            "allow_print": True,
-            "allow_external_share": True,
-            "view_only": False,
-            "watermark_text": "",
-            "expired": False,
-            "message": "",
-        }
+    """Return effective DRM restrictions for a document (including sensitivity inherit)."""
+    policy, inherited = resolve_document_policy(document)
+    if not policy:
+        return _rights_payload(
+            policy=None,
+            inherited=False,
+            expired=False,
+            view_only=False,
+            allow_download=True,
+            allow_print=True,
+            allow_external_share=True,
+            watermark_text="",
+            message="",
+        )
 
     expired = False
     if policy.expires_after_days and document.created_at:
@@ -34,30 +121,30 @@ def resolve_document_rights(document, user=None) -> dict:
     is_superuser = bool(getattr(user, "is_superuser", False))
 
     if expired and not is_author and not is_superuser:
-        return {
-            "policy_id": str(policy.id),
-            "policy_name": policy.name,
-            "allow_download": False,
-            "allow_print": False,
-            "allow_external_share": False,
-            "view_only": True,
-            "watermark_text": policy.watermark_text,
-            "expired": True,
-            "message": "Document access has expired under DRM policy.",
-        }
+        return _rights_payload(
+            policy=policy,
+            inherited=inherited,
+            expired=True,
+            view_only=True,
+            allow_download=False,
+            allow_print=False,
+            allow_external_share=False,
+            watermark_text=policy.watermark_text or "",
+            message="Document access has expired under DRM policy.",
+        )
 
-    view_only = policy.view_only
-    return {
-        "policy_id": str(policy.id),
-        "policy_name": policy.name,
-        "allow_download": policy.allow_download and not view_only,
-        "allow_print": policy.allow_print and not view_only,
-        "allow_external_share": policy.allow_external_share,
-        "view_only": view_only,
-        "watermark_text": policy.watermark_text or "",
-        "expired": False,
-        "message": policy.description or "",
-    }
+    view_only = bool(policy.view_only)
+    return _rights_payload(
+        policy=policy,
+        inherited=inherited,
+        expired=False,
+        view_only=view_only,
+        allow_download=bool(policy.allow_download) and not view_only,
+        allow_print=bool(policy.allow_print) and not view_only,
+        allow_external_share=bool(policy.allow_external_share),
+        watermark_text=policy.watermark_text or "",
+        message=policy.description or "",
+    )
 
 
 def should_withhold_direct_media(rights: dict) -> bool:
@@ -75,8 +162,8 @@ def should_withhold_direct_media(rights: dict) -> bool:
         return True
     if (rights.get("watermark_text") or "").strip():
         return True
-    # Active policy → always gate through /content/ and /download/
-    return bool(rights.get("policy_id"))
+    # Active (attached or inherited) policy → gate through /content/ and /download/
+    return bool(rights.get("effective_policy_id") or rights.get("policy_id"))
 
 
 def resolve_effective_document_rights(document, user=None) -> dict:
@@ -160,12 +247,41 @@ def assert_print_allowed(document, user=None) -> None:
 
 
 def assert_share_allowed(document, user=None) -> None:
+    """
+    Gate *internal* ACL share (grant access to NPA users/offices).
+
+    allow_external_share is a separate control for off-platform / public release
+    and must not block in-app permission grants. View-only DRM still applies to
+    recipients (no download/print). Time-limited policies cannot be shared after expiry
+    (even by author/superuser — they may still view).
+    """
+    del user  # reserved for future caller-scoped share rules
+    policy, _inherited = resolve_document_policy(document)
+    if not policy or not policy.expires_after_days or not getattr(document, "created_at", None):
+        return
+    expiry = document.created_at + timezone.timedelta(days=policy.expires_after_days)
+    if timezone.now() > expiry:
+        raise PermissionDenied("Document access has expired under DRM policy.")
+
+
+def blocks_plaintext_extraction(document, user=None) -> bool:
+    """
+    True when OCR / extracted plain text must not be exposed or regenerated.
+
+    Applies to Confidential/Restricted classification and view-only / expired DRM.
+    HTML preview may still render; selectable plain OCR text must not.
+    """
     rights = resolve_document_rights(document, user)
-    if rights["expired"]:
-        raise PermissionDenied(rights["message"] or "Document access expired.")
-    if not rights["allow_external_share"]:
+    if rights.get("expired") or rights.get("view_only"):
+        return True
+    sensitivity = (getattr(document, "sensitivity", "") or "").strip().lower()
+    return sensitivity in {"confidential", "restricted"}
+
+
+def assert_plaintext_extraction_allowed(document, user=None) -> None:
+    if blocks_plaintext_extraction(document, user):
         raise PermissionDenied(
-            f"Sharing blocked by DRM policy: {rights['policy_name'] or 'restricted'}"
+            "Text extraction and OCR are disabled for this document under DRM / classification policy."
         )
 
 
@@ -185,6 +301,11 @@ def apply_version_drm_redaction(data: dict, document, user=None) -> dict:
         data["content_text"] = ""
         data["content_json"] = None
         data["ocr_text"] = ""
+    elif blocks_plaintext_extraction(document, user):
+        # Keep HTML for in-app preview; strip copyable plain extracts.
+        data["ocr_text"] = ""
+        data["content_text"] = ""
 
     data["drm_delivery"] = "api" if withhold else "media"
+    data["plaintext_extraction_blocked"] = blocks_plaintext_extraction(document, user)
     return data

@@ -10,6 +10,7 @@ import {
   fetchCanonicalContent,
 } from "@/lib/canonical-document";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
+import { DrmWatermarkOverlay } from "@/components/dms/DrmWatermarkOverlay";
 import type { DocumentVersion } from "@/lib/api/dms";
 import { convertDocxArrayBufferToHtml } from "@/lib/docx-to-html";
 
@@ -17,6 +18,8 @@ interface DmsVersionPreviewContentProps {
   version: DocumentVersion;
   expanded?: boolean;
   allowDownload?: boolean;
+  /** When false, block text selection / copy in the preview surface. */
+  allowCopyText?: boolean;
   /** When set (from Search), highlight matches in HTML / Word preview. */
   highlightQuery?: string;
   watermarkText?: string | null;
@@ -43,6 +46,7 @@ export function DmsVersionPreviewContent({
   version,
   expanded = false,
   allowDownload = true,
+  allowCopyText = true,
   highlightQuery = "",
   watermarkText = null,
 }: DmsVersionPreviewContentProps) {
@@ -140,29 +144,28 @@ export function DmsVersionPreviewContent({
     const withHits = highlightQuery.trim()
       ? highlightHtml(sanitized, highlightQuery.trim())
       : sanitized;
-    const wm = (watermarkText || "").trim();
     return (
-      <div className="relative overflow-hidden">
-        {wm ? (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden select-none"
-          >
-            <span
-              className="font-bold tracking-widest whitespace-nowrap opacity-[0.12] dark:opacity-[0.18]"
-              style={{
-                fontSize: "clamp(28px, 8vw, 64px)",
-                color: "rgb(85 85 85)",
-                transform: "rotate(-30deg)",
-              }}
-            >
-              {wm}
-            </span>
-          </div>
-        ) : null}
+      <div
+        className={`relative overflow-hidden ${minHeight} ${allowCopyText ? "" : "select-none"}`}
+        onCopy={
+          allowCopyText
+            ? undefined
+            : (event) => {
+                event.preventDefault();
+              }
+        }
+        onCut={
+          allowCopyText
+            ? undefined
+            : (event) => {
+                event.preventDefault();
+              }
+        }
+      >
+        <DrmWatermarkOverlay text={watermarkText} />
         <div
           ref={containerRef}
-          className={`document-print-area doc-paper ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
+          className={`document-print-area doc-paper relative z-0 ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
           style={{
             fontFamily: "Verdana, Geneva, sans-serif",
             fontSize: "12px",
@@ -171,6 +174,7 @@ export function DmsVersionPreviewContent({
             maxWidth: "900px",
             margin: "0 auto",
             textAlign: "left",
+            userSelect: allowCopyText ? undefined : "none",
           }}
         >
           <style
@@ -228,35 +232,31 @@ export function DmsVersionPreviewContent({
   if (isPDF) {
     if (apiPdfBytes) {
       return (
-        <div className={`w-full overflow-auto ${minHeight}`}>
+        <div className={`relative w-full overflow-auto ${minHeight}`}>
+          <DrmWatermarkOverlay text={watermarkText} />
           {!allowDownload ? (
-            <p className="px-4 pt-3 text-xs text-muted-foreground">
+            <p className="relative z-0 px-4 pt-3 text-xs text-muted-foreground">
               View-only — download is disabled by DRM policy.
             </p>
           ) : null}
-          <SecurePdfCanvasPreview data={apiPdfBytes} minHeightClassName={minHeight} />
+          <div className="relative z-0">
+            <SecurePdfCanvasPreview data={apiPdfBytes} minHeightClassName={minHeight} />
+          </div>
         </div>
       );
     }
   }
 
   if (isImage && apiBlobUrl) {
-    const wm = (watermarkText || "").trim();
     return (
       <div className={`relative flex items-center justify-center p-4 bg-muted/20 ${minHeight} overflow-hidden`}>
-        {wm ? (
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center select-none">
-            <span className="font-bold tracking-widest whitespace-nowrap opacity-[0.14]" style={{ fontSize: "clamp(28px, 8vw, 56px)", color: "rgb(85 85 85)", transform: "rotate(-30deg)" }}>
-              {wm}
-            </span>
-          </div>
-        ) : null}
+        <DrmWatermarkOverlay text={watermarkText} />
         <Image
           src={apiBlobUrl}
           alt={fileName}
           width={800}
           height={600}
-          className="max-w-full max-h-[70vh] object-contain"
+          className="relative z-0 max-w-full max-h-[70vh] object-contain"
           unoptimized
         />
       </div>

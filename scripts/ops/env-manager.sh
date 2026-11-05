@@ -70,7 +70,18 @@ cmd_start() {
         stack_stop_stag_on_mac
     fi
     ui_header "Starting ECM ${STACK_ENVIRONMENT_TITLE}"
-    stack_compose up -d
+    if [[ "$STACK_ENVIRONMENT" == "local" ]]; then
+        stack_compose up -d
+    else
+        local backend_n="${STACK_BACKEND_REPLICAS:-1}"
+        local celery_n="${STACK_CELERY_REPLICAS:-1}"
+        local frontend_n="${STACK_FRONTEND_REPLICAS:-1}"
+        ui_info "Scale: backend×${backend_n} celery-worker×${celery_n} frontend×${frontend_n}"
+        stack_compose up -d \
+            --scale "backend=${backend_n}" \
+            --scale "celery-worker=${celery_n}" \
+            --scale "frontend=${frontend_n}"
+    fi
     sleep 10
     cmd_status
 }
@@ -299,51 +310,74 @@ _deploy_build_up() {
     ui_step "Building and starting stack"
     docker image prune -f >/dev/null 2>&1 || true
     _deploy_purge_stale_containers
-    stack_compose up -d --build
+    local backend_n="${STACK_BACKEND_REPLICAS:-1}"
+    local celery_n="${STACK_CELERY_REPLICAS:-1}"
+    local frontend_n="${STACK_FRONTEND_REPLICAS:-1}"
+    ui_step "Starting stack (backend×${backend_n} celery-worker×${celery_n} frontend×${frontend_n})"
+    stack_compose up -d --build \
+        --scale "backend=${backend_n}" \
+        --scale "celery-worker=${celery_n}" \
+        --scale "frontend=${frontend_n}"
 }
 
 _deploy_apply_runtime_configuration() {
-    ui_step "Applying migrations and verifying runtime configuration"
-    stack_backend_manage migrate --noinput
-    stack_backend_manage setup_role_permissions --force
+    ui_step "Verifying runtime configuration (migrate service already ran)"
     stack_backend_manage check_environment_parity --strict
 }
 
 _deploy_wait_healthy() {
-    ui_step "Waiting for backend health (${STACK_BACKEND_CONTAINER})"
+    ui_step "Waiting for backend replicas healthy (prefix ${STACK_BACKEND_CONTAINER})"
     ui_info "Manual check URL: ${STACK_HEALTH_URL}"
-    local initial_sleep=5
-    local attempts=40
+    local initial_sleep=8
+    local attempts=50
     local interval=3
     sleep "$initial_sleep"
     local i
     for ((i = 1; i <= attempts; i++)); do
-        if ! docker ps --format '{{.Names}}' | grep -q "^${STACK_BACKEND_CONTAINER}$"; then
-            ui_warning "Container ${STACK_BACKEND_CONTAINER} is not running (attempt ${i}/${attempts})"
+        local ids
+        ids="$(stack_compose ps -q backend 2>/dev/null || true)"
+        if [[ -z "$ids" ]]; then
+            ui_warning "No backend containers running (attempt ${i}/${attempts})"
             echo "  attempt ${i}/${attempts}…"
             sleep "$interval"
             continue
         fi
 
-        local health
-        health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$STACK_BACKEND_CONTAINER" 2>/dev/null || echo "missing")
-        case "$health" in
-            healthy)
-                ui_success "Backend health is healthy"
-                return 0
-                ;;
-            unhealthy)
-                ui_error "Backend container is unhealthy."
-                docker inspect -f '{{range .State.Health.Log}}{{println .End .ExitCode .Output}}{{end}}' "$STACK_BACKEND_CONTAINER" 2>/dev/null | tail -5 || true
-                docker logs --tail 60 "$STACK_BACKEND_CONTAINER" || true
-                return 1
-                ;;
-            none|missing)
-                ui_error "No Docker healthcheck on ${STACK_BACKEND_CONTAINER}. Define one in compose (backend.healthcheck) and redeploy."
-                return 1
-                ;;
-        esac
-        echo "  attempt ${i}/${attempts}… (status: ${health})"
+        local id health all_healthy=1 any_unhealthy=0 any_missing_hc=0
+        while IFS= read -r id; do
+            [[ -z "$id" ]] && continue
+            health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null || echo "missing")
+            case "$health" in
+                healthy) ;;
+                unhealthy)
+                    any_unhealthy=1
+                    all_healthy=0
+                    ;;
+                none|missing)
+                    any_missing_hc=1
+                    all_healthy=0
+                    ;;
+                *)
+                    all_healthy=0
+                    ;;
+            esac
+        done <<< "$ids"
+
+        if [[ "$any_unhealthy" -eq 1 ]]; then
+            ui_error "One or more backend replicas are unhealthy."
+            stack_compose ps backend || true
+            stack_compose logs --tail 60 backend || true
+            return 1
+        fi
+        if [[ "$any_missing_hc" -eq 1 ]]; then
+            ui_error "Backend replicas missing healthchecks. Define backend.healthcheck and redeploy."
+            return 1
+        fi
+        if [[ "$all_healthy" -eq 1 ]]; then
+            ui_success "All backend replicas are healthy"
+            return 0
+        fi
+        echo "  attempt ${i}/${attempts}… (waiting for healthy replicas)"
         sleep "$interval"
     done
     ui_error "Backend did not become healthy in time"

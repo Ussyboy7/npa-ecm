@@ -236,8 +236,28 @@ export function DocumentSidebar({
 
           {activeTab === "details" && (
             <div className="space-y-3 min-w-0">
-              {document.drmRights?.policy_name ? (
-                <DocumentDrmBanner rights={document.drmRights} />
+              {(document.effectiveRights?.policy_name || document.drmRights?.policy_name) ? (
+                <DocumentDrmBanner
+                  rights={{
+                    policy_name:
+                      document.effectiveRights?.policy_name || document.drmRights?.policy_name || null,
+                    view_only: Boolean(
+                      document.effectiveRights?.view_only ?? document.drmRights?.view_only,
+                    ),
+                    watermark_text:
+                      document.effectiveRights?.watermark_text ||
+                      document.drmRights?.watermark_text ||
+                      "",
+                    expired: Boolean(
+                      document.effectiveRights?.expired ?? document.drmRights?.expired,
+                    ),
+                    message:
+                      document.effectiveRights?.message || document.drmRights?.message || "",
+                    inherited: Boolean(
+                      document.effectiveRights?.inherited ?? document.drmRights?.inherited,
+                    ),
+                  }}
+                />
               ) : null}
               {document.effectiveRights && (
                 <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2">
@@ -255,6 +275,11 @@ export function DocumentSidebar({
                     {document.effectiveRights.can_replace_version && <Badge variant="secondary" className="text-[11px]">Replace versions</Badge>}
                     {document.effectiveRights.can_manage_sharing && <Badge variant="secondary" className="text-[11px]">Manage sharing</Badge>}
                   </div>
+                  {document.effectiveRights.inherited ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Inherited from {document.sensitivity} classification
+                    </p>
+                  ) : null}
                   {document.effectiveRights.watermark_text && (
                     <p className="text-xs text-muted-foreground">Watermark: {document.effectiveRights.watermark_text}</p>
                   )}

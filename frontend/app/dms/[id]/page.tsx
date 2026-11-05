@@ -25,6 +25,8 @@ import {
   getDocumentAccessLogs,
   downloadDocumentVersion,
   canDownloadDocument,
+  canAccessExtractedText,
+  canCopyDocumentText,
   type DocumentRecord,
   type DocumentVersion,
   type DocumentAccessLog,
@@ -463,6 +465,11 @@ const DocumentDetailContent = () => {
           onClose={() => setPreviewVersion(null)}
           documentId={document.id}
           allowDownload={canDownloadDocument(document)}
+          allowExtractedText={canAccessExtractedText(document)}
+          allowCopyText={canCopyDocumentText(document)}
+          watermarkText={
+            document.effectiveRights?.watermark_text || document.drmRights?.watermark_text || null
+          }
           onVersionCreated={async (updated) => {
             setDocument(updated);
             setPreviewVersion(null);
