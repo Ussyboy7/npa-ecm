@@ -382,3 +382,46 @@ class DrmPdfWatermarkTests(APITestCase):
         self.assertNotEqual(original, restricted)
         # Encrypted PDFs typically include Encrypt dictionary
         self.assertIn(b"/Encrypt", restricted)
+
+
+
+class DocumentVisibilityNullOrgTests(APITestCase):
+    """A user with no division/department must not match permission rows that lack those FKs."""
+
+    def setUp(self):
+        from organization.models import Directorate, Division
+
+        directorate = Directorate.objects.create(name="Visibility Test Directorate", code="VTDIR")
+        self.division = Division.objects.create(directorate=directorate, name="Visibility Test Division", code="VTD")
+        self.author = User.objects.create_user(
+            username="vis_author", email="vis_author@npa.gov.ng", password="pass12345"
+        )
+        # High-grade user with no division or department, so the confidential branch applies.
+        self.orgless_user = User.objects.create_user(
+            username="vis_orgless",
+            email="vis_orgless@npa.gov.ng",
+            password="pass12345",
+            grade_level="MSS5",
+        )
+        self.document = Document.objects.create(
+            title="Division-only Confidential Report",
+            document_type=Document.DocumentType.REPORT,
+            status=Document.DocumentStatus.DRAFT,
+            sensitivity=Document.Sensitivity.CONFIDENTIAL,
+            author=self.author,
+        )
+        # Permission shared only with a division; its departments/users are empty.
+        permission = DocumentPermission.objects.create(
+            document=self.document,
+            access=DocumentPermission.AccessLevel.READ,
+        )
+        permission.divisions.add(self.division)
+
+    def test_user_without_division_does_not_see_division_only_document(self):
+        self.assertIsNone(self.orgless_user.division_id)
+        self.assertIsNone(self.orgless_user.department_id)
+        self.client.force_authenticate(user=self.orgless_user)
+        response = self.client.get(reverse("api_v1:document-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {str(item["id"]) for item in response.data.get("results", response.data)}
+        self.assertNotIn(str(self.document.id), ids)

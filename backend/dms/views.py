@@ -354,7 +354,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if user.grade_level:
             visibility_filter |= Q(permissions__grade_levels__contains=[user.grade_level])
 
-        visibility_filter |= Q(sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL])
+        visibility_filter |= Q(sensitivity=Document.Sensitivity.PUBLIC)
 
         # Visibility rules:
         # - Public: All authenticated users (when published)
@@ -369,22 +369,23 @@ class DocumentViewSet(viewsets.ModelViewSet):
         )
         
         # Internal requires explicit permission - shared with specific depts/divs/directorates
-        has_internal_permission = (
-            Q(permissions__users=user) |
-            Q(permissions__divisions=user.division_id) |
-            Q(permissions__departments=user.department_id)
-        )
+        has_internal_permission = Q(permissions__users=user)
+        if user.division_id:
+            has_internal_permission |= Q(permissions__divisions=user.division_id)
+        if user.department_id:
+            has_internal_permission |= Q(permissions__departments=user.department_id)
         visibility_filter |= (
             Q(sensitivity=Document.Sensitivity.INTERNAL) & has_internal_permission
         )
         
         # Confidential: need grade level AND explicit permission
-        has_confidential_permission = (
-            Q(permissions__users=user) |
-            Q(permissions__divisions=user.division_id) |
-            Q(permissions__departments=user.department_id) |
-            Q(permissions__grade_levels__contains=[user.grade_level])
-        ) if user.grade_level else Q()
+        has_confidential_permission = Q(permissions__users=user)
+        if user.division_id:
+            has_confidential_permission |= Q(permissions__divisions=user.division_id)
+        if user.department_id:
+            has_confidential_permission |= Q(permissions__departments=user.department_id)
+        if user.grade_level:
+            has_confidential_permission |= Q(permissions__grade_levels__contains=[user.grade_level])
         
         if user.grade_level in SENSITIVITY_HIGH_CONFIDENTIAL_GRADES:
             visibility_filter |= (

@@ -177,13 +177,15 @@ def resolve_effective_document_rights(document, user=None) -> dict:
     if user and getattr(user, "is_authenticated", False):
         from .models import DocumentPermission
 
-        matches = DocumentPermission.objects.filter(document=document).filter(
-            Q(users=user)
-            | Q(divisions=getattr(user, "division_id", None))
-            | Q(departments=getattr(user, "department_id", None))
-            | Q(offices__memberships__user=user, offices__memberships__is_active=True)
-            | Q(grade_levels__contains=[getattr(user, "grade_level", "")])
-        ).values_list("access", flat=True)
+        matches_q = Q(users=user)
+        if getattr(user, "division_id", None):
+            matches_q |= Q(divisions=user.division_id)
+        if getattr(user, "department_id", None):
+            matches_q |= Q(departments=user.department_id)
+        matches_q |= Q(offices__memberships__user=user, offices__memberships__is_active=True)
+        if getattr(user, "grade_level", ""):
+            matches_q |= Q(grade_levels__contains=[user.grade_level])
+        matches = DocumentPermission.objects.filter(document=document).filter(matches_q).values_list("access", flat=True)
         access_levels = set(matches)
 
     if is_owner or is_superuser:
@@ -201,7 +203,7 @@ def resolve_effective_document_rights(document, user=None) -> dict:
         is_owner
         or is_superuser
         or access_level
-        or getattr(document, "sensitivity", "") in {"public", "internal"}
+        or getattr(document, "sensitivity", "") == "public"
         or (
             getattr(document, "status", "") == "published"
             and getattr(document, "sensitivity", "") == "public"
