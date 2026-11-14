@@ -1,10 +1,20 @@
 from django.test import TestCase
 from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
+from django.core.management import call_command
 from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.test import APIClient
+from organization.models import Directorate, Division, Office, OfficeMembership, Role
+from accounts.nominal_roll_mapping import resolve_office_code, resolve_role
 from .models import User, SealOTP
 from unittest.mock import patch
+from pathlib import Path
+import csv
+import tempfile
 
 
 class UserModelTests(TestCase):
@@ -44,6 +54,7 @@ class AuthAPITests(TestCase):
         self.assertIn("refresh", response.data)
         self.assertIn("npa_ecm_access_token", response.cookies)
         self.assertIn("npa_ecm_refresh_token", response.cookies)
+
 
     def test_login_failure(self):
         response = self.client.post(self.login_url, {
@@ -87,6 +98,523 @@ class AuthAPITests(TestCase):
         self.assertIn("npa_ecm_access_token", response.cookies)
         self.assertIn("npa_ecm_refresh_token", response.cookies)
 
+
+class InitialPasswordSetTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="firstlogin",
+            email="firstlogin@example.com",
+        )
+        self.user.set_unusable_password()
+        self.user.save(update_fields=["password"])
+        self.url = reverse("api_v1:initial_password_set")
+        self.uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+        self.token = default_token_generator.make_token(self.user)
+
+    def test_sets_password_and_consumes_token(self):
+        response = self.client.post(
+            self.url,
+            {
+                "uid": self.uid,
+                "token": self.token,
+                "new_password": "NewSecurePass123!",
+                "confirm_password": "NewSecurePass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewSecurePass123!"))
+        cache.clear()
+
+        retry = self.client.post(
+            self.url,
+            {
+                "uid": self.uid,
+                "token": self.token,
+                "new_password": "AnotherPass123!",
+                "confirm_password": "AnotherPass123!",
+            },
+            format="json",
+        )
+        self.assertEqual(retry.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_invalid_token(self):
+        response = self.client.post(
+            self.url,
+            {
+                "uid": self.uid,
+                "token": "invalid-token",
+                "new_password": "NewSecurePass123!",
+                "confirm_password": "NewSecurePass123!",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class NominalRollImportTests(TestCase):
+    def setUp(self):
+        self.md_role = Role.objects.create(name="Managing Director")
+        self.gm_role = Role.objects.create(name="General Manager")
+        self.agm_role = Role.objects.create(name="Assistant General Manager")
+
+        self.md = User.objects.create_user(
+            username="md",
+            email="md@npa.gov.ng",
+            password="ExistingPass123!",
+            first_name="Dr.",
+            last_name="Dantsoho",
+        )
+        self.md.system_role = self.md_role
+        self.md.save(update_fields=["system_role"])
+
+        self.gm = User.objects.create_user(
+            username="gmprocurement",
+            email="gm.procurement@npa.gov.ng",
+            password="ExistingPass123!",
+            first_name="Adedapo",
+            last_name="Adekunle",
+        )
+        self.gm.system_role = self.gm_role
+        self.gm.save(update_fields=["system_role"])
+
+        self.agm = User.objects.create_user(
+            username="agmsoftware",
+            email="agm.software@npa.gov.ng",
+            password="ExistingPass123!",
+            first_name="Fola",
+            last_name="Adeyinka",
+        )
+        self.agm.system_role = self.agm_role
+        self.agm.save(update_fields=["system_role"])
+
+        self.other = User.objects.create_user(
+            username="demo-other",
+            email="demo-other@npa.gov.ng",
+            password="ExistingPass123!",
+        )
+        self.legacy = User.objects.create_user(
+            username="legacy-unusable",
+            email="legacy@npa.gov.ng",
+            password=None,
+            first_name="Legacy",
+            last_name="User",
+            employee_id="8888",
+        )
+
+    def test_updates_known_admins_in_place_and_sets_default_password(self):
+        from openpyxl import Workbook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            workbook_path = tmp_path / "roll.xlsx"
+            links_path = tmp_path / "first-login.csv"
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.append(
+                [
+                    "Employee Number",
+                    "Person No.",
+                    "Title",
+                    "Surname",
+                    "First Name",
+                    "Middle Name",
+                    "Grade Level",
+                    "Designation",
+                    "Email Address",
+                ]
+            )
+            sheet.append(
+                [
+                    "3509",
+                    "6493",
+                    "Mr.",
+                    "DANTSOHO",
+                    "ABUBAKAR",
+                    "MOHAMMED",
+                    "MDCS",
+                    "MANAGING DIRECTOR",
+                    "a.dantosho@nigerianports.gov.ng",
+                ]
+            )
+            sheet.append(
+                [
+                    "3643",
+                    "6275",
+                    "Mr.",
+                    "ADEKUNLE",
+                    "ADEDAPO",
+                    "FELIX",
+                    "MSS1",
+                    "GENERAL MANAGER PROCUREMENT (HOD)",
+                    "f.adekunle@nigerianports.gov.ng",
+                ]
+            )
+            sheet.append(
+                [
+                    "9999",
+                    "A9999",
+                    "Ms.",
+                    "NEWPERSON",
+                    "ADA",
+                    "NGOZI",
+                    "SSS2",
+                    "OFFICER II",
+                    "ada.newperson@nigerianports.gov.ng",
+                ]
+            )
+            sheet.append(
+                [
+                    "8888",
+                    "A8888",
+                    "Mr.",
+                    "USER",
+                    "LEGACY",
+                    "",
+                    "SSS1",
+                    "OFFICER I",
+                    "legacy@npa.gov.ng",
+                ]
+            )
+            workbook.save(workbook_path)
+
+            call_command(
+                "import_nominal_roll",
+                workbook_path,
+                "--apply",
+                "--deactivate-missing",
+                "--first-login-out",
+                links_path,
+                "--first-login-base-url",
+                "https://ecm.example.gov.ng",
+            )
+
+            self.md.refresh_from_db()
+            self.assertEqual(self.md.employee_id, "3509")
+            self.assertEqual(self.md.email, "a.dantosho@nigerianports.gov.ng")
+            self.assertEqual(self.md.system_role_id, self.md_role.id)
+            self.assertTrue(self.md.check_password("ExistingPass123!"))
+
+            self.gm.refresh_from_db()
+            self.assertEqual(self.gm.employee_id, "3643")
+            self.assertEqual(self.gm.email, "f.adekunle@nigerianports.gov.ng")
+            self.assertEqual(self.gm.system_role_id, self.gm_role.id)
+            self.assertTrue(self.gm.check_password("ExistingPass123!"))
+
+            self.assertEqual(User.objects.filter(username="md").count(), 1)
+            self.assertEqual(User.objects.filter(username="gmprocurement").count(), 1)
+            new_user = User.objects.get(employee_id="9999")
+            self.assertTrue(new_user.check_password("ChangeMe123!"))
+            self.legacy.refresh_from_db()
+            self.assertTrue(self.legacy.check_password("ChangeMe123!"))
+            self.assertTrue(self.agm.is_active)
+            self.assertFalse(self.other.refresh_from_db() or self.other.is_active)
+            self.assertFalse(links_path.exists())
+
+    def test_reconcile_report_flags_placeholder_and_duplicate_emails(self):
+        from io import StringIO
+        from openpyxl import Workbook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            workbook_path = tmp_path / "roll.xlsx"
+            report_path = tmp_path / "reconciliation.csv"
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.append(
+                [
+                    "Employee Number",
+                    "Person No.",
+                    "Title",
+                    "Surname",
+                    "First Name",
+                    "Middle Name",
+                    "Grade Level",
+                    "Designation",
+                    "Email Address",
+                ]
+            )
+            sheet.append(
+                ["9701", "A9701", "Mr.", "ALPHA", "ONE", "", "SSS1", "OFFICER", "nan"]
+            )
+            sheet.append(
+                ["9702", "A9702", "Ms.", "BETA", "TWO", "", "SSS2", "OFFICER", "nan"]
+            )
+            sheet.append(
+                [
+                    "9703",
+                    "A9703",
+                    "Mr.",
+                    "GAMMA",
+                    "THREE",
+                    "",
+                    "SSS3",
+                    "OFFICER",
+                    "shared@nigerianports.gov.ng",
+                ]
+            )
+            sheet.append(
+                [
+                    "9704",
+                    "A9704",
+                    "Mrs.",
+                    "DELTA",
+                    "FOUR",
+                    "",
+                    "SSS4",
+                    "OFFICER",
+                    "shared@nigerianports.gov.ng",
+                ]
+            )
+            workbook.save(workbook_path)
+
+            call_command(
+                "reconcile_nominal_roll",
+                workbook_path,
+                "--out",
+                report_path,
+                stdout=StringIO(),
+            )
+            with report_path.open(newline="", encoding="utf-8") as handle:
+                rows = {row["employee_number"]: row for row in csv.DictReader(handle)}
+
+            self.assertEqual(rows["9701"]["action"], "create")
+            self.assertEqual(rows["9701"]["email"], "")
+            self.assertIn("placeholder", rows["9701"]["note"])
+            self.assertEqual(rows["9702"]["action"], "create")
+            self.assertEqual(rows["9704"]["action"], "skip_duplicate_email")
+            self.assertEqual(rows["9704"]["note"], "Email first appears on row 4.")
+
+    def test_import_treats_email_placeholder_as_missing(self):
+        from io import StringIO
+        from openpyxl import Workbook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workbook_path = Path(tmp) / "roll.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.append(
+                [
+                    "Employee Number",
+                    "Person No.",
+                    "Title",
+                    "Surname",
+                    "First Name",
+                    "Middle Name",
+                    "Grade Level",
+                    "Designation",
+                    "Email Address",
+                ]
+            )
+            sheet.append(
+                ["9705", "A9705", "Mr.", "EPSILON", "FIVE", "", "SSS1", "OFFICER", "nan"]
+            )
+            workbook.save(workbook_path)
+
+            call_command(
+                "import_nominal_roll",
+                workbook_path,
+                "--apply",
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+
+            created = User.objects.get(employee_id="9705")
+            self.assertEqual(created.email, "")
+            self.assertEqual(created.username, "npa9705")
+            self.assertTrue(created.check_password("ChangeMe123!"))
+
+    def test_management_name_match_is_not_used_for_non_management_grade(self):
+        from io import StringIO
+        from openpyxl import Workbook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workbook_path = Path(tmp) / "roll.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.append(
+                [
+                    "Employee Number",
+                    "Person No.",
+                    "Title",
+                    "Surname",
+                    "First Name",
+                    "Middle Name",
+                    "Grade Level",
+                    "Designation",
+                    "Email Address",
+                ]
+            )
+            sheet.append(
+                [
+                    "9706",
+                    "A9706",
+                    "Mr.",
+                    "ADEKUNLE",
+                    "ADEDAPO",
+                    "",
+                    "SSS2",
+                    "SENIOR ERM OFFICER",
+                    "unique.adedapo@nigerianports.gov.ng",
+                ]
+            )
+            workbook.save(workbook_path)
+
+            call_command(
+                "import_nominal_roll",
+                workbook_path,
+                "--apply",
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+
+            self.gm.refresh_from_db()
+            self.assertNotEqual(self.gm.employee_id, "9706")
+            created = User.objects.get(employee_id="9706")
+            self.assertEqual(created.system_role_id, None)
+
+
+class NominalRollMappingTests(TestCase):
+    def test_role_is_selected_by_grade_and_secretary_is_overridden(self):
+        self.assertEqual(resolve_role("MDCS", "MANAGING DIRECTOR"), "Managing Director")
+        self.assertEqual(resolve_role("MSS1", "GENERAL MANAGER ENGINEERING"), "General Manager")
+        self.assertEqual(resolve_role("MSS2", "ASST. GENERAL MANAGER"), "Assistant General Manager")
+        self.assertEqual(resolve_role("SSS4", "SENIOR AUDITOR"), "Officer II")
+        self.assertEqual(resolve_role("MSS4", "PRIN PERSONAL SECRETARY"), "Secretary")
+        self.assertEqual(resolve_role("JSS1", "CHIEF PATROLMAN"), "Staff I")
+
+    def test_office_mapping_uses_grade_tier_and_unit(self):
+        self.assertEqual(
+            resolve_office_code("MSS1", "GENERAL MANAGER PROCUREMENT (HOD)"),
+            "OFF_DIV_PROCUREMENT",
+        )
+        self.assertEqual(
+            resolve_office_code("SSS2", "SENIOR AUDITOR"),
+            "OFF_DIV_AUDIT",
+        )
+        self.assertEqual(
+            resolve_office_code("SSS2", "HR OPERATIONS OFFICER I"),
+            "OFF_DEPT_HR_MGT",
+        )
+        self.assertEqual(
+            resolve_office_code("MDCS", "MANAGING DIRECTOR"),
+            "OFF_MD",
+        )
+        self.assertEqual(
+            resolve_office_code("EDCS", "EXECUTIVE DIR. MARINE & OPERATIONS"),
+            "OFF_DIR_EDMO",
+        )
+        self.assertIsNone(resolve_office_code("SSS2", "GENERAL DUTY OFFICER"))
+
+
+class NominalRollRoleAssignmentCommandTests(TestCase):
+    def setUp(self):
+        self.directorate = Directorate.objects.create(
+            name="Engineering & Technical Services",
+            code="ENG",
+        )
+        self.division = Division.objects.create(
+            directorate=self.directorate,
+            name="Engineering & Technical Services",
+            code="ENG",
+        )
+        self.office = Office.objects.create(
+            name="Engineering & Technical Services Division Office",
+            code="OFF_DIV_ENGINEERING",
+            office_type=Office.OfficeTier.DIVISION,
+            directorate=self.directorate,
+            division=self.division,
+        )
+        self.role = Role.objects.create(
+            name="General Manager",
+            permissions={"can_approve": True, "can_register_correspondence": True},
+        )
+        self.user = User.objects.create_user(
+            username="rollmanager",
+            email="rollmanager@nigerianports.gov.ng",
+            employee_id="8801",
+            password="ExistingPass123!",
+        )
+
+    def _workbook(self, path):
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(
+            [
+                "Employee Number",
+                "Person No.",
+                "Title",
+                "Surname",
+                "First Name",
+                "Middle Name",
+                "Grade Level",
+                "Designation",
+                "Email Address",
+            ]
+        )
+        sheet.append(
+            [
+                "8801",
+                "A8801",
+                "Mr.",
+                "ROLL",
+                "MANAGER",
+                "",
+                "MSS1",
+                "GENERAL MANAGER ENGINEERING (HOD)",
+                "rollmanager@nigerianports.gov.ng",
+            ]
+        )
+        workbook.save(path)
+
+    def test_apply_fills_blank_role_and_office_and_is_idempotent(self):
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            workbook_path = tmp_path / "roll.xlsx"
+            report_path = tmp_path / "mapping.csv"
+            self._workbook(workbook_path)
+
+            call_command(
+                "assign_nominal_roll_roles",
+                workbook_path,
+                "--apply",
+                "--out",
+                report_path,
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+            self.user.refresh_from_db()
+            self.assertEqual(self.user.system_role_id, self.role.id)
+            self.assertEqual(self.user.directorate_id, self.directorate.id)
+            self.assertEqual(self.user.division_id, self.division.id)
+            membership = OfficeMembership.objects.get(user=self.user, office=self.office)
+            self.assertTrue(membership.is_primary)
+            self.assertTrue(membership.can_approve)
+
+            call_command(
+                "assign_nominal_roll_roles",
+                workbook_path,
+                "--apply",
+                "--out",
+                report_path,
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+            self.assertEqual(
+                OfficeMembership.objects.filter(user=self.user).count(), 1
+            )
+            self.user.refresh_from_db()
+            self.assertEqual(self.user.system_role_id, self.role.id)
 
 class SealOTPModelTests(TestCase):
     def setUp(self):

@@ -51,6 +51,14 @@ export interface SLATargets {
   low: number;
 }
 
+export interface SLADefaultSettings {
+  targetHours: number;
+  warningThresholdPercent: number;
+  criticalThresholdPercent: number;
+}
+
+export type SLADefaults = Record<keyof SLATargets, SLADefaultSettings>;
+
 export interface SLAChoices {
   priorities: { value: string; label: string }[];
   correspondenceTypes: { value: string; label: string }[];
@@ -466,10 +474,17 @@ export const invalidateSLATargetsCache = (): void => {
 };
 
 export const DEFAULT_SLA_TARGETS: SLATargets = {
-  urgent: 48,
-  high: 72,
-  medium: 120,
-  low: 168,
+  urgent: 8,
+  high: 24,
+  medium: 48,
+  low: 72,
+};
+
+export const DEFAULT_SLA_DEFAULTS: SLADefaults = {
+  urgent: { targetHours: 8, warningThresholdPercent: 75, criticalThresholdPercent: 90 },
+  high: { targetHours: 24, warningThresholdPercent: 75, criticalThresholdPercent: 90 },
+  medium: { targetHours: 48, warningThresholdPercent: 75, criticalThresholdPercent: 90 },
+  low: { targetHours: 72, warningThresholdPercent: 75, criticalThresholdPercent: 90 },
 };
 
 export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
@@ -511,15 +526,43 @@ export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
   return request;
 };
 
-export const updateSLATargets = async (targets: SLATargets): Promise<{ updated: SLAConfiguration[] }> => {
-  const response = await apiFetch<{ updated: unknown[] }>('/analytics/sla-config/bulk_update/', {
+export const updateSLATargets = async (targets: SLATargets): Promise<void> => {
+  await apiFetch('/analytics/sla-config/bulk_update/', {
     method: 'POST',
     body: JSON.stringify(targets),
   });
   invalidateSLATargetsCache();
-  return {
-    updated: (Array.isArray(response.updated) ? response.updated : []).filter(isRecord).map(mapSLAConfiguration),
-  };
+};
+
+export const fetchSLADefaults = async (): Promise<SLADefaults> => {
+  try {
+    const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/defaults/');
+    const read = (priority: keyof SLATargets): SLADefaultSettings => {
+      const fallback = DEFAULT_SLA_DEFAULTS[priority];
+      const raw = response[priority];
+      if (!isRecord(raw)) return fallback;
+      return {
+        targetHours: asNumber(raw.target_hours, fallback.targetHours),
+        warningThresholdPercent: asNumber(
+          raw.warning_threshold_percent,
+          fallback.warningThresholdPercent,
+        ),
+        criticalThresholdPercent: asNumber(
+          raw.critical_threshold_percent,
+          fallback.criticalThresholdPercent,
+        ),
+      };
+    };
+    return {
+      urgent: read('urgent'),
+      high: read('high'),
+      medium: read('medium'),
+      low: read('low'),
+    };
+  } catch (err) {
+    logError('Failed to fetch SLA defaults, using defaults', err);
+    return DEFAULT_SLA_DEFAULTS;
+  }
 };
 
 export const fetchSLAChoices = async (): Promise<SLAChoices> => {

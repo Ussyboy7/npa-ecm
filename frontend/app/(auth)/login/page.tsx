@@ -2,7 +2,7 @@
 import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { logError } from '@/lib/client-logger';
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import Image from "next/image";
 import Link from "next/link";
@@ -30,7 +30,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
-import { login, clearTokens, isMfaChallenge, verifyLoginMFA, requestLoginMFAEmail, getOidcLoginUrl, fetchOidcStatus } from "@/lib/api-client";
+import { login, clearTokens, isMfaChallenge, verifyLoginMFA, requestLoginMFAEmail, getOidcLoginUrl, fetchOidcStatus, restoreAuthCookies } from "@/lib/api-client";
 import { getStoredRedirectPath } from "@/lib/auth-errors";
 
 /** Valid route prefixes for post-login redirect. Invalid or unknown paths fall back to /dashboard to avoid 404s. */
@@ -111,12 +111,26 @@ function LoginForm() {
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
   const [mfaMethods, setMfaMethods] = useState<string[]>([]);
   const [mfaCode, setMfaCode] = useState("");
-  const [mfaMethod, setMfaMethod] = useState<"email" | "totp">("email");
+  const [mfaMethod, setMfaMethod] = useState<"email" | "totp" | "backup_code">("email");
   const [mfaEmailSent, setMfaEmailSent] = useState(false);
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const ssoError = searchParams?.get("sso_error");
 
   const personaMap = useMemo(() => new Map(DEMO_PERSONAS.map((persona) => [persona.id, persona])), []);
+  const resumedRef = useRef(false);
+
+  // The proxy gates routes on the auth cookie, which can lapse while the
+  // session itself is still valid in storage. When it bounced us here with a
+  // ?redirect= target, restore the cookie and continue instead of asking the
+  // user to sign in again.
+  useEffect(() => {
+    const target = searchParams?.get('redirect');
+    if (!target || resumedRef.current) return;
+    resumedRef.current = true;
+    void restoreAuthCookies().then((ok) => {
+      if (ok) window.location.replace(resolveRedirectPath(target));
+    });
+  }, [searchParams]);
 
   useEffect(() => {
     void fetchOidcStatus()
@@ -168,7 +182,13 @@ function LoginForm() {
       if (isMfaChallenge(result)) {
         setMfaChallengeId(result.challenge_id);
         setMfaMethods(result.methods);
-        setMfaMethod(result.methods.includes("totp") ? "totp" : "email");
+        setMfaMethod(
+          result.methods.includes("totp")
+            ? "totp"
+            : result.methods.includes("email")
+            ? "email"
+            : "backup_code",
+        );
         toast.message("Enter your verification code to complete sign-in.");
         return;
       }
@@ -316,13 +336,21 @@ function LoginForm() {
                   {mfaMethods.length > 1 && (
                     <div className="space-y-2">
                       <Label>Verification method</Label>
-                      <Select value={mfaMethod} onValueChange={(v) => setMfaMethod(v as "email" | "totp")}>
+                      <Select
+                        value={mfaMethod}
+                        onValueChange={(v) =>
+                          setMfaMethod(v as "email" | "totp" | "backup_code")
+                        }
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {mfaMethods.includes("email") && <SelectItem value="email">Email code</SelectItem>}
                           {mfaMethods.includes("totp") && <SelectItem value="totp">Authenticator app</SelectItem>}
+                          {mfaMethods.includes("backup_code") && (
+                            <SelectItem value="backup_code">Backup code</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -331,11 +359,11 @@ function LoginForm() {
                     <Label htmlFor="mfaCode">Verification code</Label>
                     <Input
                       id="mfaCode"
-                      inputMode="numeric"
+                      inputMode={mfaMethod === "backup_code" ? "text" : "numeric"}
                       autoComplete="one-time-code"
                       value={mfaCode}
                       onChange={(e) => setMfaCode(e.target.value)}
-                      placeholder="6-digit code"
+                      placeholder={mfaMethod === "backup_code" ? "XXXX-XXXX" : "6-digit code"}
                     />
                   </div>
                   {mfaMethod === "email" && mfaMethods.includes("email") && (

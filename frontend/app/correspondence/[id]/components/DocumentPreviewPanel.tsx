@@ -575,38 +575,43 @@ export const DocumentPreviewPanel = ({
                   <div
                     key={doc.id}
                     className={cn(
-                      'flex items-center gap-2 px-2.5 py-2 rounded-xl transition-colors cursor-pointer min-w-0',
+                      'flex items-center gap-1 px-1.5 py-1 rounded-xl transition-colors min-w-0',
                       isSelected ? 'bg-primary/6' : 'hover:bg-muted/40',
                     )}
-                    onClick={() => {
-                      handleViewLinkedDocument(doc.id);
-                      setDocumentSurface('preview');
-                    }}
                   >
-                    <FileText className="h-4 w-4 text-primary flex-shrink-0" />
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                      <p className={cn(corrType.fileTitle, 'truncate')} title={doc.title}>
-                        {doc.title}
-                      </p>
-                      <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', corrType.caption)}>
-                        <Badge
-                          variant={doc.role === 'primary' ? 'default' : 'secondary'}
-                          className="text-[10px] h-4 px-1 flex-shrink-0"
-                        >
-                          {doc.role === 'primary' ? 'Primary' : 'Linked'}
-                        </Badge>
-                        {version?.versionNumber != null && (
-                          <span>v{version.versionNumber}</span>
-                        )}
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
+                      className="flex flex-1 items-center gap-2 min-w-0 rounded-lg px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => {
+                        handleViewLinkedDocument(doc.id);
+                        setDocumentSurface('preview');
+                      }}
+                    >
+                      <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <p className={cn(corrType.fileTitle, 'truncate')} title={doc.title}>
+                          {doc.title}
+                        </p>
+                        <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', corrType.caption)}>
+                          <Badge
+                            variant={doc.role === 'primary' ? 'default' : 'secondary'}
+                            className="text-[10px] h-4 px-1 flex-shrink-0"
+                          >
+                            {doc.role === 'primary' ? 'Primary' : 'Linked'}
+                          </Badge>
+                          {version?.versionNumber != null && (
+                            <span>v{version.versionNumber}</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
                     {canDl && (
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 flex-shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           void handleLinkedVersionDownload(
                             version?.id,
                             version?.fileName || doc.title,
@@ -621,8 +626,7 @@ export const DocumentPreviewPanel = ({
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={() => {
                         router.push(`/dms/${doc.id}`);
                       }}
                       aria-label={`Open ${doc.title} in DMS`}
@@ -668,38 +672,43 @@ export const DocumentPreviewPanel = ({
                   <div
                     key={attachment.id || idx}
                     className={cn(
-                      'flex items-center gap-2 px-2.5 py-2 rounded-xl transition-colors cursor-pointer min-w-0',
+                      'flex items-center gap-1 px-1.5 py-1 rounded-xl transition-colors min-w-0',
                       isSelected ? 'bg-primary/6' : 'hover:bg-muted/40',
                     )}
-                    onClick={() => {
-                      handleViewAttachment(originalIndex);
-                      setDocumentSurface('preview');
-                    }}
                   >
-                    <FileIcon className="h-4 w-4 text-primary flex-shrink-0" />
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                      <p
-                        className={cn(corrType.fileTitle, 'truncate')}
-                        title={attachment.fileName || 'Attachment'}
-                      >
-                        {attachment.fileName || 'Attachment'}
-                      </p>
-                      <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', corrType.caption)}>
-                        <Badge variant="outline" className="text-[10px] h-4 px-1 flex-shrink-0">
-                          {fileTypeLabel}
-                        </Badge>
-                        {attachment.fileSize && (
-                          <span>{formatFileSize(attachment.fileSize)}</span>
-                        )}
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
+                      className="flex flex-1 items-center gap-2 min-w-0 rounded-lg px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => {
+                        handleViewAttachment(originalIndex);
+                        setDocumentSurface('preview');
+                      }}
+                    >
+                      <FileIcon className="h-4 w-4 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <p
+                          className={cn(corrType.fileTitle, 'truncate')}
+                          title={attachment.fileName || 'Attachment'}
+                        >
+                          {attachment.fileName || 'Attachment'}
+                        </p>
+                        <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', corrType.caption)}>
+                          <Badge variant="outline" className="text-[10px] h-4 px-1 flex-shrink-0">
+                            {fileTypeLabel}
+                          </Badge>
+                          {attachment.fileSize && (
+                            <span>{formatFileSize(attachment.fileSize)}</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
                     {attachment.hasFile && attachment.id ? (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={() => {
                         void handleForceDownload(attachment.fileName, attachment.id);
                       }}
                       aria-label={`Download ${attachment.fileName}`}
@@ -1121,12 +1130,14 @@ export const DocumentPreviewPanel = ({
                 if (documentContentHtml && documentContentHtml.trim().length > 0) {
                   return (
                     <div
-                      className="relative h-full overflow-auto p-6 doc-paper max-w-none"
+                      className="h-full overflow-auto bg-muted/30 p-3 sm:p-6"
                       aria-label="Document content preview"
                       style={{ colorScheme: 'light' }}
                     >
-                      {watermarkOverlay}
-                      <div dangerouslySetInnerHTML={{ __html: documentContentHtml }} />
+                      <div className="doc-sheet doc-paper relative">
+                        {watermarkOverlay}
+                        <div dangerouslySetInnerHTML={{ __html: documentContentHtml }} />
+                      </div>
                     </div>
                   );
                 }
@@ -1136,12 +1147,14 @@ export const DocumentPreviewPanel = ({
                   if (selectedVersion.contentHtml?.trim() && !selectedVersion.hasFile) {
                     return (
                       <div
-                        className="relative h-full overflow-auto p-6 doc-paper max-w-none"
+                        className="h-full overflow-auto bg-muted/30 p-3 sm:p-6"
                         aria-label="Document content preview"
                         style={{ colorScheme: 'light' }}
                       >
-                        {watermarkOverlay}
-                        <div dangerouslySetInnerHTML={{ __html: sanitizeThemedHtml(selectedVersion.contentHtml) }} />
+                        <div className="doc-sheet doc-paper relative">
+                          {watermarkOverlay}
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeThemedHtml(selectedVersion.contentHtml) }} />
+                        </div>
                       </div>
                     );
                   }
@@ -1181,20 +1194,22 @@ export const DocumentPreviewPanel = ({
                 if (bodyHtml) {
                   return (
                     <div
-                      className="h-full overflow-auto p-6 doc-paper"
+                      className="h-full overflow-auto bg-muted/30 p-3 sm:p-6"
                       aria-label="Correspondence body"
                       style={{ colorScheme: 'light' }}
                     >
-                      <div className="mb-4 pb-3 border-b border-border/60">
-                        <h4 className="text-sm font-semibold text-muted-foreground">Original Document</h4>
-                        {correspondence.subject ? (
-                          <p className="text-sm font-medium mt-1 text-foreground">{correspondence.subject}</p>
-                        ) : null}
+                      <div className="doc-sheet doc-paper mx-auto">
+                        <div className="mb-4 pb-3 border-b border-neutral-200">
+                          <h4 className="text-sm font-semibold text-neutral-500">Original Document</h4>
+                          {correspondence.subject ? (
+                            <p className="text-sm font-medium mt-1 text-neutral-900">{correspondence.subject}</p>
+                          ) : null}
+                        </div>
+                        <div
+                          className="prose prose-sm max-w-none text-neutral-900"
+                          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+                        />
                       </div>
-                      <div
-                        className="prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: bodyHtml }}
-                      />
                     </div>
                   );
                 }
@@ -1205,13 +1220,14 @@ export const DocumentPreviewPanel = ({
                 if (treatmentResponse && !isFallbackOnly) {
                   return (
                     <div
-                      className="h-full overflow-auto p-6"
+                      className="h-full overflow-auto bg-muted/30 p-3 sm:p-6"
                       aria-label="Treatment response content"
+                      style={{ colorScheme: 'light' }}
                     >
-                      <div className="mb-4 pb-4 border-b border-border">
-                        <h4 className="text-sm font-semibold text-muted-foreground mb-2">Treatment Response</h4>
-                      </div>
-                      <div className="rounded-lg border border-border overflow-hidden doc-paper p-4">
+                      <div className="doc-sheet doc-paper mx-auto">
+                        <div className="mb-4 pb-4 border-b border-neutral-200">
+                          <h4 className="text-sm font-semibold text-neutral-500 mb-2">Treatment Response</h4>
+                        </div>
                         <div
                           className={cn(
                             'prose prose-sm max-w-none text-neutral-900',

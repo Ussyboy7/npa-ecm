@@ -14,6 +14,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { apiFetch } from "@/lib/api-client";
 import { canDispatchCorrespondence, formatDateShort } from "@/lib/correspondence-helpers";
 import { PRIORITY_VALUES } from "@/lib/constants";
@@ -52,6 +53,7 @@ const RegisteredCorrespondencePage = () => {
   const router = useRouter();
   const { currentUser } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
+  const visibility = useSidebarVisibility();
   const { divisions } = useOrganization();
   const { users } = useOrgUsers();
   const [items, setItems] = useState<Correspondence[]>([]);
@@ -101,6 +103,7 @@ const RegisteredCorrespondencePage = () => {
         page: String(pagination.page),
         page_size: String(pagination.pageSize),
         ordering: `${sortPrefix}${sortBy}`,
+        registered_only: "true",
       });
 
       if (debouncedSearch) params.append("search", debouncedSearch);
@@ -110,7 +113,7 @@ const RegisteredCorrespondencePage = () => {
       if (dateTo) params.append("received_date_to", dateTo);
 
       const response = await apiFetch<Record<string, unknown>>(
-        `/correspondence/items/?${params.toString()}`,
+        `/correspondence/items/registered/?${params.toString()}`,
       );
       const results = Array.isArray(response.results) ? response.results : [];
       setItems(results.map(mapApiCorrespondence));
@@ -153,7 +156,7 @@ const RegisteredCorrespondencePage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, statusFilter, priorityFilter, dateFrom, dateTo, sortBy, sortOrder]);
 
-  const canViewRegistry = permissions.canViewCorrespondenceRegistry;
+  const canViewRegistry = visibility.showRegisteredCorrespondence && permissions.canViewCorrespondenceRegistry;
   const canRegister = Boolean(permissions.canRegisterCorrespondence);
 
   if (!currentUser) return null;

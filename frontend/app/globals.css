@@ -177,6 +177,45 @@ All colors MUST be HSL.
     color: #1d4ed8;
   }
 
+  /**
+   * Preview sheet — a page-sized white surface centered on a muted backdrop.
+   * Width matches US Letter (8.5in) with a printable 1in text column.
+   */
+  .doc-sheet {
+    width: 100%;
+    max-width: 8.5in;
+    min-height: 11in;
+    margin-inline: auto;
+    padding: 1in 0.9in;
+    background-color: #ffffff;
+    color: #171717;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.08), 0 12px 32px rgb(15 23 42 / 0.12);
+  }
+
+  .doc-sheet img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Signatures are captured large; keep them a signature-sized mark on the page. */
+  .doc-sheet img[alt="Signature" i],
+  .doc-sheet img[src*="signature" i] {
+    width: auto;
+    height: auto;
+    max-width: min(220px, 100%);
+    max-height: 88px;
+    object-fit: contain;
+  }
+
+  @media print {
+    .doc-sheet {
+      max-width: none;
+      min-height: 0;
+      padding: 0;
+      box-shadow: none;
+    }
+  }
+
   :focus-visible {
     @apply outline-none ring-0;
   }

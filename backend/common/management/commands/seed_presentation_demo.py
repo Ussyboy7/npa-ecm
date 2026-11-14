@@ -291,7 +291,7 @@ class Command(BaseCommand):
 
         # ── Step 1: Inward Correspondence ──────────────────────────
         corr_securenet, _ = Correspondence.objects.update_or_create(
-            reference_number="NPA/CORR/2025/SECURENET-001",
+            reference_number="HQ/AGM/ICTNETWORKS/AD/001",
             defaults={
                 "subject": "Proposal for Procurement of Network Infrastructure Upgrade for Lagos Port Complex",
                 "body_html": """
@@ -808,7 +808,7 @@ class Command(BaseCommand):
 
         # Outward correspondence
         corr_outward, _ = Correspondence.objects.update_or_create(
-            reference_number="NPA/CORR/2025/SECURENET-002",
+            reference_number="HQ/AGM/ICTNETWORKS/AD/002",
             defaults={
                 "subject": "Letter of Award — Network Infrastructure Upgrade for Lagos Port Complex",
                 "body_html": "<p>Letter of Award dispatched to SecureNet Technologies Ltd.</p>",
@@ -1246,6 +1246,7 @@ class Command(BaseCommand):
                 user=self.md,
                 correspondence=correspondence,
                 request=None,
+                minute=minute,
             )
             minute.seal_applied = seal
             minute.save(update_fields=["seal_applied"])

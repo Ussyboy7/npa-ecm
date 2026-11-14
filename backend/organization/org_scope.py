@@ -107,28 +107,47 @@ def correspondence_org_boundary_q(scope: UserOrgScope) -> Q | None:
     if scope.level == "all":
         return None
     if scope.level == "directorate" and scope.directorate_id:
-        return Q(division__directorate_id=scope.directorate_id) | Q(
-            department__division__directorate_id=scope.directorate_id
+        return (
+            Q(division__directorate_id=scope.directorate_id)
+            | Q(department__division__directorate_id=scope.directorate_id)
+            | Q(owning_office__directorate_id=scope.directorate_id)
+            | Q(current_office__directorate_id=scope.directorate_id)
         )
     if scope.level == "division" and scope.division_id:
-        return Q(division_id=scope.division_id) | Q(department__division_id=scope.division_id)
+        return (
+            Q(division_id=scope.division_id)
+            | Q(department__division_id=scope.division_id)
+            | Q(owning_office__division_id=scope.division_id)
+            | Q(current_office__division_id=scope.division_id)
+        )
     if scope.level == "department" and scope.department_id:
-        return Q(department_id=scope.department_id)
+        return (
+            Q(department_id=scope.department_id)
+            | Q(owning_office__department_id=scope.department_id)
+            | Q(current_office__department_id=scope.department_id)
+        )
     return Q()
 
 
 def correspondence_participation_q(user, office_ids: tuple = ()) -> Q:
-    """Touched / assigned / CC participation filter for correspondence."""
+    """Return correspondence created, routed, authored, or shared with the user."""
     from correspondence.models import CorrespondenceDistribution, Minute
 
     participation = Q(created_by=user) | Q(current_approver=user)
     if office_ids:
         participation |= Q(owning_office_id__in=office_ids) | Q(current_office_id__in=office_ids)
     minute_ids = Minute.objects.filter(to_user=user).values_list("correspondence_id", flat=True)
+    authored_minute_ids = Minute.objects.filter(user=user).values_list(
+        "correspondence_id", flat=True
+    )
     distribution_ids = CorrespondenceDistribution.objects.filter(
         user=user, is_active=True
     ).values_list("correspondence_id", flat=True)
-    participation |= Q(id__in=minute_ids) | Q(id__in=distribution_ids)
+    participation |= (
+        Q(id__in=minute_ids)
+        | Q(id__in=authored_minute_ids)
+        | Q(id__in=distribution_ids)
+    )
     return participation
 
 

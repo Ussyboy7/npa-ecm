@@ -12,13 +12,19 @@ import {
   remindParallelBranch,
 } from "@/lib/correspondence-parallel";
 import type { ParallelBranch } from "@/lib/npa-structure";
-import { formatDateTime } from '@/lib/datetime';
+import { formatRoutingDateTime } from '@/lib/datetime';
 
 const STATUS_LABELS: Record<ParallelBranch["status"], string> = {
   pending: "Pending",
   overdue: "Overdue",
   completed: "Completed",
   force_completed: "Force completed",
+};
+
+const OUTCOME_LABELS: Record<"respond" | "treat" | "onward", string> = {
+  respond: "Respond",
+  treat: "Treat document",
+  onward: "Minute onward",
 };
 
 const statusBadgeVariant = (status: ParallelBranch["status"]) => {
@@ -30,11 +36,14 @@ const statusBadgeVariant = (status: ParallelBranch["status"]) => {
 interface ParallelRoutingStatusPanelProps {
   correspondenceId: string;
   onRefresh?: () => Promise<unknown> | void;
+  /** Reports the branch count so the parent can render an empty state. */
+  onBranchCountChange?: (count: number) => void;
 }
 
 export function ParallelRoutingStatusPanel({
   correspondenceId,
   onRefresh,
+  onBranchCountChange,
 }: ParallelRoutingStatusPanelProps) {
   const [branches, setBranches] = useState<ParallelBranch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,12 +54,14 @@ export function ParallelRoutingStatusPanel({
     try {
       const branchData = await fetchParallelBranches(correspondenceId);
       setBranches(branchData);
+      onBranchCountChange?.(branchData.length);
     } catch {
       setBranches([]);
+      onBranchCountChange?.(0);
     } finally {
       setLoading(false);
     }
-  }, [correspondenceId]);
+  }, [correspondenceId, onBranchCountChange]);
 
   useEffect(() => {
     void load();
@@ -105,7 +116,7 @@ export function ParallelRoutingStatusPanel({
     return (
       <div className="rounded-xl border border-dashed border-border/60 py-4 px-4 flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading parallel routing status...
+        Loading assignment status...
       </div>
     );
   }
@@ -117,15 +128,15 @@ export function ParallelRoutingStatusPanel({
       <div className="border-b border-border/60 px-4 py-3 pb-2">
         <p className="text-sm font-semibold flex items-center gap-2">
           <GitBranch className="h-4 w-4" />
-          Parallel Routing
+          Assigned separately
         </p>
-        <p className="text-xs text-muted-foreground mt-0.5">Per-branch response status and non-response actions</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Each recipient has their own instruction and expected outcome.</p>
       </div>
       <div className="space-y-3 p-4">
         <div className="space-y-2 rounded-md border border-border/70 p-3">
           <div className="flex items-center justify-between gap-2 text-sm">
             <span className="font-medium">
-              {summary.complete} of {summary.total} branches complete
+              {summary.complete} of {summary.total} assignments handled
             </span>
             {summary.overdue > 0 && (
               <Badge variant="destructive" className="gap-1">
@@ -159,8 +170,15 @@ export function ParallelRoutingStatusPanel({
                       <Badge variant={statusBadgeVariant(branch.status)} className="h-5 text-[10px]">
                         {STATUS_LABELS[branch.status]}
                       </Badge>
-                      <span>{branch.targetKind === "office" ? "Office branch" : "User branch"}</span>
-                      {branch.deadline && <span>Due {formatDateTime(branch.deadline)}</span>}
+                      <span>{branch.targetKind === "office" ? "Office assignment" : "Person assignment"}</span>
+                      <span>
+                        {branch.completedOutcome
+                          ? `Completed: ${OUTCOME_LABELS[branch.completedOutcome]}`
+                          : isClosed
+                            ? "Closed without a recorded action"
+                            : `Expects: ${OUTCOME_LABELS[branch.expectedOutcome]}`}
+                      </span>
+                      {branch.deadline && <span>Due {formatRoutingDateTime(branch.deadline)}</span>}
                     </div>
                   </div>
 

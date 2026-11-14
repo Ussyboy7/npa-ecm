@@ -6,6 +6,7 @@ export type StoredSignature = {
   imageData: string;
   fileName?: string;
   uploadedAt: string;
+  updatedAt?: string;
   sealOfficeName?: string;
   sealOfficeTitle?: string;
   sealPrefix?: string;
@@ -84,6 +85,7 @@ function toStoredSignature(response: BackendSignatureResponse): StoredSignature 
     imageData: response.signature_url || '',
     fileName: response.original_filename,
     uploadedAt: response.created_at,
+    updatedAt: response.updated_at,
     sealOfficeName: response.seal_office_name,
     sealOfficeTitle: response.seal_office_title,
     sealPrefix: response.seal_prefix,
@@ -130,6 +132,7 @@ export const updateSignatureSettings = async (
     sealPrefix?: string;
     require2fa?: boolean;
     isActive?: boolean;
+    currentPassword?: string;
   }
 ): Promise<StoredSignature> => {
   const payload: Record<string, unknown> = {};
@@ -138,6 +141,7 @@ export const updateSignatureSettings = async (
   if (settings.sealPrefix !== undefined) payload.seal_prefix = settings.sealPrefix;
   if (settings.require2fa !== undefined) payload.require_2fa = settings.require2fa;
   if (settings.isActive !== undefined) payload.is_active = settings.isActive;
+  if (settings.currentPassword !== undefined) payload.current_password = settings.currentPassword;
 
   const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/', {
     method: 'PATCH',

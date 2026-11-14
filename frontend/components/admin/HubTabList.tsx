@@ -14,10 +14,11 @@ export type HubTabLink = {
 type HubTabListProps = {
   tabs: HubTabLink[];
   className?: string;
+  appearance?: "default" | "outlined";
 };
 
 /** Single standard tab row for admin hubs (links, not nested Tabs). */
-export function HubTabList({ tabs, className }: HubTabListProps) {
+export function HubTabList({ tabs, className, appearance = "default" }: HubTabListProps) {
   const pathname = usePathname() || "";
   const searchParams = useSearchParams();
   const searchTab = searchParams.get("tab");
@@ -25,7 +26,10 @@ export function HubTabList({ tabs, className }: HubTabListProps) {
   return (
     <div
       className={cn(
-        "inline-flex h-9 max-w-full flex-wrap items-center justify-start gap-1 rounded-lg bg-muted p-1 text-muted-foreground",
+        "inline-flex h-9 max-w-full flex-wrap items-center justify-start gap-1 p-1 text-muted-foreground",
+        appearance === "outlined"
+          ? "h-auto w-fit rounded-xl border border-border/60 bg-card/60"
+          : "rounded-lg bg-muted",
         className,
       )}
       role="tablist"
@@ -41,7 +45,9 @@ export function HubTabList({ tabs, className }: HubTabListProps) {
             className={cn(
               "inline-flex items-center justify-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-all",
               active
-                ? "bg-background text-foreground shadow-sm"
+                ? appearance === "outlined"
+                  ? "rounded-lg bg-muted text-foreground shadow-none"
+                  : "bg-background text-foreground shadow-sm"
                 : "hover:text-foreground",
             )}
           >

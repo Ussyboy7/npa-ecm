@@ -16,7 +16,11 @@ export interface User {
   email: string;
   first_name: string;
   last_name: string;
+  middle_name: string;
+  honorific: string;
   employee_id: string;
+  personnel_number: string;
+  designation: string;
   grade_level: string;
   system_role: string | null;
   system_role_name?: string;

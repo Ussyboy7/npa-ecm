@@ -17,7 +17,7 @@ import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { toast } from "@/components/ui/sonner";
 import { Check, Loader2, Search } from "lucide-react";
 
-const MATRIX_CATEGORIES = [
+export const MATRIX_CATEGORIES = [
   "correspondence",
   "documents",
   "workflow",

@@ -1,6 +1,4 @@
 "use client";
-import { ERROR_UNKNOWN } from '@/lib/constants';
-
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAbortController } from '@/hooks/use-abort-controller';
@@ -26,7 +24,6 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from "@/components/ui/sonner";
 import { formatDateShort, formatDateTime } from "@/lib/datetime";
-import { ensureSealImageCached } from "@/lib/seal-cache";
 import {
   MessageSquare,
   Send,
@@ -55,6 +52,7 @@ import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
 import { PrimaryRoutePanel } from './PrimaryRoutePanel';
 import { submitParallelRoute, submitCcDistribution } from '@/lib/parallel-routing';
+import type { AssignmentMergeStrategy, BranchConfig } from '@/lib/parallel-routing';
 import { RoutingSection } from './RoutingSection';
 import { type SignatureTemplate } from '@/lib/api/signatures';
 import { useSignature } from '@/hooks/use-signature';
@@ -72,7 +70,6 @@ import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { fetchSLATargets, DEFAULT_SLA_TARGETS, type SLATargets } from '@/lib/sla-client';
 import React from 'react';
 
@@ -98,10 +95,10 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [draftId, setDraftId] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<DistributionRecipient[]>([]);
   const [routeMode, setRouteMode] = useState<'single' | 'parallel'>('single');
-  const [mergeStrategy, setMergeStrategy] = useState<'all' | 'any' | 'majority' | 'independent'>('all');
   const [parallelUserIds, setParallelUserIds] = useState<string[]>([]);
   const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
-  const [branchConfigs, setBranchConfigs] = useState<Record<string, { purpose: 'action' | 'information' | 'approval'; minuteText: string }>>({});
+  const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>({});
+  const [mergeStrategy, setMergeStrategy] = useState<AssignmentMergeStrategy>('independent');
   const [distributionUserIds, setDistributionUserIds] = useState<string[]>([]);
   const [distributionOfficeIds, setDistributionOfficeIds] = useState<string[]>([]);
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
@@ -115,6 +112,12 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   // 2FA state for executive approvals
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [twoFAVerificationToken, setTwoFAVerificationToken] = useState<string | null>(null);
+  const [approvalReceipt, setApprovalReceipt] = useState<{
+    minuteId: string;
+    officeName: string;
+    finalApproval: boolean;
+  } | null>(null);
+  const [approvedCopyLoading, setApprovedCopyLoading] = useState(false);
   const [applySignature, setApplySignature] = useState(false);
   const [applySignatureManuallySet, setApplySignatureManuallySet] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
@@ -129,7 +132,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const { currentUser: activeUser } = useCurrentUser();
   const { assistantAssignments, offices, officeMemberships, directorates, divisions } = useOrganization();
   const { users: organizationUsers } = useOrgUsers();
-  
+
   // Use shared signature hook (after activeUser is available)
   const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences, isLoading: isSignatureLoading } = useSignature({
     userId: activeUser?.id,
@@ -478,6 +481,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   // Cleanup: Cancel ongoing requests when modal closes
   useEffect(() => {
     if (!isOpen) {
+      setApprovalReceipt(null);
+      setApprovedCopyLoading(false);
       if (typeof document !== "undefined") {
         try {
           document.body.style.removeProperty('pointer-events');
@@ -729,10 +734,10 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       return false;
     }
 
-    // Must select either a person OR an office (single), or two+ parallel targets
+    // Must select either a person OR an office (single), or two or more separate assignments
     if (actionType === 'minute' && routeMode === 'parallel') {
       if (parallelUserIds.length + parallelOfficeIds.length < 2) {
-        setForwardToError('Parallel routing requires at least two people or offices');
+        setForwardToError('Assign separately requires at least two people or offices');
         return false;
       }
     } else if (!forwardTo && !targetOfficeId) {
@@ -779,7 +784,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     // 2FA/seal only for EXECUTIVE (MD) – endorsement and departmental do not require 2FA
     const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
     const isExecMD = actionType === 'approve' && isMD && required === 'executive' && Boolean(userSignature);
-    const requiresTwoFA = isExecMD;
+    const requiresTwoFA = isExecMD && userSignature?.require2fa !== false;
     
     if (requiresTwoFA && !twoFAVerificationToken) {
       // Show 2FA modal for executive approvals
@@ -797,6 +802,45 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     // Proceed to confirmation after 2FA
     setShowConfirmation(true);
   };
+
+  const handleApprovalSuccessClose = useCallback(() => {
+    setApprovalReceipt(null);
+    onClose();
+  }, [onClose]);
+
+  const handleViewApprovedCopy = useCallback(async () => {
+    if (!approvalReceipt?.minuteId) return;
+
+    // Open the tab during the click so the PDF fetch is not treated as a
+    // pop-up. The authenticated endpoint returns the sealed approved copy.
+    const previewWindow = window.open('', '_blank');
+    setApprovedCopyLoading(true);
+    try {
+      const pdfBlob = await apiFetch<Blob>(
+        `/correspondence/minutes/${approvalReceipt.minuteId}/approval-pdf/`,
+        { responseType: 'blob' },
+      );
+      const objectUrl = URL.createObjectURL(pdfBlob);
+      if (previewWindow) {
+        previewWindow.location.href = objectUrl;
+      } else {
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60 * 1000);
+    } catch (error: unknown) {
+      previewWindow?.close();
+      logError('Failed to open approved copy', error);
+      toast.error(
+        error instanceof Error ? error.message : 'Could not open the approved copy',
+      );
+    } finally {
+      setApprovedCopyLoading(false);
+    }
+  }, [approvalReceipt?.minuteId]);
 
   // Keyboard shortcuts
   useKeyboardShortcuts([
@@ -878,6 +922,15 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       (membership) => membership.userId === currentUser.id && membership.isActive && membership.isPrimary
     );
     const currentUserOfficeId = currentUserOfficeMembership?.officeId || correspondence.currentOfficeId || undefined;
+
+    const routedOfficeName =
+      offices.find((office) => String(office.id) === String(recipientOfficeId || targetOfficeId))?.name ||
+      (forwardUser ? getUserOfficeInfo(forwardUser.id)?.office?.name : undefined) ||
+      forwardUser?.name ||
+      'the next office';
+    const requiredApprovalLevel =
+      (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+    const isFinalApproval = actionType === 'approve' && (requiredApprovalLevel !== 'executive' || isMD);
 
     const templateForSignature = applySignature
       ? (selectedTemplateId
@@ -994,6 +1047,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         method: 'POST',
         body: JSON.stringify({
           correspondence: correspondence.id,
+          workflow_template: correspondence.workflowTemplateId ?? undefined,
           user_id: currentUser.id,
           grade_level: currentUser.gradeLevel,
           action_type: actionType,
@@ -1006,30 +1060,13 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           signature_payload: signaturePayload || undefined,
           purpose: purpose,
           requires_response: purpose === 'action' || purpose === 'approval',
+          verification_token: twoFAVerificationToken || undefined,
         }),
       });
       
       const createdMinuteId =
         typeof minuteResponse?.id === 'string' ? minuteResponse.id : undefined;
 
-      if (actionType === "approve") {
-        const sealData = (minuteResponse?.seal_data as Record<string, unknown>) || null;
-        const serialNumber = sealData ? (sealData.serial_number as string) : "";
-        if (serialNumber) {
-          void ensureSealImageCached({
-            serialNumber,
-            officeName: (sealData?.office_name as string) || "",
-            officeTitle: (sealData?.office_title as string) || "",
-            sealedBy: (sealData?.sealed_by as string) || "",
-            sealedAt: (sealData?.sealed_at as string) || "",
-            signatureImageUrl: (sealData?.signature_image_url as string | undefined) ?? undefined,
-            existingSealImageUrl: (sealData?.seal_image_url as string | undefined) ?? undefined,
-          });
-        } else {
-          logWarn('[MinuteModal] No seal_data in create response — seal may not have been generated');
-        }
-      }
-      
       logInfo('[MinuteModal] Minute created', {
         minuteId: createdMinuteId,
         distributionEntriesToCreate: newDistributionEntries.length,
@@ -1070,16 +1107,16 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             parallelUserIds,
             parallelOfficeIds,
             branchConfigs,
-            mergeStrategy,
             defaultPurpose: purpose,
             defaultMinuteText: minuteText.trim(),
+            mergeStrategy,
             parentMinuteId: createdMinuteId,
             signal,
           });
-          toast.success(`Created ${parallelUserIds.length + parallelOfficeIds.length} parallel branch(es).`);
+          toast.success(`Assigned separately to ${parallelUserIds.length + parallelOfficeIds.length} recipients.`);
         } catch (error: unknown) {
-          logError('[MinuteModal] Failed to create parallel route', error);
-          toast.error('Minute saved, but parallel branches failed. Please retry from the workflow tab.');
+          logError('[MinuteModal] Failed to assign separately', error);
+          toast.error('Minute saved, but assigning separately failed. Please retry from the Routing tab.');
         }
       }
 
@@ -1142,6 +1179,19 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
       bumpSidebarCounts();
 
+      // An approval minute already performs the routing. Show a receipt with
+      // the actual destination instead of closing into a generic toast that
+      // could be read as a second "send to Procurement" step.
+      if (actionType === 'approve' && createdMinuteId) {
+        setTwoFAVerificationToken(null);
+        setApprovalReceipt({
+          minuteId: createdMinuteId,
+          officeName: routedOfficeName,
+          finalApproval: isFinalApproval,
+        });
+        return;
+      }
+
       setTimeout(() => {
         onClose();
 
@@ -1154,9 +1204,11 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           setRouteType('person');
           setActionType('minute');
           setRouteMode('single');
-          setMergeStrategy('all');
+
           setParallelUserIds([]);
           setParallelOfficeIds([]);
+          setBranchConfigs({});
+          setMergeStrategy('independent');
           setDistributionUserIds([]);
           setDistributionOfficeIds([]);
           setDistribution([]);
@@ -1256,7 +1308,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   return (
     <>
     <Dialog
-      open={isOpen}
+      open={isOpen && !approvalReceipt}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
@@ -1264,8 +1316,12 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       <DialogContent size="xl" height="fill">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
-            Minute Correspondence
+            {actionType === 'approve' ? (
+              <Shield className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+            ) : (
+              <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
+            )}
+            {actionType === 'approve' ? 'Approve Correspondence' : 'Minute Correspondence'}
             {hasDraft && (
               <Badge variant="secondary" className="ml-2 text-xs" aria-label="Draft loaded">
                 Draft Loaded
@@ -1273,7 +1329,9 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             )}
           </DialogTitle>
           <DialogDescription>
-            Add your comments and forward to the next level
+            {actionType === 'approve'
+              ? 'Record your approval. The approval minute routes the record to the selected destination.'
+              : 'Add your comments and forward to the next level'}
           </DialogDescription>
         </DialogHeader>
 
@@ -1628,7 +1686,11 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
           {/* Route To — shared PrimaryRoutePanel for minutes; single RoutingSection for approvals */}
           {actionType === 'approve' ? (
-            <RoutingSection
+            <div className="space-y-2">
+              <p className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
+                This destination is recorded on the approval minute. No separate transmittal is needed afterwards.
+              </p>
+              <RoutingSection
               routeType={routeType}
               onRouteTypeChange={(v) => {
                 setRouteType(v);
@@ -1673,7 +1735,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               suggestedNext={suggestedNext}
               findUserById={findUserById}
               getUserOfficeInfo={getUserOfficeInfoForRouting}
-            />
+              />
+            </div>
           ) : (
             <PrimaryRoutePanel
               routeMode={routeMode}
@@ -1717,11 +1780,11 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               onParallelUserIdsChange={setParallelUserIds}
               parallelOfficeIds={parallelOfficeIds}
               onParallelOfficeIdsChange={setParallelOfficeIds}
-              mergeStrategy={mergeStrategy}
-              onMergeStrategyChange={setMergeStrategy}
               branchConfigs={branchConfigs}
               onBranchConfigsChange={setBranchConfigs}
               defaultBranchText={minuteText.trim()}
+              mergeStrategy={mergeStrategy}
+              onMergeStrategyChange={setMergeStrategy}
               distributionUserIds={distributionUserIds}
               onDistributionUserIdsChange={setDistributionUserIds}
               distributionOfficeIds={distributionOfficeIds}
@@ -1781,7 +1844,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                     <strong>{currentUser?.name}</strong> will{' '}
                     {actionType === 'approve' ? (
                       <>
-                        <strong className="text-emerald-600">approve with digital seal</strong> and forward to{' '}
+                        <strong className="text-emerald-600">approve with digital seal</strong> and route to{' '}
                       </>
                     ) : (
                       'minute and forward to '
@@ -1828,12 +1891,17 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               onClick={handleSubmit}
               disabled={isSubmitting}
               className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
-              aria-label="Send minute"
+              aria-label={actionType === 'approve' ? 'Approve and route' : 'Send minute'}
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Sending...
+                  {actionType === 'approve' ? 'Approving...' : 'Sending...'}
+                </>
+              ) : actionType === 'approve' ? (
+                <>
+                  <CheckCircle className="h-4 w-4" />
+                  Approve & Route
                 </>
               ) : (
                 <>
@@ -1893,6 +1961,73 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             }) : undefined,
           }}
         />
+
+        <Dialog
+          open={Boolean(approvalReceipt)}
+          onOpenChange={(open) => {
+            if (!open) handleApprovalSuccessClose();
+          }}
+        >
+          <DialogContent size="md" density="flush" className="overflow-hidden">
+            <div className="border-b border-emerald-200/70 bg-emerald-50/80 px-6 py-6 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm">
+                <CheckCircle className="h-6 w-6" />
+              </div>
+              <DialogHeader className="space-y-1.5">
+                <DialogTitle className="text-lg leading-snug text-emerald-950 dark:text-emerald-50">
+                  {approvalReceipt?.finalApproval ? 'Approved' : 'Endorsed'} and routed to{' '}
+                  {approvalReceipt?.officeName ?? 'the next office'}
+                </DialogTitle>
+                <DialogDescription className="text-emerald-800/80 dark:text-emerald-200/70">
+                  The approval minute has already routed this record. No separate send step is required.
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <div className="space-y-2.5 rounded-xl border border-border/60 bg-muted/25 p-4 text-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-muted-foreground">Reference</span>
+                  <span className="text-right font-medium">{correspondence.referenceNumber}</span>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-muted-foreground">Routed to</span>
+                  <span className="text-right font-medium">
+                    {approvalReceipt?.officeName ?? 'the next office'}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-muted-foreground">Approval minute</span>
+                  <span className="text-right font-mono text-xs">
+                    {approvalReceipt?.minuteId.slice(0, 8)}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                The approved copy includes the memo and digital seal. You can open it now or from the
+                Approvals register later.
+              </p>
+            </div>
+
+            <DialogFooter className="border-t border-border/60 px-6 py-4">
+              <Button variant="outline" onClick={handleApprovalSuccessClose}>
+                Done
+              </Button>
+              <Button
+                onClick={() => void handleViewApprovedCopy()}
+                disabled={approvedCopyLoading || !approvalReceipt?.minuteId}
+                className="gap-2"
+              >
+                {approvedCopyLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                View approved copy
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <TwoFactorVerificationModal
           open={show2FAModal}

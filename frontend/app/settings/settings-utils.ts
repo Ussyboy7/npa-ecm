@@ -44,17 +44,6 @@ const validatePassword = (password: string): string | null => {
   return null;
 };
 
-// Generate mock backup codes
-const generateBackupCodes = (): string[] => {
-  const codes: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const code = Math.random().toString(36).substring(2, 6).toUpperCase() + '-' +
-                 Math.random().toString(36).substring(2, 6).toUpperCase();
-    codes.push(code);
-  }
-  return codes;
-};
-
 // Helper to convert backend snake_case to frontend camelCase
 const convertBackendToFrontend = (backend: Record<string, unknown>): NotificationPreferencesType | null => {
   if (!backend) return null;
@@ -129,7 +118,6 @@ export {
   validateEmail,
   validatePhone,
   validatePassword,
-  generateBackupCodes,
   convertBackendToFrontend,
   convertFrontendToBackend,
 };

@@ -46,7 +46,7 @@ function CompletionSummaryModalContent({
   documentContentHtml
 }: CompletionSummaryModalProps) {
   const finalMinute = minutes[minutes.length - 1];
-  const completionDate = finalMinute?.timestamp || correspondence?.updatedAt;
+  const completionDate = correspondence?.completedAt || finalMinute?.timestamp || correspondence?.updatedAt;
 
   const handlePrint = useCallback(() => {
     if (!correspondence) return;

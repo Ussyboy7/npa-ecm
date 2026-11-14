@@ -111,65 +111,76 @@ class AnalyticsService:
         # 5. Truly unassigned
         return (None, "Unassigned", "Unassigned")
 
-    # Default SLA targets (will be overridden by database values if available)
-    DEFAULT_SLA_TARGETS = {
-        Correspondence.Priority.URGENT: 2,
-        Correspondence.Priority.HIGH: 3,
-        Correspondence.Priority.MEDIUM: 5,
-        Correspondence.Priority.LOW: 7,
-    }
-    
+    @classmethod
+    def get_sla_defaults(cls) -> dict[str, dict[str, int]]:
+        """Get configured defaults, falling back to the model constants."""
+        from .models import SLAConfiguration
+
+        try:
+            return SLAConfiguration.get_defaults()
+        except Exception:
+            return {
+                priority: {
+                    "target_hours": SLAConfiguration.DEFAULT_TARGET_HOURS.get(priority, 0),
+                    "warning_threshold_percent": (
+                        SLAConfiguration.DEFAULT_WARNING_THRESHOLD_PERCENT
+                    ),
+                    "critical_threshold_percent": (
+                        SLAConfiguration.DEFAULT_CRITICAL_THRESHOLD_PERCENT
+                    ),
+                }
+                for priority in SLAConfiguration.Priority.values
+            }
+
     @classmethod
     def get_sla_targets(cls) -> dict[str, int]:
-        """Get SLA targets from database, with fallback to defaults."""
-        try:
-            from .models import SLAConfiguration
-            return SLAConfiguration.get_default_sla_targets()
-        except Exception:
-            return cls.DEFAULT_SLA_TARGETS
+        """Get SLA targets from the configured defaults."""
+        return {
+            priority: settings["target_hours"]
+            for priority, settings in cls.get_sla_defaults().items()
+        }
     
     @classmethod
     def get_sla_target(cls, priority: str, division_id: str | None = None) -> int:
-        """Get SLA target for a specific priority and optional division."""
+        """Get the SLA target in hours for a priority and optional division."""
         try:
             from .models import SLAConfiguration
             sla = SLAConfiguration.get_sla_for_correspondence(priority, division_id=division_id)
             if sla:
-                return sla.target_days
+                return sla.target_hours
         except Exception:
             pass
         
         targets = cls.get_sla_targets()
-        return targets.get(priority, 5)
+        return targets.get(priority, targets.get("medium", 0))
     
     @classmethod
     def get_sla_thresholds(cls, priority: str, division_id: str | None = None) -> dict[str, int]:
-        """Get SLA target and warning/critical thresholds for a priority."""
+        """Get the SLA target and warning/critical thresholds in hours."""
         try:
             from .models import SLAConfiguration
             sla = SLAConfiguration.get_sla_for_correspondence(priority, division_id=division_id)
             if sla:
-                target = sla.target_days
-                warning_days = int(target * sla.warning_threshold_percent / 100)
-                critical_days = int(target * sla.critical_threshold_percent / 100)
+                target_hours = sla.target_hours
+                warning_hours = int(target_hours * sla.warning_threshold_percent / 100)
+                critical_hours = int(target_hours * sla.critical_threshold_percent / 100)
                 return {
-                    "target": target,
-                    "warning": warning_days,
-                    "critical": critical_days,
+                    "target": target_hours,
+                    "warning": warning_hours,
+                    "critical": critical_hours,
                 }
         except Exception:
             pass
-        
-        target = cls.get_sla_targets().get(priority, 5)
+
+        defaults_by_priority = cls.get_sla_defaults()
+        defaults = defaults_by_priority.get(priority) or defaults_by_priority.get("medium", {})
+        target = defaults.get("target_hours", 0)
         return {
             "target": target,
-            "warning": int(target * 0.75),
-            "critical": int(target * 0.90),
+            "warning": int(target * defaults.get("warning_threshold_percent", 0) / 100),
+            "critical": int(target * defaults.get("critical_threshold_percent", 0) / 100),
         }
 
-    # Keep for backward compatibility, but use get_sla_targets() in new code
-    SLA_TARGETS = DEFAULT_SLA_TARGETS
-    
     RESPONSE_BUCKETS = [
         {"name": "0-2 days", "min": 0, "max": 2},
         {"name": "3-5 days", "min": 3, "max": 5},
@@ -285,6 +296,7 @@ class AnalyticsService:
         )
 
         now = timezone.now()
+        sla_targets = cls.get_sla_targets()
         office_metrics = cls._initialize_office_metrics(offices)
         summary = {"totalQueue": 0, "urgent": 0, "slaBreaches": 0, "approachingSLA": 0}
 
@@ -305,7 +317,7 @@ class AnalyticsService:
                 metrics["urgent"] += 1
                 summary["urgent"] += 1
 
-            sla_status = cls._sla_status(item, now)
+            sla_status = cls._sla_status(item, now, sla_targets)
             if sla_status == "breach":
                 metrics["slaBreaches"] += 1
                 summary["slaBreaches"] += 1
@@ -404,7 +416,6 @@ class AnalyticsService:
         trend = cls._compute_daily_trend(correspondences, days=min(range_days, 30))
         
         # Calculate SLA metrics
-        sla_targets = cls.get_sla_targets()
         sla_compliant = 0
         sla_breached = 0
         sla_at_risk = 0
@@ -413,19 +424,19 @@ class AnalyticsService:
             if item.status == Correspondence.Status.ARCHIVED:
                 continue
             priority = item.priority or "medium"
-            target = sla_targets.get(priority, 5)
             thresholds = cls.get_sla_thresholds(priority)
-            days_open = cls._turnaround_days(item, now)
+            target_hours = thresholds["target"]
+            hours_open = cls._hours_open(item, now)
             
             if item.status == Correspondence.Status.COMPLETED:
-                if days_open <= target:
+                if hours_open <= target_hours:
                     sla_compliant += 1
                 else:
                     sla_breached += 1
             else:
-                if days_open > target:
+                if hours_open > target_hours:
                     sla_breached += 1
-                elif days_open >= thresholds["warning"]:
+                elif hours_open >= thresholds["warning"]:
                     sla_at_risk += 1
                 else:
                     sla_compliant += 1
@@ -538,10 +549,14 @@ class AnalyticsService:
         return correspondence.created_at
 
     @classmethod
-    def _turnaround_days(cls, correspondence: Correspondence, now: datetime) -> float:
+    def _hours_open(cls, correspondence: Correspondence, now: datetime) -> float:
         start = cls._start_datetime(correspondence)
         end = correspondence.completed_at or now
-        return max(0.0, (end - start).total_seconds() / 86400.0)
+        return max(0.0, (end - start).total_seconds() / 3600.0)
+
+    @classmethod
+    def _turnaround_days(cls, correspondence: Correspondence, now: datetime) -> float:
+        return cls._hours_open(correspondence, now) / 24.0
 
     @classmethod
     def _fetch_office_correspondence(
@@ -603,14 +618,20 @@ class AnalyticsService:
         return metrics
 
     @classmethod
-    def _sla_status(cls, correspondence: Correspondence, now: datetime) -> str:
+    def _sla_status(
+        cls,
+        correspondence: Correspondence,
+        now: datetime,
+        sla_targets: dict[str, int] | None = None,
+    ) -> str:
         if not correspondence.received_date:
             return "ok"
-        target = cls.SLA_TARGETS.get(correspondence.priority, 5)
-        days_open = (now.date() - correspondence.received_date).days
-        if days_open > target:
+        targets = sla_targets or cls.get_sla_targets()
+        target_hours = targets.get(correspondence.priority, targets.get("medium", 0))
+        hours_open = cls._hours_open(correspondence, now)
+        if hours_open > target_hours:
             return "breach"
-        if target - days_open <= 1:
+        if target_hours - hours_open <= 24:
             return "approaching"
         return "ok"
 
@@ -630,6 +651,7 @@ class AnalyticsService:
             ),
         )
         payload = []
+        sla_targets = cls.get_sla_targets()
         for item in ordered[:limit]:
             payload.append(
                 {
@@ -644,7 +666,7 @@ class AnalyticsService:
                     if item.current_approver
                     else None,
                     "agingDays": round(cls._turnaround_days(item, now), 1),
-                    "slaStatus": cls._sla_status(item, now),
+                    "slaStatus": cls._sla_status(item, now, sla_targets),
                 }
             )
         return payload
@@ -762,10 +784,11 @@ class AnalyticsService:
     def _compute_sla(cls, completed: Iterable[Correspondence], now: datetime) -> dict[str, Any]:
         compliant = 0
         breached = 0
+        sla_targets = cls.get_sla_targets()
         for item in completed:
-            target = cls.SLA_TARGETS.get(item.priority, 5)
-            days_taken = cls._turnaround_days(item, now)
-            if days_taken <= target:
+            target_hours = sla_targets.get(item.priority, sla_targets.get("medium", 0))
+            hours_taken = cls._hours_open(item, now)
+            if hours_taken <= target_hours:
                 compliant += 1
             else:
                 breached += 1
@@ -1063,7 +1086,7 @@ class AnalyticsService:
         compliant = 0
         breached = 0
         at_risk = 0
-        days_to_breach_sum = 0.0
+        hours_to_breach_sum = 0.0
         
         # By priority breakdown
         by_priority: dict[str, dict[str, int]] = {
@@ -1080,30 +1103,32 @@ class AnalyticsService:
                 
             total += 1
             priority = item.priority or "medium"
-            target = sla_targets.get(priority, 5)
-            thresholds = cls.get_sla_thresholds(priority, division_id=str(item.division_id) if item.division_id else None)
-            
-            days_open = cls._turnaround_days(item, now)
+            thresholds = cls.get_sla_thresholds(
+                priority,
+                division_id=str(item.division_id) if item.division_id else None,
+            )
+            target_hours = thresholds["target"]
+            hours_open = cls._hours_open(item, now)
             
             # Determine SLA status
             if item.status == Correspondence.Status.COMPLETED:
-                if days_open <= target:
+                if hours_open <= target_hours:
                     compliant += 1
                     by_priority[priority]["compliant"] += 1
                 else:
                     breached += 1
                     by_priority[priority]["breached"] += 1
             else:
-                days_remaining = target - days_open
-                days_to_breach_sum += max(0, days_remaining)
+                hours_remaining = target_hours - hours_open
+                hours_to_breach_sum += max(0, hours_remaining)
                 
-                if days_open > target:
+                if hours_open > target_hours:
                     breached += 1
                     by_priority[priority]["breached"] += 1
-                elif days_open >= thresholds["critical"]:
+                elif hours_open >= thresholds["critical"]:
                     at_risk += 1
                     by_priority[priority]["atRisk"] += 1
-                elif days_open >= thresholds["warning"]:
+                elif hours_open >= thresholds["warning"]:
                     at_risk += 1
                     by_priority[priority]["atRisk"] += 1
                 else:
@@ -1131,20 +1156,24 @@ class AnalyticsService:
             div_bucket = by_division[div_id_str]
             div_bucket["total"] += 1
             if item.status == Correspondence.Status.COMPLETED:
-                if days_open <= target:
+                if hours_open <= target_hours:
                     div_bucket["compliant"] += 1
                 else:
                     div_bucket["breached"] += 1
             else:
-                if days_open > target:
+                if hours_open > target_hours:
                     div_bucket["breached"] += 1
-                elif days_open >= thresholds["warning"]:
+                elif hours_open >= thresholds["warning"]:
                     div_bucket["atRisk"] += 1
                 else:
                     div_bucket["compliant"] += 1
         
         compliance_rate = round((compliant / total) * 100, 2) if total else 0.0
-        avg_days_to_breach = round(days_to_breach_sum / (total - breached), 2) if (total - breached) > 0 else 0.0
+        avg_days_to_breach = (
+            round((hours_to_breach_sum / (total - breached)) / 24, 2)
+            if (total - breached) > 0
+            else 0.0
+        )
         
         # Add compliance rate to each division
         for div in by_division.values():
@@ -1192,12 +1221,16 @@ class AnalyticsService:
 
         correspondences = list(cls._fetch_correspondence(range_days=range_days))
         now = timezone.now()
-        sla_targets = cls.get_sla_targets()
         
         # Group by division
         division_data: dict[str, dict[str, Any]] = {}
         
         for item in correspondences:
+            # Archived items are excluded everywhere else in analytics; counting
+            # them here made division compliance disagree with the SLA summary.
+            if item.status == Correspondence.Status.ARCHIVED:
+                continue
+
             div_id, div_name, full_name = cls._get_division_for_correspondence(item)
             # Skip directorate-level items (they don't belong in division metrics)
             if div_id is None and div_name == "Directorate Level":
@@ -1239,21 +1272,26 @@ class AnalyticsService:
             if priority in div:
                 div[priority] += 1
             
-            days_open = cls._turnaround_days(item, now)
-            target = sla_targets.get(priority, 5)
+            hours_open = cls._hours_open(item, now)
+            days_open = hours_open / 24.0
+            thresholds = cls.get_sla_thresholds(
+                priority,
+                division_id=str(item.division_id) if item.division_id else None,
+            )
+            target_hours = thresholds["target"]
             
             if item.status == Correspondence.Status.COMPLETED:
                 div["completed"] += 1
                 div["turnaround_values"].append(days_open)
-                if days_open <= target:
+                if hours_open <= target_hours:
                     div["slaCompliant"] += 1
                 else:
                     div["slaBreached"] += 1
             else:
                 div["pending"] += 1
-                if days_open > target:
+                if hours_open > target_hours:
                     div["slaBreached"] += 1
-                elif days_open >= target * 0.75:
+                elif hours_open >= thresholds["warning"]:
                     div["slaAtRisk"] += 1
                 else:
                     div["slaCompliant"] += 1

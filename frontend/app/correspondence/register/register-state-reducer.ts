@@ -2,7 +2,7 @@
  * State reducer for Register Correspondence form
  */
 
-import { FormData, FlowType, DistributionState, createInitialFormData, RegisterRoutingConfig, createInitialRoutingConfig } from './register-utils';
+import { FormData, FlowType, DistributionState, createInitialFormData } from './register-utils';
 import { FormStep } from './register-constants';
 
 export type RegisterState = {
@@ -12,10 +12,7 @@ export type RegisterState = {
   linkedDocumentIds: string[];
   flowType: FlowType;
   distributions: DistributionState;
-  routingConfig: RegisterRoutingConfig;
   ui: {
-    assignSearch: string;
-    officeSearch: string;
     submitting: boolean;
     errors: Record<string, string>;
     hasDraft: boolean;
@@ -34,10 +31,6 @@ export type RegisterAction =
   | { type: 'SET_LINKED_DOCUMENTS'; payload: string[] }
   | { type: 'SET_DISTRIBUTIONS'; payload: DistributionState }
   | { type: 'UPDATE_DISTRIBUTION'; payload: { type: 'directorates' | 'divisions' | 'departments'; ids: string[] } }
-  | { type: 'UPDATE_ROUTING'; payload: Partial<RegisterRoutingConfig> }
-  | { type: 'SET_ROUTING'; payload: RegisterRoutingConfig }
-  | { type: 'SET_ASSIGN_SEARCH'; payload: string }
-  | { type: 'SET_OFFICE_SEARCH'; payload: string }
   | { type: 'SET_SUBMITTING'; payload: boolean }
   | { type: 'SET_ERRORS'; payload: Record<string, string> }
   | { type: 'CLEAR_ERRORS' }
@@ -61,10 +54,7 @@ export const createInitialState = (owningOfficeId?: string): RegisterState => {
       divisions: [],
       departments: [],
     },
-    routingConfig: createInitialRoutingConfig(),
     ui: {
-      assignSearch: '',
-      officeSearch: '',
       submitting: false,
       errors: {},
       hasDraft: false,
@@ -164,27 +154,6 @@ export const registerReducer = (
         },
       };
 
-    case 'UPDATE_ROUTING':
-      return {
-        ...state,
-        routingConfig: { ...state.routingConfig, ...action.payload },
-      };
-
-    case 'SET_ROUTING':
-      return { ...state, routingConfig: action.payload };
-
-    case 'SET_ASSIGN_SEARCH':
-      return {
-        ...state,
-        ui: { ...state.ui, assignSearch: action.payload },
-      };
-
-    case 'SET_OFFICE_SEARCH':
-      return {
-        ...state,
-        ui: { ...state.ui, officeSearch: action.payload },
-      };
-
     case 'SET_SUBMITTING':
       return {
         ...state,
@@ -232,7 +201,6 @@ export const registerReducer = (
           divisions: [],
           departments: [],
         },
-        routingConfig: createInitialRoutingConfig(),
         ui: {
           ...state.ui,
           errors: {},

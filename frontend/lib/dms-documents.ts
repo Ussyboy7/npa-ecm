@@ -1,4 +1,4 @@
-import { ERROR_AUTHENTICATION_REQUIRED, ERROR_UNKNOWN } from '@/lib/constants';
+import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
 import { apiFetch, hasTokens } from './api-client';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { logInfo, logWarn } from '@/lib/client-logger';
@@ -406,6 +406,7 @@ export const shareDocument = async (
   documentId: string,
   options: {
     userIds?: string[];
+    directorateIds?: string[];
     divisionIds?: string[];
     departmentIds?: string[];
     officeIds?: string[];
@@ -420,6 +421,7 @@ export const shareDocument = async (
 
   const {
     userIds = [],
+    directorateIds = [],
     divisionIds = [],
     departmentIds = [],
     officeIds = [],
@@ -438,9 +440,14 @@ export const shareDocument = async (
       }),
     });
   } else {
-    const hasSelection = userIds.length > 0 || divisionIds.length > 0 || departmentIds.length > 0 || officeIds.length > 0;
+    const hasSelection =
+      userIds.length > 0 ||
+      directorateIds.length > 0 ||
+      divisionIds.length > 0 ||
+      departmentIds.length > 0 ||
+      officeIds.length > 0;
     if (!hasSelection) {
-      throw new Error('Select at least one recipient, division, or department');
+      throw new Error('Select at least one recipient, directorate, division, or department');
     }
 
     await apiFetch('/dms/permissions/', {
@@ -450,6 +457,7 @@ export const shareDocument = async (
         access,
         note,
         user_ids: Array.from(new Set(userIds.filter(Boolean))),
+        directorate_ids: Array.from(new Set(directorateIds.filter(Boolean))),
         division_ids: Array.from(new Set(divisionIds.filter(Boolean))),
         department_ids: Array.from(new Set(departmentIds.filter(Boolean))),
         office_ids: Array.from(new Set(officeIds.filter(Boolean))),

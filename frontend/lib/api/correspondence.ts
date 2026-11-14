@@ -39,6 +39,7 @@ export interface ApiCorrespondence {
   directorate_id?: unknown;
   current_approver?: unknown;
   current_approver_id?: unknown;
+  can_take_initial_action?: unknown;
   created_by?: unknown;
   created_by_id?: unknown;
   direction?: unknown;
@@ -59,6 +60,8 @@ export interface ApiCorrespondence {
   has_physical_copy?: unknown;
   physical_documents?: Array<Record<string, unknown>>;
   workflow_state?: unknown;
+  workflow_template?: unknown;
+  workflow_template_details?: unknown;
   active_parallel_branches?: unknown;
   completed_parallel_branches?: unknown;
   flow_type?: unknown;
@@ -121,6 +124,7 @@ export interface ApiMinute {
   requires_response?: unknown;
   response_deadline?: unknown;
   routing_type?: unknown;
+  assignment_outcome?: unknown;
   parallel_group_id?: unknown;
   is_parallel_branch?: unknown;
   parent_minute_id?: unknown;

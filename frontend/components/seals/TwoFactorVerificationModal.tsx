@@ -13,7 +13,8 @@ import {
   RefreshCw,
   QrCode,
   Copy,
-  Check
+  Check,
+  KeyRound,
 } from "lucide-react";
 import {
   Dialog,
@@ -48,6 +49,15 @@ interface TwoFactorStatus {
   email: string;
   has_email: boolean;
   available_methods: string[];
+  can_seal?: boolean;
+  requires_verification?: boolean;
+  blocking_reason?: "no_signature" | "signature_inactive" | "no_2fa_method" | null;
+  recovery_actions?: Array<{
+    action: string;
+    label: string;
+    endpoint?: string;
+    method?: string;
+  }>;
 }
 
 export function TwoFactorVerificationModal({
@@ -60,7 +70,7 @@ export function TwoFactorVerificationModal({
   description = "Enter the verification code to apply the digital seal",
 }: TwoFactorVerificationModalProps) {
   const [status, setStatus] = useState<TwoFactorStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<"email" | "totp">("email");
+  const [activeTab, setActiveTab] = useState<"email" | "totp" | "backup_code">("email");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -73,6 +83,7 @@ export function TwoFactorVerificationModal({
   
   // TOTP state
   const [totpCode, setTotpCode] = useState("");
+  const [backupCode, setBackupCode] = useState("");
   const [showSetup, setShowSetup] = useState(false);
   const [setupData, setSetupData] = useState<{
     secret: string;
@@ -87,6 +98,7 @@ export function TwoFactorVerificationModal({
   // Refs for auto-focus
   const emailInputRef = useRef<HTMLInputElement>(null);
   const totpInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   // Load 2FA status when modal opens
   useEffect(() => {
@@ -97,6 +109,7 @@ export function TwoFactorVerificationModal({
       setOtpSent(false);
       setOtpCode("");
       setTotpCode("");
+      setBackupCode("");
       setError(null);
       setRemainingAttempts(null);
       setShowSetup(false);
@@ -117,6 +130,8 @@ export function TwoFactorVerificationModal({
       emailInputRef.current?.focus();
     } else if (activeTab === "totp") {
       totpInputRef.current?.focus();
+    } else if (activeTab === "backup_code") {
+      backupInputRef.current?.focus();
     }
   }, [activeTab, otpSent]);
 
@@ -125,7 +140,20 @@ export function TwoFactorVerificationModal({
       setLoading(true);
       const data = await apiFetch<TwoFactorStatus>("/accounts/2fa/status/");
       setStatus(data);
-      setActiveTab(data.preferred_method);
+      const preferredAvailable = data.available_methods.includes(data.preferred_method);
+      if (preferredAvailable) {
+        setActiveTab(data.preferred_method);
+      } else if (data.available_methods.includes("totp")) {
+        setActiveTab("totp");
+      } else if (data.available_methods.includes("email")) {
+        setActiveTab("email");
+      } else if (data.available_methods.includes("backup_code")) {
+        setActiveTab("backup_code");
+      } else {
+        // No method is configured. Open the authenticator setup path so the
+        // required second factor can be created instead of leaving a dead end.
+        setActiveTab("totp");
+      }
     } catch (err) {
       logError("Failed to load 2FA status:", err);
       toast.error("Failed to load 2FA settings");
@@ -221,10 +249,13 @@ export function TwoFactorVerificationModal({
       
       if (response.verified && response.verification_token) {
         if (showSetup) {
-          toast.success("Authenticator app setup complete!");
+          toast.success("Authenticator app setup complete. Generate backup codes in Settings.");
           setShowSetup(false);
           setSetupData(null);
-          await loadStatus();
+          // The setup code already proved possession of the new factor. Use
+          // the returned token to continue the seal flow immediately.
+          onVerified(response.verification_token);
+          onOpenChange(false);
         } else {
           toast.success("Verification successful!");
           onVerified(response.verification_token);
@@ -261,6 +292,38 @@ export function TwoFactorVerificationModal({
       setError(err instanceof Error ? err.message : "Failed to setup authenticator");
     } finally {
       setSending(false);
+    }
+  };
+
+  const verifyBackupCode = async () => {
+    if (backupCode.trim().length < 4) return;
+
+    try {
+      setVerifying(true);
+      setError(null);
+
+      const response = await apiFetch<{
+        verified: boolean;
+        verification_token?: string;
+        detail?: string;
+      }>("/accounts/2fa/backup-codes/verify/", {
+        method: "POST",
+        body: JSON.stringify({ code: backupCode.trim() }),
+      });
+
+      if (response.verified && response.verification_token) {
+        toast.success("Verification successful!");
+        onVerified(response.verification_token);
+        onOpenChange(false);
+      } else {
+        setError(response.detail || "Invalid or already used backup code");
+        setBackupCode("");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+      setBackupCode("");
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -323,15 +386,56 @@ export function TwoFactorVerificationModal({
           </Alert>
         )}
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "email" | "totp")}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="email" disabled={!status?.has_email} className="gap-2">
+        {status?.blocking_reason === "no_2fa_method" && (
+          <Alert className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="space-y-2">
+              <p>
+                2FA is required to seal, but no email or authenticator method is
+                configured. Set up an authenticator app now, or add an email in
+                your profile settings and try again.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setActiveTab("totp");
+                  void setupTOTP();
+                }}
+                disabled={sending}
+              >
+                <QrCode className="mr-2 h-4 w-4" />
+                Set up authenticator
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "email" | "totp" | "backup_code")}
+        >
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger
+              value="email"
+              disabled={!status?.available_methods.includes("email")}
+              className="gap-2"
+            >
               <Mail className="h-4 w-4" />
               Email
             </TabsTrigger>
             <TabsTrigger value="totp" className="gap-2">
               <Smartphone className="h-4 w-4" />
               Authenticator
+            </TabsTrigger>
+            <TabsTrigger
+              value="backup_code"
+              disabled={!status?.available_methods.includes("backup_code")}
+              className="gap-2"
+            >
+              <KeyRound className="h-4 w-4" />
+              Backup code
             </TabsTrigger>
           </TabsList>
 
@@ -350,7 +454,7 @@ export function TwoFactorVerificationModal({
                 </div>
                 <Button 
                   onClick={requestEmailOTP} 
-                  disabled={sending || !status?.has_email}
+                  disabled={sending || !status?.available_methods.includes("email")}
                   className="w-full"
                 >
                   {sending ? (
@@ -427,7 +531,7 @@ export function TwoFactorVerificationModal({
 
           {/* TOTP Tab */}
           <TabsContent value="totp" className="space-y-4 mt-4">
-            {!status?.totp_confirmed && !showSetup ? (
+            {!(status?.totp_confirmed && status?.totp_enabled) && !showSetup ? (
               // Not set up yet
               <div className="text-center space-y-4">
                 <div className="p-4 bg-muted rounded-lg">
@@ -462,6 +566,7 @@ export function TwoFactorVerificationModal({
                         alt="TOTP QR Code" 
                         width={192}
                         height={192}
+                        unoptimized
                         className="w-48 h-48 border rounded-lg"
                       />
                     </div>
@@ -570,6 +675,44 @@ export function TwoFactorVerificationModal({
                 </Button>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="backup_code" className="space-y-4 mt-4">
+            <div className="text-center space-y-2">
+              <KeyRound className="h-8 w-8 mx-auto text-primary" />
+              <p className="text-sm">Enter one of your unused backup codes.</p>
+              <p className="text-xs text-muted-foreground">
+                Each code works once and is replaced when you generate a new set.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="backup-code">Backup code</Label>
+              <Input
+                ref={backupInputRef}
+                id="backup-code"
+                type="text"
+                value={backupCode}
+                onChange={(e) => setBackupCode(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, verifyBackupCode)}
+                placeholder="XXXX-XXXX"
+                className="text-center text-xl tracking-widest font-mono"
+                autoComplete="one-time-code"
+              />
+            </div>
+            <Button
+              onClick={verifyBackupCode}
+              disabled={backupCode.trim().length < 4 || verifying}
+              className="w-full"
+            >
+              {verifying ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                "Verify"
+              )}
+            </Button>
           </TabsContent>
         </Tabs>
       </DialogContent>

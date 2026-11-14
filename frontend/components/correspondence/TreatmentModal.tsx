@@ -57,7 +57,7 @@ import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers } from '@/lib/routing-utils';
 import { PrimaryRoutePanel } from './PrimaryRoutePanel';
 import { submitParallelRoute } from '@/lib/parallel-routing';
-import type { BranchConfig } from '@/lib/parallel-routing';
+import type { AssignmentMergeStrategy, BranchConfig } from '@/lib/parallel-routing';
 
 
 import { useSignature } from '@/hooks/use-signature';
@@ -68,6 +68,7 @@ import { type UploadedFile } from '@/hooks/use-file-upload';
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import React from 'react';
+import { cn } from '@/lib/utils';
 import {
   getTemplatesForUser,
   saveTemplate,
@@ -115,10 +116,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
   const [routeMode, setRouteMode] = useState<'single' | 'parallel'>('single');
-  const [mergeStrategy, setMergeStrategy] = useState<'all' | 'any' | 'majority' | 'independent'>('all');
   const [parallelUserIds, setParallelUserIds] = useState<string[]>([]);
   const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
   const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>({});
+  const [mergeStrategy, setMergeStrategy] = useState<AssignmentMergeStrategy>('independent');
   
   // Document selection state (for existing document response type)
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -323,10 +324,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setCharacterCount(0);
     setForwardTo('');
     setRouteMode('single');
-    setMergeStrategy('all');
     setParallelUserIds([]);
     setParallelOfficeIds([]);
     setBranchConfigs({});
+    setMergeStrategy('independent');
     setRouteType('person');
     setTargetOfficeId('');
     setOnBehalfOf('');
@@ -665,10 +666,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       }
     }
 
-    // Validate recipient — single or parallel
+    // Validate recipient — single or separate assignments
     if (routeMode === 'parallel') {
       if (parallelUserIds.length + parallelOfficeIds.length < 2) {
-        setForwardToError('Parallel routing requires at least two people or offices');
+        setForwardToError('Assign separately requires at least two people or offices');
         return false;
       }
     } else if (!forwardTo && !targetOfficeId) {
@@ -800,11 +801,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       });
       createdMinuteId = minuteResponse?.id ?? null;
 
-      // Update original correspondence - auto-complete when treating and responding
-      // This marks the original as completed since a response has been created
+      // Keep the original active until its minutes are acknowledged and it is
+      // completed through the dedicated completion action.
       const correspondenceUpdate: Record<string, unknown> = {
         direction: correspondence.direction,
-        status: 'completed',
       };
       
       if (!isParallelRoute) {
@@ -900,9 +900,9 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           parallelUserIds,
           parallelOfficeIds,
           branchConfigs,
-          mergeStrategy,
           defaultPurpose: purpose,
           defaultMinuteText: branchText,
+          mergeStrategy,
           signal,
         });
       }
@@ -935,15 +935,14 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       
       toast.success('Response sent successfully', {
         description: isParallelRoute
-          ? `Formal response created with ${parallelUserIds.length + parallelOfficeIds.length} parallel branch(es)`
+          ? `Formal response created and assigned separately to ${parallelUserIds.length + parallelOfficeIds.length} recipients`
           : actingFor
             ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
             : `Sent to ${recipient?.name ?? 'selected user'}`,
       });
 
-      // Also notify that original correspondence was completed
-      toast.success('Original correspondence marked as completed', {
-        description: 'A completion package will be generated automatically.',
+      toast.success('Original correspondence remains active', {
+        description: 'Complete it separately after all active minutes are acknowledged.',
       });
 
       // Close modal
@@ -1043,6 +1042,18 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     : null;
   const selectedRecipient = forwardTo ? findUserById(forwardTo) ?? null : null;
   const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) ?? null : null;
+  const handleResponseTypeChange = (value: string) => {
+    setResponseType(value as typeof responseType);
+    if (value !== 'existing-document') {
+      setSelectedDocumentId(null);
+      setDocumentSearchQuery('');
+    }
+    if (value === 'existing-document') {
+      setMemoContent('');
+      setCharacterCount(0);
+      setMemoContentError('');
+    }
+  };
 
   return (
     <>
@@ -1155,29 +1166,22 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 Response Type *
               </Label>
-              <RadioGroup value={responseType} onValueChange={(v: string) => {
-                setResponseType(v as typeof responseType);
-                // Reset document selection when switching away from existing-document
-                if (v !== 'existing-document') {
-                  setSelectedDocumentId(null);
-                  setDocumentSearchQuery('');
-                }
-                // Reset memo content and errors when switching to document
-                if (v === 'existing-document') {
-                  setMemoContent('');
-                  setCharacterCount(0);
-                  setMemoContentError('');
-                } else if (v === 'memo') {
-                  // Clear document-related errors when switching to memo
-                  // Keep memo content if user was typing
-                }
-              }}>
+              <RadioGroup value={responseType} onValueChange={handleResponseTypeChange}>
                 <div className="space-y-3">
                   {/* Memo Option */}
-                  <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                  <div
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest('[role="radio"], label')) return;
+                      handleResponseTypeChange('memo');
+                    }}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+                      responseType === 'memo' ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border",
+                    )}
+                  >
                     <RadioGroupItem value="memo" id="response-memo" className="mt-1" />
                     <div className="flex-1 space-y-1">
-                      <Label htmlFor="response-memo" className="font-medium cursor-pointer flex items-center gap-2">
+                      <Label htmlFor="response-memo" className="flex cursor-pointer items-center gap-2 font-medium">
                         <FileText className="h-4 w-4 text-blue-500" />
                         Memo Response
                       </Label>
@@ -1188,10 +1192,19 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                   </div>
 
                   {/* Existing Document Option */}
-                  <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                  <div
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest('[role="radio"], label')) return;
+                      handleResponseTypeChange('existing-document');
+                    }}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+                      responseType === 'existing-document' ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border",
+                    )}
+                  >
                     <RadioGroupItem value="existing-document" id="response-document" className="mt-1" />
                     <div className="flex-1 space-y-1">
-                      <Label htmlFor="response-document" className="font-medium cursor-pointer flex items-center gap-2">
+                      <Label htmlFor="response-document" className="flex cursor-pointer items-center gap-2 font-medium">
                         <LinkIcon className="h-4 w-4 text-purple-500" />
                         Attach Existing Document
                       </Label>
@@ -1465,11 +1478,11 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               onParallelUserIdsChange={setParallelUserIds}
               parallelOfficeIds={parallelOfficeIds}
               onParallelOfficeIdsChange={setParallelOfficeIds}
-              mergeStrategy={mergeStrategy}
-              onMergeStrategyChange={setMergeStrategy}
               branchConfigs={branchConfigs}
               onBranchConfigsChange={setBranchConfigs}
               defaultBranchText={memoContent.replace(/<[^>]+>/g, ' ').trim() || `Response to ${correspondence.referenceNumber}`}
+              mergeStrategy={mergeStrategy}
+              onMergeStrategyChange={setMergeStrategy}
               showDistribution={false}
               offices={officeOptions}
               directorates={directorates}

@@ -171,11 +171,13 @@ export const LINE_HEIGHTS = [
   { label: "1.15", value: "1.15" },
   { label: "1.5", value: "1.5" },
   { label: "Double", value: "2" },
+  { label: "Custom", value: "custom" },
 ] as const;
 
 /** Word-like paragraph styles for the compose toolbar. */
 export const DOCUMENT_STYLES = [
   { id: "normal", label: "Normal", fontSize: "12pt" },
+  { id: "custom", label: "Custom", fontSize: "12pt" },
   { id: "h1", label: "Heading 1", level: 1 as const, fontSize: "16pt" },
   { id: "h2", label: "Heading 2", level: 2 as const, fontSize: "14pt" },
   { id: "h3", label: "Heading 3", level: 3 as const, fontSize: "12pt" },

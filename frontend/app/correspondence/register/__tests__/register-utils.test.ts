@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/utils', () => ({
   generateUUID: vi.fn(() => '550e8400-e29b-41d4-a716-446655440000'),
@@ -16,7 +16,9 @@ import {
   isValidEmail,
   validateFile,
   createInitialFormData,
-  createInitialRoutingConfig,
+  buildSubmissionFormData,
+  getCorrespondenceSourceError,
+  getExistingCorrespondenceId,
 } from '../register-utils';
 
 const emptyDistributions = { directorates: [], divisions: [], departments: [] };
@@ -112,25 +114,56 @@ describe('validateStep', () => {
     expect(errors.recipientName).toBe('Recipient name is required');
   });
 
+  it('validates sender step requires outward distribution', () => {
+    const errors = validateStep('sender', baseFormData, 'outward', [], emptyDistributions);
+    expect(errors.distribution).toBe('Select at least one directorate, division, or department');
+  });
+
+  it('accepts sender step when outward distribution is selected', () => {
+    const errors = validateStep(
+      'sender',
+      { ...baseFormData, recipientName: 'Recipient' },
+      'outward',
+      [],
+      { directorates: ['dir-1'], divisions: [], departments: [] },
+    );
+    expect(errors.distribution).toBeUndefined();
+  });
+
+  it('requires an explicit source when outward recipient and distribution overlap', () => {
+    const errors = validateStep(
+      'sender',
+      { ...baseFormData, recipientName: 'Recipient' },
+      'outward',
+      [],
+      { directorates: ['dir-1'], divisions: [], departments: [] },
+    );
+    expect(errors.correspondenceSource).toBe(
+      'Choose whether this outward correspondence is internal or external',
+    );
+    expect(
+      getCorrespondenceSourceError(
+        { ...baseFormData, recipientName: 'Recipient' },
+        'outward',
+        { directorates: ['dir-1'], divisions: [], departments: [] },
+      ),
+    ).toBe('Choose whether this outward correspondence is internal or external');
+  });
+
+  it('accepts an explicit internal source for outward correspondence', () => {
+    const errors = validateStep(
+      'sender',
+      { ...baseFormData, recipientName: 'Recipient', correspondenceSource: 'internal' },
+      'outward',
+      [],
+      { directorates: ['dir-1'], divisions: [], departments: [] },
+    );
+    expect(errors.correspondenceSource).toBeUndefined();
+  });
+
   it('validates email in sender step', () => {
     const errors = validateStep('sender', { ...baseFormData, senderEmail: 'invalid' }, 'inward', [], emptyDistributions);
     expect(errors.senderEmail).toBe('Please enter a valid email address');
-  });
-
-  it('validates routing step requires assignTo', () => {
-    const errors = validateStep('routing', baseFormData, 'inward', [], emptyDistributions);
-    expect(errors.assignTo).toBe('Please select a route destination');
-  });
-
-  it('validates parallel routing requires at least two branches', () => {
-    const routing = { ...createInitialRoutingConfig(), routeMode: 'parallel' as const };
-    const errors = validateStep('routing', baseFormData, 'inward', [], emptyDistributions, 0, routing);
-    expect(errors.assignTo).toBe('Parallel routing requires at least two people or offices');
-  });
-
-  it('validates routing step requires distribution for outward', () => {
-    const errors = validateStep('routing', baseFormData, 'outward', [], emptyDistributions);
-    expect(errors.distribution).toBe('Select at least one directorate, division, or department');
   });
 
   it('validates documents step requires files', () => {
@@ -150,7 +183,6 @@ describe('validateFormData', () => {
   it('returns errors for empty form', () => {
     const errors = validateFormData(base, 'inward', [], emptyDistributions);
     expect(errors.subject).toBe('Subject is required');
-    expect(errors.assignTo).toBe('Please select a route destination');
     expect(errors.owningOfficeId).toBe('Please select an owning office');
     expect(errors.documentFiles).toBe('Please upload or select at least one source document');
   });
@@ -179,13 +211,164 @@ describe('validateFormData', () => {
     const valid = {
       ...base,
       subject: 'Test',
-      assignTo: 'user-1',
       owningOfficeId: 'office-1',
       senderOrganization: 'Org',
       receivedDate: '2025-03-01',
     };
     const errors = validateFormData(valid, 'inward', [new File([''], 'x.pdf')], emptyDistributions);
     expect(Object.keys(errors)).toHaveLength(0);
+  });
+});
+
+describe('physical custody registration', () => {
+  const base = createInitialFormData();
+
+  it('does not ask for a custodian office when a physical copy is selected', () => {
+    const errors = validateStep(
+      'basics',
+      { ...base, subject: 'Test', owningOfficeId: 'office-1', hasPhysicalCopy: true },
+      'inward',
+      [],
+      emptyDistributions,
+    );
+    expect(Object.keys(errors)).toHaveLength(0);
+  });
+
+  it('submits physical tracking without a custodian or shelf field', () => {
+    const form = buildSubmissionFormData(
+      {
+        ...base,
+        subject: 'Test',
+        owningOfficeId: 'office-1',
+        hasPhysicalCopy: true,
+      },
+      'inward',
+      [],
+      emptyDistributions,
+    );
+    expect(form.get('has_physical_copy')).toBe('true');
+    expect(form.get('physical_custodian_office')).toBeNull();
+    expect(form.get('physical_location')).toBeNull();
+  });
+
+  it('registers into the owning office queue without an initial approver', () => {
+    const form = buildSubmissionFormData(
+      { ...base, subject: 'Test', owningOfficeId: 'office-1' },
+      'inward',
+      [],
+      emptyDistributions,
+    );
+    expect(form.get('current_approver_id')).toBeNull();
+    expect(form.get('current_office')).toBe('office-1');
+    expect(form.get('owning_office')).toBe('office-1');
+  });
+
+  it('submits the explicit internal/external source for outward correspondence', () => {
+    const form = buildSubmissionFormData(
+      {
+        ...base,
+        subject: 'Test',
+        owningOfficeId: 'office-1',
+        recipientName: 'Recipient',
+        correspondenceSource: 'external',
+      },
+      'outward',
+      [],
+      { directorates: ['dir-1'], divisions: [], departments: [] },
+    );
+    expect(form.get('source')).toBe('external');
+  });
+
+  it('uses an inward document reference as the incoming reference', () => {
+    const form = buildSubmissionFormData(
+      {
+        ...base,
+        subject: 'Test',
+        owningOfficeId: 'office-1',
+        referenceNumber: "HQ/AGM/SA&DM/AD/001",
+        senderReference: 'SA&DM/AD/2026/017',
+      },
+      'inward',
+      [],
+      emptyDistributions,
+    );
+    expect(form.get('reference_number')).toBe('SA&DM/AD/2026/017');
+    expect(form.get('sender_reference')).toBe('SA&DM/AD/2026/017');
+  });
+
+  it('keeps the generated outgoing reference when a sender reference is supplied', () => {
+    const form = buildSubmissionFormData(
+      {
+        ...base,
+        subject: 'Test',
+        owningOfficeId: 'office-1',
+        referenceNumber: "HQ/AGM/SA&DM/AD/001",
+        senderReference: 'EXTERNAL/OUT/2026/1',
+      },
+      'outward',
+      [],
+      emptyDistributions,
+    );
+    expect(form.get('reference_number')).toBe("HQ/AGM/SA&DM/AD/001");
+    expect(form.get('sender_reference')).toBe('EXTERNAL/OUT/2026/1');
+  });
+
+  it('submits the selected reference classification code', () => {
+    const form = buildSubmissionFormData(
+      {
+        ...base,
+        subject: 'Test',
+        owningOfficeId: 'office-1',
+        referenceClassificationCode: 'OP',
+      },
+      'inward',
+      [],
+      emptyDistributions,
+    );
+    expect(form.get('reference_classification_code')).toBe('OP');
+  });
+
+  it('omits the classification code when no scheme classification is selected', () => {
+    const form = buildSubmissionFormData(
+      { ...base, subject: 'Test', owningOfficeId: 'office-1' },
+      'inward',
+      [],
+      emptyDistributions,
+    );
+    expect(form.get('reference_classification_code')).toBeNull();
+  });
+
+  it('omits custody ids when no physical copy is declared', () => {
+    const form = buildSubmissionFormData(
+      { ...base, subject: 'Test', owningOfficeId: 'office-1', hasPhysicalCopy: false },
+      'inward',
+      [],
+      emptyDistributions,
+    );
+    expect(form.get('has_physical_copy')).toBe('false');
+    expect(form.get('physical_custodian_office')).toBeNull();
+    expect(form.get('physical_location')).toBeNull();
+  });
+});
+
+describe('getExistingCorrespondenceId', () => {
+  it('reads the existing record id from a duplicate-reference API error', () => {
+    const error = {
+      body: JSON.stringify({
+        error: true,
+        message: 'This reference already belongs to an existing correspondence',
+        details: { existing_correspondence_id: 'corr-123' },
+      }),
+    };
+    expect(getExistingCorrespondenceId(error)).toBe('corr-123');
+  });
+
+  it('returns null for unrelated or malformed errors', () => {
+    expect(getExistingCorrespondenceId(new Error('network'))).toBeNull();
+    expect(getExistingCorrespondenceId({ body: 'not-json' })).toBeNull();
+    expect(
+      getExistingCorrespondenceId({ body: JSON.stringify({ details: {} }) })
+    ).toBeNull();
   });
 });
 
@@ -203,7 +386,6 @@ describe('calculateCompletionPercentage', () => {
       ...base,
       subject: 'Test',
       senderOrganization: 'Org',
-      assignTo: 'user-1',
       owningOfficeId: 'office-1',
       receivedDate: '2025-03-01',
     };
@@ -214,11 +396,10 @@ describe('calculateCompletionPercentage', () => {
     const partial = {
       ...base,
       subject: 'Test',
-      assignTo: 'user-1',
       owningOfficeId: 'office-1',
       receivedDate: '2025-03-01',
     };
-    expect(calculateCompletionPercentage(partial, 'inward', [new File([''], 'x.pdf')])).toBe(83);
+    expect(calculateCompletionPercentage(partial, 'inward', [new File([''], 'x.pdf')])).toBe(80);
   });
 
   it('returns 0% for empty outward form', () => {
@@ -229,13 +410,19 @@ describe('calculateCompletionPercentage', () => {
     const complete = {
       ...base,
       subject: 'Test',
-      senderOrganization: 'Org',
-      assignTo: 'user-1',
       owningOfficeId: 'office-1',
       recipientName: 'Recipient',
       dispatchDate: '2025-03-01',
       letterDate: '2025-02-28',
     };
-    expect(calculateCompletionPercentage(complete, 'outward', [new File([''], 'x.pdf')])).toBe(100);
+    const distributions = { directorates: ['dir-1'], divisions: [], departments: [] };
+    expect(
+      calculateCompletionPercentage(
+        complete,
+        'outward',
+        [new File([''], 'x.pdf')],
+        distributions,
+      ),
+    ).toBe(100);
   });
 });

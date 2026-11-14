@@ -14,6 +14,13 @@ export default function CreateDocumentPage() {
     router.push(`/dms/${document.id}`);
   };
 
+  const handleOpenChange = () => {
+    // A direct visit (bookmark, refresh) has no history entry, and router.back()
+    // would then do nothing at all — land on the documents list instead.
+    if (window.history.length > 1) router.back();
+    else router.push('/dms');
+  };
+
   return (
     <>
       {!currentUser?.id ? (
@@ -31,7 +38,7 @@ export default function CreateDocumentPage() {
 
           <DocumentUploadDialog
             open
-            onOpenChange={() => router.back()}
+            onOpenChange={handleOpenChange}
             mode="create"
             currentUser={currentUser}
             onComplete={handleComplete}

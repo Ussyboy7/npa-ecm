@@ -38,8 +38,27 @@ export const sanitizeHtml = (html: string, options?: Partial<DomPurifyConfig>): 
  * Sanitizes HTML for rich text editor content
  * Allows more formatting options
  */
+/**
+ * Drop style declarations whose values can load resources or run script.
+ * Applies to every rich-text path, not only Office paste.
+ */
+const stripUnsafeStyleValues = (html: string): string =>
+  html.replace(/(\s)style\s*=\s*("([^"]*)"|'([^']*)')/gi, (_m, ws: string, _q: string, dq?: string, sq?: string) => {
+    const value = dq ?? sq ?? '';
+    const kept = value
+      .split(';')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .filter((part) => {
+        const idx = part.indexOf(':');
+        return idx > 0 && !UNSAFE_CSS_VALUE_RE.test(part.slice(idx + 1));
+      })
+      .join('; ');
+    return kept ? `${ws}style="${kept}"` : '';
+  });
+
 export const sanitizeRichText = (html: string): string => {
-  return sanitizeHtml(html, {
+  return stripUnsafeStyleValues(sanitizeHtml(html, {
     ALLOWED_TAGS: [
       'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'a', 'img', 'table', 'thead',
@@ -50,10 +69,10 @@ export const sanitizeRichText = (html: string): string => {
     ALLOWED_ATTR: [
       'href', 'src', 'alt', 'title', 'class', 'id', 'style', 'width', 'height',
       'colspan', 'rowspan', 'colwidth', 'align', 'valign', 'target', 'rel',
-      'data-indent', 'data-color',
+      'data-indent', 'data-color', 'data-borderless', 'data-row-height',
       'face', 'size', 'color',
     ],
-  });
+  }));
 };
 
 /**
@@ -116,6 +135,9 @@ const PASTE_STYLE_ALLOW = new Set([
   'display',
 ]);
 
+const UNSAFE_CSS_VALUE_RE =
+  /url\s*\(|expression\s*\(|javascript\s*:|vbscript\s*:|@import|behavior\s*:|-moz-binding|\\|<|>/i;
+
 const EXCEL_PASTE_RE =
   /Excel\.Sheet|urn:schemas-microsoft-com:office:excel|xmlns:x=|ProgId="Excel\.Sheet"/i;
 
@@ -140,6 +162,8 @@ function normalizePasteDeclaration(
   }
 
   if (!PASTE_STYLE_ALLOW.has(prop)) return null;
+  // Reject values that can load resources or run script (url(), expression(), javascript:, legacy bindings).
+  if (UNSAFE_CSS_VALUE_RE.test(value)) return null;
 
   // Excel "general" alignment is not CSS.
   if (prop === 'text-align' && /^general$/i.test(value)) return null;
@@ -370,7 +394,7 @@ function applyTipTapColwidths(table: Element): void {
     .join('; ');
   table.setAttribute(
     'style',
-    [withoutWidth, 'width: 100%', 'border-collapse: collapse'].filter(Boolean).join('; '),
+    [withoutWidth, 'border-collapse: collapse'].filter(Boolean).join('; '),
   );
 }
 

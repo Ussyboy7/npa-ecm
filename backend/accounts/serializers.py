@@ -1,5 +1,8 @@
 """Serializers for the accounts application."""
 
+import base64
+import re
+
 from rest_framework import serializers
 
 from organization.models import Department, Directorate, Division, Role
@@ -59,6 +62,10 @@ class UserListSerializer(serializers.ModelSerializer):
             "system_role",
             "system_role_name",
             "employee_id",
+            "personnel_number",
+            "honorific",
+            "middle_name",
+            "designation",
             "directorate",
             "division",
             "department",
@@ -88,7 +95,14 @@ class UserSerializer(serializers.ModelSerializer):
     # CharField model fields lack null=True so DRF rejects ``null``.
     # Accept null here and normalise to "" before save.
     employee_id = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    personnel_number = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    honorific = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    middle_name = serializers.CharField(max_length=100, allow_blank=True, allow_null=True, required=False)
+    designation = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     grade_level = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    phone = serializers.CharField(max_length=32, allow_blank=True, allow_null=True, required=False)
+    bio = serializers.CharField(max_length=500, allow_blank=True, allow_null=True, required=False)
+    profile_photo = serializers.SerializerMethodField()
     system_role_name = serializers.SerializerMethodField()
     directorate_name = serializers.SerializerMethodField()
     division_name = serializers.SerializerMethodField()
@@ -104,6 +118,18 @@ class UserSerializer(serializers.ModelSerializer):
             return ""
         except (AttributeError, ValueError):
             return ""
+
+    def get_profile_photo(self, obj):
+        """Return the stored photo as a data URI (media is not publicly served)."""
+        if not obj.profile_photo:
+            return None
+        try:
+            with obj.profile_photo.open("rb") as photo:
+                data = photo.read()
+        except (FileNotFoundError, OSError, ValueError):
+            return None
+        # Uploads are normalised to JPEG by CurrentUserPhotoView.
+        return f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}"
     
     def get_directorate_name(self, obj):
         try:
@@ -145,6 +171,13 @@ class UserSerializer(serializers.ModelSerializer):
             "system_role_name",
             "permissions",
             "employee_id",
+            "personnel_number",
+            "honorific",
+            "middle_name",
+            "designation",
+            "phone",
+            "bio",
+            "profile_photo",
             "directorate",
             "division",
             "department",
@@ -194,7 +227,16 @@ class UserSerializer(serializers.ModelSerializer):
     @staticmethod
     def _normalise_charfields(validated_data: dict) -> None:
         """Convert null to ``""`` for CharField columns that lack ``null=True``."""
-        for field in ("employee_id", "grade_level"):
+        for field in (
+            "employee_id",
+            "personnel_number",
+            "honorific",
+            "middle_name",
+            "designation",
+            "grade_level",
+            "phone",
+            "bio",
+        ):
             if field in validated_data and validated_data[field] is None:
                 validated_data[field] = ""
 
@@ -232,7 +274,6 @@ class ExecutiveSignatureSerializer(serializers.ModelSerializer):
             "user",
             "user_name",
             "user_role",
-            "signature_image",
             "signature_url",
             "has_signature",
             "original_filename",
@@ -328,6 +369,38 @@ class UserSignaturePreferencesSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "user", "created_at", "updated_at"]
 
 
+class ExecutiveSignatureSettingsSerializer(serializers.ModelSerializer):
+    """Validated updates for seal display and security settings."""
+
+    class Meta:
+        model = ExecutiveSignature
+        fields = [
+            "seal_office_name",
+            "seal_office_title",
+            "seal_prefix",
+            "require_2fa",
+            "is_active",
+        ]
+
+    def validate_seal_office_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Organization name is required")
+        return value
+
+    def validate_seal_prefix(self, value):
+        value = value.strip().upper()
+        if not value:
+            raise serializers.ValidationError("Serial prefix is required")
+        if len(value) > 20:
+            raise serializers.ValidationError("Maximum 20 characters")
+        if not re.fullmatch(r"[A-Z0-9-]+", value):
+            raise serializers.ValidationError(
+                "Use uppercase letters, numbers, and hyphens only"
+            )
+        return value
+
+
 class ExecutiveSignatureUploadSerializer(serializers.Serializer):
     """Serializer for uploading a new signature image."""
     
@@ -335,9 +408,9 @@ class ExecutiveSignatureUploadSerializer(serializers.Serializer):
         help_text="PNG or JPG signature image (max 2MB, transparent background recommended)"
     )
     seal_office_name = serializers.CharField(
-        max_length=100, 
+        max_length=100,
         required=False,
-        default="NIGERIAN PORTS AUTHORITY"
+        allow_blank=False,
     )
     seal_office_title = serializers.CharField(
         max_length=100, 
@@ -345,11 +418,29 @@ class ExecutiveSignatureUploadSerializer(serializers.Serializer):
         allow_blank=True
     )
     seal_prefix = serializers.CharField(
-        max_length=20, 
+        max_length=20,
         required=False,
-        default="NPA"
+        allow_blank=False,
     )
-    require_2fa = serializers.BooleanField(required=False, default=True)
+    require_2fa = serializers.BooleanField(required=False)
+
+    def validate_seal_office_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Organization name is required")
+        return value
+
+    def validate_seal_prefix(self, value):
+        value = value.strip().upper()
+        if not value:
+            raise serializers.ValidationError("Serial prefix is required")
+        if len(value) > 20:
+            raise serializers.ValidationError("Maximum 20 characters")
+        if not re.fullmatch(r"[A-Z0-9-]+", value):
+            raise serializers.ValidationError(
+                "Use uppercase letters, numbers, and hyphens only"
+            )
+        return value
 
     def validate_signature_image(self, value):
         # Validate file size (max 2MB)
@@ -358,10 +449,10 @@ class ExecutiveSignatureUploadSerializer(serializers.Serializer):
             raise serializers.ValidationError("Signature image must be less than 2MB")
         
         # Validate file type
-        allowed_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml']
+        allowed_types = ['image/png', 'image/jpeg', 'image/jpg']
         if value.content_type not in allowed_types:
             raise serializers.ValidationError(
-                f"Invalid file type. Allowed: PNG, JPG, SVG. Got: {value.content_type}"
+                f"Invalid file type. Allowed: PNG, JPG. Got: {value.content_type}"
             )
         
         return value

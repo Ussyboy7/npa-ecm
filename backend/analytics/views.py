@@ -22,6 +22,7 @@ from .models import (
     EscalationRule,
     ReportSnapshot,
     SLAConfiguration,
+    SLADefault,
     StaffPerformanceSnapshot,
     UsageMetric,
 )
@@ -120,36 +121,40 @@ class SLAConfigurationViewSet(WorkflowAdminMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def targets(self, request):
-        """Get the current global SLA targets as a simple dict."""
+        """Get the current default SLA targets as a simple dict."""
         targets = SLAConfiguration.get_default_sla_targets()
         return Response(targets)
+
+    @action(detail=False, methods=["get"])
+    def defaults(self, request):
+        """Get default target and warning/critical thresholds per priority."""
+        return Response(SLAConfiguration.get_defaults())
 
     @action(detail=False, methods=["post"])
     def bulk_update(self, request):
         """
-        Bulk update global SLA targets.
-        Expected format: {"urgent": 2, "high": 3, "medium": 5, "low": 7}
+        Bulk update default SLA targets.
+        Expected format: {"urgent": 8, "high": 24, "medium": 48, "low": 72}
         """
         data = request.data
         updated = []
-        
-        for priority, target_days in data.items():
+
+        for priority, target_hours in data.items():
             if priority not in SLAConfiguration.Priority.values:
                 continue
-            
-            sla, created = SLAConfiguration.objects.update_or_create(
+
+            if not isinstance(target_hours, int) or target_hours < 1:
+                raise ValidationError(
+                    {"target_hours": f"Invalid target for {priority}: {target_hours}"}
+                )
+
+            SLADefault.objects.update_or_create(
                 priority=priority,
-                correspondence_type=SLAConfiguration.CorrespondenceType.ALL,
-                division=None,
-                defaults={
-                    "name": f"Global {priority.title()} SLA",
-                    "target_days": target_days,
-                    "is_active": True,
-                },
+                defaults={"target_hours": target_hours},
             )
-            updated.append(SLAConfigurationSerializer(sla).data)
-        
-        return Response({"updated": updated})
+            updated.append(priority)
+
+        return Response({"updated": updated, "defaults": SLAConfiguration.get_defaults()})
 
     @action(detail=False, methods=["get"])
     def choices(self, request):

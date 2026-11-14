@@ -5,7 +5,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from organization.models import Department, Division, Office
+from organization.models import Department, Directorate, Division, Office
 
 from .models import (
     Document,
@@ -36,6 +36,25 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
     file_url = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=None)
     has_file = serializers.SerializerMethodField()
     drm_delivery = serializers.SerializerMethodField()
+
+    def validate(self, attrs):
+        """Keep a linked memo's printed Ref.: aligned with its correspondence."""
+        content_html = attrs.get("content_html")
+        if content_html and content_html.strip():
+            document = attrs.get("document")
+            if document is None and self.instance is not None:
+                document = self.instance.document
+            if document and document.document_type == Document.DocumentType.MEMO:
+                from correspondence.reference_utils import memo_reference_conflict
+
+                links = document.correspondence_links.select_related("correspondence")
+                for link in links:
+                    conflict = memo_reference_conflict(
+                        content_html, link.correspondence.reference_number
+                    )
+                    if conflict:
+                        raise serializers.ValidationError({"content_html": conflict})
+        return attrs
 
     def get_has_file(self, obj) -> bool:
         return bool((getattr(obj, "file_url", None) or "").strip() or (getattr(obj, "content_html", None) or "").strip())
@@ -165,6 +184,12 @@ class DocumentPermissionSerializer(serializers.ModelSerializer):
         queryset=Office.objects.all(),
         required=False,
     )
+    directorate_ids = serializers.PrimaryKeyRelatedField(
+        source="directorates",
+        many=True,
+        queryset=Directorate.objects.all(),
+        required=False,
+    )
     user_ids = serializers.PrimaryKeyRelatedField(
         source="users",
         many=True,
@@ -182,6 +207,7 @@ class DocumentPermissionSerializer(serializers.ModelSerializer):
             "division_ids",
             "department_ids",
             "office_ids",
+            "directorate_ids",
             "grade_levels",
             "user_ids",
             "created_at",
@@ -242,6 +268,7 @@ class DocumentSerializer(serializers.ModelSerializer):
     )
     drm_rights = serializers.SerializerMethodField()
     effective_rights = serializers.SerializerMethodField()
+    publication_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
@@ -269,10 +296,52 @@ class DocumentSerializer(serializers.ModelSerializer):
             "drm_policy_id",
             "drm_rights",
             "effective_rights",
+            "publication_history",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "author", "versions", "permissions", "form_document", "case_links", "parent_document", "drm_rights", "created_at", "updated_at"]
+        read_only_fields = ["id", "author", "status", "versions", "permissions", "form_document", "case_links", "parent_document", "drm_rights", "created_at", "updated_at"]
+
+    def get_publication_history(self, obj):
+        """Return formal-issue audit records for a document detail response."""
+        view = self.context.get("view")
+        if view is not None and getattr(view, "action", None) != "retrieve":
+            return []
+
+        from audit.models import ActivityLog
+        from correspondence.models import Correspondence
+
+        issue_logs = ActivityLog.objects.filter(
+            object_type="document",
+            object_id=str(obj.id),
+            action=ActivityLog.ActionType.DOCUMENT_UPDATED,
+        ).only("timestamp", "metadata").order_by("timestamp")
+        entries = []
+        correspondence_ids = set()
+        for log in issue_logs:
+            metadata = log.metadata or {}
+            version_id = metadata.get("published_version_id")
+            if not metadata.get("issue_type") or not metadata.get("correspondence_id"):
+                continue
+            correspondence_id = str(metadata["correspondence_id"])
+            correspondence_ids.add(correspondence_id)
+            entries.append({
+                "published_version_id": str(version_id) if version_id else None,
+                "published_version_number": metadata.get("published_version_number"),
+                "correspondence_id": correspondence_id,
+                "issue_type": metadata["issue_type"],
+                "timestamp": log.timestamp.isoformat(),
+            })
+
+        correspondences = {
+            str(correspondence.id): correspondence
+            for correspondence in Correspondence.objects.filter(id__in=correspondence_ids)
+        }
+        for entry in entries:
+            correspondence = correspondences.get(entry["correspondence_id"])
+            entry["correspondence_reference"] = correspondence.reference_number if correspondence else ""
+            entry["correspondence_subject"] = correspondence.subject if correspondence else ""
+        return entries
 
     def get_drm_rights(self, obj):
         from .drm import resolve_document_rights

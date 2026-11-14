@@ -33,6 +33,10 @@ class ActivityLog(UUIDModel):
         CORRESPONDENCE_REJECTED = "correspondence_rejected", "Correspondence Rejected"
         CORRESPONDENCE_COMPLETED = "correspondence_completed", "Correspondence Completed"
 
+        # Case actions
+        CASE_CREATED = "case_created", "Case Created"
+        CASE_UPDATED = "case_updated", "Case Updated"
+
         # User actions
         USER_LOGIN = "user_login", "User Login"
         USER_LOGOUT = "user_logout", "User Logout"

@@ -4,7 +4,6 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 import { useMemo, useState, useEffect, useLayoutEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -21,17 +20,16 @@ import {
   ArrowUp,
   ArrowDown,
   Plus,
-  Download,
   Loader2,
   Pencil,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
 import { UserTableSkeleton, UserTableSkeletonRows } from "@/components/admin/UserTableSkeleton";
-import { getGradeLevelByCode, type User } from "@/lib/npa-structure";
-import { exportToCSV } from "@/lib/admin-export";
+import { GRADE_LEVELS, getGradeLevelByCode, type User } from "@/lib/npa-structure";
 import { toast } from "@/components/ui/sonner";
 import { getRecentSearches, addRecentSearch, getSearchSuggestions, clearRecentSearches } from "@/lib/admin-search-autocomplete";
+import { mapApiUserToUser } from "@/lib/organization-data";
 import { 
   fetchUsers, 
   type User as ApiUser, 
@@ -74,40 +72,8 @@ const getGradeLabel = (code: string | undefined) => getGradeLevelByCode(code)?.n
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_ACTIVE_FILTER: ActiveFilter = { key: 'status', value: 'active', display: 'Status: Active' };
 
-const parseStoredFilters = (raw: string | null): ActiveFilter[] => {
-  if (!raw) return [DEFAULT_ACTIVE_FILTER];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [DEFAULT_ACTIVE_FILTER];
-    const normalized = parsed
-      .filter((item): item is ActiveFilter => typeof item === 'object' && item !== null)
-      .map((item) => ({
-        key: String(item.key) as FilterCategory,
-        value: String(item.value ?? ''),
-        display: String(item.display ?? ''),
-      }))
-      .filter((item) => item.key && item.display);
-    return normalized.length > 0 ? normalized : [DEFAULT_ACTIVE_FILTER];
-  } catch {
-    return [DEFAULT_ACTIVE_FILTER];
-  }
-};
-
-const parseStoredSort = (raw: string | null): SortState | null => {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as SortState;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (!parsed.key || !parsed.direction) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-};
-
 export type UsersManagementTabHandle = {
   openCreateUser: () => void;
-  exportUsers: () => void;
 };
 
 export const UsersManagementTab = forwardRef<
@@ -119,7 +85,6 @@ export const UsersManagementTab = forwardRef<
     filterPortalId?: string;
     searchQuery?: string;
     onSearchQueryChange?: (value: string) => void;
-    onTotalCountChange?: (totalCount: number) => void;
   }
 >(function UsersManagementTab(
   {
@@ -129,12 +94,10 @@ export const UsersManagementTab = forwardRef<
     filterPortalId,
     searchQuery: controlledSearchQuery,
     onSearchQueryChange,
-    onTotalCountChange,
   },
   ref,
 ) {
   const { divisions, departments, roles } = useOrganization();
-  const searchParams = useSearchParams();
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -143,7 +106,6 @@ export const UsersManagementTab = forwardRef<
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Load from URL params or localStorage
   const [internalSearchQuery, setInternalSearchQuery] = useState('');
   const searchQuery = controlledSearchQuery ?? internalSearchQuery;
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -158,10 +120,8 @@ export const UsersManagementTab = forwardRef<
   const [filters, setFilters] = useState<ActiveFilter[]>([DEFAULT_ACTIVE_FILTER]);
   const [sortState, setSortState] = useState<SortState | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
-  const [_isBulkActionMode, setIsBulkActionMode] = useState(false);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
-  const [_mounted, _setMounted] = useState(false);
   const [showBulkDeactivateConfirm, setShowBulkDeactivateConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
@@ -180,54 +140,6 @@ export const UsersManagementTab = forwardRef<
     if (UUID_REGEX.test(value)) return value;
     return roleIdByName.get(value.toLowerCase()) || null;
   }, [roleIdByName]);
-  
-  // Ensure client-side only rendering for localStorage-dependent UI
-  useEffect(() => {
-    _setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!searchParams) return;
-    const urlQuery = searchParams.get('search');
-    if (urlQuery) {
-      setSearchQuery(urlQuery);
-    } else {
-      const storedSearch = localStorage.getItem('admin_users_search');
-      if (storedSearch) setSearchQuery(storedSearch);
-    }
-    const storedFilters = localStorage.getItem('admin_users_filters');
-    if (storedFilters) setFilters(parseStoredFilters(storedFilters));
-    const storedSort = localStorage.getItem('admin_users_sort');
-    if (storedSort) setSortState(parseStoredSort(storedSort));
-  }, [searchParams, setSearchQuery]);
-
-  // Normalize legacy role filters (name-based) to UUID-based filters expected by backend.
-  useEffect(() => {
-    if (roles.length === 0) return;
-    setFilters((prev) => {
-      let changed = false;
-      const normalized = prev.flatMap((filter) => {
-        if (filter.key !== 'role') return [filter];
-        const roleId = resolveRoleId(filter.value);
-        if (!roleId) {
-          changed = true;
-          return [];
-        }
-        const roleName = roles.find((role) => role.id === roleId)?.name || filter.display.replace(/^Role:\s*/i, '') || 'Role';
-        const nextFilter: ActiveFilter = {
-          ...filter,
-          value: roleId,
-          display: `Role: ${roleName}`,
-        };
-        if (nextFilter.value !== filter.value || nextFilter.display !== filter.display) {
-          changed = true;
-        }
-        return [nextFilter];
-      });
-      return changed ? normalized : prev;
-    });
-  }, [roles, resolveRoleId]);
   
   // Load recent searches
   const recentSearches = typeof window !== 'undefined' ? getRecentSearches('users') : [];
@@ -287,6 +199,9 @@ export const UsersManagementTab = forwardRef<
           case 'department':
             queryParams.department = filter.value;
             break;
+          case 'grade':
+            queryParams.grade_level = filter.value;
+            break;
         }
       });
       
@@ -323,46 +238,17 @@ export const UsersManagementTab = forwardRef<
   
   // Map API users to local User type (must be before useEffects that use it)
   const mappedUsers = useMemo(() => {
-    return users.map((apiUser): User => ({
-      id: apiUser.id,
-      name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
-      email: apiUser.email,
-      employeeId: apiUser.employee_id || '',
-      gradeLevel: apiUser.grade_level || '',
-      directorate: apiUser.directorate || undefined,
-      division: apiUser.division || undefined,
-      department: apiUser.department || undefined,
-      systemRole: apiUser.system_role_name || apiUser.system_role || '',
-      active: apiUser.is_active,
-      username: apiUser.username,
-      isSuperuser: apiUser.is_superuser,
-    }));
+    return users.map((apiUser) =>
+      mapApiUserToUser(apiUser as unknown as Record<string, unknown>),
+    );
   }, [users]);
   
-  useEffect(() => {
-    onTotalCountChange?.(totalCount);
-  }, [totalCount, onTotalCountChange]);
-  
-  const handleExportUsers = useCallback(() => {
-    const columns = [
-      { key: 'name' as keyof User, label: 'Name' },
-      { key: 'email' as keyof User, label: 'Email' },
-      { key: 'systemRole' as keyof User, label: 'Role' },
-      { key: 'gradeLevel' as keyof User, label: 'Grade' },
-      { key: 'division' as keyof User, label: 'Division' },
-      { key: 'department' as keyof User, label: 'Department' },
-      { key: 'active' as keyof User, label: 'Status' },
-    ];
-    exportToCSV(mappedUsers, columns, { filename: `users-export-${new Date().toISOString().split('T')[0]}.csv` });
-  }, [mappedUsers]);
-
   useImperativeHandle(ref, () => ({
     openCreateUser: () => {
       setSelectedUser(null);
       setEditOpen(true);
     },
-    exportUsers: handleExportUsers,
-  }), [handleExportUsers]);
+  }), []);
 
   const [filterPortalTarget, setFilterPortalTarget] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -396,17 +282,6 @@ export const UsersManagementTab = forwardRef<
     }
   }, [searchQuery, mappedUsers]);
   
-  // Persist to localStorage and URL
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('admin_users_search', searchQuery);
-      localStorage.setItem('admin_users_filters', JSON.stringify(filters));
-      if (sortState) {
-        localStorage.setItem('admin_users_sort', JSON.stringify(sortState));
-      }
-    }
-  }, [searchQuery, filters, sortState]);
-
   const addFilter = (filter: ActiveFilter) => {
     setFilters((prev) => {
       const exists = prev.some((item) => item.key === filter.key && item.value === filter.value);
@@ -449,7 +324,6 @@ export const UsersManagementTab = forwardRef<
         description: result.message || `Activated ${result.activated_count || selectedUserIds.size} user(s)`,
       });
       setSelectedUserIds(new Set());
-      setIsBulkActionMode(false);
       await loadUsers();
     } catch (error: unknown) {
       handleApiError(error, 'Bulk Activate');
@@ -479,7 +353,6 @@ export const UsersManagementTab = forwardRef<
         description: result.message || `Deactivated ${result.deactivated_count || selectedUserIds.size} user(s)`,
       });
       setSelectedUserIds(new Set());
-      setIsBulkActionMode(false);
       setShowBulkDeactivateConfirm(false);
       await loadUsers();
     } catch (error: unknown) {
@@ -510,7 +383,6 @@ export const UsersManagementTab = forwardRef<
         description: result.message || `Archived ${result.archived_count || selectedUserIds.size} user(s)`,
       });
       setSelectedUserIds(new Set());
-      setIsBulkActionMode(false);
       setShowBulkArchiveConfirm(false);
       await loadUsers();
     } catch (error: unknown) {
@@ -541,7 +413,6 @@ export const UsersManagementTab = forwardRef<
         description: result.message || `Deleted ${result.deleted_count || selectedUserIds.size} user(s)`,
       });
       setSelectedUserIds(new Set());
-      setIsBulkActionMode(false);
       setShowBulkDeleteConfirm(false);
       await loadUsers();
     } catch (error: unknown) {
@@ -569,7 +440,6 @@ export const UsersManagementTab = forwardRef<
         description: result.message || `Assigned role to ${result.assigned_count || selectedUserIds.size} user(s)`,
       });
       setSelectedUserIds(new Set());
-      setIsBulkActionMode(false);
       setShowBulkRoleAssign(false);
       await loadUsers();
     } catch (error: unknown) {
@@ -598,14 +468,6 @@ export const UsersManagementTab = forwardRef<
         newState = null;
       }
       
-      if (typeof window !== 'undefined') {
-        if (newState) {
-          localStorage.setItem('admin_users_sort', JSON.stringify(newState));
-        } else {
-          localStorage.removeItem('admin_users_sort');
-        }
-      }
-      
       // Reset to page 1 when sorting changes
       setCurrentPage(1);
       
@@ -630,9 +492,6 @@ export const UsersManagementTab = forwardRef<
               value={searchQuery}
               onChange={(event) => {
                 setSearchQuery(event.target.value);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('admin_users_search', event.target.value);
-                }
               }}
               onFocus={() => {
                 if (searchQuery.trim().length > 1 || recentSearches.length > 0) {
@@ -722,7 +581,7 @@ export const UsersManagementTab = forwardRef<
               setFilterValue("role", role.id, `Role: ${role.name}`);
             }}
           >
-            <SelectTrigger className="h-8 w-[130px] text-xs">
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by role">
               <SelectValue placeholder="Role" />
             </SelectTrigger>
             <SelectContent>
@@ -747,7 +606,7 @@ export const UsersManagementTab = forwardRef<
               setFilterValue("division", division.id, `Division: ${division.name}`);
             }}
           >
-            <SelectTrigger className="h-8 w-[130px] text-xs">
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by division">
               <SelectValue placeholder="Division" />
             </SelectTrigger>
             <SelectContent>
@@ -772,9 +631,34 @@ export const UsersManagementTab = forwardRef<
               setFilterValue("department", department.id, `Department: ${department.name}`);
             }}
           >
-            <SelectTrigger className="h-8 w-[130px] text-xs">
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by department">
               <SelectValue placeholder="Department" />
             </SelectTrigger>
+
+          <Select
+            value={getFilterValue("grade")}
+            onValueChange={(value) => {
+              if (value === "all") {
+                setFilterValue("grade", "all", "");
+                return;
+              }
+              const grade = GRADE_LEVELS.find((item) => item.code === value);
+              if (!grade) return;
+              setFilterValue("grade", grade.code, `Grade: ${grade.name}`);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by grade">
+              <SelectValue placeholder="Grade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Grades</SelectItem>
+              {GRADE_LEVELS.map((grade) => (
+                <SelectItem key={grade.code} value={grade.code}>
+                  {grade.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
               {departments.map((department) => (
@@ -795,7 +679,7 @@ export const UsersManagementTab = forwardRef<
               setFilterValue("status", value, `Status: ${value === "active" ? "Active" : "Inactive"}`);
             }}
           >
-            <SelectTrigger className="h-8 w-[130px] text-xs">
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by status">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -813,15 +697,6 @@ export const UsersManagementTab = forwardRef<
 
           {!hideFilterActions ? (
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportUsers}
-              aria-label="Export users to CSV"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
             <Button
               onClick={() => {
                 setSelectedUser(null);
@@ -930,8 +805,7 @@ export const UsersManagementTab = forwardRef<
                 size="sm"
                 onClick={() => {
                   setSelectedUserIds(new Set());
-                  setIsBulkActionMode(false);
-                }}
+                            }}
                 disabled={isBulkProcessing}
               >
                 Clear
@@ -959,6 +833,9 @@ export const UsersManagementTab = forwardRef<
           />
         ) : null}
 
+      <p className="text-[11px] text-muted-foreground sm:hidden">
+        Swipe the table sideways to see all columns.
+      </p>
       <div className="overflow-x-auto rounded-xl border border-border/60">
           {loading && mappedUsers.length === 0 ? (
             <UserTableSkeleton rows={pageSize} />
@@ -969,7 +846,7 @@ export const UsersManagementTab = forwardRef<
                 <TableHead className="w-8">
                   <input
                     type="checkbox"
-                    checked={selectedUserIds.size === mappedUsers.length && mappedUsers.length > 0}
+                    checked={mappedUsers.length > 0 && mappedUsers.every((user) => selectedUserIds.has(user.id))}
                     onChange={(e) => {
                       if (e.target.checked) {
                         setSelectedUserIds(new Set(mappedUsers.map(u => u.id)));
@@ -992,6 +869,7 @@ export const UsersManagementTab = forwardRef<
                     {renderSortIcon("name")}
                   </button>
                 </TableHead>
+                <TableHead className="w-[200px] text-xs">Email</TableHead>
                 <TableHead className="w-[150px]">
                   <button
                     type="button"
@@ -1003,26 +881,16 @@ export const UsersManagementTab = forwardRef<
                     {renderSortIcon("role")}
                   </button>
                 </TableHead>
-                <TableHead className="w-[130px]">
+                <TableHead className="w-[120px] text-xs">Grade</TableHead>
+                <TableHead className="w-[180px]">
                   <button
                     type="button"
                     className="flex items-center gap-1 text-left text-xs"
                     onClick={() => toggleSort("division")}
-                    aria-label="Sort by division"
+                    aria-label="Sort by unit"
                   >
-                    Division
+                    Unit
                     {renderSortIcon("division")}
-                  </button>
-                </TableHead>
-                <TableHead className="w-[130px]">
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 text-left text-xs"
-                    onClick={() => toggleSort("department")}
-                    aria-label="Sort by department"
-                  >
-                    Department
-                    {renderSortIcon("department")}
                   </button>
                 </TableHead>
                 <TableHead className="w-[100px]">
@@ -1044,7 +912,7 @@ export const UsersManagementTab = forwardRef<
                 <UserTableSkeletonRows rows={pageSize} />
               ) : mappedUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No users found
                   </TableCell>
                 </TableRow>
@@ -1056,6 +924,7 @@ export const UsersManagementTab = forwardRef<
                 const department = user.department
                   ? departments.find((dept) => dept.id === user.department)
                   : undefined;
+                const gradeLabel = getGradeLabel(user.gradeLevel) || user.gradeLevel || "—";
                 const isSelected = selectedUserIds.has(user.id);
                 return (
                   <TableRow key={user.id} className={`${isSelected ? "bg-muted/50" : ""} hover:bg-muted/50 h-10`}>
@@ -1084,6 +953,14 @@ export const UsersManagementTab = forwardRef<
                         )}
                       </div>
                     </TableCell>
+                    <TableCell className="py-1.5">
+                      <span
+                        className="block max-w-[200px] truncate text-xs text-muted-foreground"
+                        title={user.email || undefined}
+                      >
+                        {user.email || "—"}
+                      </span>
+                    </TableCell>
                     <TableCell className="py-1.5 max-w-[150px]">
                       <Badge
                         variant="secondary"
@@ -1099,40 +976,39 @@ export const UsersManagementTab = forwardRef<
                       </Badge>
                     </TableCell>
                     <TableCell className="py-1.5">
-                      {division ? (
-                        <button
-                          type="button"
-                          className="flex flex-col text-left hover:text-primary min-w-0 w-full"
-                          onClick={() =>
-                            addFilter({ key: "division", value: division.id, display: `Division: ${division.name}` })
-                          }
-                        >
-                          <span className="text-xs break-words leading-none">{division.name}</span>
-                          {division.code && (
-                            <span className="text-[10px] text-muted-foreground break-words leading-none">{division.code}</span>
-                          )}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      <span className="block max-w-[120px] truncate text-xs" title={gradeLabel}>
+                        {gradeLabel}
+                      </span>
                     </TableCell>
                     <TableCell className="py-1.5">
-                      {department ? (
-                        <button
-                          type="button"
-                          className="flex flex-col text-left hover:text-primary min-w-0 w-full"
-                          onClick={() =>
-                            addFilter({ key: "department", value: department.id, display: `Department: ${department.name}` })
-                          }
-                        >
-                          <span className="text-xs break-words leading-none">{department.name}</span>
-                          {department.code && (
-                            <span className="text-[10px] text-muted-foreground break-words leading-none">{department.code}</span>
-                          )}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        {division ? (
+                          <button
+                            type="button"
+                            className="truncate text-left text-xs leading-tight hover:text-primary"
+                            title={division.name}
+                            onClick={() =>
+                              addFilter({ key: "division", value: division.id, display: `Division: ${division.name}` })
+                            }
+                          >
+                            {division.name}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                        {department ? (
+                          <button
+                            type="button"
+                            className="truncate text-left text-[10px] leading-tight text-muted-foreground hover:text-primary"
+                            title={department.name}
+                            onClick={() =>
+                              addFilter({ key: "department", value: department.id, display: `Department: ${department.name}` })
+                            }
+                          >
+                            {department.name}
+                          </button>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="py-1.5">
                       <Badge
@@ -1232,7 +1108,7 @@ export const UsersManagementTab = forwardRef<
                   }}
                   disabled={loading}
                 >
-                  <SelectTrigger className="ml-2 w-[130px] h-9">
+                  <SelectTrigger className="ml-2 w-[130px] h-9" aria-label="Users per page">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

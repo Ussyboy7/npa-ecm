@@ -68,6 +68,11 @@ router.register(r"foia-notes", FOIANoteViewSet, basename="foia-note")
 # items/<pk>/ detail route (e.g. pk="my-sent" → 404).
 urlpatterns = [
     path(
+        "items/registered/",
+        CorrespondenceViewSet.as_view({"get": "registered"}),
+        name="correspondence-registered",
+    ),
+    path(
         "items/my-sent/",
         CorrespondenceViewSet.as_view({"get": "my_sent"}),
         name="correspondence-my-sent",

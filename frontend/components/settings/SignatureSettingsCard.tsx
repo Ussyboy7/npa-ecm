@@ -14,6 +14,7 @@ import {
   Lock,
   ImageIcon,
   Info,
+  Trash2,
 } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 import { Button } from '@/components/ui/button';
@@ -28,8 +29,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { DigitalSealPreview, type DigitalSealPreviewHandle } from '@/components/seals/DigitalSealPreview';
+import { StepUpDialog } from '@/components/settings/StepUpDialog';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import {
+  deleteUserSignatureFromBackend,
   fetchUserSignature,
   uploadUserSignature,
   updateSignatureSettings,
@@ -37,14 +40,14 @@ import {
 } from '@/lib/api/signatures';
 import { emitSignatureUpdated } from '@/hooks/use-signature';
 import { logError } from '@/lib/client-logger';
-import { formatDateShort } from '@/lib/datetime';
+import { formatDate } from '@/lib/datetime';
 import { appType } from '@/lib/app-type';
 import { cn } from '@/lib/utils';
 
 const MAX_SIGNATURE_SIZE_MB = 2;
 const MAX_OFFICE_NAME_LENGTH = 100;
 const MAX_OFFICE_TITLE_LENGTH = 100;
-const MAX_PREFIX_LENGTH = 10;
+const MAX_PREFIX_LENGTH = 20;
 
 const DEFAULT_SEAL_SETTINGS = {
   sealOfficeName: DEFAULT_SEAL_OFFICE_NAME,
@@ -53,13 +56,22 @@ const DEFAULT_SEAL_SETTINGS = {
   require2fa: true,
 };
 
-export const SignatureSettingsCard = () => {
+interface SignatureSettingsCardProps {
+  onUnsavedChange?: (hasUnsavedChanges: boolean) => void;
+}
+
+export const SignatureSettingsCard = ({ onUnsavedChange }: SignatureSettingsCardProps) => {
   const { currentUser } = useCurrentUser();
   const [signature, setSignature] = useState<StoredSignature | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [show2FADialog, setShow2FADialog] = useState(false);
+  const [showDisable2FAStepUp, setShowDisable2FAStepUp] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [pendingSignatureFile, setPendingSignatureFile] = useState<File | null>(null);
+  const [showReplaceDialog, setShowReplaceDialog] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const sealPreviewRef = useRef<DigitalSealPreviewHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -100,12 +112,6 @@ export const SignatureSettingsCard = () => {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    if (!sealOfficeTitle && currentUser?.systemRole) {
-      setSealOfficeTitle(`OFFICE OF THE ${currentUser.systemRole.toUpperCase()}`);
-    }
-  }, [currentUser?.systemRole, sealOfficeTitle]);
-
-  useEffect(() => {
     if (!signature) return;
     setHasUnsavedChanges(
       sealOfficeName !== (signature.sealOfficeName || DEFAULT_SEAL_SETTINGS.sealOfficeName) ||
@@ -114,6 +120,22 @@ export const SignatureSettingsCard = () => {
         require2fa !== (signature.require2fa ?? DEFAULT_SEAL_SETTINGS.require2fa)
     );
   }, [signature, sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    onUnsavedChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onUnsavedChange]);
+
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
 
   const validateOfficeName = (value: string): string | undefined => {
     if (!value.trim()) return 'Organization name is required';
@@ -133,16 +155,14 @@ export const SignatureSettingsCard = () => {
     return undefined;
   };
 
-  const persistSignatureFile = useCallback(
+  const saveSignatureFile = useCallback(
     async (file: File) => {
       setIsUploading(true);
+      setErrors((prev) => ({ ...prev, file: undefined }));
       try {
-        const uploaded = await uploadUserSignature(file, {
-          sealOfficeName,
-          sealOfficeTitle,
-          sealPrefix,
-          require2fa,
-        });
+        // Seal settings are saved separately so uploading an image never
+        // persists unsaved Organization / Office title / prefix edits.
+        const uploaded = await uploadUserSignature(file);
         if (uploaded) {
           setSignature(uploaded);
           emitSignatureUpdated();
@@ -167,7 +187,19 @@ export const SignatureSettingsCard = () => {
         setIsUploading(false);
       }
     },
-    [sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]
+    []
+  );
+
+  const requestSignatureSave = useCallback(
+    async (file: File) => {
+      if (signature) {
+        setPendingSignatureFile(file);
+        setShowReplaceDialog(true);
+        return;
+      }
+      await saveSignatureFile(file);
+    },
+    [saveSignatureFile, signature]
   );
 
   const handleSignatureUpload = useCallback(
@@ -184,17 +216,17 @@ export const SignatureSettingsCard = () => {
         return;
       }
       if (!ALLOWED_SIGNATURE_MIME_TYPES.includes(file.type)) {
-        const message = 'Use PNG, JPG, or SVG';
+        const message = 'Use PNG or JPG';
         setErrors((prev) => ({ ...prev, file: message }));
         toast.error(message);
         event.target.value = '';
         return;
       }
 
-      await persistSignatureFile(file);
+      await requestSignatureSave(file);
       event.target.value = '';
     },
-    [persistSignatureFile]
+    [requestSignatureSave]
   );
 
   const handleDrawSave = useCallback(
@@ -202,12 +234,12 @@ export const SignatureSettingsCard = () => {
       const res = await fetch(dataUrl);
       const blob = await res.blob();
       const file = new File([blob], 'drawn-signature.png', { type: 'image/png' });
-      await persistSignatureFile(file);
+      await requestSignatureSave(file);
     },
-    [persistSignatureFile]
+    [requestSignatureSave]
   );
 
-  const handleSaveSettings = useCallback(async () => {
+  const saveSettings = useCallback(async (currentPassword?: string) => {
     if (!signature) return;
     const officeNameError = validateOfficeName(sealOfficeName);
     const officeTitleError = validateOfficeTitle(sealOfficeTitle);
@@ -222,6 +254,11 @@ export const SignatureSettingsCard = () => {
       return;
     }
 
+    if (signature.require2fa && !require2fa && !currentPassword) {
+      setShowDisable2FAStepUp(true);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const updated = await updateSignatureSettings({
@@ -229,31 +266,55 @@ export const SignatureSettingsCard = () => {
         sealOfficeTitle,
         sealPrefix,
         require2fa,
+        currentPassword,
       });
       if (updated) {
         setSignature(updated);
         setHasUnsavedChanges(false);
+        setShowDisable2FAStepUp(false);
         toast.success('Seal settings saved');
       }
     } catch (error: unknown) {
       logError('Failed to save settings', error);
       toast.error(error instanceof Error ? error.message : 'Failed to save settings');
+      throw error;
     } finally {
       setIsSaving(false);
     }
   }, [signature, sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
 
+  const handleSaveSettings = useCallback(() => {
+    void saveSettings().catch(() => undefined);
+  }, [saveSettings]);
+
   const handleResetToDefaults = useCallback(() => {
     setSealOfficeName(DEFAULT_SEAL_SETTINGS.sealOfficeName);
-    setSealOfficeTitle(
-      currentUser?.systemRole
-        ? `OFFICE OF THE ${currentUser.systemRole.toUpperCase()}`
-        : DEFAULT_SEAL_SETTINGS.sealOfficeTitle
-    );
+    setSealOfficeTitle(DEFAULT_SEAL_SETTINGS.sealOfficeTitle);
     setSealPrefix(DEFAULT_SEAL_SETTINGS.sealPrefix);
     setRequire2fa(DEFAULT_SEAL_SETTINGS.require2fa);
     setErrors({});
-  }, [currentUser?.systemRole]);
+  }, []);
+
+  const handleDeleteSignature = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      await deleteUserSignatureFromBackend();
+      setSignature(null);
+      setShowDeleteDialog(false);
+      setHasUnsavedChanges(false);
+      setSealOfficeName(DEFAULT_SEAL_SETTINGS.sealOfficeName);
+      setSealOfficeTitle(DEFAULT_SEAL_SETTINGS.sealOfficeTitle);
+      setSealPrefix(DEFAULT_SEAL_SETTINGS.sealPrefix);
+      setRequire2fa(DEFAULT_SEAL_SETTINGS.require2fa);
+      emitSignatureUpdated();
+      toast.success('Signature removed');
+    } catch (error: unknown) {
+      logError('Failed to remove signature', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to remove signature');
+    } finally {
+      setIsDeleting(false);
+    }
+  }, []);
 
   const handleDownloadSeal = useCallback(() => {
     if (!sealPreviewRef.current) {
@@ -297,8 +358,7 @@ export const SignatureSettingsCard = () => {
   }
 
   const signatureSrc = signature?.imageData || undefined;
-  const officeTitleDisplay =
-    sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`;
+  const officeTitleDisplay = sealOfficeTitle;
 
   return (
     <div className="space-y-5">
@@ -316,8 +376,8 @@ export const SignatureSettingsCard = () => {
             <div>
               <p className={appType.sectionLabel}>Your signature</p>
               <p className={appType.caption}>
-                {signatureSrc
-                  ? `Saved ${formatDateShort(signature!.uploadedAt)}`
+                {signature
+                  ? `Saved ${formatDate(signature.updatedAt || signature.uploadedAt)}`
                   : 'Not set yet'}
               </p>
             </div>
@@ -333,10 +393,26 @@ export const SignatureSettingsCard = () => {
               ) : (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <ImageIcon className="h-4 w-4 opacity-50" />
-                  <span className="text-sm">No signature yet</span>
+                  <span className="text-sm">
+                    {signature ? 'Signature on file — preview unavailable' : 'No signature yet'}
+                  </span>
                 </div>
               )}
             </div>
+            {signature ? (
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="quiet"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove signature
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
@@ -365,7 +441,7 @@ export const SignatureSettingsCard = () => {
             />
 
             {captureMode === 'draw' ? (
-              <SignaturePad onSave={handleDrawSave} />
+              <SignaturePad onSave={handleDrawSave} disabled={isUploading} />
             ) : (
               <button
                 type="button"
@@ -381,7 +457,7 @@ export const SignatureSettingsCard = () => {
                 <ImageIcon className="h-6 w-6 mx-auto mb-2 text-muted-foreground opacity-60" />
                 <p className="text-sm font-medium text-foreground">Choose an image</p>
                 <p className={cn(appType.caption, 'mt-1')}>
-                  PNG, JPG, or SVG · max {MAX_SIGNATURE_SIZE_MB}MB
+                  PNG or JPG · max {MAX_SIGNATURE_SIZE_MB}MB
                 </p>
               </button>
             )}
@@ -435,17 +511,22 @@ export const SignatureSettingsCard = () => {
                 ref={sealPreviewRef}
                 officeName={sealOfficeName}
                 officeTitle={officeTitleDisplay}
+                serialNumber="PREVIEW"
                 serialPrefix={sealPrefix}
                 signatureImage={signatureSrc}
                 size={260}
-                showQR={true}
+                showQR={false}
               />
             </div>
+
+            <p className={cn(appType.caption, 'text-center')}>
+              Preview only — a serial number and verification QR are issued when a seal is applied.
+            </p>
 
             {signature && (
               <p className={cn(appType.caption, 'text-center')}>
                 Used {signature.timesUsed || 0} time{(signature.timesUsed || 0) === 1 ? '' : 's'}
-                {signature.lastUsedAt ? ` · last ${formatDateShort(signature.lastUsedAt)}` : ''}
+                {signature.lastUsedAt ? ` · last ${formatDate(signature.lastUsedAt)}` : ''}
               </p>
             )}
           </div>
@@ -598,6 +679,84 @@ export const SignatureSettingsCard = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={showReplaceDialog}
+        onOpenChange={(open) => {
+          setShowReplaceDialog(open);
+          if (!open) setPendingSignatureFile(null);
+        }}
+      >
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>Replace your signature?</DialogTitle>
+            <DialogDescription>
+              Your current signature will be replaced. Existing seals keep the signature they were
+              issued with.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="ghost"
+              size="compact"
+              onClick={() => {
+                setShowReplaceDialog(false);
+                setPendingSignatureFile(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="compact"
+              onClick={() => {
+                const file = pendingSignatureFile;
+                setShowReplaceDialog(false);
+                setPendingSignatureFile(null);
+                if (file) void saveSignatureFile(file);
+              }}
+            >
+              Replace signature
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>Remove your signature?</DialogTitle>
+            <DialogDescription>
+              You will not be able to apply new seals until you upload or draw a signature again.
+              Existing seals remain verifiable.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" size="compact" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="compact"
+              disabled={isDeleting}
+              onClick={() => void handleDeleteSignature()}
+            >
+              {isDeleting ? 'Removing…' : 'Remove signature'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <StepUpDialog
+        open={showDisable2FAStepUp}
+        onOpenChange={setShowDisable2FAStepUp}
+        title="Turn off seal 2FA"
+        description="Confirm your password before removing the second factor from seal application."
+        mode="password"
+        confirmLabel="Turn off 2FA"
+        onConfirm={async (password) => {
+          await saveSettings(password);
+        }}
+      />
     </div>
   );
 };

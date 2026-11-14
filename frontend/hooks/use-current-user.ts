@@ -16,7 +16,10 @@ const toOptionalString = (value: unknown): string | undefined => {
 };
 
 const mapApiUserToUser = (data: Record<string, unknown>): User => {
-  const name = `${toOptionalString(data.first_name) ?? ""} ${toOptionalString(data.last_name) ?? ""}`.trim();
+  const firstName = toOptionalString(data.first_name) ?? "";
+  const middleName = toOptionalString(data.middle_name) ?? "";
+  const lastName = toOptionalString(data.last_name) ?? "";
+  const name = [firstName, middleName, lastName].filter(Boolean).join(" ");
   // system_role is now a ForeignKey (UUID), but backend returns system_role_name for display
   const systemRoleObj = isRecord(data.system_role) ? data.system_role : undefined;
   let roleName = toOptionalString(data.system_role_name) ?? (systemRoleObj ? toOptionalString(systemRoleObj.name) : undefined) ?? "";
@@ -40,18 +43,26 @@ const mapApiUserToUser = (data: Record<string, unknown>): User => {
     username: typeof data.username === "string" ? data.username : toOptionalString(data.username),
     name: name.length > 0 ? name : (typeof data.username === "string" ? data.username : "User"),
     email: typeof data.email === "string" ? data.email : String(data.email ?? ""),
+    firstName: firstName || undefined,
+    middleName: middleName || undefined,
+    lastName: lastName || undefined,
+    personnelNumber: toOptionalString(data.personnel_number),
     employeeId: typeof data.employee_id === "string" ? data.employee_id : String(data.employee_id ?? ""),
     gradeLevel: typeof data.grade_level === "string" ? data.grade_level : String(data.grade_level ?? ""),
     directorate: toOptionalString(data.directorate ?? data.directorate_id),
     division: toOptionalString(data.division ?? data.division_id),
     department: toOptionalString(data.department ?? data.department_id),
+    directorateName: toOptionalString(data.directorate_name),
+    divisionName: toOptionalString(data.division_name),
+    departmentName: toOptionalString(data.department_name),
     systemRole: roleName, // Use role name for display
     avatar: typeof data.avatar === "string" ? data.avatar : undefined,
     active: typeof data.is_active === "boolean" ? data.is_active : true,
     isSuperuser: typeof data.is_superuser === "boolean" ? data.is_superuser : false,
     phone: toOptionalString(data.phone),
     bio: toOptionalString(data.bio),
-    jobTitle: toOptionalString(data.job_title),
+    jobTitle: toOptionalString(data.job_title) ?? toOptionalString(data.designation),
+    designation: toOptionalString(data.designation),
     profilePhoto: typeof data.profile_photo === "string" ? data.profile_photo : undefined,
     rolePermissions,
   };

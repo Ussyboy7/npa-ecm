@@ -1,17 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RoutingSection } from "@/components/correspondence/RoutingSection";
 import { RouteRecipientPicker } from "@/components/correspondence/RouteRecipientPicker";
-import type { BranchConfig } from "@/lib/parallel-routing";
-import { syncBranchConfigs } from "@/lib/parallel-routing";
+import type {
+  AssignmentMergeStrategy,
+  BranchConfig,
+} from "@/lib/parallel-routing";
 import type { User } from "@/lib/npa-structure";
 
 export type RouteMode = "single" | "parallel";
-export type MergeStrategy = "all" | "any" | "majority" | "independent";
 export type RoutePurpose = "action" | "information" | "approval";
 
 export interface OfficeOption {
@@ -44,16 +44,16 @@ interface PrimaryRoutePanelProps {
   onOfficeFilterDivisionChange: (divisionId: string) => void;
   purpose: RoutePurpose;
   onPurposeChange: (purpose: RoutePurpose) => void;
-  // Parallel route
+  // Separate assignments
   parallelUserIds: string[];
   onParallelUserIdsChange: (ids: string[]) => void;
   parallelOfficeIds: string[];
   onParallelOfficeIdsChange: (ids: string[]) => void;
-  mergeStrategy: MergeStrategy;
-  onMergeStrategyChange: (strategy: MergeStrategy) => void;
   branchConfigs?: Record<string, BranchConfig>;
   onBranchConfigsChange?: (configs: Record<string, BranchConfig>) => void;
   defaultBranchText?: string;
+  mergeStrategy?: AssignmentMergeStrategy;
+  onMergeStrategyChange?: (strategy: AssignmentMergeStrategy) => void;
   // CC / distribution (informational copy — not work branches)
   distributionUserIds?: string[];
   onDistributionUserIdsChange?: (ids: string[]) => void;
@@ -98,11 +98,11 @@ export function PrimaryRoutePanel({
   onParallelUserIdsChange,
   parallelOfficeIds,
   onParallelOfficeIdsChange,
-  mergeStrategy,
-  onMergeStrategyChange,
   branchConfigs = {},
   onBranchConfigsChange,
   defaultBranchText = "",
+  mergeStrategy = "independent",
+  onMergeStrategyChange,
   distributionUserIds = [],
   onDistributionUserIdsChange,
   distributionOfficeIds = [],
@@ -122,47 +122,12 @@ export function PrimaryRoutePanel({
   const parallelTargetCount = parallelUserIds.length + parallelOfficeIds.length;
   const distributionCount = distributionUserIds.length + distributionOfficeIds.length;
 
-  const handleParallelUserIdsChange = (ids: string[]) => {
-    onParallelUserIdsChange(ids);
-    if (onBranchConfigsChange) {
-      onBranchConfigsChange(
-        syncBranchConfigs(ids, parallelOfficeIds, branchConfigs, {
-          purpose,
-          minuteText: defaultBranchText || "Please review and respond.",
-        }),
-      );
-    }
-  };
-
-  const handleParallelOfficeIdsChange = (ids: string[]) => {
-    onParallelOfficeIdsChange(ids);
-    if (onBranchConfigsChange) {
-      onBranchConfigsChange(
-        syncBranchConfigs(parallelUserIds, ids, branchConfigs, {
-          purpose,
-          minuteText: defaultBranchText || "Please review and respond.",
-        }),
-      );
-    }
-  };
-
-  const distributionBranchConfigs = useMemo(() => {
-    const configs: Record<string, BranchConfig> = {};
-    for (const userId of distributionUserIds) {
-      configs[`user:${userId}`] = { purpose: "information", minuteText: "" };
-    }
-    for (const officeId of distributionOfficeIds) {
-      configs[`office:${officeId}`] = { purpose: "information", minuteText: "" };
-    }
-    return configs;
-  }, [distributionUserIds, distributionOfficeIds]);
-
   return (
     <div className="space-y-4">
       <p className="text-xs font-medium text-muted-foreground">
         {routeMode === "single"
           ? "Primary route — select one destination"
-          : "Parallel route — select two or more destinations"}
+          : "Assign separately — each recipient handles their own instruction and outcome"}
       </p>
 
       {showRouteModeToggle && (
@@ -173,8 +138,8 @@ export function PrimaryRoutePanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="single">Single route</SelectItem>
-              <SelectItem value="parallel">Parallel routing</SelectItem>
+              <SelectItem value="single">Single recipient</SelectItem>
+              <SelectItem value="parallel">Assign separately</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -214,43 +179,70 @@ export function PrimaryRoutePanel({
       {routeMode === "parallel" && (
         <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
           <div className="flex items-center justify-between gap-2">
-            <Label>Route To</Label>
-            <Badge variant="secondary">{parallelTargetCount} branches</Badge>
+            <Label>Recipients</Label>
+            <Badge variant="secondary">{parallelTargetCount} assignments</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            Each person or office gets an independent work branch on the same correspondence.
+            Each recipient gets their own instruction and expected outcome. They do not wait for each other.
           </p>
-          <div className="space-y-2">
-            <Label className="text-xs">Completion rule</Label>
-            <Select value={mergeStrategy} onValueChange={(value) => onMergeStrategyChange(value as MergeStrategy)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Wait for all branches</SelectItem>
-                <SelectItem value="any">Any one completes</SelectItem>
-                <SelectItem value="majority">Majority completes</SelectItem>
-                <SelectItem value="independent">Independent branches</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           <RouteRecipientPicker
             userIds={parallelUserIds}
             officeIds={parallelOfficeIds}
-            onUserIdsChange={handleParallelUserIdsChange}
-            onOfficeIdsChange={handleParallelOfficeIdsChange}
+            onUserIdsChange={onParallelUserIdsChange}
+            onOfficeIdsChange={onParallelOfficeIdsChange}
             users={users}
             offices={offices}
             directorates={directorates}
             divisions={divisions}
-            defaultPurpose={purpose}
+            defaultPurpose="action"
+            defaultOutcome="respond"
             branchConfigs={branchConfigs}
             onBranchConfigsChange={onBranchConfigsChange}
             defaultBranchText={defaultBranchText}
             showPerRecipientEditor={Boolean(onBranchConfigsChange)}
             excludeUserId={excludeUserId}
-            emptyMessage="Add at least two people or offices for parallel routing."
+            emptyMessage="Add at least two people or offices to assign separately."
           />
+
+          {onMergeStrategyChange && (
+            <div className="space-y-2 rounded-md border border-border/70 bg-background/70 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label>After the assignments</Label>
+                <Badge variant="outline">
+                  {mergeStrategy === "independent" ? "Independent" : "Consolidated"}
+                </Badge>
+              </div>
+              <Select
+                value={mergeStrategy}
+                onValueChange={(value) =>
+                  onMergeStrategyChange(value as AssignmentMergeStrategy)
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="independent">
+                    Keep independent — no consolidation (default)
+                  </SelectItem>
+                  <SelectItem value="all">
+                    Consolidate — after every expected outcome
+                  </SelectItem>
+                  <SelectItem value="any">
+                    Consolidate — after the first expected outcome
+                  </SelectItem>
+                  <SelectItem value="majority">
+                    Consolidate — after a majority of expected outcomes
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {mergeStrategy === "independent"
+                  ? "Each assignment returns or moves on as soon as its recipient completes it."
+                  : "Use consolidation only when the responses genuinely need to be reviewed together. The item returns to the origin once this condition is met."}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -274,7 +266,6 @@ export function PrimaryRoutePanel({
             divisions={divisions}
             defaultPurpose="information"
             informationOnly
-            branchConfigs={distributionBranchConfigs}
             excludeUserId={excludeUserId}
             emptyMessage="No distribution recipients added yet."
           />

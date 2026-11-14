@@ -7,18 +7,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { TabsContent } from '@/components/ui/tabs';
-import { Loader2, Camera, Save, Briefcase, Building2 } from 'lucide-react';
+import { Loader2, Camera, Save, Briefcase, Building2, Lock } from 'lucide-react';
 import { appType } from '@/lib/app-type';
 
 interface ProfileSectionProps {
-  profile: { firstName: string; lastName: string; email: string; phone: string; bio: string; jobTitle: string };
+  profile: { firstName: string; middleName: string; lastName: string; email: string; phone: string; bio: string };
   profilePhoto: string | null;
   profileErrors: Record<string, string>;
   isSavingProfile: boolean;
   isUploadingPhoto: boolean;
   userInitials: string;
   systemRole?: string;
+  designation?: string;
   gradeLevel?: string;
+  personnelNumber?: string;
+  employeeId?: string;
   division?: string;
   department?: string;
   onPhotoUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -34,7 +37,10 @@ export function ProfileSection({
   isUploadingPhoto,
   userInitials,
   systemRole,
+  designation,
   gradeLevel,
+  personnelNumber,
+  employeeId,
   division,
   department,
   onPhotoUpload,
@@ -77,11 +83,16 @@ export function ProfileSection({
               />
             </div>
             <div className="space-y-1">
-              <p className="font-medium">{profile.firstName} {profile.lastName}</p>
+              <p className="font-medium">
+                {[profile.firstName, profile.middleName, profile.lastName]
+                  .map((part) => part.trim())
+                  .filter(Boolean)
+                  .join(' ') || 'No name set'}
+              </p>
               <p className="text-sm text-muted-foreground">{profile.email}</p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Briefcase className="h-3 w-3" />
-                <span>{profile.jobTitle || systemRole || 'No title set'}</span>
+                <span>{designation || 'No job title set'}</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Building2 className="h-3 w-3" />
@@ -92,7 +103,7 @@ export function ProfileSection({
 
           <Separator />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="firstName">First Name</Label>
               <Input
@@ -103,6 +114,18 @@ export function ProfileSection({
               />
               {profileErrors.firstName && (
                 <p className="text-sm text-destructive">{profileErrors.firstName}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="middleName">Middle Name</Label>
+              <Input
+                id="middleName"
+                placeholder="Enter your middle name"
+                value={profile.middleName}
+                onChange={(e) => onProfileChange('middleName', e.target.value)}
+              />
+              {profileErrors.middleName && (
+                <p className="text-sm text-destructive">{profileErrors.middleName}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -160,15 +183,33 @@ export function ProfileSection({
           </div>
 
           <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-            <p className="text-sm font-medium">Organization Details</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">Service Details</p>
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                <Lock className="h-3 w-3" />
+                Admin-managed
+              </span>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Job Title</p>
-                <p className="font-medium">{systemRole || 'Not set'}</p>
+                <p className="font-medium">{designation || 'Not set'}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Grade Level</p>
                 <p className="font-medium">{gradeLevel || 'Not set'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Personnel Number</p>
+                <p className="font-medium">{personnelNumber || 'Not set'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Employee ID</p>
+                <p className="font-medium">{employeeId || 'Not set'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">System Role</p>
+                <p className="font-medium">{systemRole || 'Not set'}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Division</p>
@@ -179,7 +220,10 @@ export function ProfileSection({
                 <p className="font-medium">{department || 'Not assigned'}</p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Contact your administrator to update organization details.</p>
+            <p className="text-xs text-muted-foreground">
+              These values are maintained by your administrator. Your job title comes from the nominal roll;
+              the system role controls which features you can access.
+            </p>
           </div>
 
           <Button size="sm" onClick={onSave} disabled={isSavingProfile}>

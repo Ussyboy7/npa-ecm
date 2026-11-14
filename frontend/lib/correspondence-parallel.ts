@@ -8,6 +8,18 @@ const mapBranch = (item: Record<string, unknown>): ParallelBranch => ({
   targetId: String(item.target_id ?? item.targetId ?? ''),
   targetLabel: String(item.target_label ?? item.targetLabel ?? 'Unknown'),
   status: (item.status as ParallelBranch['status']) ?? 'pending',
+  expectedOutcome:
+    item.expected_outcome === 'treat' || item.expected_outcome === 'onward'
+      ? item.expected_outcome
+      : 'respond',
+  completedOutcome:
+    item.completed_outcome === 'treat' || item.completed_outcome === 'onward' || item.completed_outcome === 'respond'
+      ? item.completed_outcome
+      : null,
+  completedAction:
+    item.completed_action || item.completedAction
+      ? String(item.completed_action ?? item.completedAction)
+      : null,
   deadline: item.deadline || item.response_deadline ? String(item.deadline ?? item.response_deadline) : null,
   branchOriginatorId:
     item.branch_originator_id || item.branchOriginatorId

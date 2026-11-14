@@ -20,6 +20,7 @@ import {
   Loader2,
   GitCompare,
   MoreVertical,
+  ShieldCheck,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { formatFileSize } from "@/lib/file-utils";
@@ -173,6 +174,9 @@ export function DocumentVersionsPanel({
                 version.fileName?.toLowerCase().endsWith(".doc"))) ||
               Boolean(version.contentHtml && version.contentHtml.trim() !== ""));
           const olderVersion = index < versions.length - 1 ? versions[index + 1] : null;
+          const publication = (document.publicationHistory ?? []).find(
+            (event) => event.publishedVersionId === version.id,
+          );
 
           return (
             <div
@@ -198,6 +202,11 @@ export function DocumentVersionsPanel({
                     {isLatest ? (
                       <span className="text-[10px] text-muted-foreground shrink-0">latest</span>
                     ) : null}
+                    {publication ? (
+                      <Badge variant="secondary" className="text-[10px] flex-shrink-0 gap-1">
+                        <ShieldCheck className="h-3 w-3" /> Issued
+                      </Badge>
+                    ) : null}
                   </div>
                   <p
                     className="font-medium text-[12px] leading-snug break-all line-clamp-2"
@@ -209,6 +218,11 @@ export function DocumentVersionsPanel({
                     {formatDateTime(version.uploadedAt)}
                     {uploader ? ` · ${uploader.name}` : ""}
                   </p>
+                  {publication ? (
+                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400 leading-snug">
+                      Issued {formatDateTime(publication.timestamp)} via {publication.correspondenceReference || publication.correspondenceSubject || "correspondence"} · immutable
+                    </p>
+                  ) : null}
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -254,7 +268,7 @@ export function DocumentVersionsPanel({
                         {isProcessing ? "Cancel OCR" : "Run OCR"}
                       </DropdownMenuItem>
                     )}
-                    {uploadUser && (
+                    {uploadUser && !publication && (
                       <DropdownMenuItem onClick={() => onReplaceVersion(version.id)}>
                         <Pencil className="h-4 w-4 mr-2" />
                         Edit
@@ -286,7 +300,7 @@ export function DocumentVersionsPanel({
           <div className="min-w-0 flex-1 overflow-hidden">
             <p className="text-[13px] font-semibold tracking-tight">Versions</p>
             <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-              Upload, OCR, replace
+              Upload revisions; issued versions stay unchanged
             </p>
           </div>
           {addButton}
@@ -311,7 +325,7 @@ export function DocumentVersionsPanel({
               <Layers className="h-4 w-4 text-primary" />
               Version history
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">Upload, OCR, and manage versions</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Issued versions are preserved; revisions create new versions</p>
           </div>
           {addButton}
         </div>

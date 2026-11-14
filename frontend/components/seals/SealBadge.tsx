@@ -9,11 +9,9 @@ import {
 } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { DigitalSealPreview, type DigitalSealPreviewHandle } from "@/components/seals/DigitalSealPreview";
+import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { uploadSealImage } from "@/lib/api/seal-images";
-import { logWarn } from "@/lib/client-logger";
+import { useState } from "react";
 import { formatDateTime } from '@/lib/datetime';
 
 export interface SealData {
@@ -37,52 +35,6 @@ interface SealBadgeProps {
 
 export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBadgeProps) {
   const [open, setOpen] = useState(false);
-  const previewRef = useRef<DigitalSealPreviewHandle>(null);
-  const uploadedSerialRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!sealData?.serialNumber) return;
-    if (uploadedSerialRef.current === sealData.serialNumber) return;
-
-    let cancelled = false;
-    let attempts = 0;
-
-    const tick = async () => {
-      attempts += 1;
-      const canvas = previewRef.current?.getCanvas();
-      if (!canvas) return;
-
-      try {
-        const dataUrl = canvas.toDataURL("image/png");
-        if (!dataUrl.startsWith("data:image/png;base64,")) return;
-
-        await uploadSealImage(sealData.serialNumber, dataUrl);
-        if (cancelled) return;
-        uploadedSerialRef.current = sealData.serialNumber;
-      } catch (err) {
-        if (!cancelled) {
-          logWarn("Failed to upload seal image", err);
-        }
-      }
-    };
-
-    const interval = window.setInterval(() => {
-      if (cancelled) return;
-      if (attempts >= 12) {
-        window.clearInterval(interval);
-        return;
-      }
-      tick();
-    }, 500);
-
-    tick();
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [open, sealData?.serialNumber]);
 
   const getVerificationUrl = () => {
     if (typeof window !== 'undefined') {
@@ -154,18 +106,26 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
         <div className="flex-1 overflow-y-auto pr-2 space-y-5">
           {/* Seal Preview - Centered */}
           <div className="flex justify-center p-3 doc-paper rounded-lg border border-emerald-200 dark:border-emerald-800">
-            <DigitalSealPreview
-              ref={previewRef}
-              officeName={sealData.officeName}
-              officeTitle={sealData.officeTitle}
-              serialNumber={sealData.serialNumber}
-              signatureImage={sealData.signatureImageUrl}
-              signatureText={sealData.sealedBy}
-              timestamp={sealData.sealedAt}
-              size={240}
-              showQR={true}
-              verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
-            />
+            {sealData.sealImageUrl ? (
+              <img
+                src={sealData.sealImageUrl}
+                alt={`Digital seal ${sealData.serialNumber}`}
+                width={240}
+                height={240}
+                className="h-[240px] w-[240px] object-contain"
+              />
+            ) : (
+              <DigitalSealPreview
+                officeName={sealData.officeName}
+                officeTitle={sealData.officeTitle}
+                serialNumber={sealData.serialNumber}
+                signatureText={sealData.sealedBy}
+                timestamp={sealData.sealedAt}
+                size={240}
+                showQR={true}
+                verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+              />
+            )}
           </div>
           
           {/* Seal Info - Grid Layout */}

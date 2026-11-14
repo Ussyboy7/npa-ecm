@@ -40,6 +40,30 @@ export interface WorkflowTemplate {
   updated_at: string;
 }
 
+export interface CorrespondenceWorkflowStep {
+  id: string;
+  order: number;
+  title: string;
+  required_role: string;
+  required_grade_level: string;
+  required_approval_level: string;
+  office_id: string | null;
+  office_name: string | null;
+  directorate_id: string | null;
+  directorate_name: string | null;
+  division_id: string | null;
+  division_name: string | null;
+  department_id: string | null;
+  department_name: string | null;
+}
+
+export interface CorrespondenceWorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  steps: CorrespondenceWorkflowStep[];
+}
+
 export interface WorkflowStepFormData {
   template?: string;
   order: number;

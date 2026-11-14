@@ -2,14 +2,14 @@
 
 import { useState, useRef } from "react";
 import { logError } from '@/lib/client-logger';
-import { CheckCircle2, XCircle, Shield, Calendar, User, FileText, AlertTriangle, ExternalLink, Eye, Copy, Share2, Printer, Download } from "lucide-react";
+import { CheckCircle2, XCircle, Shield, Calendar, User, FileText, AlertTriangle, ExternalLink, Eye, Copy, Share2, Printer, Download, FileCheck2 } from "lucide-react";
 import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatSealDate, formatSealDateLong } from "@/lib/date-formatters";
 import { toast } from "@/components/ui/sonner";
-import type { SealVerification } from "@/lib/api/seal-verification";
+import { checkSealDocument, type SealDocumentCheck, type SealVerification } from "@/lib/api/seal-verification";
 
 interface SealVerificationResultProps {
   verification: SealVerification;
@@ -25,7 +25,11 @@ export function SealVerificationResult({
   onVerifyAnother 
 }: SealVerificationResultProps) {
   const [copied, setCopied] = useState(false);
+  const [documentCheck, setDocumentCheck] = useState<SealDocumentCheck | null>(null);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [checkingDocument, setCheckingDocument] = useState(false);
   const sealPreviewRef = useRef<{ getCanvas: () => HTMLCanvasElement | null; download: (filename?: string) => void }>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCopySerial = () => {
     navigator.clipboard.writeText(verification.serial_number || serial);
@@ -80,6 +84,30 @@ export function SealVerificationResult({
     }
   };
 
+  const handleDocumentCheck = async (file: File | undefined) => {
+    if (!file) return;
+    setCheckingDocument(true);
+    setDocumentCheck(null);
+    setDocumentError(null);
+    try {
+      const result = await checkSealDocument(
+        verification.serial_number || serial,
+        file,
+      );
+      setDocumentCheck(result);
+    } catch (error) {
+      logError("Failed to check approved PDF", error);
+      setDocumentError(
+        error instanceof Error
+          ? error.message
+          : "Could not check this PDF. Please try again.",
+      );
+    } finally {
+      setCheckingDocument(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   if (verification.valid) {
     return (
       <Card className="overflow-hidden">
@@ -126,7 +154,6 @@ export function SealVerificationResult({
               officeName={verification.office_name}
               officeTitle={verification.office_title}
               serialNumber={verification.serial_number}
-              signatureImage={verification.signature_image_url || verification.seal_image_url}
               signatureText={verification.sealed_by}
               timestamp={verification.sealed_at}
               size={220}
@@ -242,6 +269,68 @@ export function SealVerificationResult({
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="rounded-lg border border-border bg-muted/30 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-sky-600/20">
+                <FileCheck2 className="h-5 w-5 text-sky-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">Check a downloaded PDF</p>
+                {verification.pdf_sha256 ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Upload the approved-copy PDF to compare it with the archived copy.
+                    This detects edits made after approval.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    No archived approved-copy hash is available for this seal yet.
+                    Generate or download the approved copy once to create one.
+                  </p>
+                )}
+                {verification.pdf_sha256 && (
+                  <div className="mt-3 space-y-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-background file:px-3 file:py-2 file:text-xs file:font-medium file:text-foreground hover:file:bg-muted"
+                      onChange={(event) => void handleDocumentCheck(event.target.files?.[0])}
+                      disabled={checkingDocument}
+                      aria-label="Upload approved-copy PDF to verify"
+                    />
+                    {checkingDocument && (
+                      <p className="text-xs text-muted-foreground">Checking document…</p>
+                    )}
+                    {documentCheck && (
+                      <div
+                        className={`rounded-md border p-3 text-xs ${
+                          documentCheck.matches
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+                            : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200"
+                        }`}
+                        role="status"
+                      >
+                        <p className="font-semibold">
+                          {documentCheck.matches
+                            ? "Document matches the archived approved copy."
+                            : "Document differs from the archived approved copy."}
+                        </p>
+                        <p className="mt-1 font-mono break-all opacity-80">
+                          SHA-256: {documentCheck.actual_sha256}
+                        </p>
+                      </div>
+                    )}
+                    {documentError && (
+                      <p className="text-xs text-destructive" role="alert">
+                        {documentError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Footer - Enhanced */}

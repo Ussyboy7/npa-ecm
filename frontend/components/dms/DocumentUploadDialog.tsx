@@ -35,7 +35,6 @@ import {
   createDocumentVersion,
   type DocumentRecord,
   type DocumentType,
-  type DocumentStatus,
   type DocumentSensitivity,
 } from '@/lib/api/dms';
 import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
@@ -57,8 +56,19 @@ import {
   resolveUploadMimeType,
   MAX_FILE_SIZE_MB,
 } from '@/lib/file-utils';
-import { Loader2, Save, Upload as UploadIcon, FilePlus, Scan, ChevronDown, PenTool, Settings2, FileText } from 'lucide-react';
+import { Loader2, Save, Upload as UploadIcon, FilePlus, Scan, PenTool, Settings2, FileText } from 'lucide-react';
 import { sanitizeRichText } from '@/lib/sanitize-html';
+import {
+  MAX_TITLE_LENGTH,
+  clearDraft,
+  firstInvalidField,
+  hasUnsavedWork,
+  nextTitleForFile,
+  readDraft,
+  validateComposeFields,
+  writeDraft,
+  type ComposeField,
+} from '@/lib/compose-draft';
 import { importDocxFileToHtml } from '@/lib/import-docx';
 import { processOCR } from '@/lib/api/capture';
 import { uploadUserSignature } from '@/lib/api/signatures';
@@ -66,9 +76,6 @@ import { formatDate } from '@/lib/datetime';
 import { cn } from '@/lib/utils';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
-const DRAFT_STORAGE_KEY = 'dms_upload_draft';
-const MAX_TITLE_LENGTH = 500;
-const MAX_REFERENCE_LENGTH = 100;
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -106,13 +113,10 @@ export const DocumentUploadDialog = ({
   const activeDivisions = useMemo(() => divisions.filter((division) => division.isActive !== false), [divisions]);
   const activeDepartments = useMemo(() => departments.filter((department) => department.isActive !== false), [departments]);
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>('memo');
-  const [status, setStatus] = useState<DocumentStatus>('draft');
   const [divisionId, setDivisionId] = useState<string | undefined>(undefined);
   const [departmentId, setDepartmentId] = useState<string | undefined>(undefined);
   const [referenceNumber, setReferenceNumber] = useState('');
-  const [tagsInput, setTagsInput] = useState('');
   const [notes, setNotes] = useState('');
   const [sensitivity, setSensitivity] = useState<DocumentSensitivity>('internal');
   const [drmPolicyId, setDrmPolicyId] = useState<string | null>(null);
@@ -135,8 +139,18 @@ export const DocumentUploadDialog = ({
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [scanMode, setScanMode] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const [versionNotesOpen, setVersionNotesOpen] = useState(mode === 'version');
   const [recipientName, setRecipientName] = useState('');
+  /** When the autosaved draft was last written; shown in the page action bar. */
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  /** Leaving with work in progress asks first (page mode). */
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  /** Word file waiting on the replace-content confirmation. */
+  const [pendingWordFile, setPendingWordFile] = useState<File | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const contentErrorRef = useRef<HTMLParagraphElement>(null);
+  const fileErrorRef = useRef<HTMLParagraphElement>(null);
+  const referenceInputRef = useRef<HTMLInputElement>(null);
   const { signature: userSignature, refreshSignature } = useSignature({
     userId: currentUser?.id,
     autoLoad: open && composeMode,
@@ -302,11 +316,45 @@ export const DocumentUploadDialog = ({
     [replaceTemplateTokens],
   );
 
-  // Auto-save draft to localStorage (debounced) - only when dialog is open
+  /** Write the draft immediately; used by the debounce, leaving, and page hide. */
+  const flushDraft = useCallback(() => {
+    if (mode !== 'create') return;
+    // Nothing typed yet (or after Discard): don't leave an empty draft behind.
+    if (!title.trim() && !editorHtml.trim() && !referenceNumber.trim() && !recipientName.trim()) {
+      clearDraft();
+      return;
+    }
+    const saved = writeDraft({
+      title,
+      documentType,
+      divisionId,
+      departmentId,
+      referenceNumber,
+      recipientName,
+      sensitivity,
+      composeMode,
+      editorHtml,
+      selectedTemplateId,
+    });
+    if (saved) setDraftSavedAt(Date.now());
+  }, [
+    mode,
+    title,
+    documentType,
+    divisionId,
+    departmentId,
+    referenceNumber,
+    recipientName,
+    sensitivity,
+    composeMode,
+    editorHtml,
+    selectedTemplateId,
+  ]);
+
+  // Auto-save draft (debounced) - only when dialog is open
   const saveDraftRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   useEffect(() => {
-    // Clear any pending saves when dialog closes
     if (!open || mode !== 'create') {
       if (saveDraftRef.current) {
         clearTimeout(saveDraftRef.current);
@@ -314,80 +362,74 @@ export const DocumentUploadDialog = ({
       }
       return;
     }
-    
-    // Clear previous timeout
-    if (saveDraftRef.current) {
-      clearTimeout(saveDraftRef.current);
-    }
-    
-    // Set new timeout to save
+
+    if (saveDraftRef.current) clearTimeout(saveDraftRef.current);
     saveDraftRef.current = setTimeout(() => {
-      // Double-check dialog is still open and component is mounted before saving
       if (!open || mode !== 'create' || !isMountedRef.current) return;
-      
-      const draft = {
-        title,
-        description,
-        documentType,
-        status,
-        referenceNumber,
-        recipientName,
-        tagsInput,
-        notes,
-        sensitivity,
-        composeMode,
-        editorHtml,
-        selectedTemplateId,
-      };
-      
-      try {
-        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-      } catch (_err) {
-        // Ignore localStorage errors
-      }
+      flushDraft();
       saveDraftRef.current = null;
     }, 1000);
-    
+
     return () => {
       if (saveDraftRef.current) {
         clearTimeout(saveDraftRef.current);
         saveDraftRef.current = null;
       }
     };
-  }, [open, mode, title, description, documentType, status, divisionId, departmentId, referenceNumber, recipientName, tagsInput, notes, sensitivity, composeMode, editorHtml, selectedTemplateId]);
+  }, [open, mode, flushDraft]);
+
+  // A refresh, tab close or SPA route change must not lose the last edit.
+  useEffect(() => {
+    if (!open) return;
+    const flush = () => flushDraft();
+    const onHidden = () => {
+      if (window.document.visibilityState === 'hidden') flushDraft();
+    };
+    window.addEventListener('pagehide', flush);
+    window.document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      window.document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, [open, flushDraft]);
+
+  // Browser-level guard for refresh/close while composing on the page.
+  useEffect(() => {
+    if (!open || !asPage) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedWork({ title, editorHtml, hasFile: Boolean(file), referenceNumber, recipientName })) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [open, asPage, title, editorHtml, file, referenceNumber, recipientName]);
 
   // Load draft from localStorage when dialog opens (create mode only)
   useEffect(() => {
     if (!open || mode !== 'create' || !isMountedRef.current) return;
-    
-    try {
-      const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
-      if (saved && isMountedRef.current) {
-        const draft = JSON.parse(saved);
-        if (isMountedRef.current && (draft.title || draft.editorHtml)) {
-          setTitle(draft.title || '');
-          setDescription(draft.description || '');
-          setDocumentType(draft.documentType || 'memo');
-          setStatus(draft.status || 'draft');
-          setDivisionId(undefined);
-          setDepartmentId(undefined);
-          setReferenceNumber(draft.referenceNumber || '');
-          setRecipientName(draft.recipientName || '');
-          setTagsInput(draft.tagsInput || '');
-          setNotes(draft.notes || '');
-          setSensitivity(draft.sensitivity || 'internal');
-          setComposeMode(draft.composeMode ?? true);
-          setEditorHtml(draft.editorHtml || '');
-          setSelectedTemplateId(draft.selectedTemplateId || null);
-          if (draft.editorHtml) {
-            setTemplateApplied(true);
-            lastResolvedTokensRef.current = buildTokenValues();
-          }
-          toast.info('Draft restored from previous session', { duration: 3000 });
-        }
+
+    const draft = readDraft();
+    if (draft) {
+      setTitle(draft.title);
+      setDocumentType((draft.documentType as DocumentType) || 'memo');
+      setDivisionId(draft.divisionId);
+      setDepartmentId(draft.departmentId);
+      setReferenceNumber(draft.referenceNumber);
+      setRecipientName(draft.recipientName);
+      setSensitivity((draft.sensitivity as DocumentSensitivity) || 'internal');
+      setComposeMode(draft.composeMode);
+      setEditorHtml(draft.editorHtml);
+      setSelectedTemplateId(draft.selectedTemplateId);
+      if (draft.editorHtml) {
+        setTemplateApplied(true);
+        lastResolvedTokensRef.current = buildTokenValues();
       }
-    } catch (_err) {
-      // Ignore parse errors
+      // The inline notice below the title replaces an auto-dismissing toast: it
+      // stays put and carries the Discard affordance.
+      setDraftRestored(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once when dialog opens
   }, [open, mode]);
@@ -456,34 +498,17 @@ export const DocumentUploadDialog = ({
 
   // Validation functions
   const validateForm = useCallback((): boolean => {
-    const errors: Record<string, string> = {};
-    
-    if (mode === 'create') {
-      if (!title.trim()) {
-        errors.title = 'Title is required';
-      } else if (title.length > MAX_TITLE_LENGTH) {
-        errors.title = `Title must be less than ${MAX_TITLE_LENGTH} characters`;
-      }
-      
-      if (referenceNumber && referenceNumber.length > MAX_REFERENCE_LENGTH) {
-        errors.referenceNumber = `Reference number must be less than ${MAX_REFERENCE_LENGTH} characters`;
-      }
-      
-      // Validate tags for duplicates
-      const tags = tagsInput.split(',').map((t) => t.trim()).filter(Boolean);
-      const uniqueTags = new Set(tags);
-      if (tags.length !== uniqueTags.size) {
-        errors.tags = 'Duplicate tags are not allowed';
-      }
-    }
-    
-    if (composeMode) {
-      if (!editorHtml || editorHtml.trim().length === 0) {
-        errors.content = 'Please enter document content';
-      }
-    } else if (!file) {
-      errors.file = 'Please select a file to upload';
-    } else {
+    const errors: Record<string, string> = validateComposeFields({
+      title,
+      referenceNumber,
+      composeMode,
+      hasContent: editorHtml.trim().length > 0,
+      hasFile: Boolean(file),
+      requireTitle: mode === 'create',
+    });
+
+    // File type/size need the File object, so they stay here.
+    if (!composeMode && file) {
       const typeValidation = validateFileType(file);
       if (!typeValidation.valid) {
         errors.file = typeValidation.error || 'Invalid file type';
@@ -493,16 +518,110 @@ export const DocumentUploadDialog = ({
         errors.file = sizeValidation.error || 'File too large';
       }
     }
-    
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [mode, title, referenceNumber, tagsInput, composeMode, editorHtml, file]);
+  }, [mode, title, referenceNumber, composeMode, editorHtml, file]);
 
-  const handleClose = useCallback((nextOpen: boolean) => {
-    // Simply close the dialog - no state reset needed
-    // Component will unmount when closed, naturally resetting everything
-    onOpenChange(nextOpen);
-  }, [onOpenChange]);
+  const unsavedWork = hasUnsavedWork({
+    title,
+    editorHtml,
+    hasFile: Boolean(file),
+    referenceNumber,
+    recipientName,
+  });
+
+  const handleClose = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        // Flush first: leaving must never cost the last second of typing.
+        flushDraft();
+        if (asPage && !isSubmitting && unsavedWork) {
+          setConfirmLeave(true);
+          return;
+        }
+      }
+      onOpenChange(nextOpen);
+    },
+    [flushDraft, asPage, isSubmitting, unsavedWork, onOpenChange],
+  );
+
+  const leaveWithoutCreating = useCallback(() => {
+    setConfirmLeave(false);
+    flushDraft();
+    onOpenChange(false);
+  }, [flushDraft, onOpenChange]);
+
+  /** Throw away the autosaved draft and start from a blank document. */
+  const discardDraft = useCallback(() => {
+    clearDraft();
+    setTitle('');
+    setDocumentType('memo');
+    setDivisionId(undefined);
+    setDepartmentId(undefined);
+    setReferenceNumber('');
+    setRecipientName('');
+    setSensitivity('internal');
+    setComposeMode(initialComposeMode ?? mode === 'create');
+    setEditorHtml('');
+    setSelectedTemplateId(null);
+    setTemplateApplied(false);
+    setValidationErrors({});
+    setDraftRestored(false);
+    setDraftSavedAt(null);
+  }, [initialComposeMode, mode]);
+
+  const clearFieldError = useCallback((field: string) => {
+    setValidationErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }, []);
+
+  const handleEditorChange = useCallback(
+    (html: string) => {
+      setEditorHtml(html);
+      clearFieldError('content');
+    },
+    [clearFieldError],
+  );
+
+  /** Name the document after the chosen file, so upload mode never asks twice. */
+  const handleFileSelected = useCallback(
+    (picked: File | null) => {
+      setFile(picked);
+      setScanMode(false);
+      clearFieldError('file');
+      if (!picked) return;
+      setTitle((current) => nextTitleForFile(current, picked.name));
+    },
+    [clearFieldError],
+  );
+
+  /** Scroll to the first field the user has to fix; errors sit far apart on a page. */
+  const focusFirstError = useCallback(() => {
+    const field: ComposeField | null = firstInvalidField({
+      title,
+      referenceNumber,
+      composeMode,
+      hasContent: editorHtml.trim().length > 0,
+      hasFile: Boolean(file),
+      requireTitle: mode === 'create',
+    });
+
+    const scrollTo = (element: HTMLElement | null, focus = false) => {
+      if (!element) return;
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (focus) element.focus({ preventScroll: true });
+    };
+
+    if (field === 'title') scrollTo(titleInputRef.current, true);
+    else if (field === 'content') scrollTo(contentErrorRef.current);
+    else if (field === 'file') scrollTo(fileErrorRef.current);
+    else if (field === 'referenceNumber') scrollTo(referenceInputRef.current, true);
+  }, [title, referenceNumber, composeMode, editorHtml, file, mode]);
 
   const handleScanFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -560,16 +679,7 @@ export const DocumentUploadDialog = ({
     e.target.value = '';
   }, [refreshSignature]);
 
-  const handleWordImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = e.target.files?.[0];
-    e.target.value = '';
-    if (!picked) return;
-
-    if (editorHtml.trim()) {
-      const ok = window.confirm('Replace the current compose content with this Word document?');
-      if (!ok) return;
-    }
-
+  const importWordFile = useCallback(async (picked: File) => {
     setIsImportingWord(true);
     try {
       const html = await importDocxFileToHtml(picked);
@@ -583,11 +693,28 @@ export const DocumentUploadDialog = ({
     } finally {
       if (isMountedRef.current) setIsImportingWord(false);
     }
-  }, [editorHtml]);
+  }, []);
+
+  const handleWordImport = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const picked = e.target.files?.[0];
+      e.target.value = '';
+      if (!picked) return;
+      // Replacing existing content asks in-app rather than via window.confirm.
+      if (editorHtml.trim()) {
+        setPendingWordFile(picked);
+        return;
+      }
+      void importWordFile(picked);
+    },
+    [editorHtml, importWordFile],
+  );
 
   const handleSubmit = useCallback(async () => {
     if (!validateForm()) {
-      toast.error('Please fix validation errors before submitting');
+      // The error text mounts on the next render, so scroll after it exists.
+      requestAnimationFrame(focusFirstError);
+      toast.error('Please fix the highlighted fields before submitting');
       return;
     }
 
@@ -595,14 +722,6 @@ export const DocumentUploadDialog = ({
     setUploadProgress(0);
 
     try {
-      const tags = tagsInput
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-      
-      // Remove duplicates
-      const uniqueTags = Array.from(new Set(tags));
-
       if (mode === 'create') {
         let fileUrl: string | undefined;
         let fileType = '';
@@ -637,14 +756,11 @@ export const DocumentUploadDialog = ({
         const created = await createDocument(
           {
             title: title.trim(),
-            description: description.trim() || undefined,
             documentType,
-            status,
             sensitivity,
             divisionId,
             departmentId,
             referenceNumber: referenceNumber.trim() || undefined,
-            tags: uniqueTags,
             authorId: currentUser.id,
             drmPolicyId,
           },
@@ -655,7 +771,6 @@ export const DocumentUploadDialog = ({
             fileUrl,
             contentHtml,
             contentJson,
-            notes: notes.trim() || undefined,
           },
         );
         
@@ -677,7 +792,7 @@ export const DocumentUploadDialog = ({
 
         // Clear draft after successful creation
         try {
-          localStorage.removeItem(DRAFT_STORAGE_KEY);
+          clearDraft();
         } catch (_err) {
           // Ignore
         }
@@ -741,7 +856,7 @@ export const DocumentUploadDialog = ({
       setIsSubmitting(false);
       setUploadProgress(0);
     }
-  }, [mode, validateForm, tagsInput, composeMode, editorHtml, file, title, description, documentType, status, sensitivity, drmPolicyId, divisionId, departmentId, referenceNumber, currentUser, document, scanMode, onComplete, replaceTemplateTokens, handleClose, notes]);
+  }, [mode, validateForm, focusFirstError, composeMode, editorHtml, file, title, documentType, sensitivity, drmPolicyId, divisionId, departmentId, referenceNumber, currentUser, document, scanMode, onComplete, replaceTemplateTokens, handleClose, notes]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -755,15 +870,36 @@ export const DocumentUploadDialog = ({
           void handleSubmit();
         }
       }
-      // Esc to close
-      if (e.key === 'Escape' && !showTemplateConfirm && !showSaveTemplateDialog) {
+      // Esc to close — but not while another dialog (metadata, template) or an
+      // open toolbar popover owns it.
+      if (
+        e.key === 'Escape' &&
+        !showTemplateConfirm &&
+        !showSaveTemplateDialog &&
+        !metadataOpen &&
+        !pendingWordFile &&
+        !window.document.querySelector('[data-radix-popper-content-wrapper]') &&
+        // Page Setup and Find & Replace own Escape while they are open. On the
+        // compose page this form is inline, so any open dialog is theirs; the
+        // dialog-hosted form is closed by its own Radix layer instead.
+        window.document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length === 0
+      ) {
         handleClose(false);
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, isSubmitting, showTemplateConfirm, showSaveTemplateDialog, handleSubmit, handleClose]);
+  }, [
+    open,
+    isSubmitting,
+    showTemplateConfirm,
+    showSaveTemplateDialog,
+    metadataOpen,
+    pendingWordFile,
+    handleSubmit,
+    handleClose,
+  ]);
 
   const dialogTitle = mode === 'create' ? 'Create Document' : 'Add New Version';
   const dialogDescription =
@@ -776,7 +912,6 @@ export const DocumentUploadDialog = ({
     const parts: string[] = [];
     const typeLabel = documentType.charAt(0).toUpperCase() + documentType.slice(1);
     parts.push(typeLabel);
-    parts.push(status.charAt(0).toUpperCase() + status.slice(1));
     const sensLabel = SENSITIVITY_OPTIONS.find((o) => o.value === sensitivity)?.label ?? sensitivity;
     parts.push(sensLabel);
     if (resolvedDivision) parts.push(resolvedDivision.name);
@@ -784,7 +919,7 @@ export const DocumentUploadDialog = ({
     if (recipientName.trim()) parts.push(`To: ${recipientName.trim()}`);
     if (referenceNumber) parts.push(referenceNumber);
     return parts.join(' · ');
-  }, [documentType, status, sensitivity, resolvedDivision, resolvedDepartment, recipientName, referenceNumber]);
+  }, [documentType, sensitivity, resolvedDivision, resolvedDepartment, recipientName, referenceNumber]);
 
   const handleTemplateSelect = useCallback(
     (templateId: string) => {
@@ -805,52 +940,43 @@ export const DocumentUploadDialog = ({
   const metadataNeedsOrg = mode === 'create' && (!resolvedDivision || !resolvedDepartment);
 
   const formContent = (
-    <div className={cn('space-y-6', asPage && 'pb-20')}>
-      <Input
-        id="doc-title"
-        value={title}
-        onChange={(e) => {
-          setTitle(e.target.value);
-          if (validationErrors.title) {
-            setValidationErrors((prev) => {
-              const next = { ...prev };
-              delete next.title;
-              return next;
-            });
-          }
-        }}
-        placeholder="Document title"
-        className="text-lg h-12"
-        maxLength={MAX_TITLE_LENGTH}
-      />
+    <div className={cn('space-y-5', asPage && 'pb-4')}>
+      {draftRestored ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span>Restored your unsaved draft.</span>
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={discardDraft}>
+            Discard draft
+          </Button>
+        </div>
+      ) : null}
+      <div className="space-y-2">
+        <Label htmlFor="doc-title" className="text-xs font-medium text-muted-foreground">
+          Document title
+        </Label>
+        <Input
+          id="doc-title"
+          ref={titleInputRef}
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            if (validationErrors.title) {
+              setValidationErrors((prev) => {
+                const next = { ...prev };
+                delete next.title;
+                return next;
+              });
+            }
+          }}
+          placeholder="Untitled document"
+          className="h-12 rounded-xl border-border/70 bg-background px-4 text-lg shadow-sm placeholder:text-muted-foreground/60 focus-visible:ring-2 focus-visible:ring-ring/25"
+          maxLength={MAX_TITLE_LENGTH}
+        />
+      </div>
       {validationErrors.title && (
         <p className="text-xs text-destructive -mt-4" role="alert">
           {validationErrors.title}
         </p>
       )}
-
-      <button
-        type="button"
-        onClick={() => setMetadataOpen(true)}
-        className="flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
-        aria-label="Edit metadata and classification"
-      >
-        <Settings2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Metadata &amp; Classification</span>
-            <span className="text-xs text-muted-foreground">Edit</span>
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {metadataSummary || 'Set type, sensitivity, organisation, and recipient'}
-          </p>
-          {metadataNeedsOrg ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Set division and department to complete the memo header.
-            </p>
-          ) : null}
-        </div>
-      </button>
 
       <Dialog open={metadataOpen} onOpenChange={setMetadataOpen}>
         <DialogContent size="lg" height="scroll">
@@ -863,9 +989,9 @@ export const DocumentUploadDialog = ({
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <Label className="text-xs">Type</Label>
+                <Label htmlFor="doc-type" className="text-xs">Type</Label>
                 <Select value={documentType} onValueChange={(value) => setDocumentType(value as DocumentType)}>
-                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="doc-type" className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {DOCUMENT_TYPES.map((t) => (
                       <SelectItem key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
@@ -874,21 +1000,9 @@ export const DocumentUploadDialog = ({
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Status</Label>
-                <Select value={status} onValueChange={(value) => setStatus(value as DocumentStatus)}>
-                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Document Classification</Label>
-                <p className="text-[10px] text-muted-foreground -mt-1">Who may access — business classification</p>
+                <Label htmlFor="doc-classification" className="text-xs">Document Classification</Label>
                 <Select value={sensitivity} onValueChange={(value) => setSensitivity(value as DocumentSensitivity)}>
-                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="doc-classification" className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {SENSITIVITY_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
@@ -897,13 +1011,12 @@ export const DocumentUploadDialog = ({
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Document Protection (DRM)</Label>
-                <p className="text-[10px] text-muted-foreground -mt-1">What users can do — leave as default to inherit from classification</p>
+                <Label htmlFor="doc-drm-policy" className="text-xs">Document Protection (DRM)</Label>
                 <Select
                   value={drmPolicyId ?? 'inherit'}
                   onValueChange={(v) => setDrmPolicyId(v === 'inherit' ? null : v)}
                 >
-                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="doc-drm-policy" className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="inherit">Inherit from {SENSITIVITY_DETAILS[sensitivity as keyof typeof SENSITIVITY_DETAILS]?.label ?? sensitivity} (Default)</SelectItem>
                     {drmPolicies.map((policy) => (
@@ -911,14 +1024,6 @@ export const DocumentUploadDialog = ({
                     ))}
                   </SelectContent>
                 </Select>
-                {drmPolicyId === null && (
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    {sensitivity === 'public' && 'Default: Download and share.'}
-                    {sensitivity === 'internal' && 'Default: Authenticated internal access.'}
-                    {sensitivity === 'confidential' && 'Default: Confidential — view only + CONFIDENTIAL watermark.'}
-                    {sensitivity === 'restricted' && 'Default: Time-limited view only + STRICTLY CONFIDENTIAL watermark (30 days).'}
-                  </p>
-                )}
               </div>
             </div>
 
@@ -926,9 +1031,9 @@ export const DocumentUploadDialog = ({
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Memo header</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <Label className="text-xs">Division</Label>
+                  <Label htmlFor="doc-division" className="text-xs">Division</Label>
                   <Select value={divisionId ?? 'none'} onValueChange={(v) => setDivisionId(v === 'none' ? undefined : v)}>
-                    <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectTrigger id="doc-division" className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Unassigned</SelectItem>
                       {activeDivisions.map((d) => (
@@ -938,9 +1043,9 @@ export const DocumentUploadDialog = ({
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs">Department</Label>
+                  <Label htmlFor="doc-department" className="text-xs">Department</Label>
                   <Select value={departmentId ?? 'none'} onValueChange={(v) => setDepartmentId(v === 'none' ? undefined : v)} disabled={!divisionId}>
-                    <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectTrigger id="doc-department" className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Unassigned</SelectItem>
                       {filteredDepartments.map((d) => (
@@ -949,34 +1054,39 @@ export const DocumentUploadDialog = ({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="sm:col-span-2">
-                  <Label className="text-xs">Recipient</Label>
+                <div>
+                  <Label htmlFor="doc-recipient" className="text-xs">Recipient</Label>
                   <Input
+                    id="doc-recipient"
                     value={recipientName}
                     onChange={(e) => setRecipientName(e.target.value)}
                     placeholder="Recipient name"
                     className="h-8"
                   />
                 </div>
-                <div className="sm:col-span-2">
-                  <Label className="text-xs">Reference</Label>
-                  <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} placeholder="NPA/MOPS/2024/045" className="h-8" />
+                <div>
+                  <Label htmlFor="doc-reference" className="text-xs">Reference</Label>
+                  <Input
+                    id="doc-reference"
+                    ref={referenceInputRef}
+                    value={referenceNumber}
+                    onChange={(e) => {
+                      setReferenceNumber(e.target.value);
+                      clearFieldError('referenceNumber');
+                    }}
+                    placeholder="NPA/MOPS/2024/045"
+                    className="h-8"
+                    aria-invalid={Boolean(validationErrors.referenceNumber)}
+                  />
+                  {validationErrors.referenceNumber ? (
+                    <p className="mt-1 text-xs text-destructive" role="alert">
+                      {validationErrors.referenceNumber}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3 border-t pt-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">More details</p>
-              <div>
-                <Label className="text-xs">Description</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Brief description" />
-              </div>
-              <div>
-                <Label className="text-xs">Tags</Label>
-                <Input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="operations, berth-allocation" className="h-8" />
-                {validationErrors.tags && <p className="text-xs text-destructive mt-1">{validationErrors.tags}</p>}
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button type="button" size="sm" onClick={() => setMetadataOpen(false)}>
@@ -986,115 +1096,157 @@ export const DocumentUploadDialog = ({
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 text-sm">
-          <Switch checked={composeMode} onCheckedChange={setComposeMode} disabled={mode === 'version' && !document} />
-          <span className="font-medium">{composeMode ? 'Compose' : 'Upload'}</span>
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+        <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <FileText className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Start with</p>
+              <div className="mt-0.5 flex items-center gap-2">
+                <Switch
+                id="compose-mode"
+                checked={composeMode}
+                onCheckedChange={setComposeMode}
+                disabled={mode === 'version' && !document}
+                aria-label="Compose a document instead of uploading a file"
+              />
+                <span className="text-sm font-semibold">{composeMode ? 'Compose a document' : 'Upload a file'}</span>
+              </div>
+            </div>
+          </div>
+          {composeMode && (
+            <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-border/60 pt-3 sm:w-auto sm:border-l sm:border-t-0 sm:pl-3 sm:pt-0">
+              <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+                <Select value={selectedTemplateId ?? ''} onValueChange={handleTemplateSelect}>
+                  <SelectTrigger className="h-9 min-w-0 flex-1 sm:w-52 sm:flex-none" aria-label="Choose a template">
+                    <SelectValue placeholder="Choose template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-9 shrink-0 px-3"
+                  onClick={() => {
+                    if (!selectedTemplateId) { toast.error('Select a template'); return; }
+                    const t = templates.find((x) => x.id === selectedTemplateId);
+                    if (!t) return;
+                    if (editorHtml.trim() && templateApplied) {
+                      setPendingTemplateAction('apply');
+                      setShowTemplateConfirm(true);
+                      return;
+                    }
+                    applyTemplateContent(t);
+                  }}
+                  disabled={isLoadingTemplates}
+                >
+                  {isLoadingTemplates ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply'}
+                </Button>
+              </div>
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 px-3 text-muted-foreground hover:text-foreground"
+                  disabled={!editorHtml?.trim()}
+                  title={editorHtml?.trim() ? 'Save the current content as a template' : 'Add content first'}
+                  onClick={() => {
+                    if (!currentUser || !editorHtml?.trim()) {
+                      toast.error(!currentUser ? 'No user context' : 'Add content first');
+                      return;
+                    }
+                    setTemplateName(`${currentUser.name.split(' ')[0]}'s Template`);
+                    setShowSaveTemplateDialog(true);
+                  }}
+                >
+                  <Save className="mr-1.5 h-3.5 w-3.5" /> Save template
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 border-border/70 bg-background px-3"
+                  disabled={isSubmitting || isImportingWord}
+                  title="Import a .docx into the editor (not identical to Word)"
+                  onClick={() => wordImportInputRef.current?.click()}
+                >
+                  {isImportingWord ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileText className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Import Word
+                </Button>
+                <input
+                  ref={wordImportInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleWordImport}
+                  disabled={isSubmitting || isImportingWord}
+                />
+              </div>
+            </div>
+          )}
         </div>
-        {composeMode && (
-          <>
-            <div className="h-4 w-px bg-border" />
-            <Select value={selectedTemplateId ?? ''} onValueChange={handleTemplateSelect}>
-              <SelectTrigger className="h-8 min-w-[14rem] max-w-[20rem]"><SelectValue placeholder="Template" /></SelectTrigger>
-              <SelectContent>
-                {templates.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() => {
-                if (!selectedTemplateId) { toast.error('Select a template'); return; }
-                const t = templates.find((x) => x.id === selectedTemplateId);
-                if (!t) return;
-                if (editorHtml.trim() && templateApplied) {
-                  setPendingTemplateAction('apply');
-                  setShowTemplateConfirm(true);
-                  return;
-                }
-                applyTemplateContent(t);
-              }}
-              disabled={isLoadingTemplates}
-            >
-              {isLoadingTemplates ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Apply'}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8"
-              onClick={() => {
-                if (!currentUser || !editorHtml?.trim()) {
-                  toast.error(!currentUser ? 'No user context' : 'Add content first');
-                  return;
-                }
-                setTemplateName(`${currentUser.name.split(' ')[0]}'s Template`);
-                setShowSaveTemplateDialog(true);
-              }}
-            >
-              <Save className="h-3 w-3 mr-1" /> Save as template
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              disabled={isSubmitting || isImportingWord}
-              title="Import a .docx into the editor (not identical to Word)"
-              onClick={() => wordImportInputRef.current?.click()}
-            >
-              {isImportingWord ? (
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              ) : (
-                <FileText className="h-3 w-3 mr-1" />
-              )}
-              Import Word
-            </Button>
-            <input
-              ref={wordImportInputRef}
-              type="file"
-              className="hidden"
-              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={handleWordImport}
-              disabled={isSubmitting || isImportingWord}
-            />
-          </>
-        )}
+        <button
+          type="button"
+          onClick={() => setMetadataOpen(true)}
+          aria-label="Edit metadata and classification"
+          className="flex w-full items-center gap-3 border-t border-border/60 px-3 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/30"
+        >
+          <Settings2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Metadata &amp; Classification</span>
+              <span className="text-xs font-medium text-primary">Edit</span>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {metadataSummary || 'Set type, sensitivity, organisation, and recipient'}
+            </p>
+            {metadataNeedsOrg ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Set division and department to complete the memo header.
+              </p>
+            ) : null}
+          </div>
+        </button>
       </div>
-
-      {composeMode && !userSignature?.imageData && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Add your signature to the document:</span>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => signatureInputRef.current?.click()} disabled={isSubmitting}>
-            <PenTool className="h-3 w-3" />
-            Upload Signature
-          </Button>
-          <input ref={signatureInputRef} type="file" className="hidden" accept=".png,.jpg,.jpeg,.gif" onChange={handleSignatureUpload} disabled={isSubmitting} />
-        </div>
-      )}
-
       {composeMode ? (
-        <div className="min-h-[400px]">
-          <RichTextEditor
-            value={editorHtml}
-            onChange={setEditorHtml}
-            placeholder="Start writing..."
-            showCharacterCount
-            showHeader={false}
-            signatureImageUrl={userSignature?.imageData}
-            tokens={[
-              { label: "Title", value: "{{document.title}}" },
-              { label: "Reference", value: "{{document.reference}}" },
-              { label: "Prepared by", value: "{{preparedBy.name}}" },
-              { label: "Sender", value: "{{sender.name}}" },
-              { label: "Recipient", value: "{{recipient.name}}" },
-              { label: "Division", value: "{{division.name}}" },
-              { label: "Department", value: "{{department.name}}" },
-              { label: "Today", value: "{{date.today}}" },
-            ]}
-          />
-        </div>
+        <>
+          <div className="min-h-[400px] rounded-xl border border-border/70 bg-background shadow-sm">
+            <RichTextEditor
+              value={editorHtml}
+              onChange={handleEditorChange}
+              placeholder="Start writing..."
+              showCharacterCount
+              showHeader={false}
+              // The page is the scroller here; a fixed-height box would nest one.
+              autoGrow={asPage}
+              signatureImageUrl={userSignature?.imageData}
+              tokens={[
+                { label: "Title", value: "{{document.title}}" },
+                { label: "Reference", value: "{{document.reference}}" },
+                { label: "Prepared by", value: "{{preparedBy.name}}" },
+                { label: "Sender", value: "{{sender.name}}" },
+                { label: "Recipient", value: "{{recipient.name}}" },
+                { label: "Division", value: "{{division.name}}" },
+                { label: "Department", value: "{{department.name}}" },
+                { label: "Today", value: "{{date.today}}" },
+              ]}
+            />
+          </div>
+          {validationErrors.content ? (
+            <p ref={contentErrorRef} className="text-xs text-destructive" role="alert">
+              {validationErrors.content}
+            </p>
+          ) : null}
+        </>
       ) : (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -1106,30 +1258,29 @@ export const DocumentUploadDialog = ({
           {scanMode && file && (
             <Alert className="py-2"><Scan className="h-4 w-4" /><AlertDescription>OCR will start after upload.</AlertDescription></Alert>
           )}
-          <FileUploadZone file={file} onFileSelect={(f) => { setFile(f); setScanMode(false); }} maxSizeMB={MAX_FILE_SIZE_MB} disabled={isSubmitting} />
-          {validationErrors.file && <p className="text-xs text-destructive">{validationErrors.file}</p>}
+          <FileUploadZone file={file} onFileSelect={handleFileSelected} maxSizeMB={MAX_FILE_SIZE_MB} disabled={isSubmitting} />
+          {validationErrors.file ? (
+            <p ref={fileErrorRef} className="text-xs text-destructive" role="alert">
+              {validationErrors.file}
+            </p>
+          ) : null}
         </div>
       )}
 
-      {mode === 'create' ? (
-        <div className="border rounded-lg">
-          <button
-            type="button"
-            onClick={() => setVersionNotesOpen((open) => !open)}
-            className="flex w-full items-center justify-between px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50"
-          >
-            <span>Version notes (optional)</span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${versionNotesOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {versionNotesOpen ? (
-            <div className="border-t px-3 pb-3 pt-2">
-              <Textarea id="notes" placeholder="Optional notes for this first version" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-            </div>
-          ) : null}
+      {composeMode && !userSignature?.imageData ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-sm text-muted-foreground">
+          <span>Add your signature to the document</span>
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => signatureInputRef.current?.click()} disabled={isSubmitting}>
+            <PenTool className="h-3 w-3" />
+            Upload Signature
+          </Button>
+          <input ref={signatureInputRef} type="file" className="hidden" accept=".png,.jpg,.jpeg,.gif" onChange={handleSignatureUpload} disabled={isSubmitting} />
         </div>
-      ) : (
+      ) : null}
+
+      {mode === 'version' ? (
         <Textarea id="notes" placeholder="Version notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-      )}
+      ) : null}
 
       {uploadProgress > 0 && uploadProgress < 100 && (
         <Progress value={uploadProgress} className="h-1.5" />
@@ -1137,22 +1288,38 @@ export const DocumentUploadDialog = ({
 
       <div
         className={cn(
-          'flex justify-end gap-2 border-t bg-background pt-3',
-          asPage && 'sticky bottom-0 z-20 -mx-4 border-border/80 px-4 pb-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] md:-mx-6 md:px-6',
+          'flex items-center gap-2',
+          asPage
+            ? 'sticky bottom-0 z-20 -mx-4 justify-between border-t border-border/70 bg-background px-4 py-3 md:-mx-6 md:px-6'
+            : 'justify-end border-t bg-background pt-3',
         )}
       >
-        <Button variant="ghost" size="sm" onClick={() => handleClose(false)} disabled={isSubmitting}>
-          Cancel
-        </Button>
-        <Button size="compact" onClick={handleSubmit} disabled={isSubmitting || (!composeMode && !file)}>
-          {isSubmitting ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
-          ) : mode === 'create' ? (
-            'Create Document'
-          ) : (
-            'Add Version'
-          )}
-        </Button>
+        {asPage ? (
+          <p className="min-w-0 truncate text-xs text-muted-foreground" aria-live="polite">
+            {draftSavedAt
+              ? `Draft saved at ${new Date(draftSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+              : 'Drafts save automatically as you write.'}
+          </p>
+        ) : null}
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => handleClose(false)} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            size="compact"
+            onClick={handleSubmit}
+            disabled={isSubmitting || (!composeMode && !file)}
+            title={asPage ? 'Save document (Ctrl/Cmd+S)' : undefined}
+          >
+            {isSubmitting ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
+            ) : mode === 'create' ? (
+              'Create Document'
+            ) : (
+              'Add Version'
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -1166,7 +1333,16 @@ export const DocumentUploadDialog = ({
           if (isSubmitting) e.preventDefault();
         }}
         onEscapeKeyDown={(e) => {
-          if (isSubmitting) e.preventDefault();
+          // A nested dialog (page setup, find & replace) or an open toolbar
+          // popover owns this Escape; closing the whole compose here would
+          // also throw the draft into the leave prompt.
+          if (
+            isSubmitting ||
+            window.document.querySelectorAll('[role="dialog"]').length > 1 ||
+            window.document.querySelector('[data-radix-popper-content-wrapper]')
+          ) {
+            e.preventDefault();
+          }
         }}
       >
         <DialogHeader>
@@ -1267,6 +1443,50 @@ export const DocumentUploadDialog = ({
             }}
           >
             Continue
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Leaving the compose page with work in progress */}
+    <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Leave without creating this document?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Your title and content are kept as a draft on this device, and will be restored the
+            next time you start a document here.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep editing</AlertDialogCancel>
+          <AlertDialogAction onClick={leaveWithoutCreating}>Leave</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Import Word over existing content */}
+    <AlertDialog
+      open={Boolean(pendingWordFile)}
+      onOpenChange={(isOpen) => !isOpen && setPendingWordFile(null)}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Replace the current content?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Importing this Word document replaces everything currently in the editor.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep current content</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              const picked = pendingWordFile;
+              setPendingWordFile(null);
+              if (picked) void importWordFile(picked);
+            }}
+          >
+            Import and replace
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

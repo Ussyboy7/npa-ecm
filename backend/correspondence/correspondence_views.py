@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
 from django.db import models, IntegrityError
-from django.db.models import Exists, Prefetch, Q, OuterRef, Subquery, CharField, Count, Case as DBCase, When, IntegerField, F
+from django.db.models import Exists, Prefetch, Q, OuterRef, Subquery, CharField, Count, Case as DBCase, When, IntegerField, F, Max
 from django.utils import timezone
 from django.db import transaction
 from django.http import FileResponse, HttpResponse
@@ -44,6 +44,13 @@ from organization.office_access import get_office_queue_office_ids
 from organization.org_scope import user_can_view_all_correspondence
 from dms.models import DocumentVersion, Document
 
+from .archive_policy import (
+    ARCHIVE_LEVEL_ORDER,
+    ARCHIVE_LEVEL_PERMISSION_BY_LEVEL,
+    archive_org_units,
+    archived_correspondence_visibility_q,
+    readable_archive_levels,
+)
 from .models import (
     Case,
     CaseComment,
@@ -97,26 +104,6 @@ User = get_user_model()
 
 
 _CLIENT_REFERENCE_PATTERN = re.compile(r"^NPA/REG/\d{4}/[A-F0-9]{8}$", re.IGNORECASE)
-_REFERENCE_LOCATION_CODE = os.getenv("NPA_REFERENCE_LOCATION_CODE", "HQ").strip().upper() or "HQ"
-
-
-def _reference_segment(value, fallback: str) -> str:
-    """Normalize one organizational reference segment without punctuation loss."""
-    raw_value = getattr(value, "code", None) or getattr(value, "name", None) or fallback
-    return re.sub(r"[^A-Za-z0-9&]+", "", str(raw_value)).upper() or fallback
-
-
-def _reference_path(owning_office, division, department) -> str:
-    """Build canonical NPA/<owning office> path for yearly sequences."""
-    office_type = str(getattr(owning_office, "office_type", "") or "").lower()
-    tier = {
-        "md": "MD",
-        "ed": "ED",
-        "gm": "GM",
-        "agm": "AGM",
-    }.get(office_type, _reference_segment(owning_office, "REG"))
-    office_seg = _reference_segment(owning_office, tier)
-    return "/".join(("NPA", office_seg))
 
 
 def _is_client_generated_reference(value: str | None) -> bool:
@@ -153,6 +140,171 @@ def _sla_due_soon_filter() -> Q:
     return due_soon_filter & ~Q(status=Correspondence.Status.COMPLETED)
 
 
+# Statuses that are no longer sitting in a seat's live tray. Archiving happens
+# separately, after completion, so both must be excluded — otherwise archiving
+# a completed memo makes it reappear in the Office Inbox it came from.
+OFFICE_TRAY_EXCLUDED_STATUSES = (
+    Correspondence.Status.COMPLETED,
+    Correspondence.Status.ARCHIVED,
+)
+
+ARCHIVABLE_STATUSES = (
+    Correspondence.Status.COMPLETED,
+    Correspondence.Status.DISPATCHED,
+    Correspondence.Status.ACKNOWLEDGED,
+)
+
+
+def _share_package_with_archive_level(correspondence: Correspondence, archive_level: str) -> None:
+    """Best-effort: keep the completion package readable at its filing level."""
+    if not archive_level:
+        return
+    try:
+        CompletionPackageService.share_with_archive_level(correspondence, archive_level)
+    except Exception:
+        logger.exception(
+            "Failed to share completion package for correspondence %s at %s level",
+            correspondence.id,
+            archive_level,
+        )
+
+
+def _archive_levels_user_may_file(user) -> list[str]:
+    from organization.permission_utils import user_has_permission
+
+    if not user_has_permission(user, "can_archive"):
+        return []
+    levels = [
+        level
+        for level in ARCHIVE_LEVEL_ORDER
+        if user_has_permission(user, ARCHIVE_LEVEL_PERMISSION_BY_LEVEL[level])
+    ]
+    if not levels:
+        # Roles created before level permissions existed only hold can_archive.
+        # Keep them working at the most restrictive depth instead of locking
+        # them out; scope checks still apply.
+        return [Correspondence.ArchiveLevel.DEPARTMENT]
+    return levels
+
+
+def _archive_scope_allows(user, level: str, units: dict[str, object | None]) -> bool:
+    """True when the filing level sits inside the user's organisational scope.
+
+    Scope flows upward only: a department officer files at department level, a
+    division head may file a department or division record in their division, and
+    a directorate head covers every division and department beneath them.
+    """
+    from organization.org_scope import resolve_user_org_scope
+
+    scope = resolve_user_org_scope(user)
+    if scope.level == "all":
+        return True
+    if scope.level == "participation":
+        # Being on the routing trail is not archive authority.
+        return False
+
+    if level == Correspondence.ArchiveLevel.DEPARTMENT:
+        department = units[level]
+        if department is None:
+            return False
+        if scope.level == "department":
+            return department.id == scope.department_id
+        department_division = department.division
+        if department_division is None:
+            return False
+        if scope.level == "division":
+            return department_division.id == scope.division_id
+        return department_division.directorate_id == scope.directorate_id
+
+    if level == Correspondence.ArchiveLevel.DIVISION:
+        division = units[level]
+        if division is None:
+            return False
+        if scope.level == "division":
+            return division.id == scope.division_id
+        if scope.level == "directorate":
+            return division.directorate_id == scope.directorate_id
+        return False
+
+    if level == Correspondence.ArchiveLevel.DIRECTORATE:
+        directorate = units[level]
+        return bool(directorate and directorate.id == scope.directorate_id)
+
+    return False
+
+
+def _resolve_archive_level(user, correspondence: Correspondence, requested: str | None) -> str:
+    """Validate the chosen filing level against level authority and org scope.
+
+    Without an explicit level, the memo is filed at its own deepest org unit that
+    the user is both authorised for and in scope for.
+    """
+    units = archive_org_units(correspondence)
+    allowed_levels = _archive_levels_user_may_file(user)
+    requested_level = (requested or "").strip().lower()
+
+    if not requested_level and not any(units.values()):
+        # Older records carry no department/division/directorate to file under.
+        # Archive them unlevelled (the previous behaviour) rather than refusing.
+        return ""
+
+    if requested_level:
+        if requested_level not in ARCHIVE_LEVEL_PERMISSION_BY_LEVEL:
+            raise ValidationError(
+                {"archive_level": "Unknown archive level. Choose department, division or directorate."}
+            )
+        if requested_level not in allowed_levels:
+            raise PermissionDenied(
+                {
+                    "detail": (
+                        f"You do not have authority to archive at {requested_level} level."
+                    ),
+                    "code": "archive_level_forbidden",
+                    "archive_level": requested_level,
+                    "allowed_levels": allowed_levels,
+                }
+            )
+        if units[requested_level] is None:
+            raise ValidationError(
+                {
+                    "archive_level": (
+                        f"This correspondence is not filed under a {requested_level}; "
+                        "choose a level it belongs to."
+                    )
+                }
+            )
+        if not _archive_scope_allows(user, requested_level, units):
+            raise PermissionDenied(
+                {
+                    "detail": (
+                        f"This correspondence is outside your organisation scope for "
+                        f"{requested_level}-level filing."
+                    ),
+                    "code": "archive_scope_denied",
+                    "archive_level": requested_level,
+                    "allowed_levels": allowed_levels,
+                }
+            )
+        return requested_level
+
+    for level in ARCHIVE_LEVEL_ORDER:
+        if units[level] is None or level not in allowed_levels:
+            continue
+        if _archive_scope_allows(user, level, units):
+            return level
+
+    raise PermissionDenied(
+        {
+            "detail": (
+                "You cannot archive this correspondence at a level within your authority "
+                "and organisation scope."
+            ),
+            "code": "archive_level_denied",
+            "allowed_levels": allowed_levels,
+        }
+    )
+
+
 class CorrespondenceViewSet(viewsets.ModelViewSet):
     queryset = Correspondence.objects.none()
     base_queryset = Correspondence.all_objects.select_related(
@@ -165,6 +317,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         "owning_office",
         "current_office",
         "completion_package",
+        "workflow_template",
     ).annotate(
         _auto_created_document_id=Subquery(
             CorrespondenceDocumentLink.objects.filter(
@@ -174,6 +327,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             output_field=CharField(),
         ),
     ).prefetch_related(
+        "workflow_template__steps__office",
+        "workflow_template__steps__directorate",
+        "workflow_template__steps__division",
+        "workflow_template__steps__department",
         "linked_documents",
         Prefetch(
             "attachments",
@@ -198,6 +355,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         Prefetch(
             "completion_package__versions",
             queryset=DocumentVersion.objects.order_by("-version_number"),
+        ),
+        Prefetch(
+            "physical_documents",
+            queryset=PhysicalDocument.objects.select_related("location", "current_office").filter(is_deleted=False),
         ),
     )
     serializer_class = CorrespondenceSerializer
@@ -267,6 +428,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = self.base_queryset
         request = getattr(self, 'request', None)
+        if request and request.query_params.get("registered_only") in {"1", "true", "yes"}:
+            from organization.permission_utils import require_page_access
+
+            require_page_access(request.user, "registered")
         if request:
             only_deleted = request.query_params.get('only_deleted') == 'true'
             include_deleted = request.query_params.get('include_deleted') == 'true'
@@ -281,100 +446,35 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             user = request.user
             if not user.is_superuser:
                 from organization.permission_utils import user_has_permission
-                # Registered is now org-scoped like Approvals: MD/Superuser see all,
-                # ED sees directorate, GM sees division, AGM/staff sees department.
+                from organization.org_scope import (
+                    correspondence_org_boundary_q,
+                    correspondence_participation_q,
+                    resolve_user_org_scope,
+                )
+
+                # Registered uses the same boundary as search and archives, so a
+                # user cannot have one horizon in the list and another in search.
                 # can_view_registry no longer bypasses scoping (only can_view_all does).
-                has_bypass = user_has_permission(user, "can_view_all_correspondence")
-                if not has_bypass:
-                    parallel_ids = list(
-                        Minute.objects.filter(
-                            to_user=user,
-                            is_parallel_branch=True,
-                            correspondence__workflow_state='parallel',
-                            is_recalled=False,
-                        ).values_list('correspondence_id', flat=True).distinct()
-                    )
-
-                    user_offices = OfficeMembership.objects.filter(
-                        user=user, is_active=True
-                    ).values_list('office', flat=True)
-                    user_office_objs = Office.objects.filter(id__in=list(user_offices))
-                    user_division_ids = set(user_office_objs.values_list('division_id', flat=True))
-                    user_department_ids = set(user_office_objs.values_list('department_id', flat=True))
-                    user_directorate_ids = set(user_office_objs.values_list('directorate_id', flat=True))
-
-                    if hasattr(user, 'division_id') and user.division_id:
-                        user_division_ids.add(user.division_id)
-                    if hasattr(user, 'department_id') and user.department_id:
-                        user_department_ids.add(user.department_id)
-                    if hasattr(user, 'directorate_id') and user.directorate_id:
-                        user_directorate_ids.add(user.directorate_id)
-
-                    user_division_ids.discard(None)
-                    user_department_ids.discard(None)
-                    user_directorate_ids.discard(None)
-
-                    # Strict Directorate → Division → Department scoping for Registered
-                    role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
-                    if role_name == "Managing Director" or getattr(user, "is_superuser", False):
-                        pass  # MD sees all (already bypassed, but keep for safety)
-                    elif getattr(user, "department_id", None):
-                        qs = qs.filter(
-                            Q(department_id=user.department_id)
-                            | Q(owning_office__department_id=user.department_id)
-                            | Q(current_office__department_id=user.department_id)
-                            | Q(minutes__from_office__department_id=user.department_id)
-                            | Q(minutes__user=user)
-                            | Q(minutes__to_user=user)
-                        )
-                    elif getattr(user, "division_id", None):
-                        qs = qs.filter(
-                            Q(division_id=user.division_id)
-                            | Q(owning_office__division_id=user.division_id)
-                            | Q(current_office__division_id=user.division_id)
-                            | Q(minutes__from_office__division_id=user.division_id)
-                            | Q(minutes__user=user)
-                            | Q(minutes__to_user=user)
-                        )
-                    elif getattr(user, "directorate_id", None):
-                        qs = qs.filter(
-                            Q(owning_office__directorate_id=user.directorate_id)
-                            | Q(current_office__directorate_id=user.directorate_id)
-                            | Q(division__directorate_id=user.directorate_id)
-                            | Q(minutes__from_office__directorate_id=user.directorate_id)
-                            | Q(minutes__user=user)
-                            | Q(minutes__to_user=user)
-                        )
+                if not user_has_permission(user, "can_view_all_correspondence"):
+                    scope = resolve_user_org_scope(user)
+                    boundary = correspondence_org_boundary_q(scope)
+                    if boundary is None:
+                        pass
+                    elif scope.level == "participation":
+                        qs = qs.filter(correspondence_participation_q(user, scope.office_ids))
                     else:
-                        # No org — fall back to office-membership / created/approver union (minimal)
-                        distribution_filter = Q()
-                        if user_division_ids:
-                            distribution_filter |= Q(division_id__in=user_division_ids)
-                        if user_department_ids:
-                            distribution_filter |= Q(department_id__in=user_department_ids)
-                        if user_directorate_ids:
-                            distribution_filter |= Q(directorate_id__in=user_directorate_ids)
-                        if list(user_offices):
-                            distribution_filter |= Q(office_id__in=list(user_offices))
-                        distribution_filter |= Q(user=user, recipient_type='user')
-
-                        dist_ids = []
-                        if distribution_filter:
-                            dist_ids = list(
-                                CorrespondenceDistribution.objects.filter(
-                                    distribution_filter, is_active=True
-                                ).values_list('correspondence_id', flat=True).distinct()
-                            )
-
-                        base_q = Q(id__in=parallel_ids) | Q(id__in=dist_ids) | Q(created_by=user) | Q(current_approver=user) | Q(minutes__user=user) | Q(minutes__to_user=user)
-                        user_office_ids = list(user_offices)
-                        if user_office_ids:
-                            base_q |= Q(current_office_id__in=user_office_ids) | Q(owning_office_id__in=user_office_ids) | Q(minutes__from_office_id__in=user_office_ids) | Q(minutes__to_office_id__in=user_office_ids)
-
-                        qs = qs.filter(base_q)
-                    # For department/division/directorate cases, qs already filtered strictly above
+                        qs = qs.filter(
+                            boundary | correspondence_participation_q(user, scope.office_ids)
+                        )
 
         return qs.distinct()
+
+    @action(detail=False, methods=["get"], url_path="registered")
+    def registered(self, request):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(request.user, "registered")
+        return self.list(request)
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -430,36 +530,78 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         owning_office = validated_data.get("owning_office") or self._get_user_primary_office(request.user)
         current_office = validated_data.get("current_office") or owning_office
         supplied_reference = (validated_data.get("reference_number") or "").strip()
+        requested_classification = (validated_data.get("reference_classification_code") or "").strip().upper()
+        direction = (validated_data.get("direction") or "").strip().lower()
+        incoming_reference = (validated_data.get("sender_reference") or "").strip()
+        uses_document_reference = direction == Correspondence.Direction.UPWARD and bool(incoming_reference)
+        if uses_document_reference:
+            reference_max_length = Correspondence._meta.get_field("reference_number").max_length
+            if len(incoming_reference) > reference_max_length:
+                raise ValidationError({
+                    "sender_reference": (
+                        f"The incoming document reference must be {reference_max_length} characters or fewer."
+                    )
+                })
+            # An incoming document's own reference is the incoming reference.
+            # Do not consume a local office serial when one is supplied.
+            supplied_reference = incoming_reference
 
-        # The old browser flow supplied NPA/REG/YYYY/XXXXXXXX. Canonicalize that
-        # placeholder on the server so references identify the owning office,
-        # not the creator's username or whichever client generated the record.
-        if not supplied_reference or _is_client_generated_reference(supplied_reference):
-            today = timezone.now().date()
-            reference_path = _reference_path(
-                owning_office,
-                validated_data.get("division"),
-                validated_data.get("department"),
+        reference_scheme = None
+        reference_classification = None
+        reference_allocation = None
+        should_generate_reference = not uses_document_reference and (
+            not supplied_reference
+            or _is_client_generated_reference(supplied_reference)
+            or bool(requested_classification)
+        )
+        if should_generate_reference:
+            from organization.reference_services import (
+                allocate_reference,
+                default_classification,
+                get_classification,
+                resolve_reference_scheme,
             )
-            sequence_prefix = f"{reference_path}/{today.year}/"
-            base_count = Correspondence.all_objects.filter(
-                reference_number__startswith=sequence_prefix
-            ).count()
 
-            reference_number = None
-            for attempt in range(100):
-                candidate = f"{sequence_prefix}{base_count + attempt + 1:06d}"
-                if not Correspondence.all_objects.filter(reference_number=candidate).exists():
-                    reference_number = candidate
-                    break
+            reference_scheme = resolve_reference_scheme(
+                office=owning_office,
+                division=validated_data.get("division"),
+                department=validated_data.get("department"),
+            )
+            if reference_scheme is None:
+                raise ValidationError({
+                    "reference_number": "No reference scheme is configured for this office. Add one in Template Hub → Reference before registering this correspondence."
+                })
+            reference_classification = (
+                get_classification(reference_scheme, requested_classification)
+                if requested_classification
+                else default_classification(reference_scheme)
+            )
+            if reference_classification is None:
+                raise ValidationError({
+                    "reference_classification_code": "This office's reference scheme has no active classification. Add one in Template Hub → Reference."
+                })
+            # The scheme owns the canonical number. Allocate it even when the
+            # browser submitted its preview, so the serial is consumed and every
+            # issued reference is recorded in the ledger.
+            supplied_reference, reference_allocation = allocate_reference(
+                reference_scheme,
+                reference_classification,
+                user=request.user,
+            )
 
-            if not reference_number:
-                import uuid
-                reference_number = f"{reference_stem}/{uuid.uuid4().hex[:8].upper()}"
-        else:
-            reference_number = supplied_reference
+        reference_number = supplied_reference
+        if reference_allocation is None:
             existing = Correspondence.all_objects.filter(reference_number=reference_number).first()
             if existing and not existing.is_deleted:
+                if uses_document_reference:
+                    raise ValidationError({
+                        "sender_reference": (
+                            f'This reference already belongs to correspondence '
+                            f'"{existing.reference_number}" ({existing.subject}). Open and forward '
+                            "the existing record instead of registering it again."
+                        ),
+                        "existing_correspondence_id": str(existing.id),
+                    })
                 raise ValidationError({
                     'reference_number': f'A correspondence with reference number "{reference_number}" already exists. Please use a different reference number, or edit the existing correspondence to add your file.'
                 })
@@ -476,6 +618,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     created_by=creator,
                     priority=priority,
                     reference_number=reference_number,
+                    reference_classification=reference_classification,
                     owning_office=owning_office,
                     current_office=current_office,
                 )
@@ -488,32 +631,38 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     'unique constraint' in error_str and 'reference_number' in error_str
                 )
                 if is_ref_error:
-                    if save_attempt < max_save_retries - 1:
-                        reference_path = _reference_path(
-                            owning_office,
-                            validated_data.get("division"),
-                            validated_data.get("department"),
-                        )
-                        sequence_prefix = f"{reference_path}/{timezone.now().year}/"
-                        count = Correspondence.all_objects.filter(
-                            reference_number__startswith=sequence_prefix
-                        ).count() + 1
-                        reference_number = f"{sequence_prefix}{count:06d}"
-                        continue
-                    else:
-                        import uuid
-                        reference_path = _reference_path(
-                            owning_office,
-                            validated_data.get("division"),
-                            validated_data.get("department"),
-                        )
-                        reference_number = f"{reference_path}/{uuid.uuid4().hex[:8].upper()}"
-                        continue
-                else:
-                    raise
+                    if reference_scheme is None or reference_classification is None:
+                        raise ValidationError({
+                            'reference_number': f'A correspondence with reference number "{reference_number}" already exists. Please use a different reference number, or edit the existing correspondence to add your file.'
+                        })
+                    if save_attempt >= max_save_retries - 1:
+                        raise ValidationError({
+                            'reference_number': "Unable to allocate a unique reference for this office. Please try again.",
+                            'code': "reference_retry_exhausted",
+                        })
+                    from organization.models import ReferenceAllocation
+                    from organization.reference_services import allocate_reference
+
+                    # The failed save did not consume the number; release the
+                    # unattached ledger row before requesting the next serial.
+                    if reference_allocation is not None:
+                        ReferenceAllocation.objects.filter(
+                            pk=reference_allocation.pk,
+                            correspondence__isnull=True,
+                        ).delete()
+                    reference_number, reference_allocation = allocate_reference(
+                        reference_scheme,
+                        reference_classification,
+                        user=request.user,
+                    )
+                    continue
+                raise
 
         if not correspondence:
             raise ValidationError({"detail": "Failed to create correspondence after multiple retry attempts", "code": "creation_retry_exhausted"})
+        if reference_allocation is not None:
+            reference_allocation.correspondence = correspondence
+            reference_allocation.save(update_fields=["correspondence", "updated_at"])
         self._sync_completed_timestamp(correspondence, None)
 
         AuditService.log_correspondence_activity(
@@ -583,24 +732,20 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             )
 
         if validated_data.get("has_physical_copy"):
-            try:
-                from .physical_serializers import generate_tracking_number
-                phys_tracking_number = generate_tracking_number()
-                PhysicalDocument.objects.create(
-                    tracking_number=phys_tracking_number,
-                    correspondence=correspondence,
-                    description=correspondence.subject or f"Physical copy of {correspondence.reference_number}",
-                    status=PhysicalDocument.Status.FILED,
-                    notes="Auto-created from correspondence registration",
-                )
-                logger.info(
-                    f"Auto-created physical document {phys_tracking_number} for correspondence {correspondence.reference_number}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to auto-create physical document for correspondence {correspondence.id}: {e}",
-                    exc_info=True
-                )
+            from .physical_serializers import generate_tracking_number
+            phys_tracking_number = generate_tracking_number()
+            PhysicalDocument.objects.create(
+                tracking_number=phys_tracking_number,
+                correspondence=correspondence,
+                location=validated_data.get("physical_location"),
+                current_office=owning_office or current_office,
+                description=correspondence.subject or f"Physical copy of {correspondence.reference_number}",
+                status=PhysicalDocument.Status.FILED,
+                notes="Auto-created from correspondence registration",
+            )
+            logger.info(
+                f"Auto-created physical document {phys_tracking_number} for correspondence {correspondence.reference_number}"
+            )
 
         output_serializer = self.get_serializer(correspondence)
         headers = self.get_success_headers(output_serializer.data)
@@ -691,13 +836,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     correspondence.id,
                 )
 
-            try:
-                CorrespondenceDocumentService.update_document_status_on_completion(correspondence)
-            except Exception:
-                logger.exception(
-                    "Failed to update DMS document status for correspondence %s",
-                    correspondence.id,
-                )
 
         AuditService.log_correspondence_activity(
             user=request.user,
@@ -729,13 +867,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     correspondence.id,
                 )
 
-            try:
-                CorrespondenceDocumentService.update_document_status_on_completion(correspondence)
-            except Exception:
-                logger.exception(
-                    "Failed to update DMS document status for correspondence %s",
-                    correspondence.id,
-                )
 
     def _sync_completed_timestamp(self, correspondence, previous_status):
         if correspondence.status == Correspondence.Status.COMPLETED:
@@ -745,6 +876,136 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         elif previous_status == Correspondence.Status.COMPLETED and correspondence.completed_at is not None:
             correspondence.completed_at = None
             correspondence.save(update_fields=["completed_at"])
+
+    def _get_completion_delegate(self, correspondence, user):
+        from organization.permission_utils import require_permission
+
+        require_permission(user, "can_minute_correspondence")
+
+        is_current_approver = correspondence.current_approver_id == user.id
+        delegation = CorrespondenceDelegation.objects.filter(
+            correspondence=correspondence,
+            principal_id=correspondence.current_approver_id,
+            assistant=user,
+            status=CorrespondenceDelegation.Status.ACTIVE,
+        ).first()
+        is_acting_for_current_office = False
+        if correspondence.acting_appointment_id:
+            from organization.models import ActingAppointment
+
+            now = timezone.now()
+            is_acting_for_current_office = ActingAppointment.objects.filter(
+                id=correspondence.acting_appointment_id,
+                acting_user=user,
+                office_id=correspondence.current_office_id,
+                is_active=True,
+                starts_at__lte=now,
+            ).filter(
+                Q(ends_at__isnull=True) | Q(ends_at__gte=now),
+            ).exists()
+
+        if not (is_current_approver or delegation or is_acting_for_current_office):
+            raise PermissionDenied("Only the current assignee or their active delegate can complete this correspondence.")
+        return delegation
+
+    def _complete_correspondence_record(self, correspondence, request):
+        correspondence.status = Correspondence.Status.COMPLETED
+        correspondence.completed_at = timezone.now()
+        correspondence.save(update_fields=["status", "completed_at", "updated_at"])
+
+        CorrespondenceDelegation.objects.filter(
+            correspondence=correspondence,
+            principal_id=correspondence.current_approver_id,
+            status=CorrespondenceDelegation.Status.ACTIVE,
+        ).update(
+            status=CorrespondenceDelegation.Status.COMPLETED,
+            completed_at=correspondence.completed_at,
+        )
+
+        try:
+            CompletionPackageService.generate_completion_package(correspondence, request.user)
+        except Exception:
+            logger.exception(
+                "Failed to generate completion package for correspondence %s",
+                correspondence.id,
+            )
+
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_COMPLETED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Completed correspondence: {correspondence.reference_number}",
+        )
+        return Response(self.get_serializer(correspondence).data)
+
+    @action(detail=True, methods=["post"], url_path="complete")
+    @transaction.atomic
+    def complete_correspondence(self, request, pk=None):
+        correspondence = self.get_object()
+        self._get_completion_delegate(correspondence, request.user)
+
+        if correspondence.status not in (Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS):
+            raise ValidationError({"detail": "Only active correspondence can be completed."})
+
+        active_minutes = correspondence.minutes.filter(is_recalled=False)
+        if not active_minutes.exists():
+            raise ValidationError({"detail": "Correspondence needs at least one active minute before it can be completed."})
+        if active_minutes.filter(acknowledged_at__isnull=True).exists():
+            raise ValidationError({"detail": "All active minutes must be acknowledged before completion."})
+
+        return self._complete_correspondence_record(correspondence, request)
+
+    @action(detail=True, methods=["post"], url_path="complete-no-response")
+    @transaction.atomic
+    def complete_without_response(self, request, pk=None):
+        correspondence = self.get_object()
+        delegation = self._get_completion_delegate(correspondence, request.user)
+        minute_text = (request.data.get("minute_text") or "").strip()
+
+        if not minute_text:
+            raise ValidationError({"minute_text": "Enter a final note before closing without a response."})
+        if correspondence.status not in (Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS):
+            raise ValidationError({"detail": "Only active correspondence can be completed."})
+        if not correspondence.minutes.filter(is_recalled=False).exists():
+            raise ValidationError({"detail": "At least one active minute is required before a final disposition."})
+
+        earlier_routed_minutes = correspondence.minutes.filter(
+            is_recalled=False,
+        ).filter(
+            Q(to_office__isnull=False) | Q(to_user__isnull=False),
+        )
+        if earlier_routed_minutes.filter(acknowledged_at__isnull=True).exists():
+            raise ValidationError({"detail": "All previously routed minutes must be acknowledged before closing without a response."})
+
+        last_step = correspondence.minutes.filter(is_recalled=False).aggregate(
+            last_step=Max("step_number"),
+        )["last_step"] or 0
+        final_minute = Minute.objects.create(
+            correspondence=correspondence,
+            user=delegation.principal if delegation else request.user,
+            performed_by=request.user if delegation else None,
+            acted_by_assistant=bool(delegation),
+            assistant_type="PA" if delegation else "",
+            grade_level=getattr(request.user, "grade_level", "") or "",
+            action_type=Minute.ActionType.MINUTE,
+            minute_text=f"[NO RESPONSE REQUIRED]\n\n{minute_text}",
+            direction=correspondence.direction,
+            step_number=last_step + 1,
+            from_office=correspondence.current_office,
+            requires_response=False,
+        )
+
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_MINUTED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Recorded final action with no response required: {correspondence.reference_number}",
+            metadata={"minute_id": str(final_minute.id), "no_response_required": True},
+        )
+
+        return self._complete_correspondence_record(correspondence, request)
 
     @action(detail=True, methods=["post"], url_path="reassign")
     def reassign(self, request, pk=None):
@@ -1328,6 +1589,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         return Response(serializer.get_parallel_branches(correspondence) or [])
 
     @action(detail=True, methods=["post"], url_path="dispatch", url_name="dispatch")
+    @transaction.atomic
     def create_dispatch(self, request, pk=None):
         correspondence = self.get_object()
         if not correspondence.is_outward():
@@ -1351,6 +1613,13 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         correspondence.status = Correspondence.Status.DISPATCHED
         correspondence.dispatch_date = serializer.validated_data.get("dispatched_date")
         correspondence.save(update_fields=["status", "dispatch_date", "updated_at"])
+
+        CorrespondenceDocumentService.publish_documents_on_issue(
+            correspondence,
+            user=request.user,
+            request=request,
+            dispatch_record=serializer.instance,
+        )
 
         AuditService.log_correspondence_activity(
             user=request.user,
@@ -1430,27 +1699,168 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if correspondence.status == Correspondence.Status.ARCHIVED:
             raise ValidationError({"detail": "Correspondence is already archived."})
 
-        if correspondence.status not in (
-            Correspondence.Status.COMPLETED,
-            Correspondence.Status.DISPATCHED,
-            Correspondence.Status.ACKNOWLEDGED,
-        ):
+        if correspondence.status not in ARCHIVABLE_STATUSES:
             raise ValidationError({"detail": "Only completed, dispatched, or acknowledged correspondence can be archived."})
 
+        archive_level = _resolve_archive_level(
+            request.user,
+            correspondence,
+            request.data.get("archive_level"),
+        )
+
+        correspondence.pre_archive_status = correspondence.status
         correspondence.status = Correspondence.Status.ARCHIVED
         correspondence.archived_at = timezone.now()
-        correspondence.save(update_fields=["status", "archived_at", "updated_at"])
+        correspondence.archive_level = archive_level
+        correspondence.save(
+            update_fields=[
+                "status",
+                "pre_archive_status",
+                "archived_at",
+                "archive_level",
+                "updated_at",
+            ]
+        )
+        _share_package_with_archive_level(correspondence, archive_level)
 
         AuditService.log_correspondence_activity(
             user=request.user,
             action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
             correspondence=correspondence,
             request=request,
-            description=f"Archived correspondence: {correspondence.reference_number}",
+            description=(
+                f"Archived correspondence at {archive_level} level: {correspondence.reference_number}"
+                if archive_level
+                else f"Archived correspondence: {correspondence.reference_number}"
+            ),
+            metadata={"archive_level": archive_level},
         )
 
         output = self.get_serializer(correspondence)
         return Response(output.data)
+
+    @action(detail=True, methods=["post"], url_path="unarchive")
+    @transaction.atomic
+    def unarchive(self, request, pk=None):
+        """Return an archived record to its prior lifecycle status with an audit reason."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_archive")
+        correspondence = self.get_object()
+        if correspondence.status != Correspondence.Status.ARCHIVED:
+            raise ValidationError({"detail": "Only archived correspondence can be returned to records."})
+
+        reason = (request.data.get("reason") or "").strip()
+        if not reason:
+            raise ValidationError({"reason": "Explain why this record is being returned to records."})
+        if len(reason) > 2000:
+            raise ValidationError({"reason": "Keep the reason under 2000 characters."})
+
+        current_level = correspondence.archive_level
+        units = archive_org_units(correspondence)
+        if current_level and (
+            current_level not in _archive_levels_user_may_file(request.user)
+            or not _archive_scope_allows(request.user, current_level, units)
+        ):
+            raise PermissionDenied(
+                {
+                    "detail": "You cannot return this record from an archive outside your authority and organisation scope.",
+                    "code": "archive_scope_denied",
+                    "archive_level": current_level,
+                }
+            )
+
+        previous_status = correspondence.pre_archive_status
+        if previous_status not in ARCHIVABLE_STATUSES:
+            # Legacy rows predate the stored lifecycle status. Use available
+            # outward dispatch evidence, otherwise safely return to completed.
+            if correspondence.is_outward() and correspondence.acknowledged_date:
+                previous_status = Correspondence.Status.ACKNOWLEDGED
+            elif correspondence.is_outward() and correspondence.dispatch_date:
+                previous_status = Correspondence.Status.DISPATCHED
+            else:
+                previous_status = Correspondence.Status.COMPLETED
+
+        correspondence.status = previous_status
+        correspondence.pre_archive_status = None
+        correspondence.archived_at = None
+        correspondence.archive_level = ""
+        correspondence.save(
+            update_fields=[
+                "status",
+                "pre_archive_status",
+                "archived_at",
+                "archive_level",
+                "updated_at",
+            ]
+        )
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Returned correspondence to records: {correspondence.reference_number} - {reason}",
+            metadata={
+                "unarchived": True,
+                "previous_archive_level": current_level,
+                "previous_status": Correspondence.Status.ARCHIVED,
+                "restored_status": previous_status,
+                "reason": reason,
+            },
+        )
+        return Response(self.get_serializer(correspondence).data)
+
+    @action(detail=True, methods=["post"], url_path="refile")
+    @transaction.atomic
+    def refile_archive(self, request, pk=None):
+        """Move an archived record to another filing level, with a written reason."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_archive")
+        correspondence = self.get_object()
+
+        if correspondence.status != Correspondence.Status.ARCHIVED:
+            raise ValidationError({"detail": "Only archived correspondence can be re-filed."})
+
+        reason = (request.data.get("reason") or "").strip()
+        if not reason:
+            raise ValidationError({"reason": "Explain why this record is being re-filed."})
+        if len(reason) > 2000:
+            raise ValidationError({"reason": "Keep the reason under 2000 characters."})
+
+        current_level = correspondence.archive_level
+        requested_level = (request.data.get("archive_level") or "").strip().lower()
+        if not requested_level:
+            raise ValidationError({"archive_level": "Choose the level to file this record under."})
+        if requested_level == current_level:
+            raise ValidationError(
+                {"archive_level": f"This record is already filed at {current_level} level."}
+            )
+
+        new_level = _resolve_archive_level(request.user, correspondence, requested_level)
+
+        correspondence.archive_level = new_level
+        correspondence.save(update_fields=["archive_level", "updated_at"])
+        _share_package_with_archive_level(correspondence, new_level)
+
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=(
+                f"Re-filed correspondence from {current_level or 'unfiled'} to {new_level} level: "
+                f"{correspondence.reference_number} - {reason}"
+            ),
+            metadata={
+                "refiled": True,
+                "previous_archive_level": current_level,
+                "archive_level": new_level,
+                "reason": reason,
+            },
+        )
+
+        return Response(self.get_serializer(correspondence).data)
 
     @action(detail=False, methods=["post"], url_path="bulk-archive")
     def bulk_archive(self, request):
@@ -1478,12 +1888,63 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if not accessible_items:
             raise PermissionDenied({"detail": "You don't have permission to archive any of the selected items", "code": "archive_permission_denied"})
 
+        requested_level = request.data.get("archive_level")
         archived_count = 0
+        skipped: list[dict[str, str]] = []
 
         for corr in accessible_items:
+            if corr.status == Correspondence.Status.ARCHIVED:
+                skipped.append(
+                    {
+                        "id": str(corr.id),
+                        "reference_number": corr.reference_number,
+                        "reason": "Already archived.",
+                    }
+                )
+                continue
+            if corr.status not in ARCHIVABLE_STATUSES:
+                skipped.append(
+                    {
+                        "id": str(corr.id),
+                        "reference_number": corr.reference_number,
+                        "reason": "Only completed, dispatched, or acknowledged correspondence can be archived.",
+                    }
+                )
+                continue
+
+            try:
+                archive_level = _resolve_archive_level(request.user, corr, requested_level)
+            except (ValidationError, PermissionDenied) as exc:
+                detail = exc.detail
+                if isinstance(detail, dict):
+                    reason = str(detail.get("detail") or detail.get("archive_level") or detail)
+                elif isinstance(detail, list):
+                    reason = str(detail[0]) if detail else "Not permitted."
+                else:
+                    reason = str(detail)
+                skipped.append(
+                    {
+                        "id": str(corr.id),
+                        "reference_number": corr.reference_number,
+                        "reason": reason,
+                    }
+                )
+                continue
+
+            corr.pre_archive_status = corr.status
             corr.status = Correspondence.Status.ARCHIVED
             corr.archived_at = timezone.now()
-            corr.save(update_fields=["status", "archived_at", "updated_at"])
+            corr.archive_level = archive_level
+            corr.save(
+                update_fields=[
+                    "status",
+                    "pre_archive_status",
+                    "archived_at",
+                    "archive_level",
+                    "updated_at",
+                ]
+            )
+            _share_package_with_archive_level(corr, archive_level)
             archived_count += 1
 
             AuditService.log_correspondence_activity(
@@ -1491,14 +1952,36 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
                 correspondence=corr,
                 request=request,
-                description=f"Archived correspondence: {corr.reference_number} - {corr.subject}",
-                metadata={"bulk_operation": True, "new_status": "archived"},
+                description=(
+                    f"Archived correspondence at {archive_level} level: "
+                    f"{corr.reference_number} - {corr.subject}"
+                    if archive_level
+                    else f"Archived correspondence: {corr.reference_number} - {corr.subject}"
+                ),
+                metadata={
+                    "bulk_operation": True,
+                    "new_status": "archived",
+                    "archive_level": archive_level,
+                },
+            )
+
+        if archived_count == 0:
+            raise PermissionDenied(
+                {
+                    "detail": (
+                        "None of the selected items can be archived within your "
+                        "authority and organisation scope."
+                    ),
+                    "code": "archive_level_denied",
+                    "rejected": skipped,
+                }
             )
 
         return Response({
             "message": f"Successfully archived {archived_count} correspondence item(s)",
             "archived_count": archived_count,
             "skipped_count": len(correspondence_ids) - archived_count,
+            "skipped": skipped,
         })
 
     @action(detail=False, methods=["post"], url_path="bulk-delete")
@@ -1602,7 +2085,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             minute_serializer.is_valid(raise_exception=True)
             minute_serializer.save()
 
-            original.status = Correspondence.Status.COMPLETED
             original.direction = response_data.get(
                 "direction", original.direction
             )
@@ -1612,7 +2094,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             current_office = response_data.get("current_office_id")
             if current_office:
                 original.current_office_id = current_office
-            original.save(update_fields=["status", "direction", "current_approver", "current_office"])
+            original.save(update_fields=["direction", "current_approver", "current_office"])
 
             response_data["source"] = "internal"
             response_data["status"] = "pending"
@@ -1634,6 +2116,19 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             if document_link_data:
                 doc_id = document_link_data if isinstance(document_link_data, str) else document_link_data.get("document_id")
                 if doc_id:
+                    linked_document = Document.objects.filter(id=doc_id).first()
+                    if linked_document is not None:
+                        from .reference_utils import memo_reference_conflict
+
+                        version = linked_document.versions.order_by(
+                            "-version_number"
+                        ).first()
+                        conflict = memo_reference_conflict(
+                            version.content_html if version else "",
+                            response_correspondence.reference_number,
+                        )
+                        if conflict:
+                            raise ValidationError({"document": conflict})
                     CorrespondenceDocumentLink.objects.create(
                         correspondence=response_correspondence,
                         document_id=doc_id,
@@ -1668,21 +2163,54 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             from organization.models import Department
 
             department = Department.objects.filter(id=department_id).first()
-        reference_path = _reference_path(owning_office, division, department)
-        year = timezone.now().year
-        sequence_prefix = f"{reference_path}/{year}/"
-        base_count = Correspondence.all_objects.filter(reference_number__startswith=sequence_prefix).count()
-        candidate = None
-        for attempt in range(100):
-            cand = f"{sequence_prefix}{base_count + attempt + 1:06d}"
-            if not Correspondence.all_objects.filter(reference_number=cand).exists():
-                candidate = cand
-                break
-        if not candidate:
-            import uuid
+        from organization.reference_services import (
+            default_classification,
+            get_classification,
+            preview_next_reference,
+            resolve_reference_scheme,
+            scheme_context,
+        )
 
-            candidate = f"{sequence_prefix}{uuid.uuid4().hex[:8].upper()}"
-        return Response({"reference_number": candidate, "reference_path": reference_path})
+        scheme = resolve_reference_scheme(
+            office=owning_office, division=division, department=department
+        )
+        if scheme is not None:
+            classification = (
+                get_classification(scheme, request.query_params.get("classification"))
+                or default_classification(scheme)
+            )
+            if classification is not None:
+                return Response(
+                    {
+                        "reference_number": preview_next_reference(scheme, classification),
+                        "reference_path": None,
+                        "scheme": scheme_context(scheme),
+                        "classification": classification.code,
+                    }
+                )
+            return Response(
+                {
+                    "reference_number": "",
+                    "reference_path": None,
+                    "scheme": scheme_context(scheme),
+                    "warning": (
+                        "This office's reference scheme has no active classification. "
+                        "Add one in Template Hub → Reference."
+                    ),
+                }
+            )
+
+        return Response(
+            {
+                "reference_number": "",
+                "reference_path": None,
+                "scheme": None,
+                "warning": (
+                    "No reference scheme is configured for this office. "
+                    "Add one in Template Hub → Reference before registering."
+                ),
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="sidebar-counts")
     def sidebar_counts(self, request):
@@ -1713,7 +2241,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
         office_ids = get_office_queue_office_ids(user)
 
-        base_filter = Q(is_deleted=False) & ~Q(status=Correspondence.Status.COMPLETED)
+        base_filter = Q(is_deleted=False) & ~Q(status__in=OFFICE_TRAY_EXCLUDED_STATUSES)
 
         unread_inbox_subquery = ReadReceipt.objects.filter(
             user=user, correspondence=OuterRef('pk')
@@ -1993,14 +2521,16 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         )
 
         if include_all_offices:
-            queryset = self.base_queryset.filter(is_deleted=False).exclude(status=Correspondence.Status.COMPLETED)
+            queryset = self.base_queryset.filter(is_deleted=False).exclude(
+                status__in=OFFICE_TRAY_EXCLUDED_STATUSES
+            )
         elif not office_ids:
             queryset = self.base_queryset.none()
         else:
             # Seat tray only — personal parallel/CC stays in My Inbox
             base_q = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
             queryset = self.base_queryset.filter(is_deleted=False).filter(base_q).exclude(
-                status=Correspondence.Status.COMPLETED
+                status__in=OFFICE_TRAY_EXCLUDED_STATUSES
             )
             queryset = queryset.exclude(
                 Q(
@@ -2192,6 +2722,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="my-inbox")
     def my_inbox(self, request):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(request.user, "my_inbox")
         user = request.user
 
         parallel_correspondence_ids = Minute.objects.filter(
@@ -2328,6 +2861,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="my-sent")
     def my_sent(self, request):
         """Correspondence the current user has routed or formally dispatched."""
+        from organization.permission_utils import require_page_access
+
+        require_page_access(request.user, "my_sent")
         user = request.user
         sent_type = request.query_params.get("sent_type", "all").lower()
 
@@ -2594,6 +3130,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="archive-records", filter_backends=[])
     def archive_records(self, request):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(request.user, "records")
         user = request.user
         base_queryset = self._get_archived_queryset(user)
         if base_queryset is None:
@@ -2613,10 +3152,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 }
             )
 
-        allowed_levels = self._get_allowed_archive_levels(user)
+        visible_levels = readable_archive_levels(user)
         archive_level = request.query_params.get("archive_level")
         if archive_level and archive_level.lower() != "all":
-            if archive_level not in allowed_levels and not getattr(user, "is_superuser", False):
+            if archive_level not in visible_levels:
                 return Response(
                     {"detail": "You do not have access to the requested archive level."},
                     status=status.HTTP_403_FORBIDDEN,
@@ -2759,13 +3298,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 }
             )
 
-        queryset = self.base_queryset.filter(
-            is_deleted=False,
-            status__in=[Correspondence.Status.COMPLETED, Correspondence.Status.ARCHIVED],
-        )
-        from organization.org_scope import apply_correspondence_org_scope
-
-        queryset = apply_correspondence_org_scope(queryset, user)
+        queryset = self._get_archived_queryset(user)
 
         directorate_ids = request.query_params.getlist("directorate")
         if directorate_ids and "all" not in [d.lower() for d in directorate_ids]:
@@ -2934,64 +3467,24 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         )
 
     def _get_allowed_archive_levels(self, user) -> list[str]:
-        if not user or not getattr(user, "is_authenticated", False):
-            return []
-        role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
-        grade = (user.grade_level or "").upper()
-        is_super_admin = getattr(user, "is_superuser", False) or role_name.lower() == "super admin"
-        is_secretary = role_name.lower() == "secretary"
-        allowed = {Correspondence.ArchiveLevel.DEPARTMENT}
-        if grade in LEADERSHIP_GRADES or is_super_admin or is_secretary:
-            allowed.add(Correspondence.ArchiveLevel.DIVISION)
-        if grade in DIRECTORATE_GRADES or is_super_admin or is_secretary:
-            allowed.add(Correspondence.ArchiveLevel.DIRECTORATE)
-        return list(allowed)
+        return _archive_levels_user_may_file(user)
 
     def _get_archived_queryset(self, user):
-        queryset = self.base_queryset.filter(
-            is_deleted=False,
-            status__in=[Correspondence.Status.COMPLETED, Correspondence.Status.ARCHIVED],
-        )
+        queryset = self.base_queryset.filter(is_deleted=False)
         if not user or not getattr(user, "is_authenticated", False):
             return queryset.none()
-        if getattr(user, "is_superuser", False):
-            return queryset
 
-        allowed_levels = self._get_allowed_archive_levels(user)
-        department_id = getattr(user, "department_id", None)
-        division_id = getattr(user, "division_id", None)
-        directorate_id = getattr(user, "directorate_id", None)
+        completed = queryset.filter(status=Correspondence.Status.COMPLETED)
+        archived = queryset.filter(status=Correspondence.Status.ARCHIVED).filter(
+            archived_correspondence_visibility_q(user)
+        ).distinct()
 
-        base_filters = Q()
+        # Completed, not-yet-filed records retain the established org/participant
+        # boundary. Archived rows use filing-level visibility only.
+        from organization.org_scope import apply_correspondence_org_scope
 
-        org_filters = Q()
-        if Correspondence.ArchiveLevel.DEPARTMENT in allowed_levels and department_id:
-            org_filters |= Q(department_id=department_id)
-        if Correspondence.ArchiveLevel.DIVISION in allowed_levels and division_id:
-            org_filters |= Q(division_id=division_id)
-        if Correspondence.ArchiveLevel.DIRECTORATE in allowed_levels and directorate_id:
-            org_filters |= Q(division__directorate_id=directorate_id)
-
-        if org_filters:
-            base_filters |= org_filters
-
-        backward_compat_filters = Q()
-        if department_id:
-            backward_compat_filters |= Q(department_id=department_id)
-        if division_id:
-            backward_compat_filters |= Q(division_id=division_id)
-        if directorate_id:
-            backward_compat_filters |= Q(division__directorate_id=directorate_id)
-
-        user_added_filters = Q(added_by=user)
-
-        if base_filters or backward_compat_filters or user_added_filters:
-            combined_filters = base_filters | backward_compat_filters | user_added_filters
-        else:
-            return queryset.none()
-
-        filtered_queryset = queryset.filter(combined_filters).distinct()
-        return filtered_queryset
+        completed = apply_correspondence_org_scope(completed, user)
+        return (completed | archived).distinct()
 
     def _parse_date_param(self, value: str | None):
         if not value:

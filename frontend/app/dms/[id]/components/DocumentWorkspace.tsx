@@ -2,8 +2,7 @@
 
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { FileText, Info, PanelRightOpen } from "lucide-react";
+import { ArrowLeft, FileText, Info, PanelRightOpen } from "lucide-react";
 import type { ComponentProps } from "react";
 import { DocumentPreviewPanel } from "./DocumentPreviewPanel";
 import { DocumentSidebar } from "./DocumentSidebar";
@@ -21,19 +20,35 @@ interface DocumentWorkspaceProps {
 }
 
 export function DocumentMobileTabBar({
-  commentsCount,
   mobileActiveTab,
   onSetMobileActiveTab,
 }: {
-  commentsCount: number;
   mobileActiveTab: "document" | "details";
   onSetMobileActiveTab: (tab: "document" | "details") => void;
 }) {
+  // While the rail is open, its own tabs are the section switcher; showing a
+  // second "Details" control here would mean two different things.
+  if (mobileActiveTab === "details") {
+    return (
+      <div className="md:hidden border-b border-border/50 bg-background/90 backdrop-blur-sm px-2 py-1.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start text-xs rounded-full gap-1"
+          onClick={() => onSetMobileActiveTab("document")}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to document
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="md:hidden border-b border-border/50 bg-background/90 backdrop-blur-sm px-2 py-1.5">
       <div className="flex gap-1 rounded-full bg-muted/50 p-1">
         <Button
-          variant={mobileActiveTab === "document" ? "default" : "ghost"}
+          variant="default"
           size="sm"
           className="flex-1 text-xs rounded-full transition-colors motion-reduce:transition-none"
           onClick={() => onSetMobileActiveTab("document")}
@@ -42,18 +57,13 @@ export function DocumentMobileTabBar({
           Document
         </Button>
         <Button
-          variant={mobileActiveTab === "details" ? "default" : "ghost"}
+          variant="ghost"
           size="sm"
           className="flex-1 text-xs rounded-full transition-colors motion-reduce:transition-none"
           onClick={() => onSetMobileActiveTab("details")}
         >
           <Info className="h-3.5 w-3.5 mr-1" />
           Details
-          {commentsCount > 0 && (
-            <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-              {commentsCount}
-            </Badge>
-          )}
         </Button>
       </div>
     </div>

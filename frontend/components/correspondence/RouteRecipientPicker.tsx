@@ -13,16 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Building2,
-  User as UserIcon,
-  FileText,
-  CheckCircle,
-  Search,
-  X,
-} from "lucide-react";
+import { Building2, User as UserIcon, Search, X } from "lucide-react";
+import { OfficeCombobox } from "@/components/correspondence/OfficeCombobox";
 import type { User } from "@/lib/npa-structure";
-import type { BranchConfig } from "@/lib/parallel-routing";
+import type { AssignmentOutcome, BranchConfig } from "@/lib/parallel-routing";
 import { branchKey } from "@/lib/parallel-routing";
 import type { RoutePurpose } from "@/components/correspondence/PrimaryRoutePanel";
 
@@ -44,7 +38,7 @@ interface RouteRecipientPickerProps {
   directorates: Array<{ id: string; name: string; shortName?: string }>;
   divisions: Array<{ id: string; name: string; shortName?: string; directorateId?: string }>;
   defaultPurpose: RoutePurpose;
-  purposeOptions?: RoutePurpose[];
+  defaultOutcome?: AssignmentOutcome;
   /** CC mode — only information, no action/approval */
   informationOnly?: boolean;
   branchConfigs?: Record<string, BranchConfig>;
@@ -55,10 +49,10 @@ interface RouteRecipientPickerProps {
   emptyMessage?: string;
 }
 
-const PURPOSE_LABELS: Record<RoutePurpose, string> = {
-  action: "Action",
-  information: "Information",
-  approval: "Approval",
+const OUTCOME_LABELS: Record<AssignmentOutcome, string> = {
+  respond: "Respond",
+  treat: "Treat document",
+  onward: "Minute onward",
 };
 
 export function RouteRecipientPicker({
@@ -68,10 +62,8 @@ export function RouteRecipientPicker({
   onOfficeIdsChange,
   users,
   offices,
-  directorates,
-  divisions,
   defaultPurpose,
-  purposeOptions = ["action", "information", "approval"],
+  defaultOutcome = "respond",
   informationOnly = false,
   branchConfigs = {},
   onBranchConfigsChange,
@@ -81,18 +73,14 @@ export function RouteRecipientPicker({
   emptyMessage = "No recipients added yet.",
 }: RouteRecipientPickerProps) {
   const [routeType, setRouteType] = useState<"person" | "office">("office");
-  const [addPurpose, setAddPurpose] = useState<RoutePurpose>(
-    informationOnly ? "information" : defaultPurpose,
-  );
+  const [addOutcome, setAddOutcome] = useState<AssignmentOutcome>(defaultOutcome);
   const [personSearchQuery, setPersonSearchQuery] = useState("");
-  const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState("all");
-  const [officeFilterDivision, setOfficeFilterDivision] = useState("all");
 
   useEffect(() => {
     if (!informationOnly) {
-      setAddPurpose(defaultPurpose);
+      setAddOutcome(defaultOutcome);
     }
-  }, [defaultPurpose, informationOnly]);
+  }, [defaultOutcome, informationOnly]);
 
   const selectedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -100,22 +88,6 @@ export function RouteRecipientPicker({
     for (const id of officeIds) keys.add(branchKey("office", id));
     return keys;
   }, [userIds, officeIds]);
-
-  const filteredOfficeDivisions = useMemo(() => {
-    if (officeFilterDirectorate === "all") return divisions;
-    return divisions.filter((d) => d.directorateId === officeFilterDirectorate);
-  }, [divisions, officeFilterDirectorate]);
-
-  const filteredOfficeOptions = useMemo(() => {
-    let result = offices.filter((o) => !selectedKeys.has(branchKey("office", o.id)));
-    if (officeFilterDirectorate !== "all") {
-      result = result.filter((o) => o.directorateId === officeFilterDirectorate);
-    }
-    if (officeFilterDivision !== "all") {
-      result = result.filter((o) => o.divisionId === officeFilterDivision);
-    }
-    return result.sort((a, b) => a.name.localeCompare(b.name));
-  }, [offices, officeFilterDirectorate, officeFilterDivision, selectedKeys]);
 
   const filteredUsers = useMemo(() => {
     const base = users
@@ -133,32 +105,31 @@ export function RouteRecipientPicker({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [users, excludeUserId, selectedKeys, personSearchQuery]);
 
-  const syncBranchConfig = (key: string, purpose: RoutePurpose) => {
+  const syncBranchConfig = (key: string, outcome: AssignmentOutcome) => {
     if (!onBranchConfigsChange) return;
     onBranchConfigsChange({
       ...branchConfigs,
       [key]: {
-        purpose,
+        purpose: informationOnly ? "information" : "action",
         minuteText:
           branchConfigs[key]?.minuteText ||
           defaultBranchText ||
-          "Please review and respond.",
+          "Please review and handle this document.",
+        outcome,
       },
     });
   };
 
   const handleAddUser = (userId: string) => {
     if (userIds.includes(userId)) return;
-    const purpose = informationOnly ? "information" : addPurpose;
     onUserIdsChange([...userIds, userId]);
-    syncBranchConfig(branchKey("user", userId), purpose);
+    syncBranchConfig(branchKey("user", userId), addOutcome);
   };
 
   const handleAddOffice = (officeId: string) => {
     if (officeIds.includes(officeId)) return;
-    const purpose = informationOnly ? "information" : addPurpose;
     onOfficeIdsChange([...officeIds, officeId]);
-    syncBranchConfig(branchKey("office", officeId), purpose);
+    syncBranchConfig(branchKey("office", officeId), addOutcome);
   };
 
   const handleRemoveUser = (userId: string) => {
@@ -182,8 +153,9 @@ export function RouteRecipientPicker({
   const updateBranchConfig = (key: string, patch: Partial<BranchConfig>) => {
     if (!onBranchConfigsChange) return;
     const current = branchConfigs[key] ?? {
-      purpose: defaultPurpose,
-      minuteText: defaultBranchText || "Please review and respond.",
+      purpose: informationOnly ? "information" : defaultPurpose,
+      minuteText: defaultBranchText || "Please review and handle this document.",
+      outcome: defaultOutcome,
     };
     onBranchConfigsChange({ ...branchConfigs, [key]: { ...current, ...patch } });
   };
@@ -219,8 +191,6 @@ export function RouteRecipientPicker({
     return items;
   }, [userIds, officeIds, users, offices]);
 
-  const effectivePurposeOptions = informationOnly ? (["information"] as RoutePurpose[]) : purposeOptions;
-
   return (
     <div className="space-y-3">
       <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
@@ -251,63 +221,14 @@ export function RouteRecipientPicker({
               )}
             </Label>
             {routeType === "office" ? (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <Select
-                    value={officeFilterDirectorate}
-                    onValueChange={(v) => {
-                      setOfficeFilterDirectorate(v);
-                      setOfficeFilterDivision("all");
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Directorate" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Directorates</SelectItem>
-                      {directorates.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.shortName || d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={officeFilterDivision} onValueChange={setOfficeFilterDivision}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Division" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Divisions</SelectItem>
-                      {filteredOfficeDivisions.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.shortName || d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Select onValueChange={handleAddOffice}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select office" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {filteredOfficeOptions.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">No offices found</div>
-                    ) : (
-                      filteredOfficeOptions.map((office) => (
-                        <SelectItem key={office.id} value={office.id}>
-                          <div className="flex w-full items-center justify-between gap-2">
-                            <span>{office.name}</span>
-                            <span className="text-[10px] uppercase text-muted-foreground">
-                              {office.officeType}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+              <OfficeCombobox
+                offices={offices}
+                onSelect={handleAddOffice}
+                excludeOfficeIds={officeIds}
+                placeholder="Select office"
+                emptyMessage="No offices found"
+                className="h-9"
+              />
             ) : (
               <Select onValueChange={handleAddUser}>
                 <SelectTrigger className="h-9">
@@ -346,36 +267,18 @@ export function RouteRecipientPicker({
 
           {!informationOnly && (
             <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                <FileText className="h-3 w-3" /> Purpose
-              </Label>
+              <Label className="text-xs text-muted-foreground">Expected outcome</Label>
               <Select
-                value={addPurpose}
-                onValueChange={(v) => setAddPurpose(v as RoutePurpose)}
+                value={addOutcome}
+                onValueChange={(v) => setAddOutcome(v as AssignmentOutcome)}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {effectivePurposeOptions.includes("action") && (
-                    <SelectItem value="action">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-warning" />
-                        For Action
-                      </div>
-                    </SelectItem>
-                  )}
-                  {effectivePurposeOptions.includes("information") && (
-                    <SelectItem value="information">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-info" />
-                        For Information
-                      </div>
-                    </SelectItem>
-                  )}
-                  {effectivePurposeOptions.includes("approval") && (
-                    <SelectItem value="approval">For Approval</SelectItem>
-                  )}
+                  <SelectItem value="respond">Respond</SelectItem>
+                  <SelectItem value="treat">Treat document</SelectItem>
+                  <SelectItem value="onward">Minute onward</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -392,9 +295,10 @@ export function RouteRecipientPicker({
             {selectedRecipients.map((recipient) => {
               const cfg = branchConfigs[recipient.key] ?? {
                 purpose: informationOnly ? "information" : defaultPurpose,
-                minuteText: defaultBranchText || "Please review and respond.",
+                minuteText: defaultBranchText || "Please review and handle this document.",
+                outcome: defaultOutcome,
               };
-              const purposeLabel = PURPOSE_LABELS[cfg.purpose] ?? cfg.purpose;
+              const outcomeLabel = OUTCOME_LABELS[cfg.outcome] ?? cfg.outcome;
               return (
                 <div
                   key={recipient.key}
@@ -413,27 +317,28 @@ export function RouteRecipientPicker({
                           {recipient.meta ? `${recipient.type} • ${recipient.meta}` : recipient.type}
                         </p>
                       </div>
-                      {showPerRecipientEditor && onBranchConfigsChange ? (
+                      {showPerRecipientEditor && onBranchConfigsChange && !informationOnly ? (
                         <Select
-                          value={cfg.purpose}
+                          value={cfg.outcome}
                           onValueChange={(v) =>
-                            updateBranchConfig(recipient.key, { purpose: v as RoutePurpose })
+                            updateBranchConfig(recipient.key, {
+                              outcome: v as AssignmentOutcome,
+                              purpose: "action",
+                            })
                           }
                         >
-                          <SelectTrigger className="h-7 w-[120px] text-xs">
+                          <SelectTrigger className="h-7 w-[142px] text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {effectivePurposeOptions.map((p) => (
-                              <SelectItem key={p} value={p}>
-                                {PURPOSE_LABELS[p]}
-                              </SelectItem>
-                            ))}
+                            <SelectItem value="respond">Respond</SelectItem>
+                            <SelectItem value="treat">Treat document</SelectItem>
+                            <SelectItem value="onward">Minute onward</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (
                         <Badge variant="outline" className="shrink-0 text-xs">
-                          {purposeLabel}
+                          {informationOnly ? "Information" : outcomeLabel}
                         </Badge>
                       )}
                     </div>

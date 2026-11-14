@@ -758,7 +758,7 @@ class Command(BaseCommand):
         owning_office = offices.get("office-md")
 
         correspondence, _ = Correspondence.objects.update_or_create(
-            reference_number="NPA/CORR/2025/015",
+            reference_number="HQ/AGM/SA&DM/AD/001",
             defaults={
                 "subject": "Request for ECM Implementation Update",
                 "body_html": "<p><strong>Update requested by Managing Director</strong></p><p>Please provide an update on the ECM rollout milestones.</p>",
@@ -836,7 +836,7 @@ class Command(BaseCommand):
 
         if edfa:
             edfa_correspondence, _ = Correspondence.objects.update_or_create(
-                reference_number="NPA/CORR/2025/016",
+                reference_number="HQ/AGM/SA&DM/AD/002",
                 defaults={
                     "subject": "FY2025 Capital Expenditure Review — Finance & Administration",
                     "body_html": (
@@ -1834,7 +1834,7 @@ class Command(BaseCommand):
             from correspondence.models import Correspondence
 
             corr1, _ = Correspondence.objects.update_or_create(
-                reference_number="NPA/CORR/2025/COMP-001",
+                reference_number="HQ/AGM/PORTSENG/AD/001",
                 defaults={
                     "subject": "Completion Confirmation – Wharf Rehabilitation Project",
                     "body_html": "<p><em>User department confirms project completion</em></p><p>This is to confirm that the Wharf Rehabilitation project has been fully completed as per contract specifications.</p>",
@@ -1853,7 +1853,7 @@ class Command(BaseCommand):
             CaseCorrespondenceLink.objects.get_or_create(case=case1, correspondence=corr1)
 
             corr2, _ = Correspondence.objects.update_or_create(
-                reference_number="NPA/CORR/2025/INV-001",
+                reference_number="HQ/AGM/CIVIL/AD/001",
                 defaults={
                     "subject": "Invoice Submission – Wharf Rehabilitation (₦2.45bn)",
                     "body_html": "<p><em>Contractor submits final invoice for payment</em></p><p>Please find attached the final invoice for the completed wharf rehabilitation project.</p>",
@@ -1864,6 +1864,7 @@ class Command(BaseCommand):
                     "division": finance_division,
                     "created_by": finance_user,
                     "current_office": audit_office,
+                    "current_approver": audit_user,
                     "owning_office": engineering_office,
                     "received_date": date.today() - timedelta(days=3),
                 },

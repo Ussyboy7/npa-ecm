@@ -42,7 +42,6 @@ import { cn } from '@/lib/utils';
 import { Shield, Search, FileText, QrCode, ExternalLink, RefreshCw, Download, AlertCircle, MoreVertical, Printer, Loader2 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
-import { ensureSealImageCached } from "@/lib/seal-cache";
 import { logError } from "@/lib/client-logger";
 import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
@@ -58,6 +57,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
+import { HubTabList, type HubTabLink } from "@/components/admin/HubTabList";
+import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 
 interface ExecutiveApproval {
   id: string;
@@ -89,8 +90,19 @@ interface ExecutiveApproval {
 function ApprovalsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const level = (searchParams.get('level') === 'departmental' ? 'departmental' : 'executive') as 'executive' | 'departmental';
+  const visibility = useSidebarVisibility();
+  const requestedLevel = searchParams.get('level');
+  const level = (
+    requestedLevel === 'departmental' ||
+    (!requestedLevel && !visibility.showExecutiveApprovals && visibility.showDepartmentalApprovals)
+      ? 'departmental'
+      : 'executive'
+  ) as 'executive' | 'departmental';
   const isDepartmental = level === 'departmental';
+  const approvalTabs: HubTabLink[] = [
+    ...(visibility.showExecutiveApprovals ? [{ href: "/approvals", label: "Executive", isActive: (_path: string, _tab: string | null) => level === "executive" }] : []),
+    ...(visibility.showDepartmentalApprovals ? [{ href: "/approvals?level=departmental", label: "Departmental", isActive: (_path: string, _tab: string | null) => level === "departmental" }] : []),
+  ];
 
   const [approvals, setApprovals] = useState<ExecutiveApproval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -444,17 +456,6 @@ function ApprovalsForm() {
       }
       try {
         setPdfLoadingId(approval.id);
-        if (approval.sealData) {
-          await ensureSealImageCached({
-            serialNumber: approval.sealData.serialNumber,
-            officeName: approval.sealData.officeName,
-            officeTitle: approval.sealData.officeTitle,
-            sealedBy: approval.sealData.sealedBy,
-            sealedAt: approval.sealData.sealedAt,
-            signatureImageUrl: approval.sealData.signatureImageUrl,
-            existingSealImageUrl: approval.sealData.sealImageUrl,
-          });
-        }
         const pdfBlob = await apiFetch<Blob>(`/correspondence/minutes/${approval.id}/approval-pdf/`, {
           responseType: 'blob',
         });
@@ -632,10 +633,7 @@ function ApprovalsForm() {
         )}
       >
         {/* Level tabs */}
-        <div className="flex gap-2">
-          <Button variant={!isDepartmental ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => router.push('/approvals')}>Executive Register</Button>
-          <Button variant={isDepartmental ? "default" : "outline"} size="sm" className="h-8 text-xs" onClick={() => router.push('/approvals?level=departmental')}>Departmental</Button>
-        </div>
+        <HubTabList tabs={approvalTabs} />
         {/* Inline filter bar */}
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">

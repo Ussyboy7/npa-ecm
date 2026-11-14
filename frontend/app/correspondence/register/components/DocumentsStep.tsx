@@ -231,7 +231,7 @@ export const DocumentsStep = memo(function DocumentsStep({
           <Label htmlFor="remarks">Remarks</Label>
           <Textarea
             id="remarks"
-            placeholder="Add registry notes or routing instructions"
+            placeholder="Add registry notes or instructions"
             value={formData.remarks}
             onChange={(e) => onFormDataChange({ remarks: e.target.value })}
             rows={3}
@@ -274,7 +274,7 @@ export const DocumentsStep = memo(function DocumentsStep({
           ) : (
             <>
               <Send className="h-4 w-4 mr-2" />
-              Register & Send
+              Register Correspondence
             </>
           )}
         </Button>

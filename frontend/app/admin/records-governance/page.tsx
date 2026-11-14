@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { RecordsSecurityTabList } from "@/components/admin/RecordsSecurityTabList";
+import { AuditTrailPanel, getAuditScopeSubtitle } from "@/components/admin/AuditTrailPanel";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,8 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
 import { downloadBlob } from "@/lib/admin-api";
+import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
   approveDisposalRequest,
   completeDisposalRequest,
@@ -68,12 +71,41 @@ function statusBadge(status: DisposalRequest["status"]) {
 function RecordsGovernanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") || "overview";
+  const visibility = useSidebarVisibility();
+  const { currentUser } = useCurrentUser();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = requestedTab || "overview";
+  const canViewRecords =
+    visibility.showRecordsGovernance || visibility.showDrmPolicies;
+  const canViewAudit = visibility.showAuditCompliance;
+  const effectiveTab =
+    activeTab === "audit"
+      ? canViewAudit
+        ? "audit"
+        : "overview"
+      : canViewRecords
+        ? activeTab
+        : canViewAudit
+          ? "audit"
+          : activeTab;
+  const auditSubtitle = getAuditScopeSubtitle(currentUser?.systemRole ?? "");
+
   useEffect(() => {
-    if (activeTab === "drm") {
+    if (activeTab === "drm" && canViewRecords) {
       router.replace("/admin/records-governance/drm");
     }
-  }, [activeTab, router]);
+  }, [activeTab, canViewRecords, router]);
+
+  useEffect(() => {
+    // Audit-only users get the audit tab; records-only users cannot select it.
+    if (canViewAudit && !canViewRecords && requestedTab !== "audit") {
+      router.replace("/admin/records-governance?tab=audit", { scroll: false });
+      return;
+    }
+    if (canViewRecords && !canViewAudit && requestedTab === "audit") {
+      router.replace("/admin/records-governance?tab=overview", { scroll: false });
+    }
+  }, [requestedTab, canViewAudit, canViewRecords, router]);
 
   const [summary, setSummary] = useState<RecordsSummary | null>(null);
   const [schedules, setSchedules] = useState<RetentionSchedule[]>([]);
@@ -125,8 +157,9 @@ function RecordsGovernanceContent() {
   }, []);
 
   useEffect(() => {
+    if (!canViewRecords) return;
     void loadAll();
-  }, [loadAll]);
+  }, [canViewRecords, loadAll]);
 
   const handleCreateSchedule = async () => {
     if (!newSchedule.name.trim()) {
@@ -214,17 +247,21 @@ function RecordsGovernanceContent() {
   return (
     <>
       <AdminPageShell
-        title="Records & security"
-        subtitle="Retention, legal holds, disposal, and document rights (DRM)."
+        title={canViewRecords ? "Records & security" : "Audit Trail"}
+        subtitle={
+          effectiveTab === "audit"
+            ? auditSubtitle
+            : "Retention, legal holds, disposal, and document rights (DRM)."
+        }
         icon={Archive}
-        stats={<StatStrip items={statItems} />}
+        stats={effectiveTab === "audit" ? undefined : <StatStrip items={statItems} />}
         actions={
-          activeTab === "retention" ? (
+          effectiveTab === "retention" ? (
             <Button size="compact" onClick={() => setScheduleDialogOpen(true)}>
               <Plus className="h-4 w-4" />
               New schedule
             </Button>
-          ) : activeTab === "holds" ? (
+          ) : effectiveTab === "holds" ? (
             <Button size="compact" onClick={() => setHoldDialogOpen(true)}>
               <Plus className="h-4 w-4" />
               New hold
@@ -236,7 +273,9 @@ function RecordsGovernanceContent() {
             <RecordsSecurityTabList />
           </div>
 
-          {activeTab === "overview" ? (
+          {effectiveTab === "audit" ? <AuditTrailPanel /> : null}
+
+          {canViewRecords && effectiveTab === "overview" ? (
           <div className="space-y-5 mt-4">
             <div className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">
               <p className="font-medium text-foreground mb-1">Archived records</p>
@@ -247,7 +286,7 @@ function RecordsGovernanceContent() {
           </div>
           ) : null}
 
-          {activeTab === "retention" ? (
+          {canViewRecords && effectiveTab === "retention" ? (
           <div className="space-y-4 mt-4">
             <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
@@ -288,7 +327,7 @@ function RecordsGovernanceContent() {
           </div>
           ) : null}
 
-          {activeTab === "holds" ? (
+          {canViewRecords && effectiveTab === "holds" ? (
           <div className="space-y-4 mt-4">
             <div className="overflow-x-auto rounded-xl border border-border/60">
               <Table>
@@ -379,7 +418,7 @@ function RecordsGovernanceContent() {
           </div>
           ) : null}
 
-          {activeTab === "disposal" ? (
+          {canViewRecords && effectiveTab === "disposal" ? (
           <div className="space-y-4 mt-4">
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="compact" onClick={() => void handleGenerateDue()}>

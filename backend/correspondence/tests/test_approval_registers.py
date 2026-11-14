@@ -193,6 +193,37 @@ class ApprovalRegistersTests(TestCase):
         # MD executive register should not contain departmental
         self.assertNotIn(str(self.dept_final_minute.id), ids)
 
+    def test_md_office_secretary_sees_executive_register(self):
+        secretary_role, _ = Role.objects.get_or_create(
+            name="MD Office SecretaryReg",
+            defaults={"permissions": {"can_access_approvals": True}},
+        )
+        secretary_role.permissions = {"can_access_approvals": True}
+        secretary_role.save(update_fields=["permissions"])
+        secretary = User.objects.create_user(
+            username="md_office_secretary_reg",
+            password="x",
+            grade_level="SSS2",
+            system_role=secretary_role,
+            division=self.div_leg,
+            department=self.dept_leg,
+        )
+        OfficeMembership.objects.create(
+            user=secretary,
+            office=self.office_md,
+            assignment_role="secretariat",
+            is_primary=True,
+            is_active=True,
+        )
+
+        resp = self._query(
+            secretary, {"action_type": "approve", "approval_level": "executive"}
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        ids = {str(item["id"]) for item in resp.data["results"]}
+        self.assertIn(str(self.exec_minute.id), ids)
+
     def test_gm_sees_departmental_not_executive_in_departmental_register(self):
         # GM finance querying departmental should see own finance departmental
         resp = self._query(self.gm_fin, {"action_type": "approve", "approval_level": "departmental"})
@@ -204,6 +235,15 @@ class ApprovalRegistersTests(TestCase):
         self.assertNotIn(str(self.exec_minute.id), ids)
         # Scoping: finance GM should NOT see legal department's minute
         self.assertNotIn(str(self.dept_leg_minute.id), ids)
+
+    def test_can_approve_user_sees_executive_minutes_in_approval_query(self):
+        self.gm_role.permissions = {"can_approve": True, "can_minute_correspondence": True}
+        self.gm_role.save(update_fields=["permissions"])
+        resp = self._query(self.gm_fin, {"action_type": "approve"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        ids = {str(item["id"]) for item in resp.data["results"]}
+        self.assertIn(str(self.exec_minute.id), ids)
+        self.assertIn(str(self.dept_final_minute.id), ids)
 
     def test_gm_executive_register_sees_none_or_scoped(self):
         # GM querying executive should see none (since executive is MD only)

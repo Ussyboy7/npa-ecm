@@ -35,25 +35,37 @@ export function StatStrip({ items, className, compact = false }: StatStripProps)
       role="group"
       aria-label="Summary statistics"
     >
-      {items.map((item, index) => (
-        <button
-          key={item.key}
-          type="button"
-          disabled={!item.onClick}
-          onClick={item.onClick}
-          title={item.hint}
-          className={cn(
-            "flex-1 min-w-[4.5rem] px-2 text-left",
-            index > 0 && "border-l border-border/50",
-            item.onClick
-              ? "cursor-pointer hover:bg-muted/50 rounded-lg transition-colors"
-              : "cursor-default",
-          )}
-        >
-          <p className={cn(appType.statLabel, "truncate")}>{item.label}</p>
-          <p className={cn(appType.statValue, "mt-0.5")}>{item.value}</p>
-        </button>
-      ))}
+      {items.map((item, index) => {
+        const cellClassName = cn(
+          "flex-1 min-w-[4.5rem] px-2 text-left",
+          index > 0 && "border-l border-border/50",
+          item.onClick
+            ? "cursor-pointer hover:bg-muted/50 rounded-lg transition-colors"
+            : "cursor-default",
+        );
+        const content = (
+          <>
+            <p className={cn(appType.statLabel, "truncate")}>{item.label}</p>
+            <p className={cn(appType.statValue, "mt-0.5")}>{item.value}</p>
+          </>
+        );
+
+        return item.onClick ? (
+          <button
+            key={item.key}
+            type="button"
+            onClick={item.onClick}
+            title={item.hint}
+            className={cellClassName}
+          >
+            {content}
+          </button>
+        ) : (
+          <div key={item.key} title={item.hint} className={cellClassName}>
+            {content}
+          </div>
+        );
+      })}
     </div>
   );
 }

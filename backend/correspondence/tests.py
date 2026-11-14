@@ -150,6 +150,9 @@ class TreatAndRespondEndpointTests(APITestCase):
         minute = Minute.objects.filter(correspondence=self.correspondence).first()
         self.assertEqual(minute.minute_text, "Approved with corrections.")
         self.assertEqual(minute.action_type, "treat")
+        self.correspondence.refresh_from_db()
+        self.assertEqual(self.correspondence.status, Correspondence.Status.PENDING)
+        self.assertIsNone(self.correspondence.completed_at)
 
     def test_treat_and_respond_requires_minute_text(self):
         response = self.client.post(

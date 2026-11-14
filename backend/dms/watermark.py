@@ -47,8 +47,10 @@ def apply_text_watermark(pdf_bytes: bytes, text: str) -> bytes:
         c.save()
         overlay_buf.seek(0)
         overlay_page = PdfReader(overlay_buf).pages[0]
-        page.merge_page(overlay_page, over=True)
-        writer.add_page(page)
+        # pypdf 7 requires the destination page to belong to a writer before
+        # merging content into it; merging on a reader-owned page now raises.
+        added_page = writer.add_page(page)
+        added_page.merge_page(overlay_page, over=True)
 
     out = io.BytesIO()
     writer.write(out)

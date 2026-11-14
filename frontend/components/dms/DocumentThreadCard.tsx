@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { logError } from "@/lib/client-logger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,16 @@ interface DocumentThreadCardProps {
   documentId: string;
   parentDocumentId?: string | null;
 }
+
+type ThreadSnapshot = {
+  parent: ThreadDocument | null;
+  children: ThreadDocument[];
+  fetchedAt: number;
+};
+
+/** Recently loaded threads, so switching rail tabs doesn't refetch. */
+const threadCache = new Map<string, ThreadSnapshot>();
+const CACHE_TTL_MS = 60_000;
 
 interface ThreadDocument {
   id: string;
@@ -57,7 +67,19 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const loadThreadDocuments = async () => {
+  const cacheKey = `${parentDocumentId ?? ""}:${documentId}`;
+
+  const loadThreadDocuments = useCallback(async (force = false) => {
+    const cached = threadCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      setParentDocument(cached.parent);
+      setChildDocuments(cached.children);
+      setLoading(false);
+      return;
+    }
+
+    let loadedParent: ThreadDocument | null = null;
+
     try {
       setLoading(true);
 
@@ -65,7 +87,7 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
         try {
           const parent = await apiFetch<unknown>(`/dms/documents/${parentDocumentId}/`);
           if (isRecord(parent)) {
-            setParentDocument({
+            loadedParent = {
               id: String(parent.id ?? ""),
               title: typeof parent.title === "string" ? parent.title : "Untitled",
               reference_number:
@@ -85,7 +107,8 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
                     name: String(parent.author.name ?? "Unknown"),
                   }
                 : undefined,
-            });
+            };
+            setParentDocument(loadedParent);
           }
         } catch (error: unknown) {
           logError("Failed to load parent document:", error);
@@ -111,6 +134,11 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
             : undefined,
         }));
         setChildDocuments(children);
+        threadCache.set(cacheKey, {
+          parent: loadedParent,
+          children,
+          fetchedAt: Date.now(),
+        });
       } catch (error: unknown) {
         logError("Failed to load child documents:", error);
       }
@@ -120,19 +148,18 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
     } finally {
       setLoading(false);
     }
-  };
+  }, [cacheKey, documentId, parentDocumentId]);
 
   useEffect(() => {
     if (documentId) {
       void loadThreadDocuments();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, parentDocumentId]);
+  }, [documentId, loadThreadDocuments]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await loadThreadDocuments();
+      await loadThreadDocuments(true);
       toast.success("Document thread refreshed");
     } catch {
       toast.error("Failed to refresh document thread");

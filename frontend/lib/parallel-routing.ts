@@ -1,8 +1,13 @@
-import type { MergeStrategy, RoutePurpose } from '@/components/correspondence/PrimaryRoutePanel';
+import type { RoutePurpose } from '@/components/correspondence/PrimaryRoutePanel';
+
+export type AssignmentOutcome = 'respond' | 'treat' | 'onward';
+
+export type AssignmentMergeStrategy = 'independent' | 'all' | 'any' | 'majority';
 
 export type BranchConfig = {
   purpose: RoutePurpose;
   minuteText: string;
+  outcome: AssignmentOutcome;
 };
 
 export type ParallelRecipientPayload = {
@@ -10,61 +15,41 @@ export type ParallelRecipientPayload = {
   office_id?: string;
   purpose: RoutePurpose;
   minute_text: string;
+  outcome: AssignmentOutcome;
 };
 
 export function branchKey(type: 'user' | 'office', id: string): string {
   return `${type}:${id}`;
 }
 
-export function parseBranchKey(key: string): { type: 'user' | 'office'; id: string } | null {
-  const [type, id] = key.split(':');
-  if ((type === 'user' || type === 'office') && id) return { type, id };
-  return null;
-}
-
-export function syncBranchConfigs(
-  parallelUserIds: string[],
-  parallelOfficeIds: string[],
-  existing: Record<string, BranchConfig>,
-  defaults: { purpose: RoutePurpose; minuteText: string },
-): Record<string, BranchConfig> {
-  const next: Record<string, BranchConfig> = {};
-  for (const userId of parallelUserIds) {
-    const key = branchKey('user', userId);
-    next[key] = existing[key] ?? { ...defaults };
-  }
-  for (const officeId of parallelOfficeIds) {
-    const key = branchKey('office', officeId);
-    next[key] = existing[key] ?? { ...defaults };
-  }
-  return next;
-}
-
 export function buildParallelRecipients(
   parallelUserIds: string[],
   parallelOfficeIds: string[],
   branchConfigs: Record<string, BranchConfig>,
-  fallback: { purpose: RoutePurpose; minuteText: string },
+  fallback: { purpose: RoutePurpose; minuteText: string; outcome?: AssignmentOutcome },
 ): ParallelRecipientPayload[] {
   const recipients: ParallelRecipientPayload[] = [];
+  const outcome = fallback.outcome ?? 'respond';
   for (const userId of parallelUserIds) {
-    const cfg = branchConfigs[branchKey('user', userId)] ?? fallback;
+    const cfg = branchConfigs[branchKey('user', userId)] ?? { ...fallback, outcome };
     const text = cfg.minuteText.trim() || fallback.minuteText.trim();
     if (!text) continue;
     recipients.push({
       user_id: userId,
       purpose: cfg.purpose ?? fallback.purpose,
       minute_text: text,
+      outcome: cfg.outcome ?? outcome,
     });
   }
   for (const officeId of parallelOfficeIds) {
-    const cfg = branchConfigs[branchKey('office', officeId)] ?? fallback;
+    const cfg = branchConfigs[branchKey('office', officeId)] ?? { ...fallback, outcome };
     const text = cfg.minuteText.trim() || fallback.minuteText.trim();
     if (!text) continue;
     recipients.push({
       office_id: officeId,
       purpose: cfg.purpose ?? fallback.purpose,
       minute_text: text,
+      outcome: cfg.outcome ?? outcome,
     });
   }
   return recipients;
@@ -77,9 +62,9 @@ export async function submitParallelRoute(
     parallelUserIds: string[];
     parallelOfficeIds: string[];
     branchConfigs: Record<string, BranchConfig>;
-    mergeStrategy: MergeStrategy;
     defaultPurpose: RoutePurpose;
     defaultMinuteText: string;
+    mergeStrategy?: AssignmentMergeStrategy;
     parentMinuteId?: string;
     signal?: AbortSignal;
   },
@@ -91,7 +76,7 @@ export async function submitParallelRoute(
     { purpose: params.defaultPurpose, minuteText: params.defaultMinuteText },
   );
   if (recipients.length < 2) {
-    throw new Error('Parallel routing requires at least two recipients with instructions');
+    throw new Error('Assign separately requires at least two recipients with instructions');
   }
   await apiFetch('/correspondence/minutes/parallel-route/', {
     method: 'POST',
@@ -99,7 +84,7 @@ export async function submitParallelRoute(
     signal: params.signal,
     body: JSON.stringify({
       correspondence_id: params.correspondenceId,
-      merge_strategy: params.mergeStrategy,
+      merge_strategy: params.mergeStrategy ?? 'independent',
       parent_minute_id: params.parentMinuteId,
       recipients,
     }),

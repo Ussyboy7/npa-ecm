@@ -17,7 +17,7 @@ export type FormData = {
   dispatchDate: string;
   priority: 'urgent' | 'high' | 'medium' | 'low';
   referenceNumber: string;
-  assignTo: string;
+  referenceClassificationCode: string;
   divisionId: string;
   documentType: string;
   tags: string;
@@ -31,7 +31,7 @@ export type FormData = {
   hasPhysicalCopy: boolean;
 };
 
-export type FlowType = 'inward' | 'outward' | 'lateral';
+export type FlowType = 'inward' | 'outward';
 
 export type DistributionState = {
   directorates: string[];
@@ -39,35 +39,6 @@ export type DistributionState = {
   departments: string[];
 };
 
-export type RegisterRoutingConfig = {
-  routeMode: 'single' | 'parallel';
-  routeType: 'person' | 'office';
-  forwardTo: string;
-  targetOfficeId: string;
-  purpose: 'action' | 'information' | 'approval';
-  mergeStrategy: 'all' | 'any' | 'majority' | 'independent';
-  parallelUserIds: string[];
-  parallelOfficeIds: string[];
-  branchConfigs: Record<string, { purpose: 'action' | 'information' | 'approval'; minuteText: string }>;
-  routingNotes: string;
-  distributionUserIds: string[];
-  distributionOfficeIds: string[];
-};
-
-export const createInitialRoutingConfig = (): RegisterRoutingConfig => ({
-  routeMode: 'single',
-  routeType: 'office',
-  forwardTo: '',
-  targetOfficeId: '',
-  purpose: 'action',
-  mergeStrategy: 'all',
-  parallelUserIds: [],
-  parallelOfficeIds: [],
-  branchConfigs: {},
-  routingNotes: '',
-  distributionUserIds: [],
-  distributionOfficeIds: [],
-});
 
 /**
  * Detect correspondence source type (internal/external) from form data
@@ -109,6 +80,23 @@ export const detectCorrespondenceSource = (
 };
 
 /**
+ * Outward correspondence with both an external recipient and an internal
+ * distribution is ambiguous. Require the registrar to choose the source
+ * instead of silently treating it as internal.
+ */
+export const getCorrespondenceSourceError = (
+  formData: FormData,
+  flowType: FlowType,
+  distributions: DistributionState
+): string | null => {
+  if (flowType !== 'outward' || formData.correspondenceSource) return null;
+  if (detectCorrespondenceSource(flowType, formData, distributions) !== 'ambiguous') {
+    return null;
+  }
+  return 'Choose whether this outward correspondence is internal or external';
+};
+
+/**
  * Reference is server-generated as HQ/<tier>/<division>/<dept>/<seq> e.g. HQ/AGM/ICT/SA&DM/001.
  * Client leaves this empty so the server canonicalizes; preview shows the expected format.
  */
@@ -133,7 +121,7 @@ export const createInitialFormData = (owningOfficeId?: string): FormData => {
     dispatchDate: '',
     priority: 'medium',
     referenceNumber: '', // Will be generated on client mount
-    assignTo: '',
+    referenceClassificationCode: '',
     divisionId: '',
     documentType: 'letter',
     tags: '',
@@ -146,6 +134,24 @@ export const createInitialFormData = (owningOfficeId?: string): FormData => {
     correspondenceSource: undefined,
     hasPhysicalCopy: false,
   };
+};
+
+/**
+ * Extract the existing record id attached to a duplicate incoming-reference guard.
+ */
+export const getExistingCorrespondenceId = (error: unknown): string | null => {
+  if (!error || typeof error !== 'object' || !('body' in error)) return null;
+  const body = (error as { body?: unknown }).body;
+  if (typeof body !== 'string') return null;
+  try {
+    const parsed = JSON.parse(body) as {
+      details?: { existing_correspondence_id?: unknown };
+    };
+    const id = parsed?.details?.existing_correspondence_id;
+    return typeof id === 'string' && id.trim() ? id : null;
+  } catch {
+    return null;
+  }
 };
 
 /**
@@ -180,18 +186,10 @@ export const validateFormData = (
   documentFiles: File[],
   distributions: DistributionState,
   linkedCount: number = 0,
-  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
 
   if (!formData.subject) errors.subject = 'Subject is required';
-  if (routing.routeMode === 'parallel') {
-    if (routing.parallelUserIds.length + routing.parallelOfficeIds.length < 2) {
-      errors.assignTo = 'Parallel routing requires at least two people or offices';
-    }
-  } else if (!formData.assignTo && !routing.forwardTo && !routing.targetOfficeId) {
-    errors.assignTo = 'Please select a route destination';
-  }
   if (!formData.owningOfficeId) errors.owningOfficeId = 'Please select an owning office';
 
   if (flowType === 'inward') {
@@ -211,6 +209,8 @@ export const validateFormData = (
     ) {
       errors.distribution = 'Select at least one directorate, division, or department';
     }
+    const sourceError = getCorrespondenceSourceError(formData, flowType, distributions);
+    if (sourceError) errors.correspondenceSource = sourceError;
   }
 
   if (!documentFiles.length && linkedCount === 0) {
@@ -237,7 +237,6 @@ export const validateStep = (
   documentFiles: File[],
   distributions: DistributionState,
   linkedCount: number = 0,
-  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): Record<string, string> => {
   const errors: Record<string, string> = {};
 
@@ -267,25 +266,17 @@ export const validateStep = (
       if (formData.recipientEmail && !isValidEmail(formData.recipientEmail)) {
         errors.recipientEmail = 'Please enter a valid email address';
       }
-      break;
-    case 'routing':
-      if (routing.routeMode === 'parallel') {
-        if (routing.parallelUserIds.length + routing.parallelOfficeIds.length < 2) {
-          errors.assignTo = 'Parallel routing requires at least two people or offices';
-        }
-      } else if (!formData.assignTo && !routing.forwardTo && !routing.targetOfficeId) {
-        errors.assignTo = 'Please select a route destination';
-      }
-      if (flowType === 'outward') {
-        if (
-          distributions.directorates.length +
+      if (
+        flowType === 'outward' &&
+        distributions.directorates.length +
           distributions.divisions.length +
           distributions.departments.length ===
           0
-        ) {
-          errors.distribution = 'Select at least one directorate, division, or department';
-        }
+      ) {
+        errors.distribution = 'Select at least one directorate, division, or department';
       }
+      const sourceError = getCorrespondenceSourceError(formData, flowType, distributions);
+      if (sourceError) errors.correspondenceSource = sourceError;
       break;
     case 'documents':
       if (!documentFiles.length && linkedCount === 0) {
@@ -305,12 +296,19 @@ export const buildSubmissionFormData = (
   flowType: FlowType,
   documentFiles: File[],
   distributions: DistributionState,
-  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): globalThis.FormData => {
   const form = new globalThis.FormData();
   
+  const incomingReference =
+    flowType === 'inward' ? formData.senderReference.trim() : '';
   form.append('subject', formData.subject);
-  form.append('reference_number', formData.referenceNumber);
+  form.append(
+    'reference_number',
+    incomingReference || formData.referenceNumber,
+  );
+  if (formData.referenceClassificationCode) {
+    form.append('reference_classification_code', formData.referenceClassificationCode);
+  }
   form.append('sender_name', formData.senderName);
   form.append('sender_organization', formData.senderOrganization);
   if (formData.senderEmail) form.append('sender_email', formData.senderEmail);
@@ -347,12 +345,7 @@ export const buildSubmissionFormData = (
     source = detected === 'ambiguous' ? 'internal' : detected;
   }
   
-  const direction = flowType === 'inward' ? 'upward' : flowType === 'lateral' ? 'lateral' : 'downward';
-  if (routing.routeMode === 'single') {
-    const approverId = formData.assignTo || routing.forwardTo;
-    if (approverId) form.append('current_approver_id', approverId);
-    if (routing.targetOfficeId) form.append('current_office', routing.targetOfficeId);
-  }
+  const direction = flowType === 'inward' ? 'upward' : 'downward';
   form.append('document_type', formData.documentType);
   if (formData.tags) {
     const tags = formData.tags
@@ -379,21 +372,29 @@ export const calculateCompletionPercentage = (
   formData: FormData,
   flowType: FlowType,
   documentFiles: File[],
+  distributions: DistributionState = { directorates: [], divisions: [], departments: [] },
   linkedCount: number = 0,
-  routing: RegisterRoutingConfig = createInitialRoutingConfig(),
 ): number => {
   let completed = 0;
   let total = 0;
 
-  total += 4;
+  total += 3;
   if (formData.subject) completed++;
-  if (formData.senderOrganization) completed++;
-  const routed =
-    routing.routeMode === 'parallel'
-      ? routing.parallelUserIds.length + routing.parallelOfficeIds.length >= 2
-      : Boolean(formData.assignTo || routing.forwardTo || routing.targetOfficeId);
-  if (routed) completed++;
   if (formData.owningOfficeId) completed++;
+  if (flowType === 'inward' ? formData.senderOrganization : formData.recipientName) {
+    completed++;
+  }
+  if (flowType === 'outward') {
+    total += 1; // outward distribution
+    if (
+      distributions.directorates.length +
+        distributions.divisions.length +
+        distributions.departments.length >
+      0
+    ) {
+      completed++;
+    }
+  }
 
   // Flow-specific required fields
   if (flowType === 'inward') {

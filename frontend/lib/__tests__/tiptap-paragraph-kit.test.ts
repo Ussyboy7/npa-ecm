@@ -5,6 +5,8 @@ import {
   ParagraphLayout,
   mergeBlockStyle,
   formatPx,
+  getBlockLineHeight,
+  resolveSpacingPresetId,
   INDENT_STEP_PX,
 } from "@/lib/tiptap-paragraph-kit";
 
@@ -37,6 +39,38 @@ describe("tiptap paragraph kit", () => {
     editor.commands.selectAll();
     editor.commands.increaseIndent();
     expect(editor.getHTML()).toMatch(/margin-left:\s*36px/);
+    editor.destroy();
+  });
+
+  it("resolves spacing presets from margin shorthand and marks custom spacing", () => {
+    const none = createEditor('<p style="margin: 0px">None</p>');
+    none.commands.selectAll();
+    expect(resolveSpacingPresetId(none)).toBe("none");
+    none.destroy();
+
+    const custom = createEditor('<p style="margin: 12pt 0px 8pt">Custom</p>');
+    custom.commands.selectAll();
+    expect(resolveSpacingPresetId(custom)).toBe("custom");
+    custom.destroy();
+  });
+
+  it("clears vertical shorthand spacing but preserves horizontal margins", () => {
+    const editor = createEditor('<p style="margin: 12pt 5px 8pt 7px">Memo</p>');
+    editor.commands.selectAll();
+    editor.commands.setParagraphSpacing(null, null);
+    const html = editor.getHTML();
+    expect(html).not.toMatch(/margin(?:-top|-bottom)?:/);
+    expect(html).toMatch(/margin-right:\s*5px/);
+    expect(html).toMatch(/margin-left:\s*7px/);
+    editor.destroy();
+  });
+
+  it("uses 1.15 for default line height and reports custom line heights", () => {
+    const editor = createEditor('<p>Default</p><p style="line-height: 1.07">Custom</p>');
+    editor.commands.setTextSelection(2);
+    expect(getBlockLineHeight(editor)).toBe("1.15");
+    editor.commands.setTextSelection(editor.state.doc.content.size - 2);
+    expect(getBlockLineHeight(editor)).toBe("custom");
     editor.destroy();
   });
 });

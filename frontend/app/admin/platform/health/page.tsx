@@ -3,23 +3,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { PlatformTabList } from "@/components/admin/PlatformTabList";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { Badge as UiBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
-import { fetchDashboardMetrics, downloadLatestBackup, type DashboardMetrics } from "@/lib/admin-dashboard-api";
+import {
+  fetchDashboardMetrics,
+  fetchDashboardAlerts,
+  downloadLatestBackup,
+  type DashboardMetrics,
+  type DashboardAlerts,
+} from "@/lib/admin-dashboard-api";
 import { apiFetch } from "@/lib/api-client";
 import { logError } from "@/lib/client-logger";
 import {
   Activity,
   CheckCircle,
-  CheckCircle2,
   AlertTriangle,
   AlertCircle,
   Server,
@@ -27,11 +32,12 @@ import {
   HardDrive,
   Download,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 
 const POLL_INTERVAL_MS = 30_000;
 
-type HealthStatus = "healthy" | "warning" | "error" | "unknown";
+type HealthStatus = "healthy" | "warning" | "error" | "unknown" | "missing";
 
 function statusColor(status: string) {
   switch (status) {
@@ -40,6 +46,7 @@ function statusColor(status: string) {
     case "warning":
       return "text-yellow-500";
     case "error":
+    case "missing":
     case "unhealthy":
       return "text-red-500";
     default:
@@ -54,6 +61,7 @@ function statusBorderClass(status: string) {
     case "warning":
       return "border-amber-500/30";
     case "error":
+    case "missing":
       return "border-red-500/30";
     default:
       return "border-border/60";
@@ -85,6 +93,14 @@ function StatusBadge({ status }: { status: string }) {
       </UiBadge>
     );
   }
+  if (status === "missing") {
+    return (
+      <UiBadge className="bg-red-500/10 text-red-700 border-red-500/20 text-xs dark:text-red-300">
+        <AlertCircle className="h-3 w-3 mr-1" />
+        Missing
+      </UiBadge>
+    );
+  }
   return (
     <UiBadge variant="outline" className="text-xs">
       Unknown
@@ -102,7 +118,6 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-
 function SectionHeading({ title, description }: { title: string; description?: string }) {
   return (
     <div className="mb-3">
@@ -112,6 +127,30 @@ function SectionHeading({ title, description }: { title: string; description?: s
   );
 }
 
+function ServiceRow({
+  label,
+  icon,
+  status,
+  detail,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  status: HealthStatus;
+  detail?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border/40 py-3 last:border-0">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={`mt-0.5 shrink-0 ${statusColor(status)}`}>{icon}</span>
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{label}</p>
+          {detail && <p className="text-xs text-muted-foreground break-words">{detail}</p>}
+        </div>
+      </div>
+      <StatusBadge status={status} />
+    </div>
+  );
+}
 
 interface SystemHealthItem {
   name: string;
@@ -120,23 +159,21 @@ interface SystemHealthItem {
   uptime?: string | null;
   detail?: string;
   diskUsage?: { total_gb: number; free_gb: number; used_pct: number };
-  started_at?: string;
-  engine?: string;
-  path?: string;
-  free_gb?: number;
-  total_gb?: number;
-  used_pct?: number;
 }
 
 export default function SystemHealthPage() {
   const { currentUser } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [alerts, setAlerts] = useState<DashboardAlerts | null>(null);
   const [readiness, setReadiness] = useState<Record<string, string>>({});
   const [readinessOverall, setReadinessOverall] = useState<HealthStatus>("unknown");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadingBackup, setDownloadingBackup] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const isMountedRef = useRef(true);
 
   const canAccess = permissions.canAccessSystemHealth || currentUser?.isSuperuser;
@@ -150,15 +187,17 @@ export default function SystemHealthPage() {
         setError(null);
       }
       try {
-        const [metricsResult, readinessResult] = await Promise.all([
+        const [metricsResult, readinessResult, alertsResult] = await Promise.all([
           fetchDashboardMetrics(),
           apiFetch<{ status: string; services: Record<string, string> }>("/health/").catch(() => ({
             status: "unhealthy" as string,
             services: { api: "unhealthy: check failed" } as Record<string, string>,
           })),
+          fetchDashboardAlerts().catch(() => null),
         ]);
         if (!isMountedRef.current) return;
         setMetrics(metricsResult);
+        setAlerts(alertsResult);
         const services = readinessResult.services || {};
         setReadiness(
           Object.fromEntries(
@@ -167,6 +206,7 @@ export default function SystemHealthPage() {
         );
         const overall = readinessResult.status === "healthy" ? "healthy" : "error";
         setReadinessOverall(overall as HealthStatus);
+        setLastUpdated(Date.now());
       } catch (err) {
         logError("Failed to load system health", err);
         if (!opts.silent && isMountedRef.current) {
@@ -178,6 +218,16 @@ export default function SystemHealthPage() {
     },
     [canAccess],
   );
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await loadData({ silent: true });
+    } finally {
+      if (isMountedRef.current) setRefreshing(false);
+    }
+  }, [loadData, refreshing]);
 
   const handleDownloadBackup = useCallback(async () => {
     if (!canDownloadBackup || downloadingBackup) return;
@@ -207,9 +257,11 @@ export default function SystemHealthPage() {
       if (typeof document !== "undefined" && document.hidden) return;
       void loadData({ silent: true });
     }, POLL_INTERVAL_MS);
+    const tickId = setInterval(() => setNowTick(Date.now()), 15_000);
     return () => {
       isMountedRef.current = false;
       clearInterval(intervalId);
+      clearInterval(tickId);
     };
   }, [loadData]);
 
@@ -217,10 +269,11 @@ export default function SystemHealthPage() {
 
   if (!canAccess) {
     return (
-      <AdminPageShell title="Platform" subtitle="ICT operations dashboard" icon={Activity} >
-      <div className="mt-4">
-        <PlatformTabList />
-      </div>
+      <AdminPageShell title="Platform" subtitle="ICT operations dashboard" icon={Activity}>
+        <div className="mt-4 space-y-3">
+          <AdminHubTabList />
+          <PlatformTabList />
+        </div>
         <PermissionDeniedCard
           title="ICT Admin Access Required"
           check={null}
@@ -232,17 +285,19 @@ export default function SystemHealthPage() {
 
   // Derived statuses
   const systemHealthItems: SystemHealthItem[] = metrics?.systemHealth || [];
-  // Add cache as a derived readiness badge
-  const hasCacheHealthy = readiness["cache"] === "healthy";
-  const cacheStatus: HealthStatus = hasCacheHealthy
-    ? "healthy"
-    : readiness["cache"]
-      ? "error"
-      : "unknown";
+  const apiItem = systemHealthItems.find((s) => s.name === "API Server");
+  const dbItem = systemHealthItems.find((s) => s.name === "Database");
+  const storageItem = systemHealthItems.find((s) => s.name === "File Storage");
+  const diskUsage = storageItem?.diskUsage;
+
+  const cacheState = readiness["cache"];
+  const cacheStatus: HealthStatus = cacheState === "healthy" ? "healthy" : cacheState ? "error" : "unknown";
+  const brokerState = readiness["celery_broker"];
+  const brokerStatus: HealthStatus =
+    brokerState === "healthy" ? "healthy" : brokerState ? "error" : "unknown";
 
   const coreStatuses: HealthStatus[] = [
     ...systemHealthItems.map((s) => (s.status as HealthStatus) || "unknown"),
-    cacheStatus,
     readinessOverall,
   ];
   const overallStatus: HealthStatus = (() => {
@@ -254,7 +309,7 @@ export default function SystemHealthPage() {
 
   const overallLabel =
     overallStatus === "healthy"
-      ? "All core services operational"
+      ? "Runtime services operational"
       : overallStatus === "warning"
         ? "One or more services need attention"
         : overallStatus === "error"
@@ -262,35 +317,29 @@ export default function SystemHealthPage() {
           : "Status unavailable";
 
   const backupStatus = metrics?.backup;
-  const backupDisplayStatus: HealthStatus = (() => {
-    const raw = backupStatus?.status || "unknown";
-    if (raw === "missing") return "warning";
-    return raw as HealthStatus;
-  })();
-  const backupLabel =
-    backupDisplayStatus === "healthy"
-      ? "Healthy"
-      : backupDisplayStatus === "warning"
-        ? backupStatus?.last_backup
-          ? "Stale"
-          : "Not configured"
-        : backupDisplayStatus === "error"
-          ? "Error"
-          : "Unknown";
+  const backupDisplayStatus: HealthStatus = (backupStatus?.status || "unknown") as HealthStatus;
+  const backupSchedule = alerts?.backup_schedule;
+  const backupScheduleLabel = backupSchedule
+    ? backupSchedule.scheduled
+      ? backupSchedule.task
+      : "None configured"
+    : "—";
 
-  // File storage disk usage
-  const fileStorageItem = systemHealthItems.find((s) => s.name === "File Storage");
-  const diskUsage = fileStorageItem?.diskUsage;
-  const mediaPath = "/app/media";
+  const updatedLabel = (() => {
+    if (!lastUpdated) return "—";
+    const seconds = Math.max(0, Math.round((nowTick - lastUpdated) / 1000));
+    if (seconds < 60) return `${seconds}s ago`;
+    return `${Math.round(seconds / 60)}m ago`;
+  })();
 
   return (
     <AdminPageShell
       title="Platform"
       subtitle="Live infrastructure monitoring — API process, database, disk volume, cache, backups, and API performance."
-      
       icon={Activity}
     >
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
+        <AdminHubTabList />
         <PlatformTabList />
       </div>
       <ClientErrorBoundary>
@@ -299,145 +348,84 @@ export default function SystemHealthPage() {
         ) : error ? (
           <ErrorState message={error} onRetry={() => void loadData()} />
         ) : (
-          <>
-            {/* Summary strip */}
-            <div className={`rounded-xl border bg-muted/30 p-4 sm:p-5 ${statusBorderClass(overallStatus)}`}>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-start gap-3 min-w-0">
-                  <CheckCircle2 className={`h-6 w-6 shrink-0 ${statusColor(overallStatus)}`} />
-                  <div>
-                    <p className="font-semibold text-foreground">{overallLabel}</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      Core infrastructure only. Backup advisories are listed separately.
-                    </p>
-                  </div>
+          <div className="space-y-6">
+            {/* Overall status + freshness */}
+            <div className={`flex flex-col gap-3 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between ${statusBorderClass(overallStatus)}`}>
+              <div className="flex items-center gap-3">
+                <CheckCircle className={`h-5 w-5 shrink-0 ${statusColor(overallStatus)}`} />
+                <div>
+                  <p className="font-semibold text-foreground">{overallLabel}</p>
+                  <p className="text-xs text-muted-foreground">Auto-refreshed every 30 seconds</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {systemHealthItems.map((system) => (
-                    <UiBadge
-                      key={system.name}
-                      variant="outline"
-                      className="bg-background/40 text-xs font-normal"
-                    >
-                      <span
-                        className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
-                          system.status === "healthy"
-                            ? "bg-green-500"
-                            : system.status === "warning"
-                              ? "bg-yellow-500"
-                              : system.status === "error"
-                                ? "bg-red-500"
-                                : "bg-muted-foreground"
-                        }`}
-                      />
-                      {system.name}
-                    </UiBadge>
-                  ))}
-                  <UiBadge variant="outline" className="bg-background/40 text-xs font-normal">
-                    <span
-                      className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
-                        cacheStatus === "healthy" ? "bg-green-500" : "bg-red-500"
-                      }`}
-                    />
-                    Cache
-                  </UiBadge>
-                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Updated {updatedLabel}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={refreshing}
+                  onClick={() => void handleRefresh()}
+                >
+                  {refreshing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  Refresh
+                </Button>
               </div>
             </div>
 
             <div className="grid gap-6 xl:grid-cols-3">
-              {/* Left column — infrastructure + performance */}
-              <div className="xl:col-span-2 space-y-6">
+              {/* Services + performance */}
+              <div className="space-y-6 xl:col-span-2">
                 <section>
                   <SectionHeading
-                    title="Infrastructure"
-                    description="Process uptime, database, and disk volume on the API server"
+                    title="Services"
+                    description="Runtime components and their latest probe result"
                   />
-                  <div className="grid gap-4 md:grid-cols-3">
-                    {/* API Server */}
-                    <div className="rounded-xl border border-border/60 p-4 flex flex-col">
-                      <div className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Server className={`h-5 w-5 shrink-0 ${statusColor(systemHealthItems.find((s) => s.name === "API Server")?.status || "unknown")}`} />
-                            <h3 className="text-base font-semibold truncate">API Server</h3>
-                          </div>
-                          <StatusBadge status={systemHealthItems.find((s) => s.name === "API Server")?.status || "unknown"} />
-                        </div>
-                        <p className="mt-2 text-sm text-muted-foreground">Process uptime since last restart.</p>
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        {(() => {
-                          const item = systemHealthItems.find((s) => s.name === "API Server");
-                          if (!item) return <DetailRow label="Uptime" value="—" />;
-                          return (
-                            <>
-                              <DetailRow label="Uptime" value={item.uptime ? `Up ${item.uptime}` : undefined} />
-                              <DetailRow label="Process started" value={item.detail || undefined} />
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* Database */}
-                    <div className="rounded-xl border border-border/60 p-4 flex flex-col">
-                      <div className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Database className={`h-5 w-5 shrink-0 ${statusColor(systemHealthItems.find((s) => s.name === "Database")?.status || "unknown")}`} />
-                            <h3 className="text-base font-semibold truncate">Database</h3>
-                          </div>
-                          <StatusBadge status={systemHealthItems.find((s) => s.name === "Database")?.status || "unknown"} />
-                        </div>
-                        <p className="mt-2 text-sm text-muted-foreground">PostgreSQL uptime since postmaster start.</p>
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        {(() => {
-                          const item = systemHealthItems.find((s) => s.name === "Database");
-                          if (!item) return <DetailRow label="Uptime" value="—" />;
-                          return (
-                            <>
-                              <DetailRow label="Uptime" value={item.uptime ? `Up ${item.uptime}` : undefined} />
-                              <DetailRow label="Engine" value="PostgreSQL" />
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* File Storage */}
-                    <div className="rounded-xl border border-border/60 p-4 flex flex-col">
-                      <div className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <HardDrive className={`h-5 w-5 shrink-0 ${statusColor(systemHealthItems.find((s) => s.name === "File Storage")?.status || "unknown")}`} />
-                            <h3 className="text-base font-semibold truncate">File Storage</h3>
-                          </div>
-                          <StatusBadge status={systemHealthItems.find((s) => s.name === "File Storage")?.status || "unknown"} />
-                        </div>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {diskUsage
-                            ? `${diskUsage.free_gb} GB free of ${diskUsage.total_gb} GB (${diskUsage.used_pct}% used).`
-                            : fileStorageItem?.detail || "Disk volume usage on the API server."}
-                        </p>
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <DetailRow label="Media path" value={mediaPath} />
-                        {diskUsage ? (
-                          <div className="pt-2 space-y-2">
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>Disk volume</span>
-                              <span>{diskUsage.used_pct}% used</span>
-                            </div>
-                            <Progress value={diskUsage.used_pct} className="h-2" />
-                            <DetailRow
-                              label="Capacity"
-                              value={`${diskUsage.free_gb} GB free of ${diskUsage.total_gb} GB`}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
+                  <div className="rounded-xl border border-border/60 p-4">
+                    <ServiceRow
+                      label="API Server"
+                      icon={<Server className="h-4 w-4" />}
+                      status={(apiItem?.status as HealthStatus) || "unknown"}
+                      detail={[apiItem?.uptime ? `Up ${apiItem.uptime}` : null, apiItem?.detail]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    />
+                    <ServiceRow
+                      label="Database"
+                      icon={<Database className="h-4 w-4" />}
+                      status={(dbItem?.status as HealthStatus) || "unknown"}
+                      detail={[dbItem?.uptime ? `Up ${dbItem.uptime}` : null, "PostgreSQL"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    />
+                    <ServiceRow
+                      label="File Storage"
+                      icon={<HardDrive className="h-4 w-4" />}
+                      status={(storageItem?.status as HealthStatus) || "unknown"}
+                      detail={
+                        diskUsage
+                          ? `${diskUsage.free_gb} GB free of ${diskUsage.total_gb} GB · media ${metrics?.performance.mediaStorageGb ?? 0} GB`
+                          : storageItem?.detail
+                      }
+                    />
+                    <ServiceRow
+                      label="Cache"
+                      icon={<Activity className="h-4 w-4" />}
+                      status={cacheStatus}
+                      detail="Redis"
+                    />
+                    <ServiceRow
+                      label="Celery broker"
+                      icon={<Activity className="h-4 w-4" />}
+                      status={brokerStatus}
+                    />
+                    <div className="mt-3 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+                      Deep check /health/ ·{" "}
+                      {readinessOverall === "healthy" ? "all probes passed" : "probe failed"}
                     </div>
                   </div>
                 </section>
@@ -445,7 +433,7 @@ export default function SystemHealthPage() {
                 <section>
                   <SectionHeading
                     title="Performance"
-                    description="Rolling 5-minute API window and uploaded file footprint"
+                    description="Rolling 5-minute API window"
                   />
                   <StatStrip
                     compact
@@ -457,9 +445,7 @@ export default function SystemHealthPage() {
                           metrics?.performance.responseTimeMs != null
                             ? `${metrics.performance.responseTimeMs} ms`
                             : "—",
-                        hint: metrics?.performance.responseTimeSample
-                          ? `Avg over ${metrics.performance.responseTimeSample} request(s)`
-                          : "Waiting for API traffic",
+                        hint: "Average",
                       },
                       {
                         key: "errors",
@@ -468,123 +454,83 @@ export default function SystemHealthPage() {
                           metrics?.performance.errorRate != null
                             ? `${Number(metrics.performance.errorRate).toFixed(2)}%`
                             : "—",
-                        hint: "5xx share (5 min window)",
+                        hint: "5xx share",
                       },
                       {
-                        key: "media",
-                        label: "Uploaded media",
+                        key: "requests",
+                        label: "Requests",
                         value:
-                          metrics?.performance.mediaStorageGb != null
-                            ? `${metrics.performance.mediaStorageGb.toFixed(2)} GB`
+                          metrics?.performance.responseTimeSample != null
+                            ? String(metrics.performance.responseTimeSample)
                             : "—",
-                        hint: "Files in MEDIA_ROOT, not whole disk",
+                        hint: "Sampled",
                       },
                     ]}
                   />
                 </section>
               </div>
 
-              {/* Right column — readiness + backups */}
-              <div className="space-y-6">
-                <section>
-                  <SectionHeading title="Readiness" description="Deep connectivity checks via /health/" />
-                  <div id="readiness" className="rounded-xl border border-border/60 p-4 space-y-2">
-                      <div className="flex items-center justify-between pb-2 border-b border-border/50">
-                        <span className="text-sm font-medium">Overall</span>
-                        <StatusBadge status={readinessOverall} />
-                      </div>
-                      {Object.keys(readiness).length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4">No readiness data available.</p>
-                      ) : (
-                        Object.entries(readiness).map(([service, state]) => {
-                          const ok = state === "healthy";
-                          return (
-                            <div
-                              key={service}
-                              className="flex items-center justify-between py-2 border-b border-border/30 last:border-0"
-                            >
-                              <span className="text-sm capitalize">{service}</span>
-                              <UiBadge
-                                className={
-                                  ok
-                                    ? "bg-green-500/10 text-green-700 border-green-500/20 text-xs"
-                                    : "bg-red-500/10 text-red-700 border-red-500/20 text-xs"
-                                }
-                              >
-                                {state}
-                              </UiBadge>
-                            </div>
-                          );
-                        })
-                      )}
-                  </div>
-                </section>
-
-                <section>
-                  <SectionHeading title="Backups" description="Latest snapshot found on disk" />
-                  <div id="backup" className="rounded-xl border border-border/60 p-4">
+              {/* Backup & recovery */}
+              <section>
+                <SectionHeading
+                  title="Backup & recovery"
+                  description="Snapshot health, age, and download"
+                />
+                <div id="backup" className="rounded-xl border border-border/60 p-4">
                     <div className="flex items-center justify-between pb-2">
                       <h3 className="text-base font-semibold">Backup status</h3>
                       <StatusBadge status={backupDisplayStatus} />
                     </div>
                     <div className="space-y-1">
-                      <DetailRow label="Status" value={backupLabel} />
                       {backupStatus?.last_backup ? (
                         <>
                           <DetailRow
                             label="Last backup"
-                            value={new Date(backupStatus.last_backup).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            value={new Date(backupStatus.last_backup).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           />
                           <DetailRow label="Age" value={`${backupStatus.age_hours} hours ago`} />
                           <DetailRow label="File" value={backupStatus.filename} />
                           <DetailRow label="Size" value={`${backupStatus.file_size_mb} MB`} />
-                          <DetailRow label="Directory" value="/backups" />
                         </>
                       ) : (
-                        <DetailRow label="Message" value="No backup files found. Run a backup job." />
+                        <DetailRow
+                          label="Message"
+                          value="No backup files found. Run a backup job."
+                        />
                       )}
-                      {canDownloadBackup && backupStatus?.filename && (
-                        <div className="pt-3">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="w-full sm:w-auto"
-                            disabled={downloadingBackup}
-                            onClick={() => void handleDownloadBackup()}
-                          >
-                            {downloadingBackup ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <Download className="h-4 w-4 mr-2" />
-                            )}
-                            {backupStatus.file_size_mb
-                              ? `Download latest (${backupStatus.file_size_mb} MB)`
-                              : "Download latest"}
-                          </Button>
-                          <p className="text-[11px] text-muted-foreground mt-2">
-                            Super admin only. Dump files contain full production data.
-                          </p>
-                        </div>
-                      )}
+                      <DetailRow label="Scheduled job" value={backupScheduleLabel} />
                     </div>
-                  </div>
-                </section>
-
-                <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 p-4 text-xs text-muted-foreground leading-relaxed space-y-2">
-                    <p>
-                      <strong className="text-foreground font-medium">Disk vs media:</strong> File Storage
-                      reports the server partition (e.g. 70% used). Uploaded media reports actual files only (often
-                      much smaller).
-                    </p>
-                    <p>
-                      <strong className="text-foreground font-medium">Uptime:</strong> API uptime resets on backend
-                      restart. Database uptime is since PostgreSQL postmaster start.
-                    </p>
+                    {canDownloadBackup && backupStatus?.filename && (
+                      <div className="pt-3">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto"
+                          disabled={downloadingBackup}
+                          onClick={() => void handleDownloadBackup()}
+                        >
+                          {downloadingBackup ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
+                          {backupStatus.file_size_mb
+                            ? `Download latest (${backupStatus.file_size_mb} MB)`
+                            : "Download latest"}
+                        </Button>
+                        <p className="text-[11px] text-muted-foreground mt-2">
+                          Super admin only. Dump files contain full production data.
+                        </p>
+                      </div>
+                    )}
                 </div>
-              </div>
+              </section>
             </div>
-          </>
+          </div>
         )}
       </ClientErrorBoundary>
     </AdminPageShell>

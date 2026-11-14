@@ -6,7 +6,12 @@ from typing import Any
 
 from accounts.models import User
 
-from .permissions_catalog import PERMISSION_LABELS, normalize_permissions, merge_superuser_permissions
+from .permissions_catalog import (
+    PAGE_ACCESS_RULES,
+    PERMISSION_LABELS,
+    merge_superuser_permissions,
+    normalize_permissions,
+)
 
 ACCESS_CONTEXTS: dict[str, dict[str, str]] = {
     "document_view": {
@@ -47,6 +52,102 @@ def user_has_permission(user: User, permission: str) -> bool:
     if getattr(user, "is_superuser", False):
         return True
     return get_role_permissions(user).get(permission, False)
+
+
+def _page_scope_context(user) -> tuple[str, bool]:
+    from organization.office_access import get_office_queue_office_ids
+    from organization.org_scope import resolve_user_org_scope
+
+    scope = resolve_user_org_scope(user)
+    has_queue = bool(get_office_queue_office_ids(user))
+    if scope.level == "all":
+        return "organisation", True
+    if scope.level in {"directorate", "division", "department"}:
+        return scope.level, True
+    if has_queue:
+        return "office", True
+    return scope.level, False
+
+
+def resolve_page_access(user) -> dict[str, dict[str, bool | str]]:
+    """Resolve page visibility and its scope using the canonical backend map."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return {
+            page_id: {"allowed": False, "scope": "none"}
+            for page_id in PAGE_ACCESS_RULES
+        }
+
+    permissions = get_role_permissions(user)
+    scope_level, has_org_context = _page_scope_context(user)
+    result: dict[str, dict[str, bool | str]] = {}
+    for page_id, rule in PAGE_ACCESS_RULES.items():
+        required_any = tuple(rule.get("required_any", ()))
+        has_permission = not required_any or any(permissions.get(key, False) for key in required_any)
+        scope_mode = str(rule.get("scope", "role"))
+        if scope_mode == "authenticated":
+            scope_allowed = True
+        elif scope_mode == "personal_or_assignment":
+            scope_allowed = has_org_context or permissions.get("can_view_all_correspondence", False)
+        elif scope_mode == "role":
+            scope_allowed = True
+        elif scope_mode == "personal":
+            scope_allowed = has_permission
+        elif scope_mode == "office_queue":
+            from organization.office_access import get_office_queue_office_ids
+
+            scope_allowed = bool(get_office_queue_office_ids(user))
+        elif scope_mode == "organisation":
+            scope_allowed = (
+                scope_level in {"organisation", "directorate", "division", "department"}
+                or permissions.get("can_view_all_correspondence", False)
+                or (page_id == "cases_all" and permissions.get("can_access_all_cases", False))
+            )
+        elif scope_mode in {"personal_or_assignment", "organisation_boundary"}:
+            scope_allowed = has_org_context or permissions.get("can_view_all_correspondence", False)
+        else:
+            scope_allowed = False
+        result[page_id] = {
+            "allowed": bool(has_permission and scope_allowed),
+            "scope": scope_level if scope_allowed else "none",
+        }
+    return result
+
+
+def require_page_access(user: User, page_id: str, scope: str | None = None) -> None:
+    """Enforce a page rule and optionally ensure the requested collection scope is allowed."""
+    from rest_framework.exceptions import PermissionDenied
+
+    if page_id not in PAGE_ACCESS_RULES:
+        raise PermissionDenied({"detail": "Unknown page access rule.", "page": page_id})
+    access = resolve_page_access(user).get(page_id, {})
+    if not access.get("allowed", False):
+        raise PermissionDenied({"detail": "You do not have access to this page.", "page": page_id})
+    if scope:
+        requested_scope = scope.lower()
+        if page_id == "cases_all" and requested_scope in {"all", "organization"}:
+            permissions = get_role_permissions(user)
+            if not (
+                permissions.get("can_access_all_cases", False)
+                or permissions.get("can_view_all_correspondence", False)
+                or getattr(user, "is_superuser", False)
+            ):
+                raise PermissionDenied(
+                    {"detail": "You do not have access to all cases across the organisation.", "page": page_id, "scope": scope}
+                )
+        scope_permission = {
+            "my": "cases_my",
+            "personal": "cases_my",
+            "office": "cases_office",
+            "all": "cases_all",
+            "organization": "cases_all",
+            "directorate": "cases_all",
+            "division": "cases_all",
+            "department": "cases_all",
+        }.get(requested_scope)
+        if scope_permission and not resolve_page_access(user).get(scope_permission, {}).get("allowed", False):
+            raise PermissionDenied(
+                {"detail": "You do not have access to the requested page scope.", "page": page_id, "scope": scope}
+            )
 
 
 def require_permission(user: User, permission: str) -> None:

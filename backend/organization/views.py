@@ -11,13 +11,25 @@ from rest_framework.response import Response
 
 from audit.services import AuditService
 from common.pagination import CatalogPageNumberPagination
-from .models import Department, Directorate, Division, Office, OfficeMembership, Role
+from common.permissions import CanAccessAdministration
+from .models import (
+    Department,
+    Directorate,
+    Division,
+    Office,
+    OfficeMembership,
+    ReferenceAllocation,
+    ReferenceScheme,
+    Role,
+)
 from .serializers import (
     DepartmentSerializer,
     DirectorateSerializer,
     DivisionSerializer,
     OfficeMembershipSerializer,
     OfficeSerializer,
+    ReferenceAllocationSerializer,
+    ReferenceSchemeSerializer,
     RoleSerializer,
 )
 
@@ -457,3 +469,129 @@ class OfficeMembershipViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         self._ensure_membership_admin()
         super().perform_destroy(instance)
+
+
+class ReferenceSchemeViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
+    """Reference-number schemes per directorate/division/department."""
+
+    serializer_class = ReferenceSchemeSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CatalogPageNumberPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["scope_type", "is_active"]
+    search_fields = [
+        "unit_code",
+        "authority_code",
+        "description",
+        "directorate__name",
+        "division__name",
+        "department__name",
+    ]
+    ordering_fields = ["scope_type", "unit_code", "created_at", "updated_at"]
+    ordering = ["scope_type", "unit_code"]
+
+    def get_queryset(self):
+        return (
+            ReferenceScheme.objects.select_related(
+                "directorate", "division__directorate", "department__division__directorate"
+            )
+            .prefetch_related("classifications")
+            .all()
+        )
+
+    def _log(self, instance, description):
+        from audit.models import ActivityLog
+
+        AuditService.log_activity(
+            user=self.request.user,
+            action=ActivityLog.ActionType.ORGANIZATION_UPDATED,
+            object_type="reference_scheme",
+            object_id=str(instance.id),
+            object_repr=str(instance),
+            module="organization",
+            description=description,
+            request=self.request,
+        )
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        self._log(instance, f"Created reference scheme: {instance}")
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self._log(instance, f"Updated reference scheme: {instance}")
+
+    def perform_destroy(self, instance):
+        from audit.models import ActivityLog
+
+        AuditService.log_activity(
+            user=self.request.user,
+            action=ActivityLog.ActionType.ORGANIZATION_DELETED,
+            object_type="reference_scheme",
+            object_id=str(instance.id),
+            object_repr=str(instance),
+            module="organization",
+            description=f"Deleted reference scheme: {instance}",
+            request=self.request,
+        )
+        super().perform_destroy(instance)
+
+    @action(detail=False, methods=["get"], url_path="resolve")
+    def resolve(self, request):
+        """Resolve the active scheme for an office/division/department (registration form)."""
+        from organization.models import Department, Division, Office
+        from organization.reference_services import (
+            resolve_reference_scheme,
+            scheme_context,
+        )
+
+        office = None
+        office_id = request.query_params.get("office") or request.query_params.get("owning_office")
+        if office_id:
+            office = Office.objects.filter(id=office_id).first()
+        division = None
+        if request.query_params.get("division"):
+            division = Division.objects.filter(id=request.query_params["division"]).first()
+        department = None
+        if request.query_params.get("department"):
+            department = Department.objects.filter(id=request.query_params["department"]).first()
+
+        scheme = resolve_reference_scheme(
+            office=office, division=division, department=department
+        )
+        if scheme is None:
+            return Response({"scheme": None, "classifications": []})
+        return Response({"scheme": scheme_context(scheme)})
+
+
+class ReferenceAllocationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Admin audit ledger of reference numbers already issued."""
+
+    serializer_class = ReferenceAllocationSerializer
+    permission_classes = [IsAuthenticated, CanAccessAdministration]
+    pagination_class = CatalogPageNumberPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["scope_type", "classification_code"]
+    search_fields = [
+        "reference_number",
+        "unit_code",
+        "classification_code",
+        "classification__label",
+        "correspondence__reference_number",
+        "correspondence__subject",
+        "scheme__directorate__name",
+        "scheme__division__name",
+        "scheme__department__name",
+    ]
+    ordering_fields = ["created_at", "reference_number", "serial"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        return ReferenceAllocation.objects.select_related(
+            "classification",
+            "correspondence",
+            "created_by",
+            "scheme__directorate",
+            "scheme__division__directorate",
+            "scheme__department__division__directorate",
+        ).all()

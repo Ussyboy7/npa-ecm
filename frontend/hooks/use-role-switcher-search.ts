@@ -7,7 +7,7 @@ import { getSearchHistory, addSearchHistory } from "@/lib/role-switcher-storage"
 import { fetchUsers } from "@/lib/admin-api";
 import { logError } from "@/lib/client-logger";
 import type { User, Division, Department } from "@/lib/npa-structure";
-import { isSeedLikeUser } from "@/lib/organization-data";
+import { isSeedLikeUser, mapApiUserToUser } from "@/lib/organization-data";
 
 const BACKEND_SEARCH_THRESHOLD = 500;
 const DEBOUNCE_DELAY = 300;
@@ -77,20 +77,9 @@ export function useRoleSwitcherSearch(
 
       if (abortController.signal.aborted) return;
 
-      const mappedUsers: User[] = response.results.map((apiUser) => ({
-        id: apiUser.id,
-        name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
-        email: apiUser.email,
-        employeeId: apiUser.employee_id || "",
-        gradeLevel: apiUser.grade_level || "",
-        directorate: apiUser.directorate || undefined,
-        division: apiUser.division || undefined,
-        department: apiUser.department || undefined,
-        systemRole: apiUser.system_role_name || apiUser.system_role || "",
-        active: apiUser.is_active,
-        username: apiUser.username,
-        isSuperuser: apiUser.is_superuser,
-      }));
+      const mappedUsers: User[] = response.results.map((apiUser) =>
+        mapApiUserToUser(apiUser as unknown as Record<string, unknown>),
+      );
 
       if (!abortController.signal.aborted) {
         setBackendSearchResults(mappedUsers);

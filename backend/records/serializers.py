@@ -21,6 +21,7 @@ class RetentionScheduleSerializer(serializers.ModelSerializer):
             "archive_level",
             "directorate",
             "division",
+            "department",
             "retention_years",
             "retention_months",
             "retention_days",

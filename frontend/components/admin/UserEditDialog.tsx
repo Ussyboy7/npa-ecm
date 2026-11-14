@@ -37,6 +37,10 @@ type FormState = {
   departmentId: string;
   email: string;
   employeeId: string;
+  personnelNumber: string;
+  honorific: string;
+  middleName: string;
+  designation: string;
   isActive: boolean;
   password?: string;
 };
@@ -49,6 +53,10 @@ const defaultState: FormState = {
   departmentId: "",
   email: "",
   employeeId: "",
+  personnelNumber: "",
+  honorific: "",
+  middleName: "",
+  designation: "",
   isActive: true,
   password: "",
 };
@@ -112,7 +120,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
       setFormData({
         username: user.username ?? "",
         firstName: nameParts[0] ?? "",
-        lastName: nameParts.slice(1).join(" ") ?? "",
+        middleName: user.middleName ?? "",
+        lastName: nameParts.slice(1).join(" ") || "",
+        honorific: user.honorific ?? "",
         systemRole: roleId, // Store role ID for form submission
         gradeLevel: user.gradeLevel ?? "",
         directorateId: user.directorate ?? "",
@@ -120,6 +130,8 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
         departmentId: user.department ?? "",
         email: user.email ?? "",
         employeeId: user.employeeId ?? "",
+        personnelNumber: user.personnelNumber ?? "",
+        designation: user.designation ?? "",
         isActive: user.active ?? true,
         password: "",
       });
@@ -129,7 +141,11 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
         ...defaultState,
         username: '',
         firstName: '',
+        middleName: '',
         lastName: '',
+        honorific: '',
+        personnelNumber: '',
+        designation: '',
         password: '',
       });
     } else if (!open) {
@@ -281,7 +297,10 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
         await updateUser(user.id, {
           username: formData.username?.trim() || undefined,
           firstName: formData.firstName?.trim() || undefined,
+          middleName: formData.middleName?.trim() || undefined,
           lastName: formData.lastName?.trim() || undefined,
+          honorific: formData.honorific?.trim() || undefined,
+          designation: formData.designation?.trim() || undefined,
           systemRole: formData.systemRole || null,
           gradeLevel: formData.gradeLevel || null,
           directorateId: formData.directorateId || null,
@@ -289,6 +308,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           departmentId: formData.departmentId || null,
           email: formData.email || user.email,
           employeeId: formData.employeeId || null,
+          personnelNumber: formData.personnelNumber || null,
           isActive: formData.isActive,
           password: formData.password && formData.password.length > 0 ? formData.password : undefined,
         });
@@ -347,7 +367,10 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           username: formData.username,
           email: formData.email,
           firstName: formData.firstName!,
+          middleName: formData.middleName || null,
           lastName: formData.lastName!,
+          honorific: formData.honorific || null,
+          designation: formData.designation || null,
           password: formData.password!,
           systemRole: formData.systemRole,
           gradeLevel: formData.gradeLevel || null,
@@ -355,6 +378,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           divisionId: formData.divisionId || null,
           departmentId: formData.departmentId || null,
           employeeId: formData.employeeId,
+          personnelNumber: formData.personnelNumber || null,
           isActive: formData.isActive,
         });
 
@@ -439,6 +463,18 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                     </div>
 
                     <div className="space-y-2">
+                      <Label htmlFor="honorific">Title</Label>
+                      <Input
+                        id="honorific"
+                        value={formData.honorific || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, honorific: event.target.value }))
+                        }
+                        placeholder="e.g. Mr."
+                      />
+                    </div>
+
+                    <div className="space-y-2">
                       <Label htmlFor="firstName">First Name *</Label>
                       <Input
                         id="firstName"
@@ -456,6 +492,18 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                           {validationErrors.firstName}
                         </p>
                       )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="middleName">Middle Name</Label>
+                      <Input
+                        id="middleName"
+                        value={formData.middleName || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, middleName: event.target.value }))
+                        }
+                        placeholder="Middle name"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -536,6 +584,18 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                     </div>
 
                     <div className="space-y-2">
+                      <Label htmlFor="honorific">Title</Label>
+                      <Input
+                        id="honorific"
+                        value={formData.honorific || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, honorific: event.target.value }))
+                        }
+                        placeholder="e.g. Mr."
+                      />
+                    </div>
+
+                    <div className="space-y-2">
                       <Label htmlFor="firstName">First Name *</Label>
                       <Input
                         id="firstName"
@@ -553,6 +613,18 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                           {validationErrors.firstName}
                         </p>
                       )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="middleName">Middle Name</Label>
+                      <Input
+                        id="middleName"
+                        value={formData.middleName || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, middleName: event.target.value }))
+                        }
+                        placeholder="Middle name"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -628,26 +700,52 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   )}
                 </div>
 
-                {/* Employee ID - Always visible, unified placement */}
-                <div className="space-y-2">
-                  <Label htmlFor="employeeId">Employee ID {!user && '*'}</Label>
-                  <Input
-                    id="employeeId"
-                    name="employeeId"
-                    value={formData.employeeId}
-                    onChange={(event) =>
-                      setFormData((prev) => ({ ...prev, employeeId: event.target.value }))
-                    }
-                    placeholder="e.g. NPA123"
-                    required={!user}
-                    aria-invalid={!!validationErrors.employeeId}
-                    aria-describedby={validationErrors.employeeId ? "employeeId-error" : undefined}
-                  />
-                  {validationErrors.employeeId && (
-                    <p id="employeeId-error" className="text-xs text-destructive" role="alert">
-                      {validationErrors.employeeId}
-                    </p>
-                  )}
+                {/* Nominal-roll identity fields */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="employeeId">Employee ID {!user && '*'}</Label>
+                    <Input
+                      id="employeeId"
+                      name="employeeId"
+                      value={formData.employeeId}
+                      onChange={(event) =>
+                        setFormData((prev) => ({ ...prev, employeeId: event.target.value }))
+                      }
+                      placeholder="e.g. 3509"
+                      required={!user}
+                      aria-invalid={!!validationErrors.employeeId}
+                      aria-describedby={validationErrors.employeeId ? "employeeId-error" : undefined}
+                    />
+                    {validationErrors.employeeId && (
+                      <p id="employeeId-error" className="text-xs text-destructive" role="alert">
+                        {validationErrors.employeeId}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="personnelNumber">Person No.</Label>
+                    <Input
+                      id="personnelNumber"
+                      value={formData.personnelNumber}
+                      onChange={(event) =>
+                        setFormData((prev) => ({ ...prev, personnelNumber: event.target.value }))
+                      }
+                      placeholder="e.g. 6493"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="designation">Designation</Label>
+                    <Input
+                      id="designation"
+                      value={formData.designation}
+                      onChange={(event) =>
+                        setFormData((prev) => ({ ...prev, designation: event.target.value }))
+                      }
+                      placeholder="e.g. MANAGING DIRECTOR"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -217,8 +217,39 @@ class CaseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
 
+        from organization.permission_utils import require_page_access, user_has_permission
+
+        user = self.request.user
+        if self.action == "list":
+            requested_scope = self.request.query_params.get("scope", "my")
+            scope_page = {
+                "my": "cases_my",
+                "personal": "cases_my",
+                "office": "cases_office",
+                "all": "cases_all",
+                "organization": "cases_all",
+                "directorate": "cases_all",
+                "division": "cases_all",
+                "department": "cases_all",
+            }.get(requested_scope, "cases_my")
+            require_page_access(user, scope_page, requested_scope)
+
         if self.detail or self.action in ("retrieve", "update", "partial_update", "destroy"):
-            return queryset
+            if user.is_superuser or user_has_permission(user, "can_view_all_correspondence"):
+                return queryset
+            from organization.office_access import get_office_queue_office_ids
+
+            office_ids = get_office_queue_office_ids(user)
+            object_scope = Q(assigned_to=user) | Q(created_by=user)
+            if office_ids:
+                object_scope |= Q(owning_office_id__in=office_ids) | Q(current_office_id__in=office_ids)
+            if getattr(user, "department_id", None):
+                object_scope |= Q(department_id=user.department_id)
+            if getattr(user, "division_id", None):
+                object_scope |= Q(division_id=user.division_id)
+            if getattr(user, "directorate_id", None):
+                object_scope |= Q(division__directorate_id=user.directorate_id)
+            return queryset.filter(object_scope).distinct()
 
         user = self.request.user
         role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
@@ -229,19 +260,19 @@ class CaseViewSet(viewsets.ModelViewSet):
         from organization.org_scope import user_can_view_all_correspondence
 
         scope = self.request.query_params.get("scope", "personal")
-        can_view_all = user_can_view_all_correspondence(user)
-        queue_office_ids = get_office_queue_office_ids(user)
-        org_wide_scopes = {
-            "organization",
-            "directorate",
-            "division",
-            "department",
-            "all",
-        }
+        from organization.permission_utils import user_has_permission
 
-        # All Cases / org-wide scopes: superuser or can_view_all_correspondence only
-        if scope in org_wide_scopes and not can_view_all and not is_superuser:
-            scope = "my" if scope == "all" else "office"
+        can_view_all = (
+            user_can_view_all_correspondence(user)
+            or user_has_permission(user, "can_access_all_cases")
+        )
+        queue_office_ids = get_office_queue_office_ids(user)
+        global_scopes = {"organization", "all"}
+
+        # Organisation-wide/all scope is privileged; hierarchical scopes are
+        # still constrained below to the caller's own unit ids.
+        if scope in global_scopes and not can_view_all and not is_superuser:
+            scope = "my"
 
         if scope == "organization" or (can_view_all and scope == "all"):
             pass
@@ -465,6 +496,9 @@ class CaseViewSet(viewsets.ModelViewSet):
         return Response(executives_list)
 
     def perform_create(self, serializer):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(self.request.user, "cases")
         if not serializer.validated_data.get("case_number"):
             today = timezone.now().date()
             count = Case.all_objects.filter(opened_at__date=today).count() + 1
@@ -651,18 +685,20 @@ class CaseViewSet(viewsets.ModelViewSet):
 
             # Certification must be backed by a real completed signature workflow.
             # Do not fabricate or auto-sign a dummy signature in production.
-            if not workflow or workflow.status != FormSignatureWorkflow.Status.COMPLETED:
+            # Superusers may certify without a completed workflow.
+            is_superuser = bool(getattr(request.user, "is_superuser", False))
+            if not is_superuser and (not workflow or workflow.status != FormSignatureWorkflow.Status.COMPLETED):
                 raise ValidationError(
                     {"detail": "CERTIFY requires a completed signature workflow"}
                 )
 
             # Check gmaudit authority via _can_user_sign
-            can_sign = False
+            can_sign = is_superuser
             try:
                 from forms.signature_views import FormSignatureWorkflowViewSet
 
                 view = FormSignatureWorkflowViewSet()
-                for sig in workflow.signatures.all():
+                for sig in (workflow.signatures.all() if workflow else []):
                     if view._can_user_sign(sig, request.user):
                         can_sign = True
                         break
@@ -827,7 +863,7 @@ class CaseViewSet(viewsets.ModelViewSet):
             required_approval_level_raw = (request.data.get("required_approval_level") or "").strip().lower()
 
             parallel_recipients = request.data.get("parallel_recipients") or []
-            merge_strategy = request.data.get("merge_strategy", "all")
+            merge_strategy = request.data.get("merge_strategy", "independent")
             use_parallel = isinstance(parallel_recipients, list) and len(parallel_recipients) >= 2
 
             if not subject:
@@ -1481,10 +1517,23 @@ class CaseTemplateViewSet(viewsets.ModelViewSet):
     ordering = ["case_type", "name"]
 
     def perform_create(self, serializer):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(self.request.user, "case_templates")
         serializer.save(created_by=self.request.user)
+
+    def get_queryset(self):
+        from organization.permission_utils import require_page_access
+
+        if self.action in {"list", "retrieve", "create", "update", "partial_update", "destroy"}:
+            require_page_access(self.request.user, "case_templates")
+        return super().get_queryset()
 
     @action(detail=True, methods=["post"], url_path="create-case")
     def create_case_from_template(self, request, pk=None):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(request.user, "cases")
         template = self.get_object()
         case_data = request.data.copy()
 

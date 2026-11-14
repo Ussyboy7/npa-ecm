@@ -11,7 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from "@/components/ui/sonner";
 import { apiFetch } from '@/lib/api-client';
-import { AlertCircle, ArrowLeft, FileText, Users, ArrowRight, FolderOpen, Loader2, RefreshCw, Edit3 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, FileText, Users, FolderOpen, Loader2, RefreshCw, Edit3 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import { useCorrespondence, CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
@@ -43,14 +43,13 @@ import {
   buildSubmissionFormData,
   calculateCompletionPercentage,
   createDistributionEntries,
+  getExistingCorrespondenceId,
 } from './register-utils';
-import { submitParallelRoute, submitCcDistribution } from '@/lib/parallel-routing';
 import { registerReducer, createInitialState } from './register-state-reducer';
 import { useDraftAutoSave } from './use-draft-auto-save';
 import { OfficeSelectionCard } from './components/OfficeSelectionCard';
 import { BasicInfoStep } from './components/BasicInfoStep';
 import { PartiesStep } from './components/PartiesStep';
-import { RoutingStep } from './components/RoutingStep';
 import { DocumentsStep } from './components/DocumentsStep';
 import { RegistrationSummary } from './components/RegistrationSummary';
 
@@ -85,6 +84,10 @@ const CorrespondenceRegisterForm = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [dismissedBanner, setDismissedBanner] = useState(false);
+  const [referenceClassifications, setReferenceClassifications] = useState<
+    Array<{ code: string; label: string }>
+  >([]);
+  const [referenceWarning, setReferenceWarning] = useState<string | null>(null);
   const [validateOnStepChange, _setValidateOnStepChange] = useState(true);
 
   const isSuperAdmin = roleChecks.isSuperAdmin || roleChecks.isSystemAdmin;
@@ -100,8 +103,7 @@ const CorrespondenceRegisterForm = () => {
     linkedDocumentIds,
     flowType,
     distributions,
-    routingConfig,
-    ui: { assignSearch: _assignSearch, officeSearch: _officeSearch, submitting, errors, hasDraft, mounted },
+    ui: { submitting, errors, hasDraft, mounted },
   } = state;
 
   // Load correspondence data if in edit mode - extracted as useCallback so it can be called from retry button
@@ -150,7 +152,6 @@ const CorrespondenceRegisterForm = () => {
           dispatchDate: formatDateForInput(corr.dispatchDate),
           priority: corr.priority || 'medium',
           referenceNumber: corr.referenceNumber || '',
-          assignTo: corr.currentApproverId || '',
           divisionId: corr.divisionId || '',
           documentType: corr.documentType || 'letter',
           tags: Array.isArray(corr.tags) ? corr.tags.join(', ') : (corr.tags || ''),
@@ -160,12 +161,13 @@ const CorrespondenceRegisterForm = () => {
           recipientEmail: '',
           recipientPhone: '',
           remarks: corr.remarks || '',
+          correspondenceSource: corr.source,
         },
       });
 
       // Set flow type
       if (corr.direction) {
-        const flowType = corr.direction === 'lateral' ? 'lateral' : corr.direction === 'downward' ? 'outward' : 'inward';
+        const flowType = corr.direction === 'downward' ? 'outward' : 'inward';
         dispatch({ type: 'SET_FLOW_TYPE', payload: flowType as FlowType });
       }
 
@@ -208,26 +210,77 @@ const CorrespondenceRegisterForm = () => {
     dispatch({ type: 'SET_MOUNTED', payload: true });
   }, []);
 
-  // Auto-fetch visible HQ preview when registering office changes (editable, sequence won't be reused)
-  const lastPreviewRef = useRef<string | null>(null);
+  // Auto-fetch the next reference preview for the selected office + classification.
+  // The reference is read-only: the registering office always owns it.
   useEffect(() => {
-    if (!mounted || editId || !formData.owningOfficeId) return;
-    const currentRef = formData.referenceNumber;
-    if (currentRef && currentRef !== lastPreviewRef.current) return; // manual edit — don't clobber
+    if (!mounted || editId) return;
+    const incomingReference = formData.senderReference.trim();
+    if (flowType === 'inward' && incomingReference) {
+      setReferenceWarning(null);
+      dispatch({
+        type: "UPDATE_FORM_DATA",
+        payload: { referenceNumber: incomingReference },
+      });
+      return;
+    }
+    if (!formData.owningOfficeId) {
+      setReferenceWarning(null);
+      dispatch({ type: "UPDATE_FORM_DATA", payload: { referenceNumber: "" } });
+      return;
+    }
     const params = new URLSearchParams({ owning_office: formData.owningOfficeId });
     if (formData.divisionId) params.set("division", formData.divisionId);
-    apiFetch<{ reference_number: string }>(`/correspondence/items/reference-preview/?${params.toString()}`)
+    if (formData.referenceClassificationCode) {
+      params.set("classification", formData.referenceClassificationCode);
+    }
+    apiFetch<{
+      reference_number?: string;
+      warning?: string;
+      scheme?: { classifications?: Array<{ code: string; label: string }> } | null;
+    }>(`/correspondence/items/reference-preview/?${params.toString()}`)
       .then((res) => {
-        const raw = res as unknown as { reference_number?: string } | string;
-        const preview = typeof raw === "string" ? raw : raw.reference_number;
-        if (typeof preview === "string" && preview) {
-          lastPreviewRef.current = preview;
-          dispatch({ type: "UPDATE_FORM_DATA", payload: { referenceNumber: preview } });
+        const scheme = res?.scheme ?? null;
+        setReferenceWarning(res?.warning || null);
+        const options = scheme?.classifications ?? [];
+        setReferenceClassifications(
+          options.map((item) => ({ code: item.code, label: item.label }))
+        );
+
+        const selected = formData.referenceClassificationCode;
+        const stillValid = options.some((item) => item.code === selected);
+        if (options.length > 0 && !stillValid) {
+          const preferred =
+            options.find((item) => item.code === "AD")?.code ?? options[0].code;
+          dispatch({
+            type: "UPDATE_FORM_DATA",
+            payload: { referenceClassificationCode: preferred },
+          });
+        } else if (options.length === 0 && selected) {
+          dispatch({
+            type: "UPDATE_FORM_DATA",
+            payload: { referenceClassificationCode: "" },
+          });
         }
+
+        const preview = res?.reference_number;
+        dispatch({
+          type: "UPDATE_FORM_DATA",
+          payload: { referenceNumber: typeof preview === "string" ? preview : "" },
+        });
       })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only on office change; referenceNumber read via currentRef snapshot
-  }, [mounted, editId, formData.owningOfficeId, formData.divisionId]);
+      .catch(() => {
+        setReferenceWarning("Could not load the reference preview. Try again.");
+        dispatch({ type: "UPDATE_FORM_DATA", payload: { referenceNumber: "" } });
+      });
+  }, [
+    mounted,
+    editId,
+    flowType,
+    formData.senderReference,
+    formData.owningOfficeId,
+    formData.divisionId,
+    formData.referenceClassificationCode,
+  ]);
 
   // Draft auto-save hook - memoize callbacks to prevent infinite loops
   const handleDraftLoaded = useCallback((draft: { flowType?: FlowType; formData?: FormData; directorateDistribution?: string[]; divisionDistribution?: string[]; departmentDistribution?: string[] }) => {
@@ -236,7 +289,12 @@ const CorrespondenceRegisterForm = () => {
       dispatch({ type: 'SET_FLOW_TYPE', payload: draft.flowType });
     }
     if (draft.formData) {
-      dispatch({ type: 'SET_FORM_DATA', payload: draft.formData });
+      // Legacy drafts can contain a stale/placeholder reference. Allocation is
+      // always refreshed from the selected office after loading.
+      dispatch({
+        type: 'SET_FORM_DATA',
+        payload: { ...draft.formData, referenceNumber: '' },
+      });
     }
     dispatch({
       type: 'SET_DISTRIBUTIONS',
@@ -314,30 +372,12 @@ const CorrespondenceRegisterForm = () => {
     return activeOffices.filter((office) => membershipOfficeIds.has(office.id));
   }, [activeOffices, userOfficeMemberships, isSuperAdmin]);
 
-  const filteredOffices = useMemo(() => {
-    if (flowType !== 'lateral') return membershipOffices;
-    const myOffice = activeOffices.find((o) => o.id === formData.owningOfficeId) || (membershipOffices[0] as typeof activeOffices[0] | undefined);
-    const tier = (myOffice as { officeType?: string } | undefined)?.officeType?.toLowerCase();
-    if (!tier) return membershipOffices;
-    return membershipOffices.filter((o) => (o as { officeType?: string }).officeType?.toLowerCase() === tier);
-  }, [membershipOffices, flowType, formData.owningOfficeId, activeOffices]);
-
   const completionPercentage = useMemo(
-    () => calculateCompletionPercentage(formData, flowType, documentFiles, linkedDocumentIds.length, routingConfig),
-    [formData, flowType, documentFiles, linkedDocumentIds]
+    () => calculateCompletionPercentage(formData, flowType, documentFiles, distributions, linkedDocumentIds.length),
+    [formData, flowType, documentFiles, distributions, linkedDocumentIds]
   );
 
   const selectedOfficeName = activeOffices.find((office) => office.id === formData.owningOfficeId)?.name;
-  // Find the office that has the selected user as primary holder
-  const selectedAssigneeOffice = useMemo(() => {
-    if (!formData.assignTo) return null;
-    const membership = officeMemberships.find(
-      (m) => m.userId === formData.assignTo && m.isPrimary && m.isActive
-    );
-    return membership ? activeOffices.find((o) => o.id === membership.officeId) : null;
-  }, [formData.assignTo, officeMemberships, activeOffices]);
-  const selectedAssigneeName = selectedAssigneeOffice?.name || 
-    organizationUsers.find((u) => u.id === formData.assignTo)?.name;
 
   // Set primary office on mount (only on client after mounted)
   // Also auto-select if user has only one office membership
@@ -348,7 +388,9 @@ const CorrespondenceRegisterForm = () => {
     if (membershipOffices.length === 1) {
       dispatch({
         type: 'UPDATE_FORM_DATA',
-        payload: { owningOfficeId: membershipOffices[0].id },
+        payload: {
+          owningOfficeId: membershipOffices[0].id,
+        },
       });
       return;
     }
@@ -360,7 +402,9 @@ const CorrespondenceRegisterForm = () => {
     if (membership?.officeId) {
       dispatch({
         type: 'UPDATE_FORM_DATA',
-        payload: { owningOfficeId: membership.officeId },
+        payload: {
+          owningOfficeId: membership.officeId,
+        },
       });
     }
   }, [mounted, currentUser, officeMemberships, formData.owningOfficeId, membershipOffices]);
@@ -413,7 +457,7 @@ const CorrespondenceRegisterForm = () => {
 
   const goToNextStep = useCallback(() => {
     if (validateOnStepChange) {
-      const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length, routingConfig);
+      const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
       if (Object.keys(stepErrors).length > 0) {
         dispatch({ type: 'SET_ERRORS', payload: stepErrors });
         toast.error('Please fix the errors in the current step before proceeding');
@@ -457,7 +501,7 @@ const CorrespondenceRegisterForm = () => {
       if (event) event.preventDefault();
 
       // Validate form
-      const validationErrors = validateFormData(formData, flowType, documentFiles, distributions, linkedDocumentIds.length, routingConfig);
+      const validationErrors = validateFormData(formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
       if (Object.keys(validationErrors).length > 0) {
         dispatch({ type: 'SET_ERRORS', payload: validationErrors });
         toast.error('Please fix the errors in the form');
@@ -471,10 +515,14 @@ const CorrespondenceRegisterForm = () => {
           validationErrors.dispatchDate
         ) {
           dispatch({ type: 'SET_STEP', payload: 'basics' });
-        } else if (validationErrors.senderName || validationErrors.senderOrganization || validationErrors.recipientName) {
+        } else if (
+          validationErrors.senderName ||
+          validationErrors.senderOrganization ||
+          validationErrors.recipientName ||
+          validationErrors.distribution ||
+          validationErrors.correspondenceSource
+        ) {
           dispatch({ type: 'SET_STEP', payload: 'sender' });
-        } else if (validationErrors.assignTo || validationErrors.distribution) {
-          dispatch({ type: 'SET_STEP', payload: 'routing' });
         } else if (validationErrors.documentFiles) {
           dispatch({ type: 'SET_STEP', payload: 'documents' });
         }
@@ -486,7 +534,7 @@ const CorrespondenceRegisterForm = () => {
       const signal = getSignal();
 
       try {
-        const formDataToSubmit = buildSubmissionFormData(formData, flowType, documentFiles, distributions, routingConfig);
+        const formDataToSubmit = buildSubmissionFormData(formData, flowType, documentFiles, distributions);
 
         // Submit with retry logic - use PATCH for edit, POST for create
         const response = await fetchWithRetry(async () => {
@@ -516,36 +564,6 @@ const CorrespondenceRegisterForm = () => {
         });
 
         const correspondenceId = response?.id || editId;
-
-        if (correspondenceId && routingConfig.routeMode === 'parallel') {
-          const branchText =
-            routingConfig.routingNotes.trim() ||
-            formData.remarks.trim() ||
-            'Please review and respond.';
-          await submitParallelRoute(
-            (path, options) => apiFetch(path, { ...options, signal }),
-            {
-              correspondenceId,
-              parallelUserIds: routingConfig.parallelUserIds,
-              parallelOfficeIds: routingConfig.parallelOfficeIds,
-              branchConfigs: routingConfig.branchConfigs,
-              mergeStrategy: routingConfig.mergeStrategy,
-              defaultPurpose: routingConfig.purpose,
-              defaultMinuteText: branchText,
-              signal,
-            },
-          );
-        }
-
-        if (correspondenceId) {
-          await submitCcDistribution(
-            (path, options) => apiFetch(path, { ...options, signal }),
-            correspondenceId,
-            routingConfig.distributionUserIds,
-            routingConfig.distributionOfficeIds,
-            currentUser?.id,
-          );
-        }
 
         if (correspondenceId && flowType === 'outward') {
           await createDistributionEntries(
@@ -610,7 +628,19 @@ const CorrespondenceRegisterForm = () => {
         }
 
         const description = (error && typeof error === 'object' && 'message' in error && typeof (error instanceof Error ? error.message : ERROR_UNKNOWN) === 'string') ? (error instanceof Error ? error.message : ERROR_UNKNOWN) : (editId ? 'Unable to update correspondence' : 'Unable to register correspondence');
-        toast.error(description);
+        const existingCorrespondenceId = getExistingCorrespondenceId(error);
+        if (existingCorrespondenceId) {
+          toast.error(description, {
+            description: 'This document is already registered in ECM.',
+            duration: 12000,
+            action: {
+              label: 'Open existing record',
+              onClick: () => router.push(`/correspondence/${existingCorrespondenceId}`),
+            },
+          });
+        } else {
+          toast.error(description);
+        }
         logError(editId ? 'Failed to update correspondence' : 'Failed to register correspondence', error);
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: false });
@@ -674,7 +704,7 @@ const CorrespondenceRegisterForm = () => {
           <p className={appType.pageSubtitle}>
             {editId 
               ? 'Update correspondence details and dispatch'
-              : 'Capture and initiate inward or outward correspondence from your office'}
+                                : 'Capture and register inward or outward correspondence from your office'}
           </p>
         </div>
 
@@ -710,12 +740,18 @@ const CorrespondenceRegisterForm = () => {
           <div className="lg:col-span-2 space-y-6 min-w-0">
             {/* Office & Flow Selection */}
             <OfficeSelectionCard
-              offices={filteredOffices}
+              offices={membershipOffices}
               selectedOfficeId={formData.owningOfficeId}
               flowType={flowType}
               error={errors.owningOfficeId}
               onOfficeSelect={(officeId) => {
-                dispatch({ type: 'UPDATE_FORM_DATA', payload: { owningOfficeId: officeId } });
+                dispatch({
+                  type: 'UPDATE_FORM_DATA',
+                  payload: {
+                    owningOfficeId: officeId,
+                    referenceNumber: '',
+                  },
+                });
                 if (errors.owningOfficeId) handleErrorClear('owningOfficeId');
               }}
               onFlowTypeChange={(newFlowType) => {
@@ -773,7 +809,7 @@ const CorrespondenceRegisterForm = () => {
                       const newStep = v as typeof currentStep;
                       if (validateOnStepChange && newStep !== currentStep) {
                         // Validate current step before switching
-                        const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length, routingConfig);
+                        const stepErrors = validateStep(currentStep, formData, flowType, documentFiles, distributions, linkedDocumentIds.length);
                         if (Object.keys(stepErrors).length > 0) {
                           dispatch({ type: 'SET_ERRORS', payload: stepErrors });
                           toast.error('Please fix the errors in the current step before switching tabs');
@@ -783,12 +819,11 @@ const CorrespondenceRegisterForm = () => {
                       dispatch({ type: 'SET_STEP', payload: newStep });
                     }}
                   >
-                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-3">
                       {FORM_STEPS.map((step) => (
                         <TabsTrigger key={step.id} value={step.id} className="gap-1.5 sm:gap-2">
                           {step.id === 'basics' && <FileText className="h-4 w-4 shrink-0" />}
                           {step.id === 'sender' && <Users className="h-4 w-4 shrink-0" />}
-                          {step.id === 'routing' && <ArrowRight className="h-4 w-4 shrink-0" />}
                           {step.id === 'documents' && <FolderOpen className="h-4 w-4 shrink-0" />}
                           <span className="truncate">{step.label}</span>
                         </TabsTrigger>
@@ -799,6 +834,8 @@ const CorrespondenceRegisterForm = () => {
                     <TabsContent value="basics" className="space-y-4 pt-4">
                       <BasicInfoStep
                         formData={formData}
+                        referenceClassifications={referenceClassifications}
+                        referenceWarning={referenceWarning}
                         flowType={flowType}
                         errors={errors}
                         onFormDataChange={handleFormDataChange}
@@ -812,33 +849,12 @@ const CorrespondenceRegisterForm = () => {
                       <PartiesStep
                         formData={formData}
                         flowType={flowType}
-                        errors={errors}
-                        onFormDataChange={handleFormDataChange}
-                        onErrorClear={handleErrorClear}
-                        onPrev={goToPrevStep}
-                        onNext={goToNextStep}
-                      />
-                    </TabsContent>
-
-                    {/* Routing Tab */}
-                    <TabsContent value="routing" className="space-y-4 pt-4">
-                      <RoutingStep
-                        formData={formData}
-                        flowType={flowType}
                         distributions={distributions}
-                        routingConfig={routingConfig}
-                        errors={errors}
                         directorates={directorates}
                         divisions={divisions}
                         departments={departments}
-                        offices={activeOffices}
-                        officeMemberships={officeMemberships}
-                        organizationUsers={organizationUsers}
-                        currentUserId={currentUser?.id}
+                        errors={errors}
                         onFormDataChange={handleFormDataChange}
-                        onRoutingChange={(updates) =>
-                          dispatch({ type: 'UPDATE_ROUTING', payload: updates })
-                        }
                         onDistributionChange={handleDistributionChange}
                         onErrorClear={handleErrorClear}
                         onPrev={goToPrevStep}
@@ -877,7 +893,6 @@ const CorrespondenceRegisterForm = () => {
               flowType={flowType}
               documentFiles={documentFiles}
               selectedOfficeName={selectedOfficeName}
-              selectedAssigneeName={selectedAssigneeName}
               hasDraft={hasDraft}
               onSaveDraft={handleSaveDraft}
               onClearDraft={handleClearDraft}

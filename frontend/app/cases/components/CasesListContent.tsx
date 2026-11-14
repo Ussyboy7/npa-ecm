@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAbortController } from "@/hooks/use-abort-controller";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -115,9 +115,10 @@ interface CasesListContentProps {
   scope: "my" | "office" | "all";
   title: string;
   description: string;
+  tabs?: ReactNode;
 }
 
-export function CasesListContent({ scope, title, description }: CasesListContentProps) {
+export function CasesListContent({ scope, title, description, tabs }: CasesListContentProps) {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const {divisions, departments: _departments, offices, officeMemberships } = useOrganization();
@@ -250,7 +251,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           params.scope = "office";
         } else if (scope === "all") {
           // Use the scope from scopeChecks (department/division/directorate/organization)
-          params.scope = scopeChecks.caseScope === "personal" ? "my" : scopeChecks.caseScope;
+          params.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
         }
 
         const response = await getCases({ ...params, signal });
@@ -338,7 +339,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
       } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
         baseParams.scope = "office";
       } else if (scope === "all") {
-        baseParams.scope = scopeChecks.caseScope === "personal" ? "my" : scopeChecks.caseScope;
+        baseParams.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
       }
 
       const allCases = await fetchAllPaginatedResults((page, pageSize) =>
@@ -380,6 +381,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
     <QueuePageShell
       title={title}
       subtitle={description}
+      tabs={tabs}
       actions={(
         <>
           <Button 

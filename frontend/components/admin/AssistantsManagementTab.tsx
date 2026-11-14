@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -60,7 +61,7 @@ import { registryQueueEmptyIconClass } from "@/components/shared/registry-queue-
 type ViewMode = "executives" | "all";
 type TypeFilter = "all" | "TA" | "PA";
 
-const MANAGEMENT_GRADES = ["MDCS", "EDCS", "MSS1", "MSS2"];
+export const MANAGEMENT_GRADES = ["MDCS", "EDCS", "MSS1", "MSS2"];
 
 export type AssistantsManagementTabHandle = {
   openAssignAssistant: () => void;
@@ -129,6 +130,7 @@ export const AssistantsManagementTab = forwardRef<
   const [selectedExecutiveId, setSelectedExecutiveId] = useState<string>("");
   const [selectedAssignment, setSelectedAssignment] = useState<AssistantAssignment | undefined>(undefined);
   const [assignmentToRemove, setAssignmentToRemove] = useState<string>("");
+  const [showUncoveredExecutives, setShowUncoveredExecutives] = useState(false);
 
   const isSuperAdmin = currentUser?.systemRole === "Super Admin";
   // Get executives (MD, ED, GM, AGM)
@@ -161,6 +163,18 @@ export const AssistantsManagementTab = forwardRef<
     
     return result;
   }, [executives, searchQuery, isSuperAdmin, currentUser?.id, assistantAssignments, users]);
+
+  // By Executive defaults to executives who actually have assistants.
+  const { visibleExecutives, uncoveredExecutives } = useMemo(() => {
+    const coveredIds = new Set(assistantAssignments.map((assignment) => assignment.executiveId));
+    const uncovered = filteredExecutives.filter((executive) => !coveredIds.has(executive.id));
+    return {
+      visibleExecutives: showUncoveredExecutives
+        ? filteredExecutives
+        : filteredExecutives.filter((executive) => coveredIds.has(executive.id)),
+      uncoveredExecutives: uncovered.length,
+    };
+  }, [assistantAssignments, filteredExecutives, showUncoveredExecutives]);
 
   // All assignments (for table view)
   const filteredAssignments = useMemo(() => {
@@ -323,8 +337,7 @@ export const AssistantsManagementTab = forwardRef<
                     />
                   </div>
                   {viewMode === "all" && (
-                    <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
-                      <SelectTrigger className="w-32">
+                    <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>                          <SelectTrigger className="w-32" aria-label="Filter by assistant type">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -358,9 +371,53 @@ export const AssistantsManagementTab = forwardRef<
                   }
                   variant="dashed"
                 />
+              ) : visibleExecutives.length === 0 ? (
+                <EmptyState
+                  icon={<Shield className={registryQueueEmptyIconClass} />}
+                  title={searchQuery.trim() ? "No executives match your search" : "No assistants assigned yet"}
+                  message={
+                    searchQuery.trim()
+                      ? "Try a different name, role, or grade level keyword."
+                      : "Executives without an assistant are hidden. Show them to make the first assignment."
+                  }
+                  actionLabel={
+                    searchQuery.trim()
+                      ? "Clear search"
+                      : `Show executives without assistants (${uncoveredExecutives})`
+                  }
+                  onAction={
+                    searchQuery.trim()
+                      ? () => setSearchQuery("")
+                      : () => setShowUncoveredExecutives(true)
+                  }
+                  variant="dashed"
+                />
               ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {filteredExecutives.map((executive) => {
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {uncoveredExecutives > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="show-uncovered-executives"
+                          checked={showUncoveredExecutives}
+                          onCheckedChange={(checked) => setShowUncoveredExecutives(checked === true)}
+                        />
+                        <label
+                          htmlFor="show-uncovered-executives"
+                          className="cursor-pointer text-xs text-muted-foreground"
+                        >
+                          Show executives without assistants ({uncoveredExecutives})
+                        </label>
+                      </div>
+                    ) : (
+                      <span />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {visibleExecutives.length} executive{visibleExecutives.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {visibleExecutives.map((executive) => {
             const assignments = getAssistantsForExecutive(executive.id);
             const canManage = canManageExecutive(executive.id);
 
@@ -383,10 +440,11 @@ export const AssistantsManagementTab = forwardRef<
                                 {assignments.length} assistant{assignments.length !== 1 ? "s" : ""}
                       </Badge>
                               {canManage && (
-                    <Button 
+                    <Button
                                   size="icon-sm"
                                   variant="ghost"
                       onClick={() => handleAssignAssistant(executive.id)}
+                      aria-label={`Assign assistant to ${executive.name}`}
                     >
                                   <Plus className="h-4 w-4" />
                     </Button>
@@ -439,9 +497,14 @@ export const AssistantsManagementTab = forwardRef<
                                       {canManage && (
                                         <DropdownMenu>
                                           <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-7 w-7"
+                                              aria-label={`Actions for ${assistant?.name || "assistant"}`}
+                                            >
                                               <MoreVertical className="h-4 w-4" />
-                              </Button>
+                                            </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent align="end">
                                             <DropdownMenuItem onClick={() => handleEditAssignment(assignment)}>
@@ -469,6 +532,7 @@ export const AssistantsManagementTab = forwardRef<
             );
           })}
                 </div>
+                </>
               )}
             </TabsContent>
 
@@ -538,7 +602,12 @@ export const AssistantsManagementTab = forwardRef<
                                   {canManage && (
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8"
+                                          aria-label={`Actions for ${assistant?.name || "assistant"}`}
+                                        >
                                           <MoreVertical className="h-4 w-4" />
                                         </Button>
                                       </DropdownMenuTrigger>

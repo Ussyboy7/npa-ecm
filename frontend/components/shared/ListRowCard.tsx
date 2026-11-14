@@ -23,7 +23,9 @@ type ListRowCardProps = {
   /** Full-width row below main content (e.g. sent-list actions). */
   footer?: ReactNode;
   /** Padding and spacing. Defaults to compact (p-3) for consistent queue views. */
-  density?: "default" | "compact";
+  density?: "default" | "compact" | "dense";
+  /** Marks a clickable row as the current selection (aria-current). */
+  selected?: boolean;
 };
 
 /**
@@ -38,19 +40,26 @@ const ListRowCard_ = ({
   footer,
   className,
   density = "compact",
+  selected = false,
 }: ListRowCardProps) => {
   const shell =
-    density === "compact"
-      ? correspondenceQueueShellClass
-      : registryQueueRowShellClass;
+    density === "dense"
+      ? "rounded-lg border border-border/60 bg-card px-2.5 py-1.5 transition-colors hover:bg-muted/40"
+      : density === "compact"
+        ? correspondenceQueueShellClass
+        : registryQueueRowShellClass;
   const rowGap =
     density === "compact"
       ? correspondenceQueueInnerGapClass
-      : registryQueueRowInnerGapClass;
+      : density === "dense"
+        ? "gap-2"
+        : registryQueueRowInnerGapClass;
   const footerDivider =
-    density === "compact"
-      ? "mt-2 border-t border-border/80 pt-2"
-      : "mt-3 border-t border-border pt-3";
+    density === "dense"
+      ? "mt-1.5 border-t border-border/80 pt-1.5"
+      : density === "compact"
+        ? "mt-2 border-t border-border/80 pt-2"
+        : "mt-3 border-t border-border pt-3";
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onRowClick) return;
@@ -67,6 +76,7 @@ const ListRowCard_ = ({
         className: "min-w-0 flex-1 cursor-pointer text-left",
         onClick: onRowClick,
         onKeyDown: handleRowKeyDown,
+        "aria-current": selected ? ("true" as const) : undefined,
       }
     : { className: "min-w-0 flex-1" };
 
@@ -106,6 +116,7 @@ const ListRowCard_ = ({
         tabIndex={0}
         onClick={onRowClick}
         onKeyDown={handleRowKeyDown}
+        aria-current={selected ? "true" : undefined}
       >
         <div className={cn("flex items-start", rowGap)}>
           {leading}
@@ -133,7 +144,7 @@ const ListRowCard_ = ({
             <div
               className={cn(
                 "flex shrink-0 flex-col self-start pt-0.5",
-                density === "compact" ? "gap-0.5" : "gap-2",
+                density === "compact" || density === "dense" ? "gap-0.5" : "gap-2",
               )}
             >
               {actions}

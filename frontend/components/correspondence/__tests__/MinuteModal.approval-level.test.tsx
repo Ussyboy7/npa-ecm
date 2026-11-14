@@ -60,9 +60,6 @@ vi.mock('@/lib/correspondence-helpers', () => ({
   generateId: (p: string) => `${p}-test`,
   getNextStepNumber: () => 1,
 }));
-vi.mock('@/lib/seal-cache', () => ({
-  ensureSealImageCached: vi.fn(),
-}));
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: '1' }),
   useRouter: () => ({ push: vi.fn() }),

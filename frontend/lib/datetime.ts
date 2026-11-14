@@ -14,6 +14,18 @@ export function formatDate(
 
 const DEFAULT_DATETIME_LOCALE = "en-US";
 
+/** Shared 24-hour timestamp format for correspondence routing views. */
+export function formatRoutingDateTime(input: string | Date): string {
+  return formatDateTime(input, "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 export function formatDateTime(
   input: string | Date,
   locale = DEFAULT_DATETIME_LOCALE,

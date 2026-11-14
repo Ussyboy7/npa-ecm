@@ -20,7 +20,7 @@ export default function ExecutiveDashboardPage() {
         <ClientErrorBoundary>
           <AdminPageShell
             title="Analytics"
-            subtitle="Real-time SLA compliance, division performance, and escalation monitoring"
+            subtitle="SLA compliance, division performance, and escalation monitoring"
             icon={Target}
             tabs={<AnalyticsTabList />}
             actions={

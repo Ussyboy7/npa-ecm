@@ -5,7 +5,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from accounts.serializers import UserSerializer
-from .models import Location, PhysicalDocument, CheckOutEvent
+from organization.models import Office
+from .models import Location, PhysicalDocument, PhysicalHandover, CheckOutEvent
 
 User = get_user_model()
 
@@ -46,6 +47,12 @@ class PhysicalDocumentSerializer(serializers.ModelSerializer):
     correspondence_ref = serializers.CharField(
         source="correspondence.reference_number", read_only=True
     )
+    current_office_name = serializers.CharField(source="current_office.name", read_only=True)
+    current_office = serializers.PrimaryKeyRelatedField(
+        queryset=Office.objects.filter(is_active=True), required=False
+    )
+    pending_handover_to_office_id = serializers.SerializerMethodField()
+    pending_handover_to_office_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PhysicalDocument
@@ -58,6 +65,10 @@ class PhysicalDocumentSerializer(serializers.ModelSerializer):
             "document",
             "location",
             "location_name",
+            "current_office",
+            "current_office_name",
+            "pending_handover_to_office_id",
+            "pending_handover_to_office_name",
             "status",
             "description",
             "checked_out_to",
@@ -70,8 +81,31 @@ class PhysicalDocumentSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id", "checked_out_to",
             "checked_out_at", "created_at",
-            "location_name", "correspondence_ref",
+            "location_name", "current_office_name", "correspondence_ref",
         ]
+
+    def get_pending_handover_to_office_id(self, obj):
+        pending = obj.handover_events.filter(received_at__isnull=True).select_related("to_office").first()
+        return str(pending.to_office_id) if pending else None
+
+    def get_pending_handover_to_office_name(self, obj):
+        pending = obj.handover_events.filter(received_at__isnull=True).select_related("to_office").first()
+        return pending.to_office.name if pending else None
+
+    def validate(self, attrs):
+        location = attrs.get("location")
+        office = attrs.get("current_office")
+        if self.instance is None:
+            if not location:
+                raise serializers.ValidationError({"location": "A storage location is required."})
+            if not office:
+                raise serializers.ValidationError({"current_office": "A custodian office is required."})
+        if self.instance is not None and office and office.id != self.instance.current_office_id:
+            raise serializers.ValidationError({"current_office": "Custody can only be changed by a confirmed handover."})
+        request = self.context.get("request")
+        if request and office and not office.memberships.filter(user=request.user, is_active=True).exists():
+            raise serializers.ValidationError({"current_office": "You must be an active member of the custodian office."})
+        return attrs
 
     def create(self, validated_data):
         if "tracking_number" not in validated_data or not validated_data.get("tracking_number"):
@@ -88,6 +122,33 @@ class PhysicalDocumentDetailSerializer(PhysicalDocumentSerializer):
     def get_checkout_events(self, obj):
         events = obj.checkout_events.select_related("user").order_by("-created_at")[:20]
         return CheckOutEventSerializer(events, many=True).data
+
+
+class PhysicalHandoverSerializer(serializers.ModelSerializer):
+    from_office_name = serializers.CharField(source="from_office.name", read_only=True)
+    to_office_name = serializers.CharField(source="to_office.name", read_only=True)
+    sent_by_name = serializers.CharField(source="sent_by.get_full_name", read_only=True)
+    received_by_name = serializers.CharField(source="received_by.get_full_name", read_only=True)
+
+    class Meta:
+        model = PhysicalHandover
+        fields = [
+            "id",
+            "physical_document",
+            "from_office",
+            "from_office_name",
+            "to_office",
+            "to_office_name",
+            "sent_by",
+            "sent_by_name",
+            "received_by",
+            "received_by_name",
+            "sent_at",
+            "received_at",
+            "notes",
+            "receipt_notes",
+        ]
+        read_only_fields = fields
 
 
 class CheckOutEventSerializer(serializers.ModelSerializer):

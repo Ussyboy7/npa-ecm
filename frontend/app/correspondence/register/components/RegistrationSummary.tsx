@@ -13,7 +13,6 @@ interface RegistrationSummaryProps {
   flowType: FlowType;
   documentFiles: File[];
   selectedOfficeName?: string;
-  selectedAssigneeName?: string;
   hasDraft: boolean;
   onSaveDraft: () => void;
   onClearDraft: () => void;
@@ -27,7 +26,6 @@ export const RegistrationSummary = memo(function RegistrationSummary({
   flowType,
   documentFiles,
   selectedOfficeName,
-  selectedAssigneeName,
   hasDraft,
   onSaveDraft,
   onClearDraft,
@@ -77,10 +75,10 @@ export const RegistrationSummary = memo(function RegistrationSummary({
             </Badge>
           </div>
           <div className="flex items-start justify-between gap-3">
-            <span className="text-muted-foreground">Assigned to</span>
-            <span className="font-medium text-right max-w-[150px] truncate">
-              {selectedAssigneeName || '—'}
-            </span>
+            <span className="text-muted-foreground">Destination</span>
+            <Badge variant="secondary" className="text-[10px] h-5">
+              Office queue
+            </Badge>
           </div>
           <Separator />
           <div className="flex items-start justify-between gap-3">

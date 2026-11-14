@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { FileText, MapPin, User, Calendar } from 'lucide-react';
+import { FileText, MapPin, User, Calendar, Building2, ArrowRight } from 'lucide-react';
 import { formatDateShort } from '@/lib/datetime';
 
 interface PhysicalDocument {
@@ -9,6 +9,8 @@ interface PhysicalDocument {
   tracking_number: string;
   status: string;
   location?: { display_name: string };
+  current_office?: { id?: string; name?: string };
+  pending_handover_to_office_name?: string;
   checked_out_to?: { name: string };
   created_at: string;
 }
@@ -20,9 +22,19 @@ interface PhysicalCopySectionProps {
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   filed: 'default',
   checked_out: 'secondary',
+  in_transit: 'secondary',
   archived: 'outline',
   destroyed: 'destructive',
   missing: 'destructive',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  filed: 'filed',
+  checked_out: 'checked out',
+  in_transit: 'in transit',
+  archived: 'archived',
+  destroyed: 'destroyed',
+  missing: 'missing',
 };
 
 export function PhysicalCopySection({ documents }: PhysicalCopySectionProps) {
@@ -42,9 +54,21 @@ export function PhysicalCopySection({ documents }: PhysicalCopySectionProps) {
             <div className="flex items-center justify-between">
               <span className="font-mono text-sm font-medium">{doc.tracking_number}</span>
               <Badge variant={STATUS_VARIANTS[doc.status] || 'default'}>
-                {doc.status.replace('_', ' ')}
+                {STATUS_LABELS[doc.status] || doc.status.replace('_', ' ')}
               </Badge>
             </div>
+            {doc.status === 'in_transit' && doc.pending_handover_to_office_name ? (
+              <div className="flex items-center gap-2 text-sm text-amber-600">
+                <ArrowRight className="h-3.5 w-3.5" />
+                On the way to {doc.pending_handover_to_office_name} — awaiting receipt
+              </div>
+            ) : null}
+            {doc.current_office?.name && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Building2 className="h-3.5 w-3.5" />
+                Custodian office: {doc.current_office.name}
+              </div>
+            )}
             {doc.location && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="h-3.5 w-3.5" />

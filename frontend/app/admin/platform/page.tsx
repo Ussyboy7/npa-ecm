@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
+import { getPlatformHomePath } from "@/lib/platform-navigation";
 
 /** Platform hub lands on the first tab the user can access. */
 export default function PlatformIndexPage() {
@@ -10,21 +11,8 @@ export default function PlatformIndexPage() {
   const visibility = useSidebarVisibility();
 
   useEffect(() => {
-    if (visibility.showSystemHealth) {
-      router.replace("/admin/platform/health");
-      return;
-    }
-    if (visibility.showHelpdeskQueue) {
-      router.replace("/admin/platform/support");
-      return;
-    }
-    if (visibility.showIntegrationHub) {
-      router.replace("/admin/platform/integrations");
-      return;
-    }
-    if (visibility.showLegacyImport) {
-      router.replace("/admin/platform/legacy-import");
-    }
+    const target = getPlatformHomePath(visibility);
+    if (target) router.replace(target);
   }, [router, visibility]);
 
   return null;

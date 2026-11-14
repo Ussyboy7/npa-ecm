@@ -5,13 +5,34 @@ import { ArrowLeft, ArrowRight, Building2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { FormData, FlowType } from '../register-utils';
+import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  DistributionState,
+  FormData,
+  FlowType,
+  detectCorrespondenceSource,
+} from '../register-utils';
+
+interface DistributionOption {
+  id: string;
+  name: string;
+}
 
 interface PartiesStepProps {
   formData: FormData;
   flowType: FlowType;
+  distributions: DistributionState;
+  directorates: DistributionOption[];
+  divisions: DistributionOption[];
+  departments: DistributionOption[];
   errors: Record<string, string>;
   onFormDataChange: (updates: Partial<FormData>) => void;
+  onDistributionChange: (
+    type: 'directorates' | 'divisions' | 'departments',
+    ids: string[]
+  ) => void;
   onErrorClear: (field: string) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -20,12 +41,34 @@ interface PartiesStepProps {
 function PartiesStepComponent({
   formData,
   flowType,
+  distributions,
+  directorates,
+  divisions,
+  departments,
   errors,
   onFormDataChange,
+  onDistributionChange,
   onErrorClear,
   onPrev,
   onNext,
 }: PartiesStepProps) {
+  const detectedSource = detectCorrespondenceSource(flowType, formData, distributions);
+  const selectedSource =
+    formData.correspondenceSource ?? (detectedSource === 'ambiguous' ? '' : detectedSource);
+
+  const toggleDistribution = (
+    type: 'directorates' | 'divisions' | 'departments',
+    id: string,
+    checked: boolean
+  ) => {
+    const currentIds = distributions[type];
+    onDistributionChange(
+      type,
+      checked ? [...currentIds, id] : currentIds.filter((item) => item !== id)
+    );
+    if (errors.distribution) onErrorClear('distribution');
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -188,13 +231,132 @@ function PartiesStepComponent({
         )}
       </div>
 
+      {flowType === 'outward' && (
+        <>
+          <Separator />
+          <div className="space-y-3">
+            <div>
+              <Label className="text-base">
+                Correspondence Source <span className="text-destructive">*</span>
+              </Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                Choose whether this correspondence is staying inside NPA or going to an external organization.
+              </p>
+            </div>
+            <RadioGroup
+              value={selectedSource}
+              onValueChange={(value) => {
+                onFormDataChange({ correspondenceSource: value as 'internal' | 'external' });
+                if (errors.correspondenceSource) onErrorClear('correspondenceSource');
+              }}
+              className="grid gap-2 sm:grid-cols-2"
+            >
+              <label className="flex items-center gap-2 rounded-lg border p-3 text-sm cursor-pointer">
+                <RadioGroupItem value="internal" id="source-internal" />
+                Internal — to NPA offices
+              </label>
+              <label className="flex items-center gap-2 rounded-lg border p-3 text-sm cursor-pointer">
+                <RadioGroupItem value="external" id="source-external" />
+                External — outside NPA
+              </label>
+            </RadioGroup>
+            {!formData.correspondenceSource && detectedSource === 'ambiguous' && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Both an external recipient and an internal distribution are present. Choose the source explicitly.
+              </p>
+            )}
+            {errors.correspondenceSource && (
+              <p className="text-sm text-destructive" role="alert">
+                {errors.correspondenceSource}
+              </p>
+            )}
+          </div>
+
+          <Separator />
+          <div className="space-y-4">
+            <div>
+              <Label className="text-base">
+                Outward distribution list <span className="text-destructive">*</span>
+              </Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                Select the NPA directorates, divisions, or departments that should receive a copy.
+              </p>
+            </div>
+            {errors.distribution && (
+              <p className="text-sm text-destructive" role="alert">
+                {errors.distribution}
+              </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Directorates</p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
+                  {directorates.map((directorate) => (
+                    <label
+                      key={directorate.id}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={distributions.directorates.includes(directorate.id)}
+                        onCheckedChange={(checked) =>
+                          toggleDistribution('directorates', directorate.id, !!checked)
+                        }
+                      />
+                      <span className="truncate">{directorate.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Divisions</p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
+                  {divisions.map((division) => (
+                    <label
+                      key={division.id}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={distributions.divisions.includes(division.id)}
+                        onCheckedChange={(checked) =>
+                          toggleDistribution('divisions', division.id, !!checked)
+                        }
+                      />
+                      <span className="truncate">{division.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Departments</p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
+                  {departments.map((department) => (
+                    <label
+                      key={department.id}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={distributions.departments.includes(department.id)}
+                        onCheckedChange={(checked) =>
+                          toggleDistribution('departments', department.id, !!checked)
+                        }
+                      />
+                      <span className="truncate">{department.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="flex justify-between pt-4">
         <Button type="button" variant="ghost" size="sm" onClick={onPrev}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
         <Button type="button" size="compact" onClick={onNext}>
-          Next: Routing
+          Next: Documents
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>

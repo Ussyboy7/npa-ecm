@@ -29,9 +29,17 @@ class ParallelPhasesTests(TestCase):
         self.member_a = User.objects.create_user(username="member_a", password="x")
         minute_role, _ = Role.objects.get_or_create(
             name="ParallelTestMinute",
-            defaults={"permissions": {"can_minute_correspondence": True}},
+            defaults={
+                "permissions": {
+                    "can_minute_correspondence": True,
+                    "can_treat_correspondence": True,
+                }
+            },
         )
-        minute_role.permissions = {"can_minute_correspondence": True}
+        minute_role.permissions = {
+            "can_minute_correspondence": True,
+            "can_treat_correspondence": True,
+        }
         minute_role.save(update_fields=["permissions"])
         self.member_a.system_role = minute_role
         self.member_a.save(update_fields=["system_role"])
@@ -214,7 +222,7 @@ class ParallelPhasesTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_parallel_route_defaults_merge_strategy_all(self):
+    def test_parallel_route_defaults_merge_strategy_independent(self):
         self.md.grade_level = "MDCS"
         self.md.save(update_fields=["grade_level"])
         url = reverse("api_v1:minute-parallel-route")
@@ -231,7 +239,376 @@ class ParallelPhasesTests(TestCase):
         )
         self.assertEqual(response.status_code, 201, response.content)
         group = ParallelRoutingGroup.objects.get(id=response.data["parallel_group_id"])
-        self.assertEqual(group.merge_strategy, "all")
+        self.assertEqual(group.merge_strategy, "independent")
+
+    def test_parallel_route_stores_per_recipient_outcomes(self):
+        self.md.grade_level = "MDCS"
+        self.md.save(update_fields=["grade_level"])
+        url = reverse("api_v1:minute-parallel-route")
+
+        response = self.client.post(
+            url,
+            {
+                "correspondence_id": str(self.correspondence.id),
+                "recipients": [
+                    {
+                        "office_id": str(self.office_a.id),
+                        "purpose": "action",
+                        "minute_text": "Respond with your assessment.",
+                        "outcome": "respond",
+                    },
+                    {
+                        "office_id": str(self.office_b.id),
+                        "purpose": "action",
+                        "minute_text": "Treat the document.",
+                        "outcome": "treat",
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        branch_a = Minute.objects.get(to_office=self.office_a, parallel_group_id=response.data["parallel_group_id"])
+        branch_b = Minute.objects.get(to_office=self.office_b, parallel_group_id=response.data["parallel_group_id"])
+        self.assertEqual(branch_a.assignment_outcome, "respond")
+        self.assertEqual(branch_b.assignment_outcome, "treat")
+
+    def test_independent_treat_branch_returns_to_origin_without_waiting(self):
+        self.md.grade_level = "MDCS"
+        self.md.save(update_fields=["grade_level"])
+        url = reverse("api_v1:minute-parallel-route")
+        response = self.client.post(
+            url,
+            {
+                "correspondence_id": str(self.correspondence.id),
+                "recipients": [
+                    {
+                        "office_id": str(self.office_a.id),
+                        "purpose": "action",
+                        "minute_text": "Treat the document.",
+                        "outcome": "treat",
+                    },
+                    {
+                        "office_id": str(self.office_b.id),
+                        "purpose": "action",
+                        "minute_text": "Respond with your assessment.",
+                        "outcome": "respond",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+
+        self.client.force_authenticate(user=self.member_a)
+        treat_response = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "treat",
+                "minute_text": "Document treated.",
+                "user_id": str(self.member_a.id),
+            },
+            format="json",
+        )
+
+        self.assertEqual(treat_response.status_code, 201, treat_response.content)
+        self.correspondence.refresh_from_db()
+        self.assertEqual(self.correspondence.current_office_id, self.owner_office.id)
+        self.assertEqual(self.correspondence.current_approver_id, self.md.id)
+
+        self.client.force_authenticate(user=self.md)
+        detail = self.client.get(
+            reverse("api_v1:correspondence-detail", args=[self.correspondence.id])
+        )
+        self.assertEqual(detail.status_code, 200, detail.content)
+        branches = detail.data["parallel_branches"]
+        branch_a_data = next(b for b in branches if b["target_id"] == self.office_a.id)
+        branch_b_data = next(b for b in branches if b["target_id"] == self.office_b.id)
+        self.assertEqual(branch_a_data["expected_outcome"], "treat")
+        self.assertEqual(branch_a_data["completed_outcome"], "treat")
+        self.assertEqual(branch_a_data["status"], "completed")
+        self.assertEqual(branch_b_data["expected_outcome"], "respond")
+        self.assertEqual(branch_b_data["status"], "pending")
+
+    def test_independent_onward_branch_moves_on_without_waiting(self):
+        self.md.grade_level = "MDCS"
+        self.md.save(update_fields=["grade_level"])
+        onward_office = Office.objects.create(name="Onward Office", code="ONW")
+        response = self.client.post(
+            reverse("api_v1:minute-parallel-route"),
+            {
+                "correspondence_id": str(self.correspondence.id),
+                "recipients": [
+                    {
+                        "office_id": str(self.office_a.id),
+                        "purpose": "action",
+                        "minute_text": "Review and pass on.",
+                        "outcome": "onward",
+                    },
+                    {
+                        "office_id": str(self.office_b.id),
+                        "purpose": "action",
+                        "minute_text": "Respond with your assessment.",
+                        "outcome": "respond",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+
+        self.client.force_authenticate(user=self.member_a)
+        plain_response = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "minute",
+                "minute_text": "Noted, but not routed onward yet.",
+                "user_id": str(self.member_a.id),
+            },
+            format="json",
+        )
+        self.assertEqual(plain_response.status_code, 201, plain_response.content)
+
+        self.client.force_authenticate(user=self.md)
+        before_onward = self.client.get(
+            reverse("api_v1:correspondence-detail", args=[self.correspondence.id])
+        )
+        branch_a_before = next(
+            b for b in before_onward.data["parallel_branches"]
+            if b["target_id"] == self.office_a.id
+        )
+        self.assertEqual(branch_a_before["expected_outcome"], "onward")
+        self.assertEqual(branch_a_before["status"], "pending")
+        self.assertIsNone(branch_a_before["completed_outcome"])
+
+        self.client.force_authenticate(user=self.member_a)
+        onward_response = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "minute",
+                "minute_text": "Passing this on for action.",
+                "to_office_id": str(onward_office.id),
+                "user_id": str(self.member_a.id),
+            },
+            format="json",
+        )
+        self.assertEqual(onward_response.status_code, 201, onward_response.content)
+        onward_minute = Minute.objects.get(id=onward_response.data["id"])
+        self.assertEqual(onward_minute.to_office_id, onward_office.id)
+        self.correspondence.refresh_from_db()
+        # The active branch assignment moves on without moving the whole record away
+        # from the origin office while sibling assignments are still pending.
+        self.assertEqual(self.correspondence.current_office_id, self.owner_office.id)
+
+        self.client.force_authenticate(user=self.md)
+        detail = self.client.get(
+            reverse("api_v1:correspondence-detail", args=[self.correspondence.id])
+        )
+        self.assertEqual(detail.status_code, 200, detail.content)
+        branches = detail.data["parallel_branches"]
+        branch_a_data = next(b for b in branches if b["target_id"] == self.office_a.id)
+        branch_b_data = next(b for b in branches if b["target_id"] == self.office_b.id)
+        self.assertEqual(branch_a_data["expected_outcome"], "onward")
+        self.assertEqual(branch_a_data["completed_outcome"], "onward")
+        self.assertEqual(branch_a_data["status"], "completed")
+        self.assertEqual(branch_b_data["status"], "pending")
+
+    def test_treat_assignment_stays_pending_until_treatment_recorded(self):
+        self.md.grade_level = "MDCS"
+        self.md.save(update_fields=["grade_level"])
+        response = self.client.post(
+            reverse("api_v1:minute-parallel-route"),
+            {
+                "correspondence_id": str(self.correspondence.id),
+                "recipients": [
+                    {
+                        "office_id": str(self.office_a.id),
+                        "purpose": "action",
+                        "minute_text": "Treat the document.",
+                        "outcome": "treat",
+                    },
+                    {
+                        "office_id": str(self.office_b.id),
+                        "purpose": "action",
+                        "minute_text": "Respond with your assessment.",
+                        "outcome": "respond",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+
+        self.client.force_authenticate(user=self.member_a)
+        plain_response = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "minute",
+                "minute_text": "Acknowledged.",
+                "user_id": str(self.member_a.id),
+            },
+            format="json",
+        )
+        self.assertEqual(plain_response.status_code, 201, plain_response.content)
+
+        self.client.force_authenticate(user=self.md)
+        detail = self.client.get(
+            reverse("api_v1:correspondence-detail", args=[self.correspondence.id])
+        )
+        branch_a_data = next(
+            b for b in detail.data["parallel_branches"]
+            if b["target_id"] == self.office_a.id
+        )
+        self.assertEqual(branch_a_data["expected_outcome"], "treat")
+        self.assertEqual(branch_a_data["status"], "pending")
+        self.assertIsNone(branch_a_data["completed_outcome"])
+
+        self.client.force_authenticate(user=self.member_a)
+        treat_response = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "treat",
+                "minute_text": "Document treated.",
+                "user_id": str(self.member_a.id),
+            },
+            format="json",
+        )
+        self.assertEqual(treat_response.status_code, 201, treat_response.content)
+
+        self.client.force_authenticate(user=self.md)
+        detail = self.client.get(
+            reverse("api_v1:correspondence-detail", args=[self.correspondence.id])
+        )
+        branch_a_data = next(
+            b for b in detail.data["parallel_branches"]
+            if b["target_id"] == self.office_a.id
+        )
+        self.assertEqual(branch_a_data["status"], "completed")
+        self.assertEqual(branch_a_data["completed_outcome"], "treat")
+
+    def test_treatment_satisfies_respond_assignment(self):
+        self.md.grade_level = "MDCS"
+        self.md.save(update_fields=["grade_level"])
+        response = self.client.post(
+            reverse("api_v1:minute-parallel-route"),
+            {
+                "correspondence_id": str(self.correspondence.id),
+                "recipients": [
+                    {
+                        "office_id": str(self.office_a.id),
+                        "purpose": "action",
+                        "minute_text": "Respond with your assessment.",
+                        "outcome": "respond",
+                    },
+                    {
+                        "office_id": str(self.office_b.id),
+                        "purpose": "action",
+                        "minute_text": "Treat the document.",
+                        "outcome": "treat",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+
+        self.client.force_authenticate(user=self.member_a)
+        treat_response = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "treat",
+                "minute_text": "Formal response recorded as a treatment.",
+                "user_id": str(self.member_a.id),
+            },
+            format="json",
+        )
+        self.assertEqual(treat_response.status_code, 201, treat_response.content)
+
+        self.client.force_authenticate(user=self.md)
+        detail = self.client.get(
+            reverse("api_v1:correspondence-detail", args=[self.correspondence.id])
+        )
+        self.assertEqual(detail.status_code, 200, detail.content)
+        branch_a_data = next(
+            b for b in detail.data["parallel_branches"]
+            if b["target_id"] == self.office_a.id
+        )
+        self.assertEqual(branch_a_data["expected_outcome"], "respond")
+        self.assertEqual(branch_a_data["status"], "completed")
+        self.assertEqual(branch_a_data["completed_action"], "treat")
+        self.assertEqual(branch_a_data["completed_outcome"], "treat")
+
+    def test_consolidation_waits_for_each_expected_outcome(self):
+        self.md.grade_level = "MDCS"
+        self.md.save(update_fields=["grade_level"])
+        response = self.client.post(
+            reverse("api_v1:minute-parallel-route"),
+            {
+                "correspondence_id": str(self.correspondence.id),
+                "merge_strategy": "all",
+                "recipients": [
+                    {
+                        "office_id": str(self.office_a.id),
+                        "purpose": "action",
+                        "minute_text": "Respond with your assessment.",
+                        "outcome": "respond",
+                    },
+                    {
+                        "office_id": str(self.office_b.id),
+                        "purpose": "action",
+                        "minute_text": "Treat the document.",
+                        "outcome": "treat",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        group = ParallelRoutingGroup.objects.get(id=response.data["parallel_group_id"])
+
+        self.client.force_authenticate(user=self.member_a)
+        respond = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "minute",
+                "minute_text": "Assessment complete.",
+                "user_id": str(self.member_a.id),
+            },
+            format="json",
+        )
+        self.assertEqual(respond.status_code, 201, respond.content)
+        group.refresh_from_db()
+        self.correspondence.refresh_from_db()
+        self.assertEqual(group.completed_branches, 1)
+        self.assertFalse(group.is_complete)
+        self.assertEqual(self.correspondence.workflow_state, "parallel")
+
+        self.client.force_authenticate(user=self.member_b)
+        treat = self.client.post(
+            reverse("api_v1:minute-list"),
+            {
+                "correspondence": str(self.correspondence.id),
+                "action_type": "treat",
+                "minute_text": "Document treated.",
+                "user_id": str(self.member_b.id),
+            },
+            format="json",
+        )
+        self.assertEqual(treat.status_code, 201, treat.content)
+        group.refresh_from_db()
+        self.correspondence.refresh_from_db()
+        self.assertEqual(group.completed_branches, 2)
+        self.assertTrue(group.is_complete)
+        self.assertEqual(self.correspondence.workflow_state, "merged")
+        self.assertEqual(self.correspondence.current_office_id, self.owner_office.id)
 
     def test_parallel_route_sets_response_deadline(self):
         self.md.grade_level = "MDCS"
@@ -434,6 +811,7 @@ class ParallelPhasesTests(TestCase):
         resp = self.client.post(
             create_url,
             {
+                "reference_number": f"NPA/RES/{uuid.uuid4().hex[:8].upper()}",
                 "subject": "Formal response memo",
                 "body_html": "<p>Our response</p>",
                 "source": "internal",

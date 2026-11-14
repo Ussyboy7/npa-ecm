@@ -109,6 +109,11 @@ class SLAConfiguration(UUIDModel, TimeStampedModel):
             )
         ]
 
+    @property
+    def target_hours(self) -> int:
+        """SLA targets are measured in hours, despite the legacy column name."""
+        return self.target_days
+
     def __str__(self):
         scope = self.division.name if self.division else "Global"
         return f"{self.name} - {self.get_priority_display()} ({scope})"
@@ -160,27 +165,79 @@ class SLAConfiguration(UUIDModel, TimeStampedModel):
             is_active=True,
         ).first()
 
+    DEFAULT_TARGET_HOURS = {
+        Priority.URGENT: 8,
+        Priority.HIGH: 24,
+        Priority.MEDIUM: 48,
+        Priority.LOW: 72,
+    }
+    DEFAULT_WARNING_THRESHOLD_PERCENT = 75
+    DEFAULT_CRITICAL_THRESHOLD_PERCENT = 90
+
+    @classmethod
+    def get_defaults(cls) -> dict[str, dict[str, int]]:
+        """Return priority -> default target/threshold settings."""
+        stored = {row.priority: row for row in SLADefault.objects.all()}
+        defaults: dict[str, dict[str, int]] = {}
+        for priority in cls.Priority.values:
+            row = stored.get(priority)
+            defaults[priority] = {
+                "target_hours": (
+                    row.target_hours if row else cls.DEFAULT_TARGET_HOURS[priority]
+                ),
+                "warning_threshold_percent": (
+                    row.warning_threshold_percent
+                    if row
+                    else cls.DEFAULT_WARNING_THRESHOLD_PERCENT
+                ),
+                "critical_threshold_percent": (
+                    row.critical_threshold_percent
+                    if row
+                    else cls.DEFAULT_CRITICAL_THRESHOLD_PERCENT
+                ),
+            }
+        return defaults
+
     @classmethod
     def get_default_sla_targets(cls) -> dict[str, int]:
-        """Return a dict of priority -> target_hours for global SLAs."""
-        defaults = {
-            cls.Priority.URGENT: 48,  # 2 days = 48 hours
-            cls.Priority.HIGH: 72,     # 3 days = 72 hours
-            cls.Priority.MEDIUM: 120,  # 5 days = 120 hours
-            cls.Priority.LOW: 168,     # 7 days = 168 hours
+        """Return a dict of priority -> target hours for the defaults."""
+        return {
+            priority: settings["target_hours"]
+            for priority, settings in cls.get_defaults().items()
         }
-        
-        for priority in cls.Priority.values:
-            sla = cls.objects.filter(
-                priority=priority,
-                correspondence_type=cls.CorrespondenceType.ALL,
-                division__isnull=True,
-                is_active=True,
-            ).first()
-            if sla:
-                defaults[priority] = sla.target_days
-        
-        return defaults
+
+    @classmethod
+    def get_default_thresholds(cls, priority: str) -> dict[str, int]:
+        """Return the default warning/critical thresholds for a priority."""
+        settings = cls.get_defaults().get(priority) or {
+            "warning_threshold_percent": cls.DEFAULT_WARNING_THRESHOLD_PERCENT,
+            "critical_threshold_percent": cls.DEFAULT_CRITICAL_THRESHOLD_PERCENT,
+        }
+        return {
+            "warning": settings["warning_threshold_percent"],
+            "critical": settings["critical_threshold_percent"],
+        }
+
+
+class SLADefault(TimeStampedModel):
+    """Organization-wide SLA defaults, kept separate from override rules."""
+
+    priority = models.CharField(
+        max_length=20,
+        choices=SLAConfiguration.Priority.choices,
+        unique=True,
+    )
+    target_hours = models.PositiveIntegerField()
+    warning_threshold_percent = models.PositiveIntegerField(default=75)
+    critical_threshold_percent = models.PositiveIntegerField(default=90)
+
+    class Meta:
+        ordering = ["priority"]
+        verbose_name = "SLA Default"
+        verbose_name_plural = "SLA Defaults"
+
+    def __str__(self):
+        return f"Default {self.get_priority_display()} SLA ({self.target_hours}h)"
 
 
 # =============================================================================

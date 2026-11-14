@@ -63,6 +63,7 @@ export const PARAGRAPH_SPACING_PRESETS = [
   { id: "compact", label: "Compact", before: "0px", after: "4px" },
   { id: "normal", label: "Normal", before: "0px", after: "8px" },
   { id: "loose", label: "Loose", before: "8px", after: "16px" },
+  { id: "custom", label: "Custom", before: null, after: null },
 ] as const;
 
 export type ParagraphSpacingId = (typeof PARAGRAPH_SPACING_PRESETS)[number]["id"];
@@ -121,14 +122,68 @@ function getBlockStyle(editor: Editor): string {
   return (editor.getAttributes(type).style as string | undefined) || "";
 }
 
+function parseBlockMargins(style: string): {
+  top: string | null;
+  right: string | null;
+  bottom: string | null;
+  left: string | null;
+} {
+  const declarations = new Map<string, string>();
+  for (const part of style.split(";")) {
+    const idx = part.indexOf(":");
+    if (idx < 0) continue;
+    const property = part.slice(0, idx).trim().toLowerCase();
+    const value = part.slice(idx + 1).trim();
+    if (property && value) declarations.set(property, value);
+  }
+
+  let [top, right, bottom, left]: Array<string | null> = [null, null, null, null];
+  const shorthand = declarations.get("margin");
+  if (shorthand) {
+    const values: string[] = [];
+    let depth = 0;
+    let token = "";
+    for (const char of shorthand.trim()) {
+      if (char === "(" ) depth += 1;
+      if (char === ")") depth = Math.max(0, depth - 1);
+      if (/\s/.test(char) && depth === 0) {
+        if (token) values.push(token);
+        token = "";
+      } else {
+        token += char;
+      }
+    }
+    if (token) values.push(token);
+    if (values.length === 1) [top, right, bottom, left] = [values[0], values[0], values[0], values[0]];
+    else if (values.length === 2) [top, right, bottom, left] = [values[0], values[1], values[0], values[1]];
+    else if (values.length === 3) [top, right, bottom, left] = [values[0], values[1], values[2], values[1]];
+    else if (values.length === 4) [top, right, bottom, left] = values as [string, string, string, string];
+  }
+
+  return {
+    top: declarations.get("margin-top") ?? top,
+    right: declarations.get("margin-right") ?? right,
+    bottom: declarations.get("margin-bottom") ?? bottom,
+    left: declarations.get("margin-left") ?? left,
+  };
+}
+
+function normalizeSpacingValue(value: string | null): string | null {
+  if (value === null) return null;
+  const normalized = value.trim().toLowerCase();
+  return /^[-+]?0(?:\.0+)?(?:[a-z%]+)?$/.test(normalized) ? "0px" : normalized;
+}
+
 export function resolveSpacingPresetId(editor: Editor): ParagraphSpacingId {
-  const style = getBlockStyle(editor);
-  const before = style.match(/margin-top:\s*([^;]+)/i)?.[1]?.trim() || null;
-  const after = style.match(/margin-bottom:\s*([^;]+)/i)?.[1]?.trim() || null;
+  const margins = parseBlockMargins(getBlockStyle(editor));
+  const before = normalizeSpacingValue(margins.top) ?? "0px";
+  const after = normalizeSpacingValue(margins.bottom) ?? "0px";
   const match = PARAGRAPH_SPACING_PRESETS.find(
-    (p) => (p.before || null) === before && (p.after || null) === after,
+    (preset) => preset.id !== "custom"
+      && (normalizeSpacingValue(preset.before) ?? "0px") === before
+      && (normalizeSpacingValue(preset.after) ?? "0px") === after,
   );
-  return match?.id ?? "none";
+  return match?.id ?? "custom";
 }
 
 export function resolveBorderPresetId(editor: Editor): ParagraphBorderId {
@@ -152,7 +207,9 @@ export function getBlockTextIndentPx(editor: Editor): number {
 }
 
 export function getBlockLineHeight(editor: Editor): string {
-  return getBlockStyle(editor).match(/line-height:\s*([^;]+)/i)?.[1]?.trim() || "1.5";
+  const lineHeight = getBlockStyle(editor).match(/line-height:\s*([^;]+)/i)?.[1]?.trim();
+  if (!lineHeight) return "1.15";
+  return ["1", "1.15", "1.5", "2"].includes(lineHeight) ? lineHeight : "custom";
 }
 
 function updateActiveBlockStyle(
@@ -226,11 +283,16 @@ export const ParagraphLayout = Extension.create({
           updateActiveBlockStyle(editor, commands, { "text-indent": value }),
       setParagraphSpacing:
         (before: string | null, after: string | null) =>
-        ({ editor, commands }: CommandProps) =>
-          updateActiveBlockStyle(editor, commands, {
+        ({ editor, commands }: CommandProps) => {
+          const margins = parseBlockMargins(getBlockStyle(editor));
+          return updateActiveBlockStyle(editor, commands, {
+            margin: null,
             "margin-top": before,
+            "margin-right": margins.right,
             "margin-bottom": after,
-          }),
+            "margin-left": margins.left,
+          });
+        },
       setParagraphBorderStyle:
         (styleBlob: string | null) =>
         ({ editor, commands }: CommandProps) => {

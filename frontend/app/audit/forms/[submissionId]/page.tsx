@@ -612,7 +612,7 @@ export default function AuditFormFillPage() {
       };
       if (payload.parallelRecipients && payload.parallelRecipients.length >= 2) {
         body.parallel_recipients = payload.parallelRecipients;
-        body.merge_strategy = payload.mergeStrategy ?? "all";
+        body.merge_strategy = payload.mergeStrategy ?? "independent";
       } else if (payload.targetOfficeId) {
         const office = offices.find((o) => o.id === payload.targetOfficeId);
         body.target_office = office?.code || payload.targetOfficeId;
@@ -626,7 +626,7 @@ export default function AuditFormFillPage() {
         { method: "POST", body: JSON.stringify(body) },
       );
       const label = payload.parallelRecipients
-        ? `parallel (${payload.parallelRecipients.length} branches)`
+        ? `assignments to ${payload.parallelRecipients.length} recipients`
         : body.target_office;
       toast.success(`Referred to ${label} via ${result.correspondence_reference ?? result.correspondence_id ?? "correspondence"}`);
       setForwardDialogOpen(false);
@@ -1060,6 +1060,7 @@ export default function AuditFormFillPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            {auditState !== "AWAITING_CERTIFICATION" && (
             <Button
               size="compact"
               variant="outline"
@@ -1125,6 +1126,8 @@ export default function AuditFormFillPage() {
               )}
               Send for Certification
             </Button>
+            )}
+            {auditState === "AWAITING_CERTIFICATION" && (
             <Button
               size="compact"
               disabled={!caseId || actionLoading === "certify"}
@@ -1158,6 +1161,7 @@ export default function AuditFormFillPage() {
               )}
               Certify
             </Button>
+            )}
           </div>
         </div>
       )}

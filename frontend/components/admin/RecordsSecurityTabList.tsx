@@ -19,35 +19,50 @@ function recordsTabActive(tab: string) {
 
 function RecordsSecurityTabListInner() {
   const visibility = useSidebarVisibility();
-  const tabs: HubTabLink[] = [
-    {
-      href: "/admin/records-governance?tab=overview",
-      label: "Overview",
-      isActive: recordsTabActive("overview"),
-    },
-    {
-      href: "/admin/records-governance?tab=retention",
-      label: "Retention",
-      isActive: recordsTabActive("retention"),
-    },
-    {
-      href: "/admin/records-governance?tab=holds",
-      label: "Legal Holds",
-      isActive: recordsTabActive("holds"),
-    },
-    {
-      href: "/admin/records-governance?tab=disposal",
-      label: "Disposal",
-      isActive: recordsTabActive("disposal"),
-    },
-  ];
-  if (visibility.showDrmPolicies) {
+  const showRecords =
+    visibility.showRecordsGovernance || visibility.showDrmPolicies;
+  const tabs: HubTabLink[] = [];
+
+  if (showRecords) {
+    tabs.push(
+      {
+        href: "/admin/records-governance?tab=overview",
+        label: "Overview",
+        isActive: recordsTabActive("overview"),
+      },
+      {
+        href: "/admin/records-governance?tab=retention",
+        label: "Retention",
+        isActive: recordsTabActive("retention"),
+      },
+      {
+        href: "/admin/records-governance?tab=holds",
+        label: "Legal Holds",
+        isActive: recordsTabActive("holds"),
+      },
+      {
+        href: "/admin/records-governance?tab=disposal",
+        label: "Disposal",
+        isActive: recordsTabActive("disposal"),
+      },
+    );
+    if (visibility.showDrmPolicies) {
+      tabs.push({
+        href: "/admin/records-governance/drm",
+        label: "DRM",
+        isActive: recordsTabActive("drm"),
+      });
+    }
+  }
+
+  if (visibility.showAuditCompliance) {
     tabs.push({
-      href: "/admin/records-governance/drm",
-      label: "DRM",
-      isActive: recordsTabActive("drm"),
+      href: "/admin/records-governance?tab=audit",
+      label: "Audit",
+      isActive: recordsTabActive("audit"),
     });
   }
+
   return <HubTabList tabs={tabs} />;
 }
 

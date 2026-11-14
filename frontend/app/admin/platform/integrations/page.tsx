@@ -8,6 +8,7 @@ import { HRMSConnectorManager } from "@/components/integrations/HRMSConnectorMan
 import { IntegrationLogsViewer } from "@/components/integrations/IntegrationLogsViewer";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { PlatformTabList } from "@/components/admin/PlatformTabList";
 import { Button } from "@/components/ui/button";
 import { Webhook, Mail, Database, Activity, Users } from "lucide-react";
@@ -24,7 +25,8 @@ export default function IntegrationHubPage() {
       icon={Webhook}
       
     >
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
+        <AdminHubTabList />
         <PlatformTabList />
       </div>
       <PermissionGate

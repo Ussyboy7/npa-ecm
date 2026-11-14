@@ -100,6 +100,35 @@ export const hasTokens = () => {
   return Boolean(token);
 };
 
+/**
+ * Re-establish the auth cookies from a session that still has tokens in storage.
+ *
+ * `proxy.ts` gates every non-public route on the access cookie, but tokens are
+ * refreshed into localStorage; once the cookie lapses, a signed-in user gets
+ * bounced to /login on every deep link. Returns true when the session is
+ * usable afterwards (refreshing first if the stored token has expired).
+ */
+export const restoreAuthCookies = async (): Promise<boolean> => {
+  if (!isBrowser()) return false;
+  const storage = getStorage();
+  const accessToken = storage?.getItem(ACCESS_TOKEN_KEY);
+  const refreshToken = storage?.getItem(REFRESH_TOKEN_KEY);
+  if (!accessToken || !refreshToken) return false;
+
+  const expiresAt = Number(storage?.getItem(ACCESS_TOKEN_EXP_KEY) || 0);
+  if (expiresAt && expiresAt - 60_000 <= Date.now()) {
+    // Expired (or about to): the refresh flow rewrites both cookies on success.
+    return attemptTokenRefresh();
+  }
+
+  const ttlSeconds = expiresAt
+    ? Math.max(60, Math.floor((expiresAt - Date.now()) / 1000))
+    : DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
+  setCookieValue(ACCESS_COOKIE_NAME, accessToken, ttlSeconds);
+  setCookieValue(REFRESH_COOKIE_NAME, refreshToken, DEFAULT_REFRESH_TOKEN_TTL_SECONDS);
+  return true;
+};
+
 export const getBaseUrl = (): string => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL;
   if (!baseUrl || baseUrl.trim() === "") {
@@ -282,7 +311,7 @@ export const login = async (username: string, password: string): Promise<LoginSt
 export const verifyLoginMFA = async (
   challengeId: string,
   code: string,
-  method: "email" | "totp" = "email"
+  method: "email" | "totp" | "backup_code" = "email"
 ): Promise<LoginResponse> => {
   const data = await apiFetch<LoginResponse>("/accounts/auth/token/mfa/", {
     method: "POST",

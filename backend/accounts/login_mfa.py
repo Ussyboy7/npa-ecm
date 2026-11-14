@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-import pyotp
 from django.conf import settings
 from django.core.cache import cache
 
@@ -13,6 +12,7 @@ from accounts.models import LoginSecuritySettings, SealOTP, User
 
 
 MFA_CHALLENGE_TTL = 300  # 5 minutes
+MFA_MAX_ATTEMPTS = 5
 
 
 def get_or_create_login_security(user: User) -> LoginSecuritySettings:
@@ -39,6 +39,10 @@ def available_login_mfa_methods(user: User, security: LoginSecuritySettings) -> 
         methods.append("email")
     if security.totp_secret and security.totp_confirmed:
         methods.append("totp")
+    from accounts.services import BackupCodeService
+
+    if BackupCodeService.remaining(user):
+        methods.append("backup_code")
     return methods
 
 
@@ -46,7 +50,7 @@ def create_mfa_challenge(user: User) -> dict[str, Any]:
     challenge_id = str(uuid.uuid4())
     cache.set(
         f"login_mfa:{challenge_id}",
-        {"user_id": str(user.id)},
+        {"user_id": str(user.id), "attempts": 0},
         timeout=MFA_CHALLENGE_TTL,
     )
     security = get_or_create_login_security(user)
@@ -71,13 +75,30 @@ def clear_mfa_challenge(challenge_id: str) -> None:
     cache.delete(f"login_mfa:{challenge_id}")
 
 
+def record_mfa_failure(challenge_id: str) -> int:
+    """Count a failed attempt for a challenge and return the new total."""
+    key = f"login_mfa:{challenge_id}"
+    payload = cache.get(key)
+    if not payload:
+        return MFA_MAX_ATTEMPTS
+    attempts = int(payload.get("attempts", 0)) + 1
+    payload["attempts"] = attempts
+    cache.set(key, payload, timeout=MFA_CHALLENGE_TTL)
+    return attempts
+
+
 def verify_login_mfa_code(user: User, method: str, code: str) -> bool:
     security = get_or_create_login_security(user)
     if method == "totp":
         if not security.totp_secret or not security.totp_confirmed:
             return False
-        totp = pyotp.TOTP(security.totp_secret)
-        return totp.verify(code, valid_window=1)
+        from accounts.services import TotpVerificationService
+
+        return TotpVerificationService.verify_and_consume(security, code)
+    if method == "backup_code":
+        from accounts.services import BackupCodeService
+
+        return BackupCodeService.consume(user, code)
     if method == "email":
         otp = (
             SealOTP.objects.filter(user=user, purpose="login", is_used=False)
@@ -98,7 +119,7 @@ def send_login_email_otp(user: User) -> str:
 
     otp = SealOTP.create_for_user(user=user, purpose="login", validity_minutes=10)
     send_mail(
-        subject=f"NPA ECM - Login Verification Code: {otp.code}",
+        subject="NPA ECM - Login Verification Code",
         message=(
             f"Your NPA ECM login verification code is:\n\n{otp.code}\n\n"
             "This code expires in 10 minutes.\n\n"

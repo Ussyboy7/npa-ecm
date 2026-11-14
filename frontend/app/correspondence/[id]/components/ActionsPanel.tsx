@@ -2,9 +2,27 @@
 
 import { useMemo, useCallback, useState, useEffect } from "react";
 import { logError } from "@/lib/client-logger";
-import { hasRolePermission } from "@/lib/permissions";
+import { getPermissionProfile, hasRolePermission } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   MessageSquare,
   Download,
@@ -51,6 +69,7 @@ interface ActionsPanelProps {
   onOpenMinuteModal?: () => void;
   onOpenTreatmentModal?: () => void;
   onOpenCompletionModal?: () => void;
+  onOpenNoResponseCompletionModal?: () => void;
   onOpenDelegateModal?: () => void;
   onDownloadCompletionPackage?: (filename: string) => Promise<void>;
   onSyncFromApi?: () => Promise<unknown>;
@@ -70,7 +89,7 @@ export function ActionsPanel({
   isCompleted = false,
   isCurrentUserTurn = false,
   isForInformationOnly = false,
-  distributionPurpose = 'action',
+  distributionPurpose = null,
   turnRestrictedDisabled = false,
   hasCompletionPackage,
   completionGeneratedAt,
@@ -82,6 +101,7 @@ export function ActionsPanel({
   onOpenMinuteModal,
   onOpenTreatmentModal,
   onOpenCompletionModal,
+  onOpenNoResponseCompletionModal,
   onOpenDelegateModal,
   onDownloadCompletionPackage,
   onOpenLinkCaseModal,
@@ -123,6 +143,105 @@ export function ActionsPanel({
 
   const [markedAsRead, setMarkedAsRead] = useState(initialMarkedAsRead);
   const [returning, setReturning] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveLevel, setArchiveLevel] = useState<string>("");
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [refileOpen, setRefileOpen] = useState(false);
+  const [refileLevel, setRefileLevel] = useState<string>("");
+  const [refileReason, setRefileReason] = useState("");
+  const [isRefiling, setIsRefiling] = useState(false);
+  const [unarchiveOpen, setUnarchiveOpen] = useState(false);
+  const [unarchiveReason, setUnarchiveReason] = useState("");
+  const [isUnarchiving, setIsUnarchiving] = useState(false);
+
+  // Filing authority is per level; the general archive permission alone is not
+  // enough, and the server also checks the memo against the user's org scope.
+  const archiveLevels = useMemo(
+    () => getPermissionProfile(activeUser).allowedArchiveLevels,
+    [activeUser],
+  );
+
+  const openArchiveDialog = useCallback(() => {
+    const existingLevel = correspondence?.archiveLevel;
+    const preferred =
+      existingLevel && archiveLevels.includes(existingLevel) ? existingLevel : archiveLevels[0] ?? "";
+    setArchiveLevel(preferred);
+    setArchiveOpen(true);
+  }, [archiveLevels, correspondence?.archiveLevel]);
+
+  // Re-filing moves the same record; only levels other than the current one.
+  const refileLevels = useMemo(
+    () => archiveLevels.filter((level) => level !== correspondence?.archiveLevel),
+    [archiveLevels, correspondence?.archiveLevel],
+  );
+
+  const openRefileDialog = useCallback(() => {
+    setRefileLevel(refileLevels[0] ?? "");
+    setRefileReason("");
+    setRefileOpen(true);
+  }, [refileLevels]);
+
+  const handleRefile = useCallback(async () => {
+    if (!correspondence || !refileLevel || !refileReason.trim()) return;
+    setIsRefiling(true);
+    try {
+      await apiFetch(`/correspondence/items/${correspondence.id}/refile/`, {
+        method: "POST",
+        body: JSON.stringify({ archive_level: refileLevel, reason: refileReason.trim() }),
+      });
+      setRefileOpen(false);
+      toast.success(`Re-filed at ${refileLevel} level`);
+      _onSyncFromApi?.();
+    } catch (error) {
+      logError("Failed to re-file correspondence", error);
+      toast.error(
+        error instanceof Error ? error.message : "Could not re-file this correspondence",
+      );
+    } finally {
+      setIsRefiling(false);
+    }
+  }, [correspondence, refileLevel, refileReason, _onSyncFromApi]);
+
+  const handleUnarchive = useCallback(async () => {
+    if (!correspondence || !unarchiveReason.trim()) return;
+    setIsUnarchiving(true);
+    try {
+      await apiFetch(`/correspondence/items/${correspondence.id}/unarchive/`, {
+        method: "POST",
+        body: JSON.stringify({ reason: unarchiveReason.trim() }),
+      });
+      setUnarchiveOpen(false);
+      setUnarchiveReason("");
+      toast.success("Returned to records");
+      _onSyncFromApi?.();
+    } catch (error) {
+      logError("Failed to return correspondence to records", error);
+      toast.error(error instanceof Error ? error.message : "Could not return this record to records");
+    } finally {
+      setIsUnarchiving(false);
+    }
+  }, [correspondence, unarchiveReason, _onSyncFromApi]);
+
+  const handleArchive = useCallback(async () => {
+    if (!correspondence || !archiveLevel) return;
+    setIsArchiving(true);
+    try {
+      await apiFetch(`/correspondence/items/${correspondence.id}/archive/`, {
+        method: "POST",
+        body: JSON.stringify({ archive_level: archiveLevel }),
+      });
+      setArchiveOpen(false);
+      toast.success(`Archived at ${archiveLevel} level`);
+      _onSyncFromApi?.();
+    } catch (error) {
+      logError("Failed to archive", error);
+      toast.error(
+        error instanceof Error ? error.message : "Could not archive this correspondence",
+      );
+    } finally {
+      setIsArchiving(false);
+    }
+  }, [archiveLevel, correspondence, _onSyncFromApi]);
 
   // Sync markedAsRead when initialMarkedAsRead changes (e.g., after refreshDetail)
   useEffect(() => {
@@ -187,6 +306,9 @@ export function ActionsPanel({
   const nonRecalledMinutes = minutes.filter(m => !m.isRecalled);
   const allMinutesAcknowledged = nonRecalledMinutes.length > 0 && 
     nonRecalledMinutes.every(m => m.acknowledgedAt);
+  const allRoutedMinutesAcknowledged = nonRecalledMinutes
+    .filter((minute) => minute.toOfficeId || minute.toUserId)
+    .every((minute) => minute.acknowledgedAt);
   const panelSpacing = compact ? "space-y-5" : "space-y-4";
   const mutedNoticeClass = compact
     ? "px-3 py-2.5 bg-muted/30 rounded-xl"
@@ -398,7 +520,7 @@ export function ActionsPanel({
       );
     }
   } else if (isRoutedUser) {
-    // Upward/Lateral: Endorse & Forward
+    // Upward/Lateral: Endorse & Forward, or record a treatment response
     if (isForInformationOnly) {
       mainActions = (
         <div className={`w-full ${mutedNoticeClass}`}>
@@ -422,21 +544,37 @@ export function ActionsPanel({
       );
     } else {
       mainActions = (
-        <Button
-          className={primaryButtonClass}
-          variant="outline"
-          onClick={onOpenMinuteModal}
-          disabled={turnRestrictedDisabled}
-        >
-          <ArrowUp className="h-4 w-4 mr-2" />
-          Endorse & Forward
-        </Button>
+        <div className={pairedActionsClass}>
+          <Button
+            className={primaryButtonClass}
+            variant="outline"
+            onClick={onOpenMinuteModal}
+            disabled={turnRestrictedDisabled}
+          >
+            <ArrowUp className="h-4 w-4 mr-2" />
+            Endorse & Forward
+          </Button>
+          <Button
+            className={primaryButtonClass}
+            variant="secondary"
+            onClick={onOpenTreatmentModal}
+            disabled={turnRestrictedDisabled}
+          >
+            <ArrowRight className="h-4 w-4 mr-2" />
+            Treat & Respond
+          </Button>
+        </div>
       );
     }
   }
 
-  const showComplete =
-    isRoutedUser && !isForInformationOnly && allMinutesAcknowledged;
+  const canComplete =
+    isRoutedUser &&
+    !isForInformationOnly &&
+    hasRolePermission(activeUser, "can_minute_correspondence");
+  const showComplete = canComplete && allMinutesAcknowledged;
+  const showNoResponseComplete =
+    canComplete && nonRecalledMinutes.length > 0 && allRoutedMinutesAcknowledged;
   const showCompleteHint =
     isRoutedUser &&
     !isForInformationOnly &&
@@ -506,14 +644,25 @@ export function ActionsPanel({
           onClick={onOpenCompletionModal}
           disabled={turnRestrictedDisabled}
         >
-          <Archive className="h-4 w-4 mr-2 opacity-70" />
-          Complete & Archive
+          <CheckCircle className="h-4 w-4 mr-2 opacity-70" />
+          Complete correspondence
+        </Button>
+      )}
+      {showNoResponseComplete && (
+        <Button
+          variant={compact ? "ghost" : "outline"}
+          className={compact ? quietRowClass : "w-full"}
+          onClick={onOpenNoResponseCompletionModal}
+          disabled={turnRestrictedDisabled}
+        >
+          <CheckCircle className="h-4 w-4 mr-2 opacity-70" />
+          Finish — no reply required
         </Button>
       )}
       {showCompleteHint && (
         <div className={cn(compact ? "px-2.5 py-1.5" : mutedNoticeClass)}>
           <p className={corrType.caption}>
-            {acknowledgedCount}/{nonRecalledMinutes.length} minutes acknowledged — Complete unlocks when all are acknowledged.
+            {acknowledgedCount}/{nonRecalledMinutes.length} minutes acknowledged. Complete requires all handoffs acknowledged; finish without a reply records the final action and closes this memo.
           </p>
         </div>
       )}
@@ -611,23 +760,177 @@ export function ActionsPanel({
           )}
 
           {canArchiveCorrespondence(correspondence) && (
-            <Button
-              className={primaryButtonClass}
-              variant="outline"
-              onClick={async () => {
-                try {
-                  await apiFetch(`/correspondence/items/${correspondence.id}/archive/`, {
-                    method: "POST",
-                  });
-                  _onSyncFromApi?.();
-                } catch (error) {
-                  logError("Failed to archive", error);
+            <>
+              <Button
+                className={primaryButtonClass}
+                variant="outline"
+                onClick={openArchiveDialog}
+                disabled={archiveLevels.length === 0}
+                title={
+                  archiveLevels.length === 0
+                    ? "You do not have permission to archive at any level"
+                    : undefined
                 }
-              }}
-            >
-              <Archive className="h-4 w-4 mr-2" />
-              Archive
-            </Button>
+              >
+                <Archive className="h-4 w-4 mr-2" />
+                Archive
+              </Button>
+              <AlertDialog open={archiveOpen} onOpenChange={(open) => !isArchiving && setArchiveOpen(open)}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>File this correspondence</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Choose the level this record belongs to. You can only file at a level you are
+                      authorised for and within your organisation scope.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor={`archive-level-${correspondence.id}`}>
+                      Archive level
+                    </label>
+                    <Select value={archiveLevel} onValueChange={setArchiveLevel} disabled={isArchiving}>
+                      <SelectTrigger id={`archive-level-${correspondence.id}`}>
+                        <SelectValue placeholder="Select a level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {archiveLevels.map((level) => (
+                          <SelectItem key={level} value={level} className="capitalize">
+                            {level}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isArchiving}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={isArchiving || !archiveLevel}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void handleArchive();
+                      }}
+                    >
+                      {isArchiving ? "Archiving…" : "Archive"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+
+          {correspondence.status === "archived" && archiveLevels.length > 0 && (
+            <>
+              <Button className={primaryButtonClass} variant="outline" onClick={() => { setUnarchiveReason(""); setUnarchiveOpen(true); }}>
+                <Undo2 className="h-4 w-4 mr-2" />
+                Return to records
+              </Button>
+              <AlertDialog open={unarchiveOpen} onOpenChange={(open) => !isUnarchiving && setUnarchiveOpen(open)}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Return this record to records?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This restores the status the record had before archiving, clears its active filing level, and records your reason in the audit trail.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor={`unarchive-reason-${correspondence.id}`}>Reason *</label>
+                    <Textarea
+                      id={`unarchive-reason-${correspondence.id}`}
+                      value={unarchiveReason}
+                      onChange={(event) => setUnarchiveReason(event.target.value)}
+                      placeholder="Why should this record return to records?"
+                      rows={3}
+                      maxLength={2000}
+                      disabled={isUnarchiving}
+                    />
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isUnarchiving}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction disabled={isUnarchiving || !unarchiveReason.trim()} onClick={(event) => { event.preventDefault(); void handleUnarchive(); }}>
+                      {isUnarchiving ? "Returning…" : "Return to records"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+
+          {correspondence.status === "archived" && refileLevels.length > 0 && (
+            <>
+              <Button className={primaryButtonClass} variant="outline" onClick={openRefileDialog}>
+                <FolderTree className="h-4 w-4 mr-2" />
+                Change filing level
+              </Button>
+              <AlertDialog
+                open={refileOpen}
+                onOpenChange={(open) => !isRefiling && setRefileOpen(open)}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Re-file this record</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Move this same record to another filing level. The change is recorded in the
+                      audit trail with your reason; no duplicate record is created.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label
+                        className="text-sm font-medium"
+                        htmlFor={`refile-level-${correspondence.id}`}
+                      >
+                        New archive level
+                      </label>
+                      <Select
+                        value={refileLevel}
+                        onValueChange={setRefileLevel}
+                        disabled={isRefiling}
+                      >
+                        <SelectTrigger id={`refile-level-${correspondence.id}`}>
+                          <SelectValue placeholder="Select a level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {refileLevels.map((level) => (
+                            <SelectItem key={level} value={level} className="capitalize">
+                              {level}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        className="text-sm font-medium"
+                        htmlFor={`refile-reason-${correspondence.id}`}
+                      >
+                        Reason *
+                      </label>
+                      <Textarea
+                        id={`refile-reason-${correspondence.id}`}
+                        value={refileReason}
+                        onChange={(event) => setRefileReason(event.target.value)}
+                        placeholder="Why does this record belong at a different level?"
+                        rows={3}
+                        maxLength={2000}
+                        disabled={isRefiling}
+                      />
+                    </div>
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isRefiling}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={isRefiling || !refileLevel || !refileReason.trim()}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void handleRefile();
+                      }}
+                    >
+                      {isRefiling ? "Re-filing…" : "Re-file"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
           )}
         </div>
       ) : (
@@ -650,14 +953,18 @@ export function ActionsPanel({
                 Your turn
               </p>
               <p className={cn(corrType.caption, "mt-0.5")}>
-                Document first — then Treat, Complete, or Delegate below.
+                Choose an action below, or hand this on.
               </p>
             </div>
           ) : !isForInformationOnly ? (
             <div className={mutedNoticeClass}>
               <div className={cn("flex items-start gap-2", corrType.meta)}>
                 <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                <span>Waiting on another office. You can still review the document and thread.</span>
+                <span>
+                  {correspondence.currentOfficeName
+                    ? `With ${correspondence.currentOfficeName} — actions unlock when it reaches you. You can still review the document and thread.`
+                    : "Waiting on the current office — actions unlock when it reaches you. You can still review the document and thread."}
+                </span>
               </div>
             </div>
           ) : null}

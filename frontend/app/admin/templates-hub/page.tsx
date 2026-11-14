@@ -23,19 +23,12 @@ import {
   correspondenceQueueBadgeClass,
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
-  correspondenceQueueListStackClass,
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
 } from "@/components/shared/registry-queue-styles";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,7 +61,6 @@ import {
   GitBranch,
   FormInput,
   Search,
-  MoreVertical,
   Edit,
   Copy,
   Power,
@@ -76,15 +68,18 @@ import {
   FileEdit,
   MessageSquare,
   LayoutTemplate,
+  X,
 } from "lucide-react";
-import { useToast } from "@/components/ui/sonner";
 import { toast as sonnerToast } from "@/components/ui/sonner";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { CaseTemplatesPanel, CASE_TEMPLATE_TYPE_FILTERS } from "@/components/cases/CaseTemplatesPanel";
+import { ReferencePanel } from "@/components/templates/ReferencePanel";
+import { TemplateHubRowActions } from "@/components/templates/TemplateHubRowActions";
 import { getCaseTemplates } from "@/lib/api/cases";
+import { listReferenceSchemes } from "@/lib/api/reference-schemes";
 
 // Scope configuration
 const scopeOptions: { value: TemplateScope; label: string }[] = [
@@ -95,7 +90,15 @@ const scopeOptions: { value: TemplateScope; label: string }[] = [
   { value: "user", label: "Personal" },
 ];
 
-type HubTab = "documents" | "minutes" | "workflows" | "forms" | "cases";
+type HubTab = "documents" | "minutes" | "workflows" | "forms" | "cases" | "references";
+
+const FORM_CATEGORY_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "procurement", label: "Procurement" },
+  { value: "audit", label: "Audit" },
+  { value: "finance", label: "Finance" },
+  { value: "general", label: "General" },
+];
 
 type WorkflowGroupKey = "upward" | "downward" | "special";
 
@@ -138,7 +141,8 @@ function workflowStepChain(steps: WorkflowStep[]): string {
 function TemplatesHubForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { toast } = useToast();
+  const urlTab = searchParams.get("tab");
+  const urlQuery = searchParams.get("q") ?? "";
   const { directorates, divisions, departments, isSyncing } = useOrganization();
   const { users: organizationUsers } = useOrgUsers();
   const { currentUser, hydrated: userHydrated } = useCurrentUser();
@@ -153,7 +157,7 @@ function TemplatesHubForm() {
   }, [currentUser, permissions.canAccessAdministration, permissions.canManageOrgStructure]);
   const allowedTabs = useMemo<HubTab[]>(
     () => (canAccessAdvancedTemplates
-      ? ["documents", "minutes", "cases", "workflows", "forms"]
+      ? ["documents", "minutes", "cases", "workflows", "forms", "references"]
       : ["documents", "minutes", "cases"]),
     [canAccessAdvancedTemplates],
   );
@@ -168,7 +172,8 @@ function TemplatesHubForm() {
       raw === "minutes" ||
       raw === "cases" ||
       raw === "workflows" ||
-      raw === "forms"
+      raw === "forms" ||
+      raw === "references"
     ) {
       if (allowedTabs.includes(raw)) {
         setActiveTab(raw);
@@ -196,27 +201,48 @@ function TemplatesHubForm() {
 
   // ============ DOCUMENT TEMPLATES STATE ============
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
-  const [activeScope, setActiveScope] = useState<TemplateScope>("organization");
-  const [selectedScopeId, setSelectedScopeId] = useState<string | null>(null);
+  const [activeScope, setActiveScope] = useState<TemplateScope>(() => {
+    const requested = searchParams.get("scope");
+    return scopeOptions.some((option) => option.value === requested)
+      ? (requested as TemplateScope)
+      : "organization";
+  });
+  const [selectedScopeId, setSelectedScopeId] = useState<string | null>(
+    searchParams.get("scope_id"),
+  );
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [contentHtml, setContentHtml] = useState("");
   const [activeTemplateType, setActiveTemplateType] = useState<TemplateType>("document");
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
-  const [templateListSearch, setTemplateListSearch] = useState("");
+  const [documentSearch, setDocumentSearch] = useState(
+    urlTab === "documents" || !urlTab ? urlQuery : "",
+  );
+  const [minuteSearch, setMinuteSearch] = useState(urlTab === "minutes" ? urlQuery : "");
+  const [editorSnapshot, setEditorSnapshot] = useState<{
+    title: string;
+    description: string;
+    contentHtml: string;
+  } | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // ============ WORKFLOW TEMPLATES STATE ============
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
   const [workflowLoading, setWorkflowLoading] = useState(true);
-  const [workflowSearch, setWorkflowSearch] = useState("");
+  const [workflowSearch, setWorkflowSearch] = useState(urlTab === "workflows" ? urlQuery : "");
   const [workflowPreviewId, setWorkflowPreviewId] = useState<string | null>(null);
 
   // ============ FORM TEMPLATES STATE ============
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
   const [formLoading, setFormLoading] = useState(true);
-  const [formSearch, setFormSearch] = useState("");
-  const [formCategoryFilter, setFormCategoryFilter] = useState<string>("all");
+  const [formSearch, setFormSearch] = useState(urlTab === "forms" ? urlQuery : "");
+  const [formCategoryFilter, setFormCategoryFilter] = useState<string>(() => {
+    const requested = searchParams.get("category");
+    return requested && FORM_CATEGORY_FILTERS.some((option) => option.value === requested)
+      ? requested
+      : "all";
+  });
   const [formPreviewId, setFormPreviewId] = useState<string | null>(null);
   const [_deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [showFormDeleteConfirm, setShowFormDeleteConfirm] = useState(false);
@@ -227,9 +253,40 @@ function TemplatesHubForm() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   // ============ CASE TEMPLATES STATE ============
-  const [caseSearch, setCaseSearch] = useState("");
-  const [caseTypeFilter, setCaseTypeFilter] = useState("all");
+  const [caseSearch, setCaseSearch] = useState(urlTab === "cases" ? urlQuery : "");
+  const [caseTypeFilter, setCaseTypeFilter] = useState(() => {
+    const requested = searchParams.get("case_type");
+    return requested && CASE_TEMPLATE_TYPE_FILTERS.some((option) => option.value === requested)
+      ? requested
+      : "all";
+  });
   const [caseTemplateCount, setCaseTemplateCount] = useState(0);
+  const [caseLoading, setCaseLoading] = useState(true);
+  const [referenceStats, setReferenceStats] = useState<{
+    total: number;
+    active: number;
+    classifications: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!canAccessAdvancedTemplates) return;
+    let cancelled = false;
+    listReferenceSchemes({ pageSize: 1 })
+      .then((data) => {
+        if (cancelled) return;
+        setReferenceStats((current) => ({
+          total: data.count,
+          active: current?.active ?? 0,
+          classifications: current?.classifications ?? 0,
+        }));
+      })
+      .catch((error) => {
+        if (!cancelled) logError("Failed to load reference scheme count", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccessAdvancedTemplates]);
 
   // Form creation dialog
   const [showFormCreate, setShowFormCreate] = useState(false);
@@ -245,7 +302,7 @@ function TemplatesHubForm() {
   );
 
   // ============ DOCUMENT TEMPLATES LOGIC ============
-  const [_templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
   
   const refreshTemplates = async () => {
     setTemplatesLoading(true);
@@ -254,7 +311,7 @@ function TemplatesHubForm() {
       setTemplates([...loaded]);
     } catch (error: unknown) {
       logError('Failed to load templates:', error);
-      toast({ title: "Error", description: "Failed to load templates. Please try again.", variant: "destructive" });
+      sonnerToast.error("Could not load templates", { description: "Please try again." });
     } finally {
       setTemplatesLoading(false);
     }
@@ -262,7 +319,6 @@ function TemplatesHubForm() {
 
   useEffect(() => {
     refreshTemplates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -271,7 +327,7 @@ function TemplatesHubForm() {
     setDescription("");
     setContentHtml("");
     setTemplateEditorOpen(false);
-    setTemplateListSearch("");
+    setEditorSnapshot(null);
     setWorkflowPreviewId(null);
     setFormPreviewId(null);
   }, [activeScope, selectedScopeId, activeTemplateType, activeTab]);
@@ -285,15 +341,17 @@ function TemplatesHubForm() {
     });
   }, [templates, activeScope, selectedScopeId, activeTemplateType]);
 
+  const templateSearch = activeTab === "minutes" ? minuteSearch : documentSearch;
+
   const filteredScopedTemplates = useMemo(() => {
-    const query = templateListSearch.trim().toLowerCase();
+    const query = templateSearch.trim().toLowerCase();
     if (!query) return scopedTemplates;
     return scopedTemplates.filter(
       (template) =>
         template.title.toLowerCase().includes(query) ||
         (template.description?.toLowerCase().includes(query) ?? false),
     );
-  }, [scopedTemplates, templateListSearch]);
+  }, [scopedTemplates, templateSearch]);
 
   const scopeEntityOptions = useMemo(() => {
     switch (activeScope) {
@@ -317,10 +375,32 @@ function TemplatesHubForm() {
       setSelectedScopeId(null);
       return;
     }
-    if (!selectedScopeId && scopeEntityOptions.length > 0) {
+    if (scopeEntityOptions.length === 0) return;
+    if (!selectedScopeId || !scopeEntityOptions.some((option) => option.id === selectedScopeId)) {
       setSelectedScopeId(scopeEntityOptions[0].id);
     }
   }, [activeScope, scopeEntityOptions, selectedScopeId]);
+
+  const isEditorDirty =
+    templateEditorOpen &&
+    editorSnapshot !== null &&
+    (title !== editorSnapshot.title ||
+      description !== editorSnapshot.description ||
+      contentHtml !== editorSnapshot.contentHtml);
+
+  const closeTemplateEditor = () => {
+    setTemplateEditorOpen(false);
+    setSelectedTemplateId(null);
+    setEditorSnapshot(null);
+  };
+
+  const requestCloseTemplateEditor = () => {
+    if (isEditorDirty) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    closeTemplateEditor();
+  };
 
   const handleTemplateSelect = (templateId: string) => {
     const template = templates.find((item) => item.id as string === templateId);
@@ -330,32 +410,39 @@ function TemplatesHubForm() {
     setTitle(template.title);
     setDescription(template.description ?? "");
     setContentHtml(template.contentHtml);
+    setEditorSnapshot({
+      title: template.title,
+      description: template.description ?? "",
+      contentHtml: template.contentHtml,
+    });
     setTemplateEditorOpen(true);
   };
 
   const handleCreateNewDocTemplate = useCallback(() => {
+    const defaultTitle = `New ${activeTemplateType === "minute" ? "Minute" : "Document"} Template`;
+    const defaultContent =
+      activeTemplateType === "minute"
+        ? "Please review and revert with your feedback at the earliest convenience."
+        : "";
     setSelectedTemplateId(null);
-    setTitle(`New ${activeTemplateType === "minute" ? "Minute" : "Document"} Template`);
+    setTitle(defaultTitle);
     setDescription("");
-    if (activeTemplateType === "minute") {
-      setContentHtml("Please review and revert with your feedback at the earliest convenience.");
-    } else {
-      setContentHtml("");
-    }
+    setContentHtml(defaultContent);
+    setEditorSnapshot({ title: defaultTitle, description: "", contentHtml: defaultContent });
     setTemplateEditorOpen(true);
   }, [activeTemplateType]);
 
   const handleSaveDocTemplate = async () => {
     if (!currentUser) {
-      toast({ title: "No current user found", description: "Unable to save template without admin context.", variant: "destructive" });
+      sonnerToast.error("No current user found", { description: "Unable to save template without admin context." });
       return;
     }
     if (!title.trim()) {
-      toast({ title: "Template title required", description: "Add a descriptive title for the template.", variant: "destructive" });
+      sonnerToast.error("Template title required", { description: "Add a descriptive title for the template." });
       return;
     }
     if (!contentHtml || contentHtml.trim().length === 0) {
-      toast({ title: "Template body empty", description: "Provide rich text content for the template.", variant: "destructive" });
+      sonnerToast.error("Template body empty", { description: "Provide rich text content for the template." });
       return;
     }
 
@@ -375,7 +462,8 @@ function TemplatesHubForm() {
         };
         await saveTemplate(updated);
         await refreshTemplates();
-        toast({ title: "Template updated", description: `${updated.title} saved successfully.` });
+        setEditorSnapshot({ title: title.trim(), description: description.trim(), contentHtml });
+        sonnerToast.success("Template updated", { description: `${updated.title} saved successfully.` });
       } else {
         const created = await createTemplate({
           scope: activeScope,
@@ -390,11 +478,12 @@ function TemplatesHubForm() {
         });
         await refreshTemplates();
         setSelectedTemplateId(created.id);
-        toast({ title: "Template created", description: `${created.title} is now available.` });
+        setEditorSnapshot({ title: title.trim(), description: description.trim(), contentHtml });
+        sonnerToast.success("Template created", { description: `${created.title} is now available.` });
       }
     } catch (error: unknown) {
       logError('Failed to save template:', error);
-      toast({ title: "Error", description: "Failed to save template. Please try again.", variant: "destructive" });
+      sonnerToast.error("Could not save template", { description: "Please try again." });
     }
   };
 
@@ -403,12 +492,11 @@ function TemplatesHubForm() {
     try {
       await deleteTemplate(selectedTemplateId);
       await refreshTemplates();
-      setTemplateEditorOpen(false);
-      setSelectedTemplateId(null);
-      toast({ title: "Template deleted", description: "Template removed successfully." });
+      closeTemplateEditor();
+      sonnerToast.success("Template deleted", { description: "Template removed successfully." });
     } catch (error: unknown) {
       logError('Failed to delete template:', error);
-      toast({ title: "Error", description: "Failed to delete template. Please try again.", variant: "destructive" });
+      sonnerToast.error("Could not delete template", { description: "Please try again." });
     }
   };
 
@@ -422,6 +510,8 @@ function TemplatesHubForm() {
         }
       } catch {
         if (!cancelled) setCaseTemplateCount(0);
+      } finally {
+        if (!cancelled) setCaseLoading(false);
       }
     })();
     return () => {
@@ -437,18 +527,18 @@ function TemplatesHubForm() {
       setWorkflowTemplates(data);
     } catch (error: unknown) {
       logError("Error loading workflow templates:", error);
-      toast({ title: "Error", description: "Failed to load workflow templates", variant: "destructive" });
+      sonnerToast.error("Could not load workflow templates");
     } finally {
       setWorkflowLoading(false);
     }
   };
 
   useEffect(() => {
-    if (canAccessAdvancedTemplates && activeTab === "workflows") {
+    // Load once so the summary strip reports the real count before the tab is opened.
+    if (canAccessAdvancedTemplates) {
       loadWorkflowTemplates();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, canAccessAdvancedTemplates]);
+  }, [canAccessAdvancedTemplates]);
 
   const filteredWorkflowTemplates = useMemo(() => {
     return workflowTemplates.filter((template) => {
@@ -485,30 +575,30 @@ function TemplatesHubForm() {
   const handleDeleteWorkflow = async () => {
     if (!workflowToDelete) return;
     if (deleteConfirmText !== "DELETE") {
-      toast({ title: "Invalid confirmation", description: 'Please type "DELETE" to confirm', variant: "destructive" });
+      sonnerToast.error("Invalid confirmation", { description: 'Please type "DELETE" to confirm' });
       return;
     }
     try {
       await deleteWorkflowTemplate(workflowToDelete.id);
-      toast({ title: "Success", description: "Template deleted successfully" });
+      sonnerToast.success("Template deleted");
       loadWorkflowTemplates();
       setShowWorkflowDeleteConfirm(false);
       setWorkflowToDelete(null);
       setDeleteConfirmText("");
     } catch (error: unknown) {
       logError("Error deleting template:", error);
-      toast({ title: "Error", description: "Failed to delete template", variant: "destructive" });
+      sonnerToast.error("Could not delete template");
     }
   };
 
   const handleToggleWorkflowActive = async (template: WorkflowTemplate) => {
     try {
       await updateWorkflowTemplate(template.id, { is_active: !template.is_active });
-      toast({ title: "Success", description: `Template ${!template.is_active ? "activated" : "deactivated"} successfully` });
+      sonnerToast.success(`Template ${!template.is_active ? "activated" : "deactivated"}`);
       loadWorkflowTemplates();
     } catch (error: unknown) {
       logError("Error toggling template:", error);
-      toast({ title: "Error", description: "Failed to update template", variant: "destructive" });
+      sonnerToast.error("Could not update template");
     }
   };
 
@@ -524,7 +614,7 @@ function TemplatesHubForm() {
   const loadFormTemplates = async () => {
     try {
       setFormLoading(true);
-      const data = await getFormTemplates({ is_active: undefined, search: formSearch || undefined });
+      const data = await getFormTemplates({ is_active: undefined });
       setFormTemplates(Array.isArray(data) ? data : []);
     } catch (error: unknown) {
       logError("Error loading form templates:", error);
@@ -536,19 +626,10 @@ function TemplatesHubForm() {
   };
 
   useEffect(() => {
+    // One load feeds both the summary count and the client-side search.
     if (!canAccessAdvancedTemplates) return;
     loadFormTemplates();
-    // Load once on mount for accurate dashboard stats and whenever switching back to forms.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, canAccessAdvancedTemplates]);
-
-  useEffect(() => {
-    if (canAccessAdvancedTemplates && activeTab === "forms") {
-      const timeoutId = setTimeout(() => loadFormTemplates(), 300);
-      return () => clearTimeout(timeoutId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formSearch, activeTab, canAccessAdvancedTemplates]);
+  }, [canAccessAdvancedTemplates]);
 
   const handleDeleteFormClick = (id: string, name: string) => {
     setFormToDelete({ id, name });
@@ -618,18 +699,17 @@ function TemplatesHubForm() {
   };
 
   const filteredFormTemplates = Array.isArray(formTemplates)
-    ? formCategoryFilter === "all"
-      ? formTemplates
-      : formTemplates.filter((t) => t.category === formCategoryFilter)
+    ? formTemplates.filter((template) => {
+        if (formCategoryFilter !== "all" && template.category !== formCategoryFilter) return false;
+        const query = formSearch.trim().toLowerCase();
+        if (!query) return true;
+        return (
+          template.name.toLowerCase().includes(query) ||
+          (template.description?.toLowerCase().includes(query) ?? false) ||
+          template.category.toLowerCase().includes(query)
+        );
+      })
     : [];
-
-  const formCategories = [
-    { value: "all", label: "All" },
-    { value: "procurement", label: "Procurement" },
-    { value: "audit", label: "Audit" },
-    { value: "finance", label: "Finance" },
-    { value: "general", label: "General" },
-  ];
 
   const getFormCategoryStyles = (category: string) => {
     switch (category) {
@@ -680,8 +760,11 @@ function TemplatesHubForm() {
     if (activeTab === "minutes") {
       return "Pick a scope, then select or create a minute template.";
     }
+    if (activeTab === "references") {
+      return "Configure how each directorate, division and department issues classified reference numbers, then audit the sequence.";
+    }
     if (activeTab === "cases") {
-      return "Start a case from a pre-configured template.";
+      return "Start a case from a pre-configured template. Case templates themselves are maintained by administrators.";
     }
     if (!canAccessAdvancedTemplates) {
       return "Manage document, minute, and case templates for your scope. Workflow and form templates are managed by executives.";
@@ -691,7 +774,87 @@ function TemplatesHubForm() {
 
   const docMinuteCtaLabel = activeTab === "minutes" ? "New minute template" : "New document template";
 
+  const scopeEntityLabel = activeScope === "user" ? "person" : activeScope;
+  const scopeDisplayName =
+    activeScope === "organization"
+      ? "Organization-wide"
+      : scopeEntityOptions.find((option) => option.id === selectedScopeId)?.name ?? `this ${activeScope}`;
+
+  const searchValue =
+    activeTab === "workflows"
+      ? workflowSearch
+      : activeTab === "forms"
+        ? formSearch
+        : activeTab === "cases"
+          ? caseSearch
+          : templateSearch;
+  const searchPlaceholder =
+    activeTab === "workflows"
+      ? "Search workflows…"
+      : activeTab === "forms"
+        ? "Search form templates…"
+        : activeTab === "cases"
+          ? "Search case templates…"
+          : "Search templates by title or description…";
+  const handleSearchChange = (value: string) => {
+    if (activeTab === "workflows") setWorkflowSearch(value);
+    else if (activeTab === "forms") setFormSearch(value);
+    else if (activeTab === "cases") setCaseSearch(value);
+    else if (activeTab === "minutes") setMinuteSearch(value);
+    else setDocumentSearch(value);
+  };
+  const clearSearch = () => handleSearchChange("");
+
+  // Keep the URL canonical so a refresh (or a shared link) restores this exact view.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set("tab", activeTab);
+    if (activeScope !== "organization") {
+      params.set("scope", activeScope);
+      if (selectedScopeId) params.set("scope_id", selectedScopeId);
+    }
+    const query = activeTab === "references" ? "" : searchValue.trim();
+    if (query) params.set("q", query);
+    if (activeTab === "forms" && formCategoryFilter !== "all") {
+      params.set("category", formCategoryFilter);
+    }
+    if (activeTab === "cases" && caseTypeFilter !== "all") {
+      params.set("case_type", caseTypeFilter);
+    }
+
+    const target = `/admin/templates-hub?${params.toString()}`;
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current === target) return;
+
+    const handle = window.setTimeout(() => {
+      router.replace(target, { scroll: false });
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [
+    activeTab,
+    activeScope,
+    selectedScopeId,
+    searchValue,
+    formCategoryFilter,
+    caseTypeFilter,
+    router,
+  ]);
+
   const headerActions = useMemo(() => {
+    if (activeTab === "references") {
+      return (
+        <ContextualHelp
+          title="Reference numbers"
+          description="Each unit issues numbers like HQ/GM/ICT/AD/001."
+          steps={[
+            "Pick a unit, then set its location, authority and unit code.",
+            "Classifications (AD, OP, CON…) each keep their own counter.",
+            "Set the next serial to align with the unit's existing register.",
+            "Open Issued numbers to audit every number against its correspondence.",
+          ]}
+        />
+      );
+    }
     if (activeTab === "workflows") {
       return (
         <>
@@ -738,7 +901,7 @@ function TemplatesHubForm() {
           steps={[
             "Filter by case type or search by name.",
             "Click Create on a template to open a new case.",
-            "You can also create a blank case from My Workspace.",
+            "Case templates are maintained by administrators, not created here.",
           ]}
         />
       );
@@ -955,66 +1118,48 @@ function TemplatesHubForm() {
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-border/60 p-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-3 pb-2">
-              <div className="space-y-2">
-                <Label>Scope Level</Label>
-                <Select value={activeScope} onValueChange={(v) => setActiveScope(v as TemplateScope)}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {scopeOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {activeScope !== "organization" ? (
-                <div className="space-y-2">
-                  <Label>Select {activeScope.charAt(0).toUpperCase() + activeScope.slice(1)}</Label>
-                  <Select value={selectedScopeId ?? ""} onValueChange={(v) => setSelectedScopeId(v || null)}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {scopeEntityOptions.map((opt) => (
-                        <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-            </div>
           <div className="space-y-4">
             {filteredScopedTemplates.length === 0 ? (
               <EmptyState
                 icon={isMinute ? <MessageSquare className={registryQueueEmptyIconClass} /> : <FileEdit className={registryQueueEmptyIconClass} />}
-                title={templateListSearch.trim() ? "No templates match your search" : `No ${isMinute ? "minute" : "document"} templates yet`}
+                title={templateSearch.trim() ? "No templates match your search" : `No ${isMinute ? "minute" : "document"} templates yet`}
                 message={
-                  templateListSearch.trim()
+                  templateSearch.trim()
                     ? "Try a different title or description keyword."
                     : `Create a template for this scope, or switch scope to find existing templates.`
                 }
-                actionLabel={templateListSearch.trim() ? undefined : createLabel}
-                onAction={templateListSearch.trim() ? undefined : handleCreateNewDocTemplate}
+                actionLabel={templateSearch.trim() ? undefined : createLabel}
+                onAction={templateSearch.trim() ? undefined : handleCreateNewDocTemplate}
               />
             ) : (
-              <div className={correspondenceQueueListStackClass}>
+              <div className="space-y-1.5">
                 {filteredScopedTemplates.map((template) => (
                   <ListRowCard
                     key={template.id}
-                    density="compact"
+                    density="dense"
+                    selected={selectedTemplateId === template.id && templateEditorOpen}
                     className={cn(selectedTemplateId === template.id && templateEditorOpen ? "ring-2 ring-primary" : "")}
                     onRowClick={() => handleTemplateSelect(template.id)}
                     leading={(
-                      <div className={cn(correspondenceQueueLeadingBoxClass, isMinute ? "bg-info/10" : "bg-primary/10")}>
+                      <div className={cn(correspondenceQueueLeadingBoxClass, "p-1.5", "bg-primary/10")}>
                         {isMinute ? (
-                          <MessageSquare className={cn(correspondenceQueueLeadingIconClass, "text-info")} />
+                          <MessageSquare className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
                         ) : (
                           <FileEdit className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
                         )}
                       </div>
                     )}
+                    actions={
+                      <TemplateHubRowActions
+                        actions={[
+                          {
+                            label: "Edit template",
+                            icon: <Edit className="h-4 w-4" />,
+                            onSelect: () => handleTemplateSelect(template.id),
+                          },
+                        ]}
+                      />
+                    }
                   >
                     <h4 className={correspondenceQueueSubjectClass}>{template.title}</h4>
                     {template.description ? (
@@ -1025,7 +1170,7 @@ function TemplatesHubForm() {
               </div>
             )}
 
-            <Dialog open={templateEditorOpen} onOpenChange={(open) => { if (!open) { setTemplateEditorOpen(false); setSelectedTemplateId(null); } }}>
+            <Dialog open={templateEditorOpen} onOpenChange={(open) => { if (!open) requestCloseTemplateEditor(); }}>
               <DialogContent size="full" height="screen">
                 <DialogHeader className="shrink-0">
                   <DialogTitle>
@@ -1048,43 +1193,82 @@ function TemplatesHubForm() {
                   </div>
                   <div className="space-y-2">
                     <Label>Content</Label>
-                    {isMinute ? (
-                      <Textarea
-                        value={contentHtml}
-                        onChange={(e) => setContentHtml(e.target.value)}
-                        rows={12}
-                        placeholder="Enter minute template text..."
-                        className="min-h-[240px]"
-                      />
-                    ) : (
-                      <RichTextEditor
-                        value={contentHtml}
-                        onChange={(html) => setContentHtml(html)}
-                        showCharacterCount={false}
-                        showHeader={false}
-                        className="min-h-[70vh]"
-                      />
-                    )}
+                    <RichTextEditor
+                      value={contentHtml}
+                      onChange={(html) => setContentHtml(html)}
+                      showCharacterCount={false}
+                      showHeader={false}
+                      compactToolbar
+                      placeholder={
+                        isMinute
+                          ? "Enter minute template text..."
+                          : "Start typing the template content..."
+                      }
+                      className="min-h-[70vh]"
+                    />
                   </div>
                 </div>
                 <div className="flex justify-between shrink-0 border-t border-border/60 pt-4 mt-2">
                   <div>
                     {selectedTemplateId ? (
-                      <Button variant="outline" size="sm" onClick={handleDeleteDocTemplate} className="text-destructive">
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="text-destructive">
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete this template?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              “{title || "This template"}” will be permanently removed. Existing documents created from it are not affected. This cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDeleteDocTemplate}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Delete template
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     ) : null}
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => { refreshTemplates(); setTemplateEditorOpen(false); }}>
-                      Reset
+                    <Button variant="outline" onClick={requestCloseTemplateEditor}>
+                      Cancel
                     </Button>
-                    <Button onClick={handleSaveDocTemplate}>
+                    <Button onClick={handleSaveDocTemplate} disabled={!isEditorDirty && Boolean(selectedTemplateId)}>
                       {selectedTemplateId ? "Update Template" : "Create Template"}
                     </Button>
                   </div>
                 </div>
+
+                <AlertDialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Your edits to this template have not been saved.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep editing</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          setShowDiscardConfirm(false);
+                          closeTemplateEditor();
+                        }}
+                      >
+                        Discard
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </DialogContent>
             </Dialog>
           </div>
@@ -1113,93 +1297,120 @@ function TemplatesHubForm() {
             actions={headerActions}
           >
           <StatStrip
-            items={[
-              { key: "documents", label: "Documents · all scopes", value: documentCount },
-              { key: "minutes", label: "Minutes · all scopes", value: minuteCount },
-              { key: "cases", label: "Cases", value: caseTemplateCount },
+            items={[                    { key: "documents", label: "Documents", hint: "All scopes", value: templatesLoading ? "—" : documentCount },
+                    { key: "minutes", label: "Minutes", hint: "All scopes", value: templatesLoading ? "—" : minuteCount },
+              { key: "cases", label: "Cases", value: caseLoading ? "—" : caseTemplateCount },
               ...(canAccessAdvancedTemplates
                 ? [
-                    { key: "workflows", label: "Workflows", value: workflowStats.total },
-                    { key: "forms", label: "Forms", value: formTemplates.length },
+                    { key: "workflows", label: "Workflows", value: workflowLoading ? "—" : workflowStats.total },
+                    { key: "forms", label: "Forms", value: formLoading ? "—" : formTemplates.length },
+                    {
+                      key: "references",
+                      label: "References",
+                      hint: "Reference schemes",
+                      value: referenceStats ? referenceStats.total : "—",
+                    },
                   ]
                 : []),
             ]}
           />
 
-          {(activeTab === "workflows" || activeTab === "forms" || activeTab === "documents" || activeTab === "minutes" || activeTab === "cases") ? (
-            <div className="rounded-xl bg-muted/30 p-2 mt-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative min-w-[200px] flex-1 max-w-sm">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder={
-                      activeTab === "workflows"
-                        ? "Search workflows…"
-                        : activeTab === "forms"
-                          ? "Search form templates…"
-                          : activeTab === "cases"
-                            ? "Search case templates…"
-                            : "Search templates by title or description…"
-                    }
-                    value={
-                      activeTab === "workflows"
-                        ? workflowSearch
-                        : activeTab === "forms"
-                          ? formSearch
-                          : activeTab === "cases"
-                            ? caseSearch
-                            : templateListSearch
-                    }
-                    onChange={(e) => {
-                      if (activeTab === "workflows") setWorkflowSearch(e.target.value);
-                      else if (activeTab === "forms") setFormSearch(e.target.value);
-                      else if (activeTab === "cases") setCaseSearch(e.target.value);
-                      else setTemplateListSearch(e.target.value);
-                    }}
-                    className="h-8 pl-8 text-xs"
-                  />
-                </div>
-                {activeTab === "forms" ? (
-                  <Select value={formCategoryFilter} onValueChange={setFormCategoryFilter}>
-                    <SelectTrigger className="h-8 w-[140px] text-xs">
-                      <SelectValue placeholder="Category" />
+          <div className="mt-4 overflow-x-auto">
+            <TabsList className="h-auto w-fit flex-wrap justify-start gap-1 rounded-xl border border-border/60 bg-card/60 p-1">
+              <TabsTrigger value="documents" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Documents</TabsTrigger>
+              <TabsTrigger value="minutes" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Minutes</TabsTrigger>
+              <TabsTrigger value="cases" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Cases</TabsTrigger>
+              {canAccessAdvancedTemplates ? (
+                <>
+                  <TabsTrigger value="workflows" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Workflows</TabsTrigger>
+                  <TabsTrigger value="forms" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Forms</TabsTrigger>
+                  <TabsTrigger value="references" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">References</TabsTrigger>
+                </>
+              ) : null}
+            </TabsList>
+          </div>
+
+          {activeTab !== "references" ? (
+          <div className="mt-4 rounded-xl bg-muted/30 p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {activeTab === "documents" || activeTab === "minutes" ? (
+                <>
+                  <Select value={activeScope} onValueChange={(v) => setActiveScope(v as TemplateScope)}>
+                    <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Scope level">
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {formCategories.map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
-                {activeTab === "cases" ? (
-                  <Select value={caseTypeFilter} onValueChange={setCaseTypeFilter}>
-                    <SelectTrigger className="h-8 w-[140px] text-xs">
-                      <SelectValue placeholder="Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CASE_TEMPLATE_TYPE_FILTERS.map((opt) => (
+                      {scopeOptions.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {activeScope !== "organization" ? (
+                    <Select value={selectedScopeId ?? ""} onValueChange={(v) => setSelectedScopeId(v || null)}>
+                      <SelectTrigger className="h-8 w-[170px] text-xs" aria-label={`Select ${scopeEntityLabel}`}>
+                        <SelectValue placeholder={`Select ${scopeEntityLabel}…`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {scopeEntityOptions.map((opt) => (
+                          <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </>
+              ) : null}
+              <div className="relative min-w-[200px] max-w-sm flex-1">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder={searchPlaceholder}
+                  aria-label={searchPlaceholder.replace("…", "")}
+                  value={searchValue}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="h-8 pl-8 pr-8 text-xs"
+                />
+                {searchValue ? (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={clearSearch}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 ) : null}
               </div>
+              {activeTab === "forms" ? (
+                <Select value={formCategoryFilter} onValueChange={setFormCategoryFilter}>
+                  <SelectTrigger className="h-8 w-[140px] text-xs" aria-label="Form category">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FORM_CATEGORY_FILTERS.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+              {activeTab === "cases" ? (
+                <Select value={caseTypeFilter} onValueChange={setCaseTypeFilter}>
+                  <SelectTrigger className="h-8 w-[140px] text-xs" aria-label="Case type">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CASE_TEMPLATE_TYPE_FILTERS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+              {activeTab === "documents" || activeTab === "minutes" ? (
+                <span className="text-xs text-muted-foreground">
+                  {filteredScopedTemplates.length} {filteredScopedTemplates.length === 1 ? "template" : "templates"} in {scopeDisplayName}
+                </span>
+              ) : null}
             </div>
+          </div>
           ) : null}
-
-            <div className="mt-4">
-              <TabsList>
-                <TabsTrigger value="documents" className="text-xs px-2.5 py-1">Documents</TabsTrigger>
-                <TabsTrigger value="minutes" className="text-xs px-2.5 py-1">Minutes</TabsTrigger>
-                <TabsTrigger value="cases" className="text-xs px-2.5 py-1">Cases</TabsTrigger>
-                {canAccessAdvancedTemplates ? (
-                  <>
-                    <TabsTrigger value="workflows" className="text-xs px-2.5 py-1">Workflows</TabsTrigger>
-                    <TabsTrigger value="forms" className="text-xs px-2.5 py-1">Forms</TabsTrigger>
-                  </>
-                ) : null}
-              </TabsList>
-            </div>
 
             <TabsContent value="documents" className="mt-2 focus-visible:outline-none">
               {renderDocumentMinutePanel("document")}
@@ -1211,6 +1422,12 @@ function TemplatesHubForm() {
 
             <TabsContent value="cases" className="mt-6 focus-visible:outline-none">
               <CaseTemplatesPanel searchQuery={caseSearch} typeFilter={caseTypeFilter} />
+            </TabsContent>
+
+            <TabsContent value="references" className="mt-6 focus-visible:outline-none">
+              <div className="rounded-xl border border-border/60 p-4">
+                <ReferencePanel onStatsChange={setReferenceStats} />
+              </div>
             </TabsContent>
 
                         <TabsContent value="workflows" className="mt-6 focus-visible:outline-none">
@@ -1239,65 +1456,56 @@ function TemplatesHubForm() {
                             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               {WORKFLOW_GROUP_LABELS[groupKey]}
                             </h3>
-                            <div className={correspondenceQueueListStackClass}>
+                            <div className="space-y-1.5">
                               {groupTemplates.map((template) => {
                                 const chain = workflowStepChain(template.steps);
                                 return (
                                   <ListRowCard
                                     key={template.id}
-                                    density="compact"
+                                    density="dense"
                                     className={cn(workflowPreviewId === template.id ? "ring-2 ring-primary" : "")}
                                     onRowClick={() => setWorkflowPreviewId(template.id)}
                                     leading={(
-                                      <div className={cn(correspondenceQueueLeadingBoxClass, "bg-success/10")}>
-                                        <GitBranch className={cn(correspondenceQueueLeadingIconClass, "text-success")} />
+                                      <div className={cn(correspondenceQueueLeadingBoxClass, "p-1.5", "bg-primary/10")}>
+                                        <GitBranch className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
                                       </div>
                                     )}
-                                    actions={(
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                            aria-label="More actions"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <MoreVertical className="h-4 w-4" />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                          <DropdownMenuItem onClick={() => router.push(`/admin/workflow-templates/${template.id}`)}>
-                                            <Edit className="mr-2 h-4 w-4" />
-                                            Edit
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              router.push(`/admin/workflow-templates/${template.id}?clone=true`)
-                                            }
-                                          >
-                                            <Copy className="mr-2 h-4 w-4" />
-                                            Clone
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem onClick={() => handleToggleWorkflowActive(template)}>
-                                            {template.is_active ? (
-                                              <PowerOff className="mr-2 h-4 w-4" />
+                                    actions={
+                                      <TemplateHubRowActions
+                                        actions={[
+                                          {
+                                            label: "Edit",
+                                            icon: <Edit className="h-4 w-4" />,
+                                            onSelect: () =>
+                                              router.push(`/admin/workflow-templates/${template.id}`),
+                                          },
+                                          {
+                                            label: "Clone",
+                                            icon: <Copy className="h-4 w-4" />,
+                                            onSelect: () =>
+                                              router.push(
+                                                `/admin/workflow-templates/${template.id}?clone=true`
+                                              ),
+                                          },
+                                          {
+                                            label: template.is_active ? "Deactivate" : "Activate",
+                                            icon: template.is_active ? (
+                                              <PowerOff className="h-4 w-4" />
                                             ) : (
-                                              <Power className="mr-2 h-4 w-4" />
-                                            )}
-                                            {template.is_active ? "Deactivate" : "Activate"}
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() => handleDeleteWorkflowClick(template.id, template.name)}
-                                            className="text-destructive"
-                                          >
-                                            <Trash2 className="mr-2 h-4 w-4" />
-                                            Delete
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    )}
+                                              <Power className="h-4 w-4" />
+                                            ),
+                                            onSelect: () => handleToggleWorkflowActive(template),
+                                          },
+                                          {
+                                            label: "Delete",
+                                            icon: <Trash2 className="h-4 w-4" />,
+                                            destructive: true,
+                                            onSelect: () =>
+                                              handleDeleteWorkflowClick(template.id, template.name),
+                                          },
+                                        ]}
+                                      />
+                                    }
                                   >
                                     <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
                                     {(chain || template.description) ? (
@@ -1305,7 +1513,7 @@ function TemplatesHubForm() {
                                         {chain || template.description}
                                       </p>
                                     ) : null}
-                                    <div className={correspondenceQueueMetaRowClass}>
+                                    <div className={cn(correspondenceQueueMetaRowClass, "pt-1")}>
                                       <span className={correspondenceQueueMetaItemClass}>
                                         <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
                                           {template.steps.length} steps
@@ -1361,59 +1569,45 @@ function TemplatesHubForm() {
                       onAction={() => setShowFormCreate(true)}
                     />
                   ) : (
-                    <div className={correspondenceQueueListStackClass}>
+                    <div className="space-y-1.5">
                       {filteredFormTemplates.map((template) => {
                         const styles = getFormCategoryStyles(template.category);
                         return (
                           <ListRowCard
                             key={template.id}
-                            density="compact"
+                            density="dense"
                             className={cn(
-                              "border-l-4",
-                              styles.accent,
                               formPreviewId === template.id ? "ring-2 ring-primary" : "",
                             )}
                             onRowClick={() => setFormPreviewId(template.id)}
                             leading={(
-                              <div className={cn(correspondenceQueueLeadingBoxClass, "bg-muted")}>
-                                <FormInput className={cn(correspondenceQueueLeadingIconClass, "text-muted-foreground")} />
+                              <div className={cn(correspondenceQueueLeadingBoxClass, "p-1.5", "bg-primary/10")}>
+                                <FormInput className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
                               </div>
                             )}
-                            actions={(
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                    aria-label="More actions"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={() => router.push(`/admin/form-templates/${template.id}`)}
-                                  >
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleCloneForm(template.id)}>
-                                    <Copy className="mr-2 h-4 w-4" />
-                                    Clone
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleDeleteFormClick(template.id, template.name)}
-                                    className="text-destructive"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
+                            actions={
+                              <TemplateHubRowActions
+                                actions={[
+                                  {
+                                    label: "Edit",
+                                    icon: <Edit className="h-4 w-4" />,
+                                    onSelect: () =>
+                                      router.push(`/admin/form-templates/${template.id}`),
+                                  },
+                                  {
+                                    label: "Clone",
+                                    icon: <Copy className="h-4 w-4" />,
+                                    onSelect: () => handleCloneForm(template.id),
+                                  },
+                                  {
+                                    label: "Delete",
+                                    icon: <Trash2 className="h-4 w-4" />,
+                                    destructive: true,
+                                    onSelect: () => handleDeleteFormClick(template.id, template.name),
+                                  },
+                                ]}
+                              />
+                            }
                           >
                             <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
                             {template.description ? (
@@ -1421,7 +1615,7 @@ function TemplatesHubForm() {
                                 {template.description}
                               </p>
                             ) : null}
-                            <div className={correspondenceQueueMetaRowClass}>
+                            <div className={cn(correspondenceQueueMetaRowClass, "pt-1")}>
                               <span className={correspondenceQueueMetaItemClass}>
                                 <Badge
                                   variant="outline"

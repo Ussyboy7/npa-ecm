@@ -44,7 +44,17 @@ class FormTemplateViewSet(viewsets.ModelViewSet):
     ordering = ["category", "name"]
     pagination_class = StandardPageNumberPagination
 
+    def get_queryset(self):
+        from organization.permission_utils import require_page_access
+
+        if self.action in {"list", "retrieve", "create", "update", "partial_update", "destroy", "clone"}:
+            require_page_access(self.request.user, "forms")
+        return super().get_queryset()
+
     def perform_create(self, serializer):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(self.request.user, "forms")
         serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=["post"])
@@ -75,6 +85,12 @@ class FormSubmissionViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "submitted_at"]
     ordering = ["-created_at"]
     pagination_class = StandardPageNumberPagination
+
+    def create(self, request, *args, **kwargs):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(request.user, "forms")
+        return super().create(request, *args, **kwargs)
 
     def get_serializer_class(self):
         if self.action == "list":

@@ -1,122 +1,105 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useMemo, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch } from "@/lib/api/dms";
 import { logError } from "@/lib/client-logger";
 import { toast } from "@/components/ui/sonner";
-import { Send, Loader2 } from "lucide-react";
+import { Search, CheckCircle2, ChevronDown } from "lucide-react";
 import type { DocumentRecord } from "@/lib/api/dms";
-import { PrimaryRoutePanel } from "@/components/correspondence/PrimaryRoutePanel";
-import { getDivisionById } from "@/lib/npa-structure";
-import { submitParallelRoute, submitCcDistribution } from "@/lib/parallel-routing";
+
+const PURPOSES = [
+  { value: 'action', label: 'For action' },
+  { value: 'information', label: 'For information' },
+  { value: 'approval', label: 'For approval' },
+] as const;
+
+type CorrespondencePurpose = (typeof PURPOSES)[number]['value'];
+
+export interface CorrespondenceRoutingState {
+  canSubmit: boolean;
+  isSubmitting: boolean;
+  summary: string;
+}
+
+export interface CorrespondenceRoutingHandle {
+  submit: () => void;
+}
 
 interface CorrespondenceRoutingViewProps {
   document: DocumentRecord;
   onComplete?: () => void;
+  onStateChange?: (state: CorrespondenceRoutingState) => void;
 }
 
-export function CorrespondenceRoutingView({
-  document,
-  onComplete,
-}: CorrespondenceRoutingViewProps) {
+/**
+ * Route a document through the correspondence registry: correspondence is the
+ * official channel, so every send is registered to an office rather than
+ * granting document access.
+ */
+export const CorrespondenceRoutingView = forwardRef<
+  CorrespondenceRoutingHandle,
+  CorrespondenceRoutingViewProps
+>(function CorrespondenceRoutingView({ document, onComplete, onStateChange }, ref) {
   const { directorates, divisions, offices, officeMemberships } = useOrganization();
-  const { users } = useOrgUsers();
   const { currentUser } = useCurrentUser();
 
-  const [routeType, setRouteType] = useState<'person' | 'office'>('person');
-  const [routeMode, setRouteMode] = useState<'single' | 'parallel'>('single');
-  const [forwardTo, setForwardTo] = useState<string>('');
-  const [targetOfficeId, setTargetOfficeId] = useState<string>('');
-  const [personSearchQuery, setPersonSearchQuery] = useState('');
-  const [officeSearchQuery, setOfficeSearchQuery] = useState('');
-  const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
-  const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
-  const [purpose, setPurpose] = useState<'action' | 'information' | 'approval'>('action');
-  const [mergeStrategy, setMergeStrategy] = useState<'all' | 'any' | 'majority' | 'independent'>('all');
-  const [parallelUserIds, setParallelUserIds] = useState<string[]>([]);
-  const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
-  const [branchConfigs, setBranchConfigs] = useState<Record<string, { purpose: 'action' | 'information' | 'approval'; minuteText: string }>>({});
-  const [distributionUserIds, setDistributionUserIds] = useState<string[]>([]);
-  const [distributionOfficeIds, setDistributionOfficeIds] = useState<string[]>([]);
-  const [notes, setNotes] = useState<string>('');
   const [subject, setSubject] = useState<string>(document.title || '');
+  const [targetOfficeId, setTargetOfficeId] = useState<string>('');
+  const [officeSearchQuery, setOfficeSearchQuery] = useState('');
+  const [purpose, setPurpose] = useState<CorrespondencePurpose>('action');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
+  const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const activeUsers = useMemo(
-    () => users.filter((u) => u.active !== false && u.id !== currentUser?.id),
-    [users, currentUser]
-  );
-
-  const officeOptionsForRouting = useMemo(
+  const officeOptions = useMemo(
     () =>
       offices
-        .filter((o) => o.isActive)
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((o) => ({
-          id: o.id,
-          name: o.name,
-          officeType: o.officeType ?? '',
-          directorateId: o.directorateId ?? undefined,
-          divisionId: o.divisionId ?? undefined,
-        })),
-    [offices]
+        .filter((office) => office.isActive)
+        .map((office) => ({
+          ...office,
+          directorateName: directorates.find((d) => d.id === office.directorateId)?.name,
+          divisionName: divisions.find((d) => d.id === office.divisionId)?.name,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [offices, directorates, divisions],
   );
 
-  const findUserById = useCallback(
-    (id: string) => activeUsers.find((u) => u.id === id),
-    [activeUsers]
-  );
+  const filteredOffices = useMemo(() => {
+    const query = officeSearchQuery.trim().toLowerCase();
+    if (!query) return officeOptions;
+    return officeOptions.filter((office) =>
+      [office.name, office.code, office.officeType, office.directorateName, office.divisionName]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query)),
+    );
+  }, [officeOptions, officeSearchQuery]);
 
-  const getUserOfficeInfo = useCallback(
-    (userId: string): { office?: { name: string }; division?: { name: string } } | null => {
-      const membership = officeMemberships.find(
-        (m) => m.userId === userId && m.isPrimary && m.isActive
-      );
-      if (!membership) return null;
-      const office = offices.find((o) => o.id === membership.officeId);
-      const user = findUserById(userId);
-      const division = user?.division ? getDivisionById(user.division) : null;
-      return {
-        office: office ? { name: office.name } : undefined,
-        division: division ? { name: division.name } : undefined,
-      };
-    },
-    [officeMemberships, offices, findUserById]
-  );
+  const targetOffice = officeOptions.find((office) => office.id === targetOfficeId);
+  const purposeLabel = PURPOSES.find((option) => option.value === purpose)?.label ?? '';
+  const canSubmit = Boolean(targetOfficeId);
 
-  const parallelTargetCount = parallelUserIds.length + parallelOfficeIds.length;
-  const canSubmit =
-    routeMode === 'single'
-      ? routeType === 'person'
-        ? Boolean(forwardTo)
-        : Boolean(targetOfficeId)
-      : parallelTargetCount >= 2;
+  const summary = targetOffice ? `${targetOffice.name} · ${purposeLabel}` : 'Choose a receiving office';
 
-  const handleSubmit = async () => {
+  useEffect(() => {
+    onStateChange?.({ canSubmit, isSubmitting, summary });
+  }, [canSubmit, isSubmitting, summary, onStateChange]);
+
+  const handleSubmit = useCallback(async () => {
     if (!currentUser) {
       toast.error('User not found');
       return;
     }
-
-    if (routeMode === 'single' && routeType === 'office' && !targetOfficeId) {
-      toast.error('Please select an office');
-      return;
-    }
-    if (routeMode === 'single' && routeType === 'person' && !forwardTo) {
-      toast.error('Please select a person');
-      return;
-    }
-    if (routeMode === 'parallel' && parallelTargetCount < 2) {
-      toast.error('Parallel routing requires at least two people or offices');
+    if (!targetOfficeId) {
+      toast.error('Please select the office to route this to');
       return;
     }
 
@@ -131,35 +114,24 @@ export function CorrespondenceRoutingView({
       formData.append('source', 'internal');
       formData.append('direction', 'upward');
       formData.append('document_type', 'letter');
-      
-      if (routeMode === 'single' && routeType === 'office') {
-        const office = offices.find((o) => o.id === targetOfficeId);
-        if (office) {
-          const primaryMember = officeMemberships.find(
-            (m) => m.officeId === office.id && m.isPrimary && m.isActive
-          );
-          if (primaryMember) {
-            formData.append('current_approver_id', primaryMember.userId);
-          }
-          formData.append('current_office', targetOfficeId);
-        }
-      } else if (routeMode === 'single') {
-        formData.append('current_approver_id', forwardTo);
+      formData.append('current_office', targetOfficeId);
+
+      // The office registry holder is the accountable recipient of the route.
+      const primaryMember = officeMemberships.find(
+        (membership) => membership.officeId === targetOfficeId && membership.isPrimary && membership.isActive,
+      );
+      if (primaryMember) {
+        formData.append('current_approver_id', primaryMember.userId);
       }
 
       const correspondenceResponse = await apiFetch<{ id: string; reference_number?: string }>(
         '/correspondence/items/',
-        {
-          method: 'POST',
-          body: formData,
-        }
+        { method: 'POST', body: formData },
       );
 
       await apiFetch(`/correspondence/document-links/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           correspondence: correspondenceResponse.id,
           document: document.id,
@@ -167,47 +139,25 @@ export function CorrespondenceRoutingView({
         }),
       });
 
-      if (routeMode === 'parallel') {
-        await submitParallelRoute(apiFetch, {
-          correspondenceId: correspondenceResponse.id,
-          parallelUserIds,
-          parallelOfficeIds,
-          branchConfigs,
-          mergeStrategy,
-          defaultPurpose: purpose,
-          defaultMinuteText: notes.trim() || 'Please review and respond.',
-        });
-      }
-
-      if (routeMode === 'single' && (notes.trim() || purpose !== 'information')) {
-        await apiFetch('/correspondence/minutes/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            correspondence: correspondenceResponse.id,
-            user_id: currentUser.id,
-            action_type: 'minute',
-            minute_text: notes.trim() || 'Routed via document correspondence',
-            direction: 'upward',
-            step_number: 1,
-            purpose,
-            requires_response: purpose !== 'information',
-          }),
-        });
-      }
-
-      await submitCcDistribution(
-        apiFetch,
-        correspondenceResponse.id,
-        distributionUserIds,
-        distributionOfficeIds,
-        currentUser?.id,
-      );
+      await apiFetch('/correspondence/minutes/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          correspondence: correspondenceResponse.id,
+          user_id: currentUser.id,
+          action_type: 'minute',
+          minute_text: notes.trim() || 'Routed via document correspondence',
+          direction: 'upward',
+          step_number: 1,
+          purpose,
+          requires_response: purpose !== 'information',
+        }),
+      });
 
       toast.success('Document sent via correspondence', {
-        description: `Reference: ${correspondenceResponse.reference_number || correspondenceResponse.id}`,
+        description: `${targetOffice?.name ?? 'Office'} · reference ${
+          correspondenceResponse.reference_number || correspondenceResponse.id
+        }`,
         action: {
           label: 'View',
           onClick: () => {
@@ -223,125 +173,157 @@ export function CorrespondenceRoutingView({
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [
+    currentUser,
+    targetOfficeId,
+    subject,
+    document.title,
+    document.id,
+    priority,
+    notes,
+    purpose,
+    officeMemberships,
+    targetOffice?.name,
+    onComplete,
+  ]);
+
+  useImperativeHandle(ref, () => ({ submit: () => void handleSubmit() }), [handleSubmit]);
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="corr-subject">Subject</Label>
-          <Input
-            id="corr-subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Correspondence subject"
-          />
-        </div>
-
-        <PrimaryRoutePanel
-          routeMode={routeMode}
-          onRouteModeChange={setRouteMode}
-          routeType={routeType}
-          onRouteTypeChange={(v) => {
-            setRouteType(v);
-            if (v === 'office') {
-              setForwardTo('');
-              setPersonSearchQuery('');
-            } else {
-              setTargetOfficeId('');
-              setOfficeSearchQuery('');
-              setOfficeFilterDirectorate('all');
-              setOfficeFilterDivision('all');
-            }
-          }}
-          forwardTo={forwardTo}
-          onForwardToChange={setForwardTo}
-          personSearchQuery={personSearchQuery}
-          onPersonSearchQueryChange={setPersonSearchQuery}
-          targetOfficeId={targetOfficeId}
-          onTargetOfficeIdChange={(v) => {
-            setTargetOfficeId(v);
-            setForwardTo('');
-          }}
-          officeSearchQuery={officeSearchQuery}
-          onOfficeSearchQueryChange={setOfficeSearchQuery}
-          officeFilterDirectorate={officeFilterDirectorate}
-          onOfficeFilterDirectorateChange={(v) => {
-            setOfficeFilterDirectorate(v);
-            setOfficeFilterDivision('all');
-          }}
-          officeFilterDivision={officeFilterDivision}
-          onOfficeFilterDivisionChange={setOfficeFilterDivision}
-          purpose={purpose}
-          onPurposeChange={setPurpose}
-          parallelUserIds={parallelUserIds}
-          onParallelUserIdsChange={setParallelUserIds}
-          parallelOfficeIds={parallelOfficeIds}
-          onParallelOfficeIdsChange={setParallelOfficeIds}
-          mergeStrategy={mergeStrategy}
-          onMergeStrategyChange={setMergeStrategy}
-          branchConfigs={branchConfigs}
-          onBranchConfigsChange={setBranchConfigs}
-          defaultBranchText={notes.trim() || 'Please review and respond.'}
-          distributionUserIds={distributionUserIds}
-          onDistributionUserIdsChange={setDistributionUserIds}
-          distributionOfficeIds={distributionOfficeIds}
-          onDistributionOfficeIdsChange={setDistributionOfficeIds}
-          offices={officeOptionsForRouting}
-          directorates={directorates}
-          divisions={divisions}
-          users={activeUsers}
-          assistantList={[]}
-          approverList={activeUsers}
-          findUserById={findUserById}
-          getUserOfficeInfo={getUserOfficeInfo}
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="corr-subject" className="text-xs text-muted-foreground">
+          Subject
+        </Label>
+        <Input
+          id="corr-subject"
+          value={subject}
+          onChange={(event) => setSubject(event.target.value)}
+          placeholder="Correspondence subject"
+          className="h-9"
         />
-
-        <div className="space-y-2">
-          <Label>Priority</Label>
-          <Select value={priority} onValueChange={(value) => setPriority(value as typeof priority)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="corr-notes">Notes</Label>
-          <Textarea
-            id="corr-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add notes or instructions..."
-            rows={3}
-          />
-        </div>
-
-        <Button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isSubmitting || !canSubmit}
-          className="w-full"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Sending...
-            </>
-          ) : (
-            <>
-              <Send className="h-4 w-4 mr-2" />
-              Send via Correspondence
-            </>
-          )}
-        </Button>
       </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <Label className="text-xs text-muted-foreground">Route to office *</Label>
+          <span className="text-[11px] text-muted-foreground">Does not grant access</span>
+        </div>
+        {officeOptions.length > 8 && (
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={officeSearchQuery}
+              onChange={(event) => setOfficeSearchQuery(event.target.value)}
+              placeholder="Search office, directorate or division..."
+              className="pl-9 h-9"
+            />
+          </div>
+        )}
+        <ScrollArea className="h-[min(190px,23vh)] rounded-md border p-2">
+          <div className="space-y-1.5">
+            {filteredOffices.length === 0 ? (
+              <p className="p-3 text-xs text-muted-foreground">No matching offices found.</p>
+            ) : (
+              filteredOffices.map((office) => {
+                const selected = office.id === targetOfficeId;
+                return (
+                  <div
+                    key={office.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selected}
+                    className={`w-full text-left flex items-start gap-2 p-2 rounded border ${
+                      selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'
+                    }`}
+                    onClick={() => setTargetOfficeId(office.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setTargetOfficeId(office.id);
+                      }
+                    }}
+                  >
+                    <span
+                      className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm border ${
+                        selected
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background'
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {selected ? <CheckCircle2 className="h-3 w-3" /> : null}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{office.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[office.directorateName, office.divisionName].filter(Boolean).join(' · ') ||
+                          office.officeType}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Purpose</Label>
+        <Select value={purpose} onValueChange={(value) => setPurpose(value as CorrespondencePurpose)}>
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PURPOSES.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Collapsible className="group">
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground">
+            More options
+            <ChevronDown className="ml-1 h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-2">
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Priority</Label>
+            <Select value={priority} onValueChange={(value) => setPriority(value as typeof priority)}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      <div className="space-y-2">
+        <Label htmlFor="corr-notes" className="text-xs text-muted-foreground">
+          Instructions
+        </Label>
+        <Textarea
+          id="corr-notes"
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder="Minute to the receiving office..."
+          rows={2}
+          className="min-h-[60px] resize-none text-sm"
+        />
+      </div>
+
     </div>
   );
-}
+});

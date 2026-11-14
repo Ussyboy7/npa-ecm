@@ -24,7 +24,10 @@ const normalizeId = (value: unknown): string | undefined => {
 };
 
 const mapApiUserToUser = (user: Record<string, unknown>): User => {
-  const fullName = `${asString(user.first_name, '')} ${asString(user.last_name, '')}`.trim();
+  const fullName = [user.first_name, user.middle_name, user.last_name]
+    .map((part) => asString(part, '').trim())
+    .filter(Boolean)
+    .join(' ');
   let roleName = asString(user.system_role_name, '');
 
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,6 +52,10 @@ const mapApiUserToUser = (user: Record<string, unknown>): User => {
     name: fullName.length > 0 ? fullName : asString(user.username, 'User'),
     email: asString(user.email),
     employeeId: asString(user.employee_id),
+    personnelNumber: asStringOptional(user.personnel_number),
+    honorific: asStringOptional(user.honorific),
+    middleName: asStringOptional(user.middle_name),
+    designation: asStringOptional(user.designation),
     gradeLevel: asString(user.grade_level),
     systemRole: roleName,
     directorate: normalizeId(user.directorate ?? user.directorate_id),
@@ -149,6 +156,8 @@ const mapApiOfficeMembership = (item: Record<string, unknown>): OfficeMembership
   officeId: normalizeId(item.office ?? item.office_id) ?? '',
   officeName: asStringOptional(item.office_name) ?? (isRecord(item.office) ? asStringOptional(item.office.name) : undefined),
   userId: normalizeId(item.user ?? item.user_id) ?? '',
+  userName: asStringOptional(item.user_name) ?? (isRecord(item.user) ? asStringOptional(item.user.name) : undefined),
+  userUsername: asStringOptional(item.user_username) ?? (isRecord(item.user) ? asStringOptional(item.user.username) : undefined),
   assignmentRole: asString(item.assignment_role, 'staff'),
   isPrimary: asBoolean(item.is_primary, false),
   canRegister: asBoolean(item.can_register, false),

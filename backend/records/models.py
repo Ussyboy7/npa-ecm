@@ -43,6 +43,13 @@ class RetentionSchedule(UUIDModel, TimeStampedModel):
         blank=True,
         related_name="retention_schedules",
     )
+    department = models.ForeignKey(
+        "organization.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retention_schedules",
+    )
     retention_years = models.PositiveIntegerField(default=7)
     retention_months = models.PositiveIntegerField(default=0)
     disposition_action = models.CharField(

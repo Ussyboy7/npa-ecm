@@ -20,6 +20,33 @@ export interface SealVerification {
   error?: string;
   seal_image_url?: string;
   signature_image_url?: string;
+  pdf_sha256?: string;
+  pdf_generated_at?: string | null;
+  snapshot_reference?: string;
+}
+
+export interface SealDocumentCheck {
+  matches: boolean;
+  expected_sha256: string;
+  actual_sha256: string;
+  pdf_generated_at?: string | null;
+  detail: string;
+}
+
+export async function checkSealDocument(
+  serialNumber: string,
+  file: File,
+): Promise<SealDocumentCheck> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<SealDocumentCheck>(
+    `/accounts/seal/document-check/${encodeURIComponent(serialNumber)}/`,
+    {
+      method: "POST",
+      body: formData,
+      skipAuth: true,
+    },
+  );
 }
 
 export async function verifySeal(serialNumber: string, signal?: AbortSignal): Promise<SealVerification> {

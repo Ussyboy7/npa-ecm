@@ -30,8 +30,10 @@ export interface EffectiveDocumentRights {
 export interface DocumentPermission {
   id?: string;
   access: PermissionAccess;
+  directorateIds: string[];
   divisionIds: string[];
   departmentIds: string[];
+  officeIds?: string[];
   gradeLevels: string[];
   userIds: string[];
   createdAt?: string;
@@ -58,6 +60,16 @@ export interface DocumentVersion {
   uploadedBy: string;
   uploadedAt: string;
   notes?: string;
+}
+
+export interface DocumentPublicationEvent {
+  publishedVersionId: string | null;
+  publishedVersionNumber?: number | null;
+  correspondenceId: string;
+  correspondenceReference: string;
+  correspondenceSubject: string;
+  issueType: 'minute' | 'dispatch' | string;
+  timestamp: string;
 }
 
 export interface DocumentCollaborator {
@@ -100,6 +112,7 @@ export interface DocumentRecord {
   departmentId?: string;
   tags: string[];
   versions: DocumentVersion[];
+  publicationHistory?: DocumentPublicationEvent[];
   permissions: DocumentPermission[];
   createdAt: string;
   updatedAt: string;
@@ -199,7 +212,7 @@ export interface CreateDocumentInput {
   title: string;
   description?: string;
   documentType: DocumentType;
-  status: DocumentStatus;
+  status?: DocumentStatus;
   sensitivity: DocumentSensitivity;
   divisionId?: string;
   departmentId?: string;
@@ -385,6 +398,11 @@ export const unwrapResults = <T,>(payload: unknown): T[] =>
 export const mapDocumentPermission = (data: Record<string, unknown>): DocumentPermission => ({
   id: data.id ? String(data.id) : undefined,
   access: (data.access as PermissionAccess) ?? 'read',
+  directorateIds: Array.isArray(data.directorate_ids)
+    ? data.directorate_ids.map(String)
+    : Array.isArray(data.directorates)
+      ? data.directorates.map(String)
+      : [],
   divisionIds: Array.isArray(data.division_ids)
     ? data.division_ids.map(String)
     : Array.isArray(data.divisions)
@@ -395,6 +413,7 @@ export const mapDocumentPermission = (data: Record<string, unknown>): DocumentPe
     : Array.isArray(data.departments)
       ? data.departments.map(String)
       : [],
+  officeIds: Array.isArray(data.office_ids) ? data.office_ids.map(String) : [],
   gradeLevels: Array.isArray(data.grade_levels) ? data.grade_levels.map(String) : [],
   userIds: Array.isArray(data.user_ids)
     ? data.user_ids.map(String)
@@ -475,6 +494,19 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
     departmentId: typeof item.department === 'string' ? item.department : (typeof item.department_id === 'string' ? item.department_id : undefined),
     tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
     versions: Array.isArray(item.versions) ? item.versions.map(mapDocumentVersion) : [],
+    publicationHistory: Array.isArray(item.publication_history)
+      ? item.publication_history.map((event: Record<string, unknown>) => ({
+          publishedVersionId: event.published_version_id ? String(event.published_version_id) : null,
+          publishedVersionNumber: typeof event.published_version_number === 'number'
+            ? event.published_version_number
+            : null,
+          correspondenceId: String(event.correspondence_id ?? ''),
+          correspondenceReference: String(event.correspondence_reference ?? ''),
+          correspondenceSubject: String(event.correspondence_subject ?? ''),
+          issueType: String(event.issue_type ?? ''),
+          timestamp: String(event.timestamp ?? ''),
+        }))
+      : [],
     permissions: Array.isArray(item.permissions) ? item.permissions.map(mapDocumentPermission) : [],
     createdAt: typeof item.created_at === 'string' ? item.created_at : new Date().toISOString(),
     updatedAt: typeof item.updated_at === 'string' ? item.updated_at : new Date().toISOString(),
@@ -548,6 +580,21 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
             : null,
           inherited: Boolean(item.effective_rights.inherited),
         }
+      : undefined,
+    case_links: Array.isArray(item.case_links)
+      ? item.case_links.map((link: Record<string, unknown>) => {
+          const linkedCase = (link.case ?? {}) as Record<string, unknown>;
+          return {
+            id: String(link.id),
+            case: {
+              id: String(linkedCase.id ?? ""),
+              caseNumber: String(linkedCase.caseNumber ?? linkedCase.case_number ?? ""),
+              title: String(linkedCase.title ?? ""),
+              status: String(linkedCase.status ?? ""),
+            },
+            notes: typeof link.notes === "string" ? link.notes : undefined,
+          };
+        })
       : undefined,
     correspondence_links: Array.isArray(item.correspondence_links)
       ? item.correspondence_links.map((link: Record<string, unknown>) => ({

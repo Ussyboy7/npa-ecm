@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCurrentUser } from './use-current-user';
+import { apiFetch } from '@/lib/api-client';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from './use-role-checks';
 
@@ -77,11 +78,25 @@ export interface SidebarVisibility {
  */
 export function useSidebarVisibility(): SidebarVisibility {
   const { currentUser } = useCurrentUser();
+  const [pageAccess, setPageAccess] = useState<Record<string, { allowed: boolean }> | null>(null);
+  useEffect(() => {
+    let active = true;
+    setPageAccess(null);
+    if (!currentUser?.id) return () => { active = false; };
+    apiFetch<{ pages: Record<string, { allowed: boolean }> }>("/accounts/auth/permissions/pages/")
+      .then((response) => {
+        if (active) setPageAccess(response.pages ?? {});
+      })
+      .catch(() => {
+        if (active) setPageAccess({});
+      });
+    return () => { active = false; };
+  }, [currentUser?.id]);
   const { officeMemberships, assistantAssignments, roles, offices } = useOrganization();
   const roleChecks = useRoleChecks();
 
   return useMemo(() => {
-    if (!currentUser) {
+    if (!currentUser || !pageAccess) {
       return {
         showDashboard: false,
         showMyInbox: false,
@@ -135,63 +150,9 @@ export function useSidebarVisibility(): SidebarVisibility {
       };
     }
 
-    // Super Admin should see EVERYTHING - check this first
+    const allowedPage = (pageId: string) => Boolean(pageAccess?.[pageId]?.allowed);
     const isSuperAdmin = roleChecks.isSuperAdmin;
     
-    if (isSuperAdmin) {
-      return {
-        showDashboard: true,
-        showMyInbox: true,
-        showMySent: true,
-        showExecutiveApprovals: true,
-        showDepartmentalApprovals: true,
-        showNotifications: false,
-        showOfficeInbox: true,
-        showRegisterCorrespondence: true,
-        showRegisteredCorrespondence: true,
-        showOfficeSent: true,
-        showMyCases: true,
-        showOfficeCases: true,
-        showAllCases: true,
-        showCreateCase: true,
-        showCaseTemplates: true,
-        showSearchDocuments: true,
-        showContentCapture: true,
-        showFOIA: true,
-        showFormsLibrary: true,
-        showVerifySeal: true,
-        showRecordsArchives: true,
-        showPhysicalRecords: true,
-        showDocumentsList: true,
-        showNewDocument: true,
-        showCaseAnalytics: true,
-        showAssistantCalendar: true,
-        showAnalyticsReports: true,
-        showExecutiveDashboard: true,
-        showPerformanceAnalytics: true,
-        showAdministration: true,
-        showAdminDashboard: true,
-        showOrganizationOffices: true,
-        showUsersRoles: true,
-        showWorkflowSLA: true,
-        showRecordsGovernance: true,
-        showTemplates: true,
-        showAuditCompliance: true,
-        showAuditForms: true,
-        showSystemHealth: true,
-        showExternalEntities: true,
-        showDivisionAnalytics: true,
-        showIntegration: true,
-        showIntegrationHub: true,
-        showSettings: true,
-        showHelpGuides: true,
-        showHelpdeskSubmit: true,
-        showHelpdeskQueue: true,
-        showDrmPolicies: true,
-        showLegacyImport: true,
-      };
-    }
-
     const perms: Record<string, boolean> = {
       ...(roles.find((r) => r.id === currentUser.systemRole || r.name === currentUser.systemRole)?.permissions ?? {}),
       ...(currentUser.rolePermissions ?? {}),
@@ -224,9 +185,8 @@ export function useSidebarVisibility(): SidebarVisibility {
     const adminOn = section("sidebar_show_administration", has("can_access_administration"));
     const integrationOn = section("sidebar_show_integration", has("can_manage_integration"));
 
-    const showDashboard = true;
+    const showDashboard = allowedPage("dashboard");
     const canAccessCorrespondence =
-      hasOfficeMembership ||
       has("can_minute_correspondence") ||
       has("can_treat_correspondence") ||
       has("can_register_correspondence") ||
@@ -234,40 +194,36 @@ export function useSidebarVisibility(): SidebarVisibility {
       has("can_view_all_correspondence") ||
       has("can_view_registry") ||
       has("can_distribute") ||
-      has("can_archive");
-    const showMyInbox = canAccessCorrespondence;
-    const showMySent = canAccessCorrespondence;
+      has("can_archive") ||
+      has("can_access_all_cases");
+    const showMyInbox = allowedPage("my_inbox") && canAccessCorrespondence;
+    const showMySent = allowedPage("my_sent") && canAccessCorrespondence;
     const showNotifications = false;
-    const showExecutiveApprovals =
-      has("can_access_approvals") || (roleChecks.isSecretary && hasExecutiveAssignment);
-    const showDepartmentalApprovals =
-      has("can_approve") || has("can_access_approvals");
+    const showExecutiveApprovals = allowedPage("approvals_executive");
+    const showDepartmentalApprovals = allowedPage("approvals_departmental");
 
-    const showOfficeInbox = registryOn && hasOfficeQueueRole;
-    const showOfficeSent = registryOn && hasOfficeQueueRole;
+    const showOfficeInbox = registryOn && allowedPage("office_inbox") && hasOfficeQueueRole;
+    const showOfficeSent = registryOn && allowedPage("office_inbox") && hasOfficeQueueRole;
     const showRegisterCorrespondence =
       registryOn &&
       has("can_register_correspondence") &&
       (hasOfficeMembership || has("can_view_registry") || roleChecks.isRegistry);
-    const showRegisteredCorrespondence =
-      registryOn &&
-      (has("can_view_registry") || has("can_view_all_correspondence") || has("can_register_correspondence"));
+    const showRegisteredCorrespondence = registryOn && allowedPage("registered");
 
-    const showMyCases = casesOn;
-    const showOfficeCases = casesOn && hasOfficeQueueRole;
-    const showCreateCase = casesOn;
-    const showCaseTemplates = casesOn;
-    const showAllCases = casesOn && has("can_view_all_correspondence");
+    const showMyCases = casesOn && allowedPage("cases_my");
+    const showOfficeCases = casesOn && allowedPage("cases_office") && hasOfficeQueueRole;
+    const showCreateCase = casesOn && has("can_create_cases");
+    const showCaseTemplates = adminOn && allowedPage("case_templates");
+    const showAllCases = casesOn && allowedPage("cases_all");
 
-    const showSearchDocuments = documentsOn && has("can_access_document_management");
+    const showSearchDocuments = documentsOn && allowedPage("documents");
     const showContentCapture = documentsOn && has("can_access_document_management");
     const showFOIA = documentsOn;
-    const showFormsLibrary = documentsOn;
-    const showVerifySeal = documentsOn;
-    const showRecordsArchives = documentsOn && (hasOfficeMembership || hasOrgUnit);
-    const showPhysicalRecords =
-      documentsOn && (has("can_archive") || showRecordsArchives || showRegisterCorrespondence);
-    const showDocumentsList = documentsOn && has("can_access_document_management");
+    const showFormsLibrary = documentsOn && allowedPage("forms");
+    const showVerifySeal = documentsOn && has("can_access_document_management");
+    const showRecordsArchives = documentsOn && allowedPage("records");
+    const showPhysicalRecords = documentsOn && allowedPage("physical_records");
+    const showDocumentsList = documentsOn && allowedPage("documents");
     const showNewDocument = documentsOn && has("can_create_documents");
 
     const isAssistantWithCalendar = assistantAssignments.some(
@@ -289,11 +245,10 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showUsersRoles =
       adminOn && (has("can_manage_users") || has("can_manage_roles"));
     const showWorkflowSLA = adminOn && has("can_manage_org_structure");
-    const showRecordsGovernance = adminOn && has("can_access_records_governance");
-    const showTemplates =
-      (adminOn && has("can_access_administration")) || casesOn;
-    const showAuditCompliance = (adminOn && has("can_access_audit_compliance")) || hasOfficeMembership;
-    const showAuditForms = adminOn && has("can_access_audit_compliance");
+    const showRecordsGovernance = adminOn && allowedPage("records_governance");
+    const showTemplates = adminOn && allowedPage("templates");
+    const showAuditCompliance = allowedPage("audit");
+    const showAuditForms = allowedPage("forms");
     const showSystemHealth = has("can_access_system_health");
     const showDrmPolicies = has("can_manage_drm_policies");
     const showLegacyImport = has("can_access_system_health");
@@ -303,8 +258,7 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showIntegration = integrationOn;
     const showIntegrationHub = integrationOn;
 
-    const showAdminDashboard =
-      has("can_access_system_health") || has("can_manage_users");
+    const showAdminDashboard = allowedPage("admin_overview");
 
     const showSettings = true;
     const showHelpGuides = true;
@@ -382,6 +336,7 @@ export function useSidebarVisibility(): SidebarVisibility {
     roleChecks,
     roles,
     offices,
+    pageAccess,
   ]);
 }
 

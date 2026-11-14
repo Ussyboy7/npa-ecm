@@ -2,15 +2,24 @@
 
 from datetime import datetime, timedelta
 import csv
+import hashlib
 import io
+import secrets
 
 from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import FileResponse, HttpResponse
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.db import transaction
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import MethodNotAllowed, NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,12 +34,18 @@ from .login_mfa import (
     get_or_create_login_security,
     user_requires_login_mfa,
 )
-from common.throttles import LoginRateThrottle, OTPRateThrottle, PasswordChangeRateThrottle
+from common.throttles import (
+    LoginRateThrottle,
+    OTPRateThrottle,
+    PasswordChangeRateThrottle,
+    TotpSetupRateThrottle,
+)
 from .models import User, ExecutiveSignature, DocumentSeal, SealOTP, SignatureTemplate, UserSignaturePreferences
 from .serializers import (
     UserListSerializer,
     UserSerializer, 
     ExecutiveSignatureSerializer,
+    ExecutiveSignatureSettingsSerializer,
     ExecutiveSignatureUploadSerializer,
     SignatureTemplateSerializer,
     UserSignaturePreferencesSerializer,
@@ -46,7 +61,7 @@ try:
 except ImportError:
     QRCODE_AVAILABLE = False
 
-from PIL import Image
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 
 AUTH_ACCESS_COOKIE_NAME = "npa_ecm_access_token"
@@ -95,6 +110,11 @@ def process_signature_background(image_bytes, threshold=200, fade_width=30):
     """
     img = Image.open(io.BytesIO(image_bytes))
 
+    # A small compressed file can still decode to a huge pixel grid. Reject
+    # those before the per-pixel Python loop to protect workers.
+    if img.width * img.height > 12_000_000:
+        raise ValueError("Signature image dimensions are too large")
+
     if img.mode != 'RGBA':
         img = img.convert('RGBA')
 
@@ -135,7 +155,16 @@ class UserViewSet(viewsets.ModelViewSet):
     pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["is_active", "is_management", "grade_level", "system_role", "division", "department"]
-    search_fields = ["username", "email", "first_name", "last_name", "employee_id"]
+    search_fields = [
+        "username",
+        "email",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "employee_id",
+        "personnel_number",
+        "designation",
+    ]
     ordering_fields = ["username", "first_name", "last_name", "date_joined", "last_login"]
     ordering = ["username"]
 
@@ -366,7 +395,8 @@ class UserViewSet(viewsets.ModelViewSet):
         # Write header
         writer.writerow([
             'ID', 'Username', 'Email', 'First Name', 'Last Name',
-            'Employee ID', 'Grade Level', 'System Role', 
+            'Middle Name', 'Honorific', 'Employee ID', 'Person No.', 'Designation',
+            'Grade Level', 'System Role',
             'Directorate', 'Division', 'Department',
             'Is Active', 'Is Management', 'Is Superuser',
             'Date Joined', 'Last Login', 'Last Activity'
@@ -380,7 +410,11 @@ class UserViewSet(viewsets.ModelViewSet):
                 user.email,
                 user.first_name,
                 user.last_name,
+                user.middle_name,
+                user.honorific,
                 user.employee_id,
+                user.personnel_number,
+                user.designation,
                 user.grade_level,
                 user.system_role.name if user.system_role else ('System Administrator' if user.is_superuser else ''),
                 user.directorate.name if user.directorate else '',
@@ -447,8 +481,12 @@ class UserViewSet(viewsets.ModelViewSet):
                     defaults={
                         'email': email,
                         'first_name': row.get('First Name', '').strip(),
+                        'middle_name': row.get('Middle Name', '').strip(),
                         'last_name': row.get('Last Name', '').strip(),
+                        'honorific': row.get('Honorific', row.get('Title', '')).strip(),
                         'employee_id': row.get('Employee ID', '').strip(),
+                        'personnel_number': row.get('Person No.', row.get('Personnel Number', '')).strip(),
+                        'designation': row.get('Designation', '').strip(),
                         'grade_level': row.get('Grade Level', '').strip(),
                         'is_active': row.get('Is Active', 'Yes').strip().lower() in ['yes', 'true', '1'],
                         'is_management': row.get('Is Management', 'No').strip().lower() in ['yes', 'true', '1'],
@@ -459,8 +497,12 @@ class UserViewSet(viewsets.ModelViewSet):
                     # Update existing user
                     user.email = email
                     user.first_name = row.get('First Name', '').strip()
+                    user.middle_name = row.get('Middle Name', '').strip()
                     user.last_name = row.get('Last Name', '').strip()
+                    user.honorific = row.get('Honorific', row.get('Title', '')).strip()
                     user.employee_id = row.get('Employee ID', '').strip()
+                    user.personnel_number = row.get('Person No.', row.get('Personnel Number', '')).strip()
+                    user.designation = row.get('Designation', '').strip()
                     user.grade_level = row.get('Grade Level', '').strip()
                     user.is_active = row.get('Is Active', 'Yes').strip().lower() in ['yes', 'true', '1']
                     user.is_management = row.get('Is Management', 'No').strip().lower() in ['yes', 'true', '1']
@@ -550,15 +592,15 @@ class UserViewSet(viewsets.ModelViewSet):
         
         writer = csv.writer(response)
         writer.writerow([
-            'Username', 'Email', 'First Name', 'Last Name',
-            'Employee ID', 'Grade Level', 'System Role',
+            'Username', 'Email', 'Title', 'First Name', 'Middle Name', 'Last Name',
+            'Employee ID', 'Person No.', 'Designation', 'Grade Level', 'System Role',
             'Directorate', 'Division', 'Department',
             'Is Active', 'Is Management', 'Password'
         ])
         # Add example row
         writer.writerow([
-            'jdoe', 'jdoe@npa.gov.ng', 'John', 'Doe',
-            'EMP001', 'MSS1', 'Staff Officer',
+            'jdoe', 'jdoe@npa.gov.ng', 'Mr.', 'John', 'Michael', 'Doe',
+            'EMP001', 'A0001', 'STAFF OFFICER', 'MSS1', 'Staff Officer',
             'Operations', 'Marine Operations', 'Port Operations',
             'Yes', 'No', 'ChangeMe123!'
         ])
@@ -580,13 +622,81 @@ class CurrentUserView(APIView):
         serializer = UserSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             # Only allow users to update certain fields themselves
-            allowed_fields = ['first_name', 'last_name', 'email']
+            allowed_fields = ['first_name', 'middle_name', 'last_name', 'email', 'phone', 'bio']
             update_data = {k: v for k, v in serializer.validated_data.items() if k in allowed_fields}
             for field, value in update_data.items():
                 setattr(request.user, field, value)
-            request.user.save(update_fields=allowed_fields)
+            if update_data:
+                request.user.save(update_fields=list(update_data))
             return Response(UserSerializer(request.user).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CurrentUserPhotoView(APIView):
+    """Upload or replace the authenticated user's profile photo."""
+
+    permission_classes = [IsAuthenticated]
+    MAX_BYTES = 5 * 1024 * 1024
+    MAX_PIXELS = 25_000_000
+    MAX_DIMENSION = 512
+    ALLOWED_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+
+    def post(self, request):
+        upload = request.FILES.get("profile_photo")
+        if not upload:
+            return Response(
+                {"profile_photo": "Choose an image to upload."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if upload.size > self.MAX_BYTES:
+            return Response(
+                {"profile_photo": "Profile photo must be 5MB or less."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if upload.content_type not in self.ALLOWED_TYPES:
+            return Response(
+                {"profile_photo": "Use a PNG, JPEG, or WebP image."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with Image.open(upload) as source:
+                width, height = source.size
+                if width * height > self.MAX_PIXELS:
+                    return Response(
+                        {"profile_photo": "Image dimensions are too large."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                image = ImageOps.exif_transpose(source)
+                image.thumbnail((self.MAX_DIMENSION, self.MAX_DIMENSION), Image.LANCZOS)
+                if image.mode in ("RGBA", "LA") or "transparency" in image.info:
+                    rgba = image.convert("RGBA")
+                    flattened = Image.new("RGB", rgba.size, (255, 255, 255))
+                    flattened.paste(rgba, mask=rgba.split()[-1])
+                    image = flattened
+                else:
+                    image = image.convert("RGB")
+                buffer = io.BytesIO()
+                image.save(buffer, format="JPEG", quality=85, optimize=True)
+        except (UnidentifiedImageError, OSError, ValueError):
+            return Response(
+                {"profile_photo": "Could not process this image. Try a different file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_name = request.user.profile_photo.name if request.user.profile_photo else ""
+        request.user.profile_photo.save(
+            f"profile-{request.user.id}.jpg",
+            ContentFile(buffer.getvalue()),
+            save=True,
+        )
+        if old_name and old_name != request.user.profile_photo.name:
+            try:
+                request.user.profile_photo.storage.delete(old_name)
+            except OSError:
+                pass
+
+        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
 
 class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -786,6 +896,62 @@ class ChangePasswordView(APIView):
         return Response({"detail": "Password changed successfully"}, status=status.HTTP_200_OK)
 
 
+class InitialPasswordSetView(APIView):
+    """Set the first password for an imported account from a signed link."""
+
+    permission_classes = []
+    throttle_classes = [PasswordChangeRateThrottle]
+
+    def post(self, request):
+        uid = request.data.get("uid") or ""
+        token = request.data.get("token") or ""
+        new_password = request.data.get("new_password") or ""
+        confirm_password = request.data.get("confirm_password") or ""
+
+        if not all([uid, token, new_password, confirm_password]):
+            raise ValidationError(
+                {"detail": "uid, token, new_password, and confirm_password are required"}
+            )
+        if new_password != confirm_password:
+            raise ValidationError({"confirm_password": "Passwords do not match"})
+        if len(new_password) < 8:
+            raise ValidationError(
+                {"new_password": "Password must be at least 8 characters long"}
+            )
+
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise ValidationError({"detail": "This setup link is invalid or has expired."})
+
+        if not user.is_active or not default_token_generator.check_token(user, token):
+            raise ValidationError({"detail": "This setup link is invalid or has expired."})
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as exc:
+            raise ValidationError({"new_password": exc.messages})
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+
+        try:
+            from audit.models import ActivityLog
+
+            AuditService.log_user_activity(
+                user=user,
+                action=ActivityLog.ActionType.USER_UPDATED,
+                target_user=user,
+                request=request,
+                description="Completed first-login password setup",
+            )
+        except Exception:
+            pass
+
+        return Response({"detail": "Password set successfully"}, status=status.HTTP_200_OK)
+
+
 class ExecutiveSignatureView(APIView):
     """
     Manage the current user's executive signature.
@@ -820,43 +986,57 @@ class ExecutiveSignatureView(APIView):
         
         validated_data = upload_serializer.validated_data
         signature_file = validated_data['signature_image']
+        # BooleanField defaults missing HTML fields to False, so only honour
+        # require_2fa when the client explicitly sent it.
+        require_2fa_provided = 'require_2fa' in request.data
 
         # Background removal re-encodes to PNG — store as .png so MIME matches bytes.
         raw_bytes = signature_file.read()
-        processed_bytes = process_signature_background(raw_bytes)
+        try:
+            processed_bytes = process_signature_background(raw_bytes)
+        except Exception:
+            return Response(
+                {"signature_image": "Could not process this image. Use a PNG or JPG under 2MB."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         file_hash = ExecutiveSignature.compute_file_hash(processed_bytes)
         original_name = signature_file.name or "signature.png"
         png_name = f"{original_name.rsplit('.', 1)[0]}.png"
         signature_file = ContentFile(processed_bytes, name=png_name)
 
-        # Get or create signature record
-        signature, created = ExecutiveSignature.objects.get_or_create(
-            user=request.user,
-            defaults={
-                'signature_image': signature_file,
-                'original_filename': signature_file.name,
-                'file_hash': file_hash,
-                'seal_office_name': validated_data.get('seal_office_name', 'NIGERIAN PORTS AUTHORITY'),
-                'seal_office_title': validated_data.get('seal_office_title', ''),
-                'seal_prefix': validated_data.get('seal_prefix', 'NPA'),
-                'require_2fa': validated_data.get('require_2fa', True),
-            }
-        )
-        
-        if not created:
-            # Update existing signature
-            # Delete old file
-            if signature.signature_image:
-                signature.signature_image.delete(save=False)
-            
-            signature.signature_image = signature_file
-            signature.original_filename = signature_file.name
-            signature.file_hash = file_hash
-            signature.seal_office_name = validated_data.get('seal_office_name', signature.seal_office_name)
-            signature.seal_office_title = validated_data.get('seal_office_title', signature.seal_office_title)
-            signature.seal_prefix = validated_data.get('seal_prefix', signature.seal_prefix)
-            signature.require_2fa = validated_data.get('require_2fa', signature.require_2fa)
-            signature.save()
+        old_image_name = ""
+        with transaction.atomic():
+            signature, created = ExecutiveSignature.objects.get_or_create(
+                user=request.user,
+                defaults={
+                    'signature_image': signature_file,
+                    'original_filename': signature_file.name,
+                    'file_hash': file_hash,
+                    'seal_office_name': validated_data.get('seal_office_name') or 'NIGERIAN PORTS AUTHORITY',
+                    'seal_office_title': validated_data.get('seal_office_title', ''),
+                    'seal_prefix': validated_data.get('seal_prefix') or 'NPA',
+                    'require_2fa': validated_data['require_2fa'] if require_2fa_provided else True,
+                }
+            )
+
+            if not created:
+                old_image_name = signature.signature_image.name if signature.signature_image else ""
+                signature.signature_image = signature_file
+                signature.original_filename = signature_file.name
+                signature.file_hash = file_hash
+                signature.seal_office_name = validated_data.get('seal_office_name', signature.seal_office_name)
+                signature.seal_office_title = validated_data.get('seal_office_title', signature.seal_office_title)
+                signature.seal_prefix = validated_data.get('seal_prefix', signature.seal_prefix)
+                if require_2fa_provided:
+                    signature.require_2fa = validated_data['require_2fa']
+                signature.is_active = True
+                signature.save()
+
+        if old_image_name and old_image_name != signature.signature_image.name:
+            try:
+                default_storage.delete(old_image_name)
+            except OSError:
+                pass
         
         # Audit log
         from audit.models import ActivityLog
@@ -881,13 +1061,37 @@ class ExecutiveSignatureView(APIView):
                 {"detail": "No signature found. Upload a signature first."},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Update allowed fields
-        allowed_fields = ['seal_office_name', 'seal_office_title', 'seal_prefix', 'require_2fa', 'is_active']
-        for field in allowed_fields:
-            if field in request.data:
-                setattr(signature, field, request.data[field])
-        signature.save()
+
+        serializer = ExecutiveSignatureSettingsSerializer(
+            signature, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        if (
+            "require_2fa" in serializer.validated_data
+            and signature.require_2fa
+            and not serializer.validated_data["require_2fa"]
+        ):
+            from .services import StepUpService
+
+            StepUpService.assert_verified(
+                request,
+                password=request.data.get("current_password"),
+                code=request.data.get("code"),
+            )
+        changed_fields = sorted(serializer.validated_data.keys())
+        signature = serializer.save()
+
+        if changed_fields:
+            from audit.models import ActivityLog
+
+            AuditService.log_user_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.USER_UPDATED,
+                target_user=request.user,
+                request=request,
+                description="Updated digital seal settings",
+                metadata={"fields": changed_fields},
+            )
         
         serializer = ExecutiveSignatureSerializer(signature, context={'request': request})
         return Response(serializer.data)
@@ -923,72 +1127,61 @@ class ExecutiveSignatureView(APIView):
 
 class SealSignatureImageView(APIView):
     """
-    Public endpoint to serve the seal's signature image (the uploaded image used when
-    the seal was created). Used by DigitalSealPreview to avoid CORS issues when
-    loading /media/ from a different origin. No authentication required.
+    Authenticated endpoint for the immutable signature image used by a seal.
     """
-    permission_classes = []
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, serial_number):
         try:
             seal = DocumentSeal.objects.select_related('signature_used').get(serial_number=serial_number)
         except DocumentSeal.DoesNotExist:
             return Response({"detail": "Seal not found"}, status=status.HTTP_404_NOT_FOUND)
-        if not seal.signature_used or not getattr(seal.signature_used, 'signature_image', None) or not seal.signature_used.signature_image:
+
+        if not request.user.is_superuser and seal.sealed_by_id != request.user.id:
+            raise PermissionDenied("You cannot access this seal's signature")
+
+        signature_field = seal.signature_image
+        if not signature_field:
             return Response({"detail": "No signature image for this seal"}, status=status.HTTP_404_NOT_FOUND)
         try:
-            with seal.signature_used.signature_image.open('rb') as f:
+            with signature_field.open('rb') as f:
                 data = f.read()
         except (OSError, ValueError):
             return Response({"detail": "Signature image file unavailable"}, status=status.HTTP_404_NOT_FOUND)
         resp = FileResponse(io.BytesIO(data), content_type='image/png', as_attachment=False)
-        resp['Access-Control-Allow-Origin'] = '*'
         return resp
 
 
-class SealImageUploadView(APIView):
+class SealImageView(APIView):
+    """Serve the hash-verified, server-rendered image for an issued seal."""
+
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, serial_number):
+    def get(self, request, serial_number):
         try:
-            seal = DocumentSeal.objects.select_related("sealed_by").get(serial_number=serial_number)
+            seal = DocumentSeal.objects.select_related("sealed_by", "signature_used").get(
+                serial_number=serial_number
+            )
         except DocumentSeal.DoesNotExist:
             raise NotFound("Seal not found")
 
-        if not (request.user.is_superuser or request.user == seal.sealed_by):
-            raise PermissionDenied("You cannot modify this seal")
+        from .services import SealGenerationService
 
-        data_url = request.data.get("image_data_url") or request.data.get("image") or ""
-        if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
-            raise ValidationError({"image_data_url": "Expected a PNG data URL"})
+        image_bytes = SealGenerationService.ensure_seal_image(seal)
+        if not image_bytes:
+            raise NotFound("Seal image unavailable")
 
-        raw_b64 = data_url.split(",", 1)[1] if "," in data_url else ""
-        try:
-            image_bytes = base64.b64decode(raw_b64, validate=True)
-        except Exception:
-            raise ValidationError({"image_data_url": "Invalid base64 payload"})
+        response = FileResponse(io.BytesIO(image_bytes), content_type="image/png", as_attachment=False)
+        response["Cache-Control"] = "private, no-store"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
-        if len(image_bytes) > 2_500_000:
-            raise ValidationError({"image_data_url": "Image too large"})
-
-        try:
-            if seal.seal_image:
-                seal.seal_image.delete(save=False)
-        except Exception:
-            pass
-
-        seal.seal_image.save(
-            f"{seal.serial_number}.png",
-            ContentFile(image_bytes),
-            save=True,
-        )
-
-        return Response(
-            {
-                "detail": "Seal image saved",
-                "seal_image_url": request.build_absolute_uri(seal.seal_image.url) if seal.seal_image else None,
-            },
-            status=status.HTTP_200_OK,
+    def post(self, request, serial_number):
+        # The seal image is evidence generated at issue time. There is no
+        # supported path for replacing it with client-rendered bytes.
+        raise MethodNotAllowed(
+            "POST",
+            detail="Seal images are generated server-side and cannot be replaced.",
         )
 
 
@@ -1016,14 +1209,6 @@ class SealVerificationView(APIView):
                 "sealed_at": seal.sealed_at.isoformat(),
             }
             
-            # Use proxy URL for signature image so it loads cross-origin (CORS-safe)
-            signature_image_url = None
-            if seal.signature_used and getattr(seal.signature_used, 'signature_image', None) and seal.signature_used.signature_image:
-                signature_image_url = request.build_absolute_uri(
-                    f"/api/v1/accounts/seal/signature-image/{seal.serial_number}/"
-                )
-            response_data["signature_image_url"] = signature_image_url
-            
             if not seal.is_valid:
                 response_data["invalidated_at"] = seal.invalidated_at.isoformat() if seal.invalidated_at else None
                 response_data["invalidated_reason"] = seal.invalidated_reason
@@ -1034,6 +1219,22 @@ class SealVerificationView(APIView):
             if seal.correspondence:
                 response_data["correspondence_subject"] = seal.correspondence.subject
                 response_data["correspondence_id"] = str(seal.correspondence.id)
+
+            from correspondence.models import ApprovalSnapshot
+
+            snapshot = (
+                ApprovalSnapshot.objects.filter(seal=seal)
+                .order_by("-created_at")
+                .first()
+            )
+            if snapshot:
+                response_data["pdf_sha256"] = snapshot.pdf_sha256
+                response_data["pdf_generated_at"] = (
+                    snapshot.pdf_generated_at.isoformat()
+                    if snapshot.pdf_generated_at
+                    else None
+                )
+                response_data["snapshot_reference"] = snapshot.document_reference
             
             return Response(response_data)
             
@@ -1042,6 +1243,58 @@ class SealVerificationView(APIView):
                 {"valid": False, "error": "Seal not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class SealDocumentCheckView(APIView):
+    """Compare a supplied PDF against the frozen approved copy for a seal."""
+
+    permission_classes = []
+
+    def post(self, request, serial_number):
+        try:
+            seal = DocumentSeal.objects.get(serial_number=serial_number)
+        except DocumentSeal.DoesNotExist:
+            return Response({"detail": "Seal not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        upload = request.FILES.get("file")
+        if upload is None or not upload.name.lower().endswith(".pdf"):
+            raise ValidationError({"file": "Upload the approved-copy PDF."})
+        if upload.size > 25 * 1024 * 1024:
+            raise ValidationError({"file": "PDF must be 25 MB or smaller."})
+
+        from correspondence.models import ApprovalSnapshot
+
+        snapshot = (
+            ApprovalSnapshot.objects.filter(seal=seal, pdf_sha256__gt="")
+            .order_by("-created_at")
+            .first()
+        )
+        if snapshot is None:
+            return Response(
+                {"detail": "No archived approved-copy hash is available for this seal."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        digest = hashlib.sha256(upload.read()).hexdigest()
+        matches = secrets.compare_digest(digest, snapshot.pdf_sha256)
+        return Response(
+            {
+                "matches": matches,
+                "expected_sha256": snapshot.pdf_sha256,
+                "actual_sha256": digest,
+                "pdf_generated_at": (
+                    snapshot.pdf_generated_at.isoformat()
+                    if snapshot.pdf_generated_at
+                    else None
+                ),
+                "detail": (
+                    "Document matches the archived approved copy."
+                    if matches
+                    else "Document differs from the archived approved copy."
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ApplySealView(APIView):
@@ -1054,7 +1307,7 @@ class ApplySealView(APIView):
     
     def post(self, request):
         """Apply seal to document or correspondence."""
-        from .services import SealGenerationService, VerificationTokenService
+        from .services import SealGenerationService
         from correspondence.models import Correspondence
         from dms.models import Document
         
@@ -1064,27 +1317,15 @@ class ApplySealView(APIView):
         if not document_id and not correspondence_id:
             raise ValidationError({"detail": "Either document_id or correspondence_id is required"})
         
-        # Require 2FA verification token for seal application
-        verification_token = request.data.get('verification_token')
-        if not verification_token:
-            raise ValidationError({"detail": "2FA verification is required. Please complete 2FA verification first."})
-        
-        if not VerificationTokenService.verify_token(
-            token=verification_token,
-            user_id=str(request.user.id),
-            purpose="seal_application",
-        ):
-            raise ValidationError({"detail": "Invalid or expired verification token. Please complete 2FA verification again."})
-        
         # Check if user has an active signature
-        try:
-            signature = ExecutiveSignature.objects.get(user=request.user, is_active=True)
-        except ExecutiveSignature.DoesNotExist:
+        if not ExecutiveSignature.objects.filter(
+            user=request.user, is_active=True
+        ).exists():
             raise ValidationError({
                 "detail": "You need to upload a digital signature before applying seals. "
                          "Go to Settings → Signature to upload your signature."
             })
-        
+
         # Get the document or correspondence
         document = None
         correspondence = None
@@ -1108,6 +1349,7 @@ class ApplySealView(APIView):
                 document=document,
                 correspondence=correspondence,
                 request=request,  # Pass request to detect correct frontend URL
+                verification_token=request.data.get('verification_token'),
             )
             
             # Audit log
@@ -1146,35 +1388,10 @@ class TwoFactorStatusView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        try:
-            signature = ExecutiveSignature.objects.get(user=request.user)
-            return Response({
-                "require_2fa": signature.require_2fa,
-                "totp_enabled": signature.totp_enabled,
-                "totp_confirmed": signature.totp_confirmed,
-                "preferred_method": signature.preferred_2fa_method,
-                "email": request.user.email,
-                "has_email": bool(request.user.email),
-                "available_methods": self._get_available_methods(signature, request.user),
-            })
-        except ExecutiveSignature.DoesNotExist:
-            return Response({
-                "require_2fa": False,
-                "totp_enabled": False,
-                "totp_confirmed": False,
-                "preferred_method": "email",
-                "email": request.user.email,
-                "has_email": bool(request.user.email),
-                "available_methods": ["email"] if request.user.email else [],
-            })
-    
-    def _get_available_methods(self, signature, user):
-        methods = []
-        if user.email:
-            methods.append("email")
-        if signature.totp_enabled and signature.totp_confirmed:
-            methods.append("totp")
-        return methods
+        from .services import SealTwoFactorService
+
+        signature = ExecutiveSignature.objects.filter(user=request.user).first()
+        return Response(SealTwoFactorService.get_status(request.user, signature))
 
 
 class RequestEmailOTPView(APIView):
@@ -1188,14 +1405,23 @@ class RequestEmailOTPView(APIView):
     def post(self, request):
         correspondence_id = request.data.get('correspondence_id')
         document_id = request.data.get('document_id')
+        purpose = str(request.data.get('purpose') or 'seal_application')
+        if purpose not in {'seal_application', 'email_otp_setup'}:
+            raise ValidationError({"detail": "Unsupported verification purpose"})
         
         if not request.user.email:
             raise ValidationError({"detail": "No email address configured. Please add an email to your profile."})
+
+        signature = ExecutiveSignature.objects.filter(user=request.user).first()
+        if purpose == 'email_otp_setup' and not signature:
+            raise ValidationError({"detail": "Upload a signature before setting up seal 2FA."})
+        if purpose == 'seal_application' and signature and not signature.email_otp_enabled:
+            raise ValidationError({"detail": "Email OTP is disabled for seal verification."})
         
         # Create OTP
         otp = SealOTP.create_for_user(
             user=request.user,
-            purpose="seal_application",
+            purpose=purpose,
             correspondence_id=correspondence_id,
             document_id=document_id,
             validity_minutes=5,
@@ -1204,11 +1430,9 @@ class RequestEmailOTPView(APIView):
         # Send email
         try:
             from django.core.mail import send_mail
-            from django.template.loader import render_to_string
-            
-            subject = f"NPA ECM - Seal Verification Code: {otp.code}"
+            subject = "NPA ECM - Verification Code"
             message = f"""
-Your verification code for digital seal application is:
+Your verification code is:
 
 {otp.code}
 
@@ -1234,9 +1458,10 @@ Electronic Correspondence Management System
                 user=request.user,
                 action=ActivityLog.ActionType.USER_UPDATED,
                 request=request,
-                description="Requested email OTP for seal application",
+                description="Requested email verification code",
                 metadata={
                     "otp_id": str(otp.id),
+                    "purpose": purpose,
                     "correspondence_id": str(correspondence_id) if correspondence_id else None,
                 },
             )
@@ -1268,6 +1493,7 @@ class VerifyEmailOTPView(APIView):
     def post(self, request):
         otp_id = request.data.get('otp_id')
         code = request.data.get('code')
+        purpose = str(request.data.get('purpose') or 'seal_application')
         
         if not otp_id or not code:
             raise ValidationError({"detail": "otp_id and code are required"})
@@ -1276,10 +1502,25 @@ class VerifyEmailOTPView(APIView):
             otp = SealOTP.objects.get(id=otp_id, user=request.user)
         except SealOTP.DoesNotExist:
             raise ValidationError({"detail": "Invalid or expired OTP"})
+
+        if otp.purpose != purpose:
+            raise ValidationError({"detail": "Invalid or expired OTP"})
         
         if otp.verify(code):
-            # Generate a short-lived verification token
-            verification_token = self._generate_verification_token(request.user, otp)
+            from .services import BackupCodeService
+
+            backup_codes = []
+            verification_token = None
+            if purpose == 'email_otp_setup':
+                signature = ExecutiveSignature.objects.filter(user=request.user).first()
+                if not signature:
+                    raise ValidationError({"detail": "No signature configured"})
+                signature.email_otp_enabled = True
+                signature.save(update_fields=['email_otp_enabled', 'updated_at'])
+                backup_codes = BackupCodeService.generate(request.user)
+            else:
+                # Generate a short-lived token for the seal application.
+                verification_token = self._generate_verification_token(request.user, otp)
             
             # Audit log
             from audit.models import ActivityLog
@@ -1287,13 +1528,14 @@ class VerifyEmailOTPView(APIView):
                 user=request.user,
                 action=ActivityLog.ActionType.USER_UPDATED,
                 request=request,
-                description="Verified email OTP for seal application",
-                metadata={"otp_id": str(otp.id)},
+                description="Verified email OTP",
+                metadata={"otp_id": str(otp.id), "purpose": purpose},
             )
             
             return Response({
                 "verified": True,
                 "verification_token": verification_token,
+                "backup_codes": backup_codes,
                 "expires_in": 300,  # 5 minutes
             })
         else:
@@ -1326,6 +1568,7 @@ class SetupTOTPView(APIView):
     Returns a QR code and secret for setup.
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [TotpSetupRateThrottle]
     
     def post(self, request):
         try:
@@ -1335,12 +1578,24 @@ class SetupTOTPView(APIView):
         
         # Generate new TOTP secret if not exists or regenerating
         force_regenerate = request.data.get('regenerate', False)
+
+        if signature.totp_secret or force_regenerate:
+            from .services import StepUpService
+
+            StepUpService.assert_verified(
+                request,
+                password=request.data.get('current_password'),
+                code=request.data.get('code'),
+            )
         
         if not signature.totp_secret or force_regenerate:
             signature.totp_secret = pyotp.random_base32()
             signature.totp_enabled = True
             signature.totp_confirmed = False
-            signature.save(update_fields=['totp_secret', 'totp_enabled', 'totp_confirmed'])
+            signature.totp_last_used_step = 0
+            signature.save(update_fields=[
+                'totp_secret', 'totp_enabled', 'totp_confirmed', 'totp_last_used_step', 'updated_at'
+            ])
         
         # Generate provisioning URI for QR code
         totp = pyotp.TOTP(signature.totp_secret)
@@ -1393,16 +1648,20 @@ class VerifyTOTPView(APIView):
         if not signature.totp_secret:
             raise ValidationError({"detail": "TOTP not set up. Please set up TOTP first."})
         
-        # Verify TOTP
-        totp = pyotp.TOTP(signature.totp_secret)
-        is_valid = totp.verify(code, valid_window=1)  # Allow 1 step tolerance
+        from .services import BackupCodeService, TotpVerificationService
+
+        # Verify TOTP and consume the time-step so the same code cannot be replayed.
+        is_valid = TotpVerificationService.verify_and_consume(signature, code)
         
         if is_valid:
             # If this is setup confirmation, mark as confirmed
+            backup_codes = []
             if purpose == 'setup' and not signature.totp_confirmed:
                 signature.totp_confirmed = True
                 signature.preferred_2fa_method = 'totp'
-                signature.save(update_fields=['totp_confirmed', 'preferred_2fa_method'])
+                signature.save(update_fields=['totp_confirmed', 'preferred_2fa_method', 'updated_at'])
+                if request.data.get('generate_backup_codes'):
+                    backup_codes = BackupCodeService.generate(request.user)
             
             # Generate verification token
             verification_token = self._generate_verification_token(request.user)
@@ -1420,6 +1679,7 @@ class VerifyTOTPView(APIView):
                 "verified": True,
                 "verification_token": verification_token,
                 "totp_confirmed": signature.totp_confirmed,
+                "backup_codes": backup_codes,
                 "expires_in": 300,
             })
         else:
@@ -1433,7 +1693,7 @@ class VerifyTOTPView(APIView):
         from .services import VerificationTokenService
         return VerificationTokenService.generate_token(
             user_id=str(user.id),
-            purpose="seal_application:totp",
+            purpose="seal_application",
         )
 
 
@@ -1442,12 +1702,10 @@ class DisableTOTPView(APIView):
     Disable TOTP for the user. Requires current TOTP code for security.
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [OTPRateThrottle]
     
     def post(self, request):
         code = request.data.get('code')
-        
-        if not code:
-            raise ValidationError({"detail": "Current TOTP code is required to disable"})
         
         try:
             signature = ExecutiveSignature.objects.get(user=request.user)
@@ -1457,17 +1715,30 @@ class DisableTOTPView(APIView):
         if not signature.totp_secret:
             return Response({"detail": "TOTP is not enabled"})
         
-        # Verify current code before disabling
-        totp = pyotp.TOTP(signature.totp_secret)
-        if not totp.verify(code, valid_window=1):
-            raise ValidationError({"detail": "Invalid code. Cannot disable TOTP."})
+        from .services import StepUpService, TotpVerificationService
+
+        # A current authenticator code is preferred. If the authenticator is
+        # lost, a password or unused backup code still allows recovery without
+        # leaving the account permanently unable to remove a broken factor.
+        if code and TotpVerificationService.verify_and_consume(signature, code):
+            pass
+        else:
+            StepUpService.assert_verified(
+                request,
+                password=request.data.get('current_password'),
+                code=code if code else None,
+            )
         
         # Disable TOTP
         signature.totp_secret = ""
         signature.totp_enabled = False
         signature.totp_confirmed = False
+        signature.totp_last_used_step = 0
         signature.preferred_2fa_method = 'email'
-        signature.save(update_fields=['totp_secret', 'totp_enabled', 'totp_confirmed', 'preferred_2fa_method'])
+        signature.save(update_fields=[
+            'totp_secret', 'totp_enabled', 'totp_confirmed', 'totp_last_used_step',
+            'preferred_2fa_method', 'updated_at',
+        ])
         
         # Audit log
         from audit.models import ActivityLog
@@ -1502,16 +1773,140 @@ class UpdatePreferred2FAView(APIView):
         if method == 'totp' and not signature.totp_confirmed:
             raise ValidationError({"detail": "TOTP is not set up. Please set up TOTP first."})
         
-        if method == 'email' and not request.user.email:
-            raise ValidationError({"detail": "No email address configured"})
+        if method == 'email' and (
+            not request.user.email or not signature.email_otp_enabled
+        ):
+            raise ValidationError({"detail": "Email OTP is not enabled"})
         
         signature.preferred_2fa_method = method
-        signature.save(update_fields=['preferred_2fa_method'])
+        signature.save(update_fields=['preferred_2fa_method', 'updated_at'])
         
         return Response({
             "preferred_method": method,
             "message": f"Preferred 2FA method updated to {'Email OTP' if method == 'email' else 'Authenticator App'}",
         })
+
+
+class DisableEmailOTPView(APIView):
+    """Disable email OTP as a seal second factor after re-authentication."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PasswordChangeRateThrottle]
+
+    def post(self, request):
+        try:
+            signature = ExecutiveSignature.objects.get(user=request.user)
+        except ExecutiveSignature.DoesNotExist:
+            raise ValidationError({"detail": "No signature configured"})
+
+        from .services import StepUpService
+
+        StepUpService.assert_verified(
+            request,
+            password=request.data.get("current_password"),
+            code=request.data.get("code"),
+        )
+        signature.email_otp_enabled = False
+        if signature.preferred_2fa_method == "email":
+            signature.preferred_2fa_method = (
+                "totp" if signature.totp_confirmed else "email"
+            )
+        signature.save(
+            update_fields=[
+                "email_otp_enabled",
+                "preferred_2fa_method",
+                "updated_at",
+            ]
+        )
+
+        from audit.models import ActivityLog
+
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            request=request,
+            description="Disabled email OTP for seal verification",
+        )
+        return Response({"email_otp_enabled": False})
+
+
+class VerifyBackupCodeView(APIView):
+    """Consume a backup code and issue a seal verification token."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [OTPRateThrottle]
+
+    def post(self, request):
+        from .services import BackupCodeService, VerificationTokenService
+
+        code = str(request.data.get("code") or "").strip()
+        if not code:
+            raise ValidationError({"detail": "Backup code is required"})
+        if not BackupCodeService.consume(request.user, code):
+            raise ValidationError({"detail": "Invalid or already used backup code"})
+
+        token = VerificationTokenService.generate_token(
+            user_id=str(request.user.id),
+            purpose="seal_application",
+        )
+        from audit.models import ActivityLog
+
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            request=request,
+            description="Used a backup code for seal verification",
+        )
+        return Response(
+            {
+                "verified": True,
+                "verification_token": token,
+                "expires_in": 300,
+            }
+        )
+
+
+class BackupCodeStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .services import BackupCodeService
+
+        remaining = BackupCodeService.remaining(request.user)
+        return Response({"remaining": remaining, "has_codes": remaining > 0})
+
+
+class GenerateBackupCodesView(APIView):
+    """Generate a fresh set of hashed, single-use login backup codes."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PasswordChangeRateThrottle]
+
+    def post(self, request):
+        from .services import BackupCodeService, StepUpService
+
+        StepUpService.assert_verified(
+            request,
+            password=request.data.get("current_password"),
+            code=request.data.get("code"),
+        )
+        codes = BackupCodeService.generate(request.user)
+
+        from audit.models import ActivityLog
+
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            request=request,
+            description="Generated login backup codes",
+            metadata={"count": len(codes)},
+        )
+        return Response(
+            {
+                "backup_codes": codes,
+                "remaining": BackupCodeService.remaining(request.user),
+            }
+        )
 
 
 class SignatureTemplateViewSet(viewsets.ModelViewSet):

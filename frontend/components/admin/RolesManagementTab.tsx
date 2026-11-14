@@ -16,11 +16,9 @@ import {
   Loader2,
 } from "lucide-react";
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import { RoleFormModal } from "@/components/admin/RoleFormModal";
 import { RoleTableSkeleton } from "@/components/admin/RoleTableSkeleton";
 import { toast } from "@/components/ui/sonner";
-import { apiFetch } from "@/lib/api-client";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,7 +59,6 @@ export const RolesManagementTab = forwardRef<
   ref,
 ) {
   const { roles, refreshOrganizationData, deleteRole } = useOrganization();
-  const { users } = useOrgUsers();
   const [internalSearchQuery, setInternalSearchQuery] = useState("");
   const searchQuery = controlledSearchQuery ?? internalSearchQuery;
   const setSearchQuery = (value: string) => {
@@ -116,19 +113,9 @@ export const RolesManagementTab = forwardRef<
     setShowDeleteConfirm(false);
     
     try {
-      // Find users with this role by matching role name
-      const usersWithRole = users.filter((u) => u.systemRole === role.name);
-      if (usersWithRole.length > 0) {
-        const updatePromises = usersWithRole.map((user) =>
-          apiFetch(`/accounts/users/${user.id}/`, {
-            method: "PATCH",
-            body: JSON.stringify({ system_role: null }),
-          })
-        );
-        await Promise.all(updatePromises);
-      }
-
-      // Then delete the role
+      // User.system_role is on_delete=SET_NULL, so the database clears every
+      // assignment as part of the same delete. Clearing them from the client
+      // first would strip users of their role even if the delete then failed.
       await deleteRole(role.id);
       
       toast({

@@ -87,7 +87,7 @@ const CompactStatusStripContent = ({
   const allAcknowledged = hasDispatchProgress && acknowledgedCount === dispatchedCount;
 
   return (
-    <DetailStatusStrip className={className}>
+    <DetailStatusStrip className={className} ariaLabel="Correspondence summary">
       <Badge variant={cfg.variant} className={cn("text-[10px] h-5 shrink-0", cfg.className)}>
         {cfg.label}
       </Badge>

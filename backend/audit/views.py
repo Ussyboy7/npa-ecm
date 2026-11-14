@@ -39,6 +39,9 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         from organization.permission_utils import user_has_permission
 
         user = self.request.user
+        from organization.permission_utils import require_page_access
+
+        require_page_access(user, "audit")
         queryset = ActivityLog.objects.all().select_related("user")
 
         if user.is_superuser:

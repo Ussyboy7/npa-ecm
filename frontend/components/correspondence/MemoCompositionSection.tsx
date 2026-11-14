@@ -191,6 +191,8 @@ export const MemoCompositionSection = ({
           onChange={(html) => onMemoContentChange(html)}
           placeholder="Compose your response memo here..."
           className={`min-h-[300px] ${memoContentError ? 'border-destructive' : ''}`}
+          // The memo section lives on a scrolling page, so let the paper grow.
+          autoGrow
           showCharacterCount
           showHeader={false}
           signatureImageUrl={signatureImageUrl}

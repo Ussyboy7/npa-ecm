@@ -75,16 +75,21 @@ function perm(user: User | null | undefined, key: string): boolean {
   return Boolean(user?.rolePermissions?.[key]);
 }
 
+/** Levels the user may file at. `can_archive` alone is not level authority. */
 function buildArchiveLevels(user: User | null | undefined): ArchiveLevel[] {
   const levels: ArchiveLevel[] = [];
-  if (perm(user, "can_archive_department") || perm(user, "can_archive")) {
+  if (perm(user, "can_archive_department")) {
     levels.push("department");
   }
-  if (perm(user, "can_archive_division") || perm(user, "can_archive")) {
+  if (perm(user, "can_archive_division")) {
     levels.push("division");
   }
-  if (perm(user, "can_archive_directorate") || perm(user, "can_archive")) {
+  if (perm(user, "can_archive_directorate")) {
     levels.push("directorate");
+  }
+  // Older roles may only carry can_archive; they keep department-level filing.
+  if (levels.length === 0 && perm(user, "can_archive")) {
+    levels.push("department");
   }
   return levels;
 }

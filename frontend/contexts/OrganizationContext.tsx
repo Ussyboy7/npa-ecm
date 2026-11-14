@@ -261,7 +261,10 @@ export const OrganizationProvider: React.FC<{
     cleanPayload({
       username: input.username,
       first_name: input.firstName,
+      middle_name: input.middleName,
       last_name: input.lastName,
+      honorific: input.honorific,
+      designation: input.designation,
       system_role: input.systemRole,
       grade_level: input.gradeLevel || undefined,
       directorate: input.directorateId === undefined ? undefined : input.directorateId || null,
@@ -270,6 +273,8 @@ export const OrganizationProvider: React.FC<{
       is_active: input.isActive,
       email: input.email,
       employee_id: input.employeeId === undefined ? undefined : input.employeeId || undefined,
+      personnel_number:
+        input.personnelNumber === undefined ? undefined : input.personnelNumber || undefined,
       password: input.password,
     });
 
@@ -278,7 +283,10 @@ export const OrganizationProvider: React.FC<{
       username: input.username,
       email: input.email,
       first_name: input.firstName,
+      middle_name: input.middleName,
       last_name: input.lastName,
+      honorific: input.honorific,
+      designation: input.designation,
       password: input.password,
       system_role: input.systemRole,
       grade_level: input.gradeLevel || undefined,
@@ -287,6 +295,8 @@ export const OrganizationProvider: React.FC<{
       department: input.departmentId === undefined ? undefined : input.departmentId || null,
       is_active: input.isActive !== undefined ? input.isActive : true,
       employee_id: input.employeeId === undefined ? undefined : input.employeeId || undefined,
+      personnel_number:
+        input.personnelNumber === undefined ? undefined : input.personnelNumber || undefined,
     });
 
   const addDirectorate = useCallback(async (directorate: CreateDirectorateInput) => {

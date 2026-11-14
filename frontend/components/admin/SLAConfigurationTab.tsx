@@ -48,8 +48,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
 } from '@/components/shared/registry-queue-styles';
 import {
   Tooltip,
@@ -62,8 +60,11 @@ import {
   type SLAConfiguration,
   type SLAConfigurationInput,
   type SLATargets,
+  type SLADefaults,
   type SLAChoices,
+  DEFAULT_SLA_DEFAULTS,
   fetchSLAConfigurations,
+  fetchSLADefaults,
   fetchSLATargets,
   updateSLATargets,
   createSLAConfiguration,
@@ -106,7 +107,8 @@ export const SLAConfigurationTab = forwardRef<
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [configs, setConfigs] = useState<SLAConfiguration[]>([]);
-  const [targets, setTargets] = useState<SLATargets>({ urgent: 48, high: 72, medium: 120, low: 168 });
+  const [targets, setTargets] = useState<SLATargets>({ urgent: 8, high: 24, medium: 48, low: 72 });
+  const [defaults, setDefaults] = useState<SLADefaults>(DEFAULT_SLA_DEFAULTS);
   const [choices, setChoices] = useState<SLAChoices | null>(null);
   const [editingTargets, setEditingTargets] = useState(false);
   const [tempTargets, setTempTargets] = useState<SLATargets>(targets);
@@ -118,7 +120,7 @@ export const SLAConfigurationTab = forwardRef<
     name: '',
     priority: 'medium',
     correspondenceType: 'all',
-    targetDays: 120,  // Default: 5 days = 120 hours
+    targetDays: 48,  // Replaced with the selected priority's default when the dialog opens
     warningThresholdPercent: 75,
     criticalThresholdPercent: 90,
     division: null,
@@ -129,14 +131,16 @@ export const SLAConfigurationTab = forwardRef<
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [configsData, targetsData, choicesData] = await Promise.all([
+      const [configsData, targetsData, defaultsData, choicesData] = await Promise.all([
         fetchSLAConfigurations(),
         fetchSLATargets(),
+        fetchSLADefaults(),
         fetchSLAChoices(),
       ]);
       setConfigs(configsData);
       setTargets(targetsData);
       setTempTargets(targetsData);
+      setDefaults(defaultsData);
       setChoices(choicesData);
       onDataChange?.();
     } catch (error: unknown) {
@@ -184,7 +188,9 @@ export const SLAConfigurationTab = forwardRef<
         name: '',
         priority: 'medium',
         correspondenceType: 'all',
-        targetDays: 120,  // Default: 5 days = 120 hours
+        // Start from the live default so a new "advanced" rule does not
+        // silently change the target it is supposed to inherit.
+        targetDays: targets.medium,
         warningThresholdPercent: 75,
         criticalThresholdPercent: 90,
         division: null,
@@ -225,6 +231,21 @@ export const SLAConfigurationTab = forwardRef<
   useImperativeHandle(ref, () => ({
     openAddRule: () => handleOpenDialog(),
   }), []);
+
+  const matchesDefault = useCallback(
+    (config: SLAConfiguration) => {
+      const defaultValue = defaults[config.priority as keyof SLATargets];
+      if (!defaultValue) return false;
+      return (
+        !config.division &&
+        config.correspondenceType === 'all' &&
+        config.targetDays === defaultValue.targetHours &&
+        config.warningThresholdPercent === defaultValue.warningThresholdPercent &&
+        config.criticalThresholdPercent === defaultValue.criticalThresholdPercent
+      );
+    },
+    [defaults],
+  );
 
   const filteredConfigs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -285,51 +306,68 @@ export const SLAConfigurationTab = forwardRef<
               )}
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className={correspondenceQueueListStackClass}>
             {(['urgent', 'high', 'medium', 'low'] as const).map((priority) => {
               const hours = editingTargets ? tempTargets[priority] : targets[priority];
+              const priorityDefaults = defaults[priority];
               return (
-                <div
+                <ListRowCard
                   key={priority}
-                  className="rounded-xl border border-border/60 bg-muted/30 p-4"
+                  density="compact"
+                  leading={
+                    <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-muted')}>
+                      <Clock className={cn(correspondenceQueueLeadingIconClass, 'text-muted-foreground')} />
+                    </div>
+                  }
                 >
-                  <div className="min-w-0 space-y-2">
-                      <Badge
-                        variant={getPriorityBadgeVariant(priority)}
-                        className={correspondenceQueueBadgeClass}
-                      >
-                        {priority.toUpperCase()}
-                      </Badge>
-                      <p className={registryQueueStatLabelClass}>Max response</p>
-                      <p className={registryQueueStatValueClass}>{hours}h</p>
-                      {editingTargets ? (
-                        <div className="space-y-2 border-t border-border/60 pt-3">
-                          <Slider
-                            value={[tempTargets[priority]]}
-                            onValueChange={([value]) =>
-                              setTempTargets({ ...tempTargets, [priority]: value })
-                            }
-                            min={1}
-                            max={720}
-                            step={1}
-                          />
-                          <Input
-                            type="number"
-                            value={tempTargets[priority]}
-                            onChange={(e) =>
-                              setTempTargets({
-                                ...tempTargets,
-                                [priority]: parseInt(e.target.value, 10) || 1,
-                              })
-                            }
-                            className="h-8"
-                            min={1}
-                            max={720}
-                          />
-                        </div>
-                      ) : null}
+                  <h4 className={correspondenceQueueSubjectClass}>
+                    {priority.charAt(0).toUpperCase() + priority.slice(1)} priority
+                  </h4>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                      All types
+                    </Badge>
                   </div>
-                </div>
+                  <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                    <span className={correspondenceQueueMetaItemClass}>
+                      <Clock className={correspondenceQueueMetaIconClass} />
+                      Max response {hours}h
+                    </span>
+                    <span className={correspondenceQueueMetaItemClass}>
+                      Warning {priorityDefaults.warningThresholdPercent}%
+                    </span>
+                    <span className={correspondenceQueueMetaItemClass}>
+                      Critical {priorityDefaults.criticalThresholdPercent}%
+                    </span>
+                  </div>
+                  {editingTargets ? (
+                    <div className="mt-2 flex items-center gap-3 border-t border-border/60 pt-2">
+                      <Slider
+                        value={[tempTargets[priority]]}
+                        onValueChange={([value]) =>
+                          setTempTargets({ ...tempTargets, [priority]: value })
+                        }
+                        min={1}
+                        max={720}
+                        step={1}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        value={tempTargets[priority]}
+                        onChange={(e) =>
+                          setTempTargets({
+                            ...tempTargets,
+                            [priority]: parseInt(e.target.value, 10) || 1,
+                          })
+                        }
+                        className="h-8 w-20"
+                        min={1}
+                        max={720}
+                      />
+                    </div>
+                  ) : null}
+                </ListRowCard>
               );
             })}
           </div>
@@ -342,6 +380,11 @@ export const SLAConfigurationTab = forwardRef<
               <p className="mt-1 text-sm text-muted-foreground">
                 Overrides for correspondence types, divisions, or combinations.
               </p>
+              {configs.length > 0 && configs.every(matchesDefault) && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  Every rule here repeats the default target, so none of them change SLA behaviour.
+                </p>
+              )}
             </div>
             {!hideAddRuleButton ? (
               <Button size="compact" onClick={() => handleOpenDialog()} className="shrink-0">
@@ -426,6 +469,11 @@ export const SLAConfigurationTab = forwardRef<
                       <Badge variant={config.isActive ? 'default' : 'secondary'} className={correspondenceQueueBadgeClass}>
                         {config.isActive ? 'Active' : 'Inactive'}
                       </Badge>
+                      {matchesDefault(config) && (
+                        <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                          Matches default
+                        </Badge>
+                      )}
                     </div>
                     <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
                       <span className={correspondenceQueueMetaItemClass}>
@@ -476,7 +524,18 @@ export const SLAConfigurationTab = forwardRef<
                   <Label htmlFor="priority">Priority</Label>
                   <Select
                     value={formData.priority}
-                    onValueChange={(value) => setFormData({ ...formData, priority: value })}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        priority: value,
+                        // Follow the new priority's default unless the user has
+                        // already typed a custom target.
+                        targetDays:
+                          prev.targetDays === targets[prev.priority as keyof SLATargets]
+                            ? targets[value as keyof SLATargets]
+                            : prev.targetDays,
+                      }))
+                    }
                   >
                     <SelectTrigger id="priority">
                       <SelectValue />

@@ -40,6 +40,7 @@ def check_sla_and_escalate() -> dict[str, Any]:
     """
     from correspondence.models import Correspondence
     from .models import Escalation, EscalationRule, SLAConfiguration
+    from .services import AnalyticsService
     
     now = timezone.now()
     results = {
@@ -63,6 +64,7 @@ def check_sla_and_escalate() -> dict[str, Any]:
         status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS],
         is_deleted=False,
     ).select_related("division", "current_approver")
+    sla_defaults = SLAConfiguration.get_defaults()
     
     for item in pending_items:
         results["checked"] += 1
@@ -75,29 +77,30 @@ def check_sla_and_escalate() -> dict[str, Any]:
             )
             
             if not sla_config:
-                # Use default SLA
-                target_days = SLAConfiguration.get_default_sla_targets().get(item.priority, 5)
-                warning_threshold = 0.75
-                critical_threshold = 0.90
+                # Use the configured defaults, including their warning/critical thresholds.
+                defaults = sla_defaults.get(item.priority) or sla_defaults.get("medium", {})
+                target_hours = defaults.get("target_hours", 0)
+                warning_threshold = defaults.get("warning_threshold_percent", 0) / 100
+                critical_threshold = defaults.get("critical_threshold_percent", 0) / 100
             else:
-                target_days = sla_config.target_days
+                target_hours = sla_config.target_hours
                 warning_threshold = sla_config.warning_threshold_percent / 100
                 critical_threshold = sla_config.critical_threshold_percent / 100
             
-            # Calculate days open
+            # Targets are stored in hours, so compare against hours open.
             if not item.received_date:
                 continue
             
-            days_open = (now.date() - item.received_date).days
+            hours_open = AnalyticsService._hours_open(item, now)
             
             # Determine SLA status
             sla_status = None
-            if days_open > target_days:
+            if hours_open > target_hours:
                 sla_status = "breach"
                 results["sla_breaches"] += 1
-            elif days_open >= target_days * critical_threshold:
+            elif hours_open >= target_hours * critical_threshold:
                 sla_status = "critical"
-            elif days_open >= target_days * warning_threshold:
+            elif hours_open >= target_hours * warning_threshold:
                 sla_status = "warning"
                 results["sla_warnings"] += 1
             
@@ -135,7 +138,7 @@ def check_sla_and_escalate() -> dict[str, Any]:
                     continue
                 
                 # Create escalation
-                escalation = _create_escalation(item, rule, sla_status, days_open, target_days)
+                escalation = _create_escalation(item, rule, sla_status, hours_open, target_hours)
                 results["escalations_created"] += 1
                 
                 # Execute action
@@ -151,11 +154,11 @@ def check_sla_and_escalate() -> dict[str, Any]:
     return results
 
 
-def _create_escalation(correspondence, rule, sla_status: str, days_open: int, target_days: int):
+def _create_escalation(correspondence, rule, sla_status: str, hours_open: float, target_hours: int):
     """Create an escalation record."""
     from .models import Escalation
     
-    trigger_reason = f"{sla_status.upper()}: Item has been pending for {days_open} days (SLA target: {target_days} days)"
+    trigger_reason = f"{sla_status.upper()}: Item has been pending for {hours_open:.1f} hours (SLA target: {target_hours} hours)"
     
     escalation = Escalation.objects.create(
         correspondence=correspondence,
@@ -315,6 +318,7 @@ def generate_daily_snapshots() -> dict[str, Any]:
     # Get all divisions
     divisions = Division.objects.filter(is_active=True)
     sla_targets = SLAConfiguration.get_default_sla_targets()
+    sla_defaults = SLAConfiguration.get_defaults()
     
     for division in divisions:
         try:
@@ -337,19 +341,27 @@ def generate_daily_snapshots() -> dict[str, Any]:
             
             now = timezone.now()
             for item in items:
-                target = sla_targets.get(item.priority, 5)
-                days = AnalyticsService._turnaround_days(item, now)
+                target_hours = sla_targets.get(
+                    item.priority, sla_targets.get("medium", 0)
+                )
+                priority_defaults = sla_defaults.get(item.priority) or sla_defaults.get(
+                    "medium", {}
+                )
+                warning_ratio = (
+                    priority_defaults.get("warning_threshold_percent", 0) / 100
+                )
+                hours_open = AnalyticsService._hours_open(item, now)
                 
                 if item.status == Correspondence.Status.COMPLETED:
-                    turnaround_values.append(days)
-                    if days <= target:
+                    turnaround_values.append(hours_open / 24.0)
+                    if hours_open <= target_hours:
                         sla_compliant += 1
                     else:
                         sla_breached += 1
                 else:
-                    if days > target:
+                    if hours_open > target_hours:
                         sla_breached += 1
-                    elif days >= target * 0.75:
+                    elif hours_open >= target_hours * warning_ratio:
                         sla_at_risk += 1
                     else:
                         sla_compliant += 1
@@ -425,6 +437,7 @@ def generate_weekly_staff_snapshots() -> dict[str, Any]:
     from accounts.models import User
     from correspondence.models import Correspondence, Minute
     from .models import StaffPerformanceSnapshot, SLAConfiguration
+    from .services import AnalyticsService
     
     now = timezone.now()
     week_end = now.date()
@@ -465,12 +478,16 @@ def generate_weekly_staff_snapshots() -> dict[str, Any]:
             
             for minute in user_minutes:
                 corr = minute.correspondence
-                target = sla_targets.get(corr.priority, 5)
-                if corr.received_date:
-                    days = (minute.timestamp.date() - corr.received_date).days
-                    total_for_sla += 1
-                    if days > target:
-                        sla_breaches += 1
+                target_hours = sla_targets.get(
+                    corr.priority, sla_targets.get("medium", 0)
+                )
+                started_at = AnalyticsService._start_datetime(corr)
+                hours_open = max(
+                    0.0, (minute.timestamp - started_at).total_seconds() / 3600.0
+                )
+                total_for_sla += 1
+                if hours_open > target_hours:
+                    sla_breaches += 1
             
             sla_compliance_rate = ((total_for_sla - sla_breaches) / total_for_sla) * 100 if total_for_sla else 100.0
             

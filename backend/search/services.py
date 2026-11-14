@@ -9,11 +9,8 @@ from typing import Any, Dict, List, Optional
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db.models import Q, QuerySet
 
-from common.constants import (
-    SENSITIVITY_HIGH_CONFIDENTIAL_GRADES,
-    SENSITIVITY_HIGH_RESTRICTED_GRADES,
-)
 from correspondence.models import Correspondence, Case
+from dms.visibility import documents_visible_to
 from dms.models import Document
 
 logger = logging.getLogger(__name__)
@@ -34,32 +31,9 @@ class SearchService:
         Returns:
             Filtered queryset
         """
-        if not user or not user.is_authenticated or user.is_superuser:
-            return queryset.distinct()
-
-        visibility_filter = Q(author=user) | Q(permissions__users=user)
-
-        if user.division_id:
-            visibility_filter |= Q(permissions__divisions=user.division_id)
-        if user.department_id:
-            visibility_filter |= Q(permissions__departments=user.department_id)
-        if user.grade_level:
-            visibility_filter |= Q(permissions__grade_levels__contains=[user.grade_level])
-
-        visibility_filter |= Q(sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL])
-
-        if user.grade_level in SENSITIVITY_HIGH_CONFIDENTIAL_GRADES:
-            visibility_filter |= Q(sensitivity=Document.Sensitivity.CONFIDENTIAL)
-        if user.grade_level in SENSITIVITY_HIGH_RESTRICTED_GRADES:
-            visibility_filter |= Q(sensitivity=Document.Sensitivity.RESTRICTED)
-
-        # Published documents with public/internal sensitivity are generally accessible
-        visibility_filter |= Q(
-            status=Document.DocumentStatus.PUBLISHED,
-            sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL],
-        )
-
-        return queryset.filter(visibility_filter).distinct()
+        # Same rules as the documents API: search must never surface a document
+        # the documents list would hide (see dms/visibility.py).
+        return documents_visible_to(queryset, user)
 
     @staticmethod
     def _apply_correspondence_visibility_filters(queryset: QuerySet, user: Any) -> QuerySet:

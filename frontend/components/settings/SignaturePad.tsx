@@ -7,6 +7,7 @@ import { Undo2, Trash2 } from 'lucide-react';
 
 interface SignaturePadProps {
   onSave: (dataUrl: string) => void;
+  disabled?: boolean;
 }
 
 interface Point {
@@ -14,7 +15,7 @@ interface Point {
   y: number;
 }
 
-export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
+export const SignaturePad: FC<SignaturePadProps> = ({ onSave, disabled = false }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -58,16 +59,17 @@ export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
   }, [drawStroke]);
 
   const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (disabled) return;
     e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     setIsDrawing(true);
     const point = getPoint(e);
     currentStrokeRef.current = [point];
     lastPointRef.current = point;
-  }, [getPoint]);
+  }, [disabled, getPoint]);
 
   const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || disabled) return;
     const point = getPoint(e);
     currentStrokeRef.current.push(point);
 
@@ -88,7 +90,7 @@ export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
       ctx.stroke();
     }
     lastPointRef.current = point;
-  }, [isDrawing, getPoint]);
+  }, [disabled, isDrawing, getPoint]);
 
   const handlePointerUp = useCallback(() => {
     if (!isDrawing) return;
@@ -160,7 +162,8 @@ export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
           ref={canvasRef}
           width={800}
           height={300}
-          className="w-full h-[200px] touch-none cursor-crosshair"
+          aria-label="Signature drawing area. Draw your signature using a pointer or upload an image instead."
+          className="w-full aspect-[8/3] touch-none cursor-crosshair"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -173,16 +176,16 @@ export const SignaturePad: FC<SignaturePadProps> = ({ onSave }) => {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={handleUndo} disabled={!hasDrawn}>
+        <Button type="button" variant="outline" size="sm" onClick={handleUndo} disabled={!hasDrawn || disabled}>
           <Undo2 className="h-3.5 w-3.5 mr-1" />
           Undo
         </Button>
-        <Button variant="outline" size="sm" onClick={handleClear} disabled={!hasDrawn}>
+        <Button type="button" variant="outline" size="sm" onClick={handleClear} disabled={!hasDrawn || disabled}>
           <Trash2 className="h-3.5 w-3.5 mr-1" />
           Clear
         </Button>
         <div className="flex-1" />
-        <Button size="sm" onClick={handleSave} disabled={!hasDrawn}>
+        <Button type="button" size="sm" onClick={handleSave} disabled={!hasDrawn || disabled}>
           Save signature
         </Button>
       </div>

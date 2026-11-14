@@ -15,7 +15,7 @@ export const EXTENSION_PDF = ".pdf";
 export const EXTENSION_DOCX = ".docx";
 export const EXTENSION_DOC = ".doc";
 
-export const ACCEPT_IMAGE_SIGNATURE = "image/png,image/jpeg,image/svg+xml";
+export const ACCEPT_IMAGE_SIGNATURE = "image/png,image/jpeg";
 export const ACCEPT_IMAGE_AVATAR = "image/png,image/jpeg,image/webp";
 export const ALLOWED_IMAGE_MIME_TYPES = [MIME_TYPE_PNG, MIME_TYPE_JPEG, MIME_TYPE_WEBP];
-export const ALLOWED_SIGNATURE_MIME_TYPES = [MIME_TYPE_PNG, MIME_TYPE_JPEG, MIME_TYPE_SVG];
+export const ALLOWED_SIGNATURE_MIME_TYPES = [MIME_TYPE_PNG, MIME_TYPE_JPEG];

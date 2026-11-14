@@ -35,6 +35,8 @@ const DOCUMENT_TYPE_HELP: Record<string, string> = {
 
 interface BasicInfoStepProps {
   formData: FormData;
+  referenceClassifications: Array<{ code: string; label: string }>;
+  referenceWarning?: string | null;
   flowType: FlowType;
   errors: Record<string, string>;
   onFormDataChange: (updates: Partial<FormData>) => void;
@@ -44,6 +46,8 @@ interface BasicInfoStepProps {
 
 export const BasicInfoStep = memo(function BasicInfoStep({
   formData,
+  referenceClassifications,
+  referenceWarning,
   flowType,
   errors,
   onFormDataChange,
@@ -61,6 +65,9 @@ export const BasicInfoStep = memo(function BasicInfoStep({
         setSlaTargets(DEFAULT_SLA_TARGETS);
       });
   }, []);
+
+  const usingIncomingReference =
+    flowType === 'inward' && formData.senderReference.trim().length > 0;
 
   const getSLADays = (priority: string): number | null => {
     if (!slaTargets) return null;
@@ -100,16 +107,56 @@ export const BasicInfoStep = memo(function BasicInfoStep({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="referenceNumber">Reference Number</Label>
+          <Label htmlFor="referenceNumber">
+            {flowType === 'inward' ? 'Incoming Reference' : 'Outgoing Reference Number'}
+          </Label>
           <Input
             id="referenceNumber"
             value={formData.referenceNumber}
-            onChange={(e) => onFormDataChange({ referenceNumber: e.target.value })}
-            placeholder="e.g., HQ/AGM/ICT/SA&DM/001"
-            className="flex-1"
+            readOnly
+            aria-readonly="true"
+            placeholder="Allocated on submission"
+            className="flex-1 bg-muted font-mono"
           />
-          <p className="text-xs text-muted-foreground">Auto-generated and editable — sequence won't be reused.</p>
+          <p className="text-xs text-muted-foreground">
+            {usingIncomingReference
+              ? 'Using the reference from the incoming document. Clear that field below to allocate a local incoming reference instead.'
+              : flowType === 'inward'
+                ? 'Allocated for this office when the item is registered. To use the document’s own reference, enter it below instead.'
+                : 'Allocated when dispatched. This reference travels with the document and remains the shared reference when another office receives it.'}
+          </p>
+          {referenceWarning && (
+            <p className="text-xs text-destructive" role="alert">
+              {referenceWarning}
+            </p>
+          )}
         </div>
+
+        {referenceClassifications.length > 0 && !usingIncomingReference ? (
+          <div className="space-y-2">
+            <Label htmlFor="referenceClassification">Reference classification</Label>
+            <Select
+              value={formData.referenceClassificationCode || ""}
+              onValueChange={(value) =>
+                onFormDataChange({ referenceClassificationCode: value })
+              }
+            >
+              <SelectTrigger id="referenceClassification">
+                <SelectValue placeholder="Select classification" />
+              </SelectTrigger>
+              <SelectContent>
+                {referenceClassifications.map((item) => (
+                  <SelectItem key={item.code} value={item.code}>
+                    {item.code} — {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Sets the classification segment of the reference number.
+            </p>
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
@@ -253,16 +300,30 @@ export const BasicInfoStep = memo(function BasicInfoStep({
           </Label>
         </div>
 
+        {formData.hasPhysicalCopy ? (
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">
+              The registering office is recorded as the paper copy&apos;s custodian. A later handover can move custody.
+            </p>
+          </div>
+        ) : null}
+
         {flowType === 'inward' ? (
           <>
             <div className="space-y-2">
-              <Label htmlFor="senderReference">Sender's Reference</Label>
+              <Label htmlFor="senderReference">Reference on Incoming Document</Label>
               <Input
                 id="senderReference"
-                placeholder="Reference on the letter"
+                maxLength={100}
+                placeholder="Reference printed on the letter, if any"
                 value={formData.senderReference}
                 onChange={(e) => onFormDataChange({ senderReference: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">
+                Optional. When present, this becomes the incoming reference for the record. Copy it exactly.
+                If the document has no reference, leave this blank and a local incoming reference is allocated.
+                Internal NPA mail already registered in ECM should be forwarded as the existing record so its outgoing reference stays the same.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="letterDate">Date of Letter</Label>

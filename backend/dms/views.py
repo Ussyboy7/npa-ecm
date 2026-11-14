@@ -22,10 +22,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from audit.services import AuditService
-from common.constants import (
-    SENSITIVITY_HIGH_CONFIDENTIAL_GRADES,
-    SENSITIVITY_HIGH_RESTRICTED_GRADES,
-)
 from common.storage_utils import resolve_media_path
 from notifications.models import Notification
 from notifications.services import NotificationService
@@ -63,6 +59,12 @@ from .drm import (
     assert_plaintext_extraction_allowed,
     assert_view_allowed,
     resolve_document_rights,
+)
+from .visibility import (
+    document_access_level,
+    documents_visible_to,
+    require_document_admin,
+    require_document_write,
 )
 from .watermark import apply_pdf_access_restrictions, apply_text_watermark, is_pdf_bytes
 
@@ -107,6 +109,15 @@ def _apply_document_tag_search_postgresql(queryset, terms: list[str]):
     where_sql = "(" + " OR ".join(fragments) + ")"
     params = [f"%{t}%" for t in terms]
     return queryset.extra(where=[where_sql], params=params)
+
+
+def _may_manage(document, user) -> bool:
+    """True when the user holds owner/admin rights on this document."""
+    try:
+        require_document_admin(document, user)
+    except PermissionDenied:
+        return False
+    return True
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -269,6 +280,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if not user or not user.is_authenticated:
             return qs.distinct()
 
+        if getattr(self, "action", None) == "list":
+            from organization.permission_utils import require_page_access
+
+            require_page_access(user, "documents")
         shared_with_me = str(self.request.query_params.get("shared_with_me", "")).lower() in {"1", "true", "yes"}
         shared_by_me = str(self.request.query_params.get("shared_by_me", "")).lower() in {"1", "true", "yes"}
         recent_for_me = str(self.request.query_params.get("recent_for_me", "")).lower() in {"1", "true", "yes"}
@@ -338,67 +353,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
             if not self.request.query_params.get("ordering"):
                 qs = qs.order_by("-last_accessed")
 
-        if user.is_superuser:
-            return qs.distinct()
-
-        visibility_filter = Q(author=user) | Q(permissions__users=user)
-        visibility_filter |= Q(
-            permissions__offices__memberships__user=user,
-            permissions__offices__memberships__is_active=True,
-        )
-
-        if user.division_id:
-            visibility_filter |= Q(permissions__divisions=user.division_id)
-        if user.department_id:
-            visibility_filter |= Q(permissions__departments=user.department_id)
-        if user.grade_level:
-            visibility_filter |= Q(permissions__grade_levels__contains=[user.grade_level])
-
-        visibility_filter |= Q(sensitivity=Document.Sensitivity.PUBLIC)
-
-        # Visibility rules:
-        # - Public: All authenticated users (when published)
-        # - Internal: Requires explicit permission (dept/division/directorate/user)
-        # - Confidential: Requires grade level + explicit permission
-        # - Restricted: Requires top grade + explicit permission
-        
-        # Public is visible to all authenticated users when published
-        visibility_filter |= Q(
-            status=Document.DocumentStatus.PUBLISHED,
-            sensitivity=Document.Sensitivity.PUBLIC,
-        )
-        
-        # Internal requires explicit permission - shared with specific depts/divs/directorates
-        has_internal_permission = Q(permissions__users=user)
-        if user.division_id:
-            has_internal_permission |= Q(permissions__divisions=user.division_id)
-        if user.department_id:
-            has_internal_permission |= Q(permissions__departments=user.department_id)
-        visibility_filter |= (
-            Q(sensitivity=Document.Sensitivity.INTERNAL) & has_internal_permission
-        )
-        
-        # Confidential: need grade level AND explicit permission
-        has_confidential_permission = Q(permissions__users=user)
-        if user.division_id:
-            has_confidential_permission |= Q(permissions__divisions=user.division_id)
-        if user.department_id:
-            has_confidential_permission |= Q(permissions__departments=user.department_id)
-        if user.grade_level:
-            has_confidential_permission |= Q(permissions__grade_levels__contains=[user.grade_level])
-        
-        if user.grade_level in SENSITIVITY_HIGH_CONFIDENTIAL_GRADES:
-            visibility_filter |= (
-                Q(sensitivity=Document.Sensitivity.CONFIDENTIAL) & has_confidential_permission
-            )
-
-        # Restricted: need top grade AND explicit permission
-        if user.grade_level in SENSITIVITY_HIGH_RESTRICTED_GRADES:
-            visibility_filter |= (
-                Q(sensitivity=Document.Sensitivity.RESTRICTED) & has_confidential_permission
-            )
-
-        return qs.filter(visibility_filter).distinct()
+        # One implementation, shared with search — see dms/visibility.py.
+        return documents_visible_to(qs, user)
 
     def perform_create(self, serializer):
         from organization.permission_utils import require_permission
@@ -440,6 +396,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
         from organization.permission_utils import require_permission
 
         require_permission(self.request.user, "can_edit_documents")
+        # The global permission only says this user may edit documents at all;
+        # the ACL on this one decides whether they may edit *this* document.
+        require_document_write(serializer.instance, self.request.user)
         document = serializer.save()
         
         # Create audit log
@@ -456,6 +415,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         from organization.permission_utils import require_permission
 
         require_permission(self.request.user, "can_delete_documents")
+        require_document_admin(instance, self.request.user)
         # Create audit log before deletion
         from audit.models import ActivityLog
         AuditService.log_document_activity(
@@ -479,22 +439,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
             raise ValidationError({"document_ids": "Document IDs are required"})
         
         documents = Document.objects.filter(id__in=document_ids, is_deleted=False)
-        
-        # Check permissions - user must be author or have admin access
-        accessible_docs = []
-        for doc in documents:
-            if doc.author == request.user or request.user.is_superuser:
-                accessible_docs.append(doc)
-            else:
-                # Check if user has admin permission
-                has_admin = doc.permissions.filter(
-                    Q(users=request.user, access="admin") |
-                    Q(divisions=request.user.division_id, access="admin") |
-                    Q(departments=request.user.department_id, access="admin")
-                ).exists()
-                if has_admin:
-                    accessible_docs.append(doc)
-        
+
+        accessible_docs = [doc for doc in documents if _may_manage(doc, request.user)]
+
         if not accessible_docs:
             raise PermissionDenied("You don't have permission to archive any of the selected documents")
         
@@ -534,22 +481,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
             raise ValidationError({"document_ids": "Document IDs are required"})
         
         documents = Document.objects.filter(id__in=document_ids, is_deleted=False)
-        
-        # Check permissions - user must be author or have admin access
-        accessible_docs = []
-        for doc in documents:
-            if doc.author == request.user or request.user.is_superuser:
-                accessible_docs.append(doc)
-            else:
-                # Check if user has admin permission
-                has_admin = doc.permissions.filter(
-                    Q(users=request.user, access="admin") |
-                    Q(divisions=request.user.division_id, access="admin") |
-                    Q(departments=request.user.department_id, access="admin")
-                ).exists()
-                if has_admin:
-                    accessible_docs.append(doc)
-        
+
+        accessible_docs = [doc for doc in documents if _may_manage(doc, request.user)]
+
         if not accessible_docs:
             raise PermissionDenied("You don't have permission to delete any of the selected documents")
         
@@ -586,13 +520,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
             raise ValidationError({"document_ids": "Document IDs are required"})
         
         documents = Document.all_objects.filter(id__in=document_ids, is_deleted=True)
-        
-        # Check permissions - user must be author or superuser
-        accessible_docs = []
-        for doc in documents:
-            if doc.author == request.user or request.user.is_superuser:
-                accessible_docs.append(doc)
-        
+
+        accessible_docs = [doc for doc in documents if _may_manage(doc, request.user)]
+
         if not accessible_docs:
             raise PermissionDenied("You don't have permission to restore any of the selected documents")
         
@@ -751,6 +681,9 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         # don't add a second forensic watermark on top (would double).
         tags = getattr(document, "tags", None) or []
         title = getattr(document, "title", "") or ""
+        if "approved-copy" in tags:
+            # The approved copy already carries APPROVED COPY on every page.
+            return ""
         if "completion-package" in tags or "Completion Package" in title:
             return ""
         rights = resolve_document_rights(document, user)
@@ -902,6 +835,45 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         )
         return self._serve_version(request, version, as_attachment=False, purpose="print")
 
+    def _published_version_issue(self, version):
+        """Find the formal issue audit entry that locks this exact version."""
+        from audit.models import ActivityLog
+
+        return ActivityLog.objects.filter(
+            object_type="document",
+            object_id=str(version.document_id),
+            action=ActivityLog.ActionType.DOCUMENT_UPDATED,
+            metadata__published_version_id=str(version.id),
+        ).order_by("timestamp").first()
+
+    def update(self, request, *args, **kwargs):
+        version = self.get_object()
+        if not self._has_version_write_access(version.document, request.user, version):
+            raise PermissionDenied("You do not have permission to change this document version")
+        if self._published_version_issue(version):
+            raise PermissionDenied(
+                "This version was formally issued and cannot be changed. Create a new version for revisions."
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        version = self.get_object()
+        if not self._has_version_write_access(version.document, request.user, version):
+            raise PermissionDenied("You do not have permission to change this document version")
+        if self._published_version_issue(version):
+            raise PermissionDenied(
+                "This version was formally issued and cannot be changed. Create a new version for revisions."
+            )
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        version = self.get_object()
+        if not self._has_version_write_access(version.document, request.user, version):
+            raise PermissionDenied("You do not have permission to delete this document version")
+        if self._published_version_issue(version):
+            raise PermissionDenied("This version was formally issued and cannot be deleted.")
+        return super().destroy(request, *args, **kwargs)
+
     def create(self, request, *args, **kwargs):
         # Create a mutable copy of request data
         data = dict(request.data)
@@ -933,8 +905,30 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
+    def _has_version_write_access(self, document, user, version=None):
+        if (
+            document.author == user
+            or getattr(user, "is_superuser", False)
+            or (version is not None and version.uploaded_by == user)
+        ):
+            return True
+
+        write_permissions = DocumentPermission.objects.filter(
+            document=document,
+            access__in=["write", "admin"],
+        )
+        if write_permissions.filter(users=user).exists():
+            return True
+        return write_permissions.filter(
+            Q(divisions__in=[getattr(user, "division_id", None)])
+            | Q(departments__in=[getattr(user, "department_id", None)])
+            | Q(grade_levels__contains=[getattr(user, "grade_level", None)])
+        ).exists()
+
     def perform_create(self, serializer):
         document = serializer.validated_data["document"]
+        if not self._has_version_write_access(document, self.request.user):
+            raise PermissionDenied("You do not have permission to create a version of this document")
         next_version = (
             document.versions.aggregate(max_version=Max("version_number"))
             .get("max_version")
@@ -949,28 +943,12 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
     def replace_version(self, request, pk=None):
         """Replace an existing version with new file content."""
         version = self.get_object()
+        if self._published_version_issue(version):
+            raise PermissionDenied(
+                "This version was formally issued and cannot be replaced. Create a new version for revisions."
+            )
 
-        # Allow author, uploader, superuser, or anyone with write share
-        if version.uploaded_by == request.user or version.document.author == request.user or getattr(request.user, "is_superuser", False):
-            pass
-        elif version.document.permissions.filter(users=request.user).exists():
-            # Shared with write — check access type via DocumentPermission
-            from dms.models import DocumentPermission
-
-            has_write = DocumentPermission.objects.filter(document=version.document, users=request.user, access__in=["write", "admin"]).exists()
-            if not has_write:
-                # Also allow if shared via division/department with write
-                has_write = DocumentPermission.objects.filter(
-                    document=version.document,
-                    access__in=["write", "admin"]
-                ).filter(
-                    Q(divisions__in=[getattr(request.user, "division_id", None)]) |
-                    Q(departments__in=[getattr(request.user, "department_id", None)]) |
-                    Q(grade_levels__contains=[getattr(request.user, "grade_level", None)])
-                ).exists()
-            if not has_write:
-                raise PermissionDenied("You can only replace versions you uploaded or documents you own")
-        else:
+        if not self._has_version_write_access(version.document, request.user, version):
             raise PermissionDenied("You can only replace versions you uploaded or documents you own")
         
         # Create a mutable copy of request data
@@ -1163,12 +1141,15 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         
         # Get document
         document = serializer.validated_data.get("document")
+        # Sharing is managing: read/write recipients cannot re-share.
+        require_document_admin(document, request.user)
         assert_share_allowed(document, request.user)
         access = serializer.validated_data.get("access", "read")
         note = serializer.validated_data.get("note", "")
         user_ids = serializer.validated_data.get("user_ids", [])
         division_ids = serializer.validated_data.get("division_ids", [])
         department_ids = serializer.validated_data.get("department_ids", [])
+        directorate_ids = serializer.validated_data.get("directorate_ids", [])
         office_ids = serializer.validated_data.get("office_ids", [])
         
         # Create permission
@@ -1197,6 +1178,19 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
             departments = Department.objects.filter(id__in=department_ids)
             for department in departments:
                 users = User.objects.filter(department=department, is_active=True)
+                notified_users.update(users)
+
+        # Add everyone whose division sits in the selected directorates.
+        if directorate_ids:
+            directorate_division_ids = list(
+                Division.objects.filter(directorate_id__in=directorate_ids).values_list("id", flat=True)
+            )
+            if directorate_division_ids:
+                users = User.objects.filter(
+                    Q(division_id__in=directorate_division_ids)
+                    | Q(department__division_id__in=directorate_division_ids),
+                    is_active=True,
+                )
                 notified_users.update(users)
 
         # Add users belonging to selected offices only.
@@ -1241,6 +1235,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
             "user_count": len(user_ids) if user_ids else 0,
             "division_count": len(division_ids) if division_ids else 0,
             "department_count": len(department_ids) if department_ids else 0,
+            "directorate_count": len(directorate_ids) if directorate_ids else 0,
             "office_count": len(office_ids) if office_ids else 0,
             "access_level": access,
         }
@@ -1277,6 +1272,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         except Document.DoesNotExist:
             raise ValidationError({"document": "Document not found"})
 
+        require_document_admin(document, request.user)
         assert_share_allowed(document, request.user)
         
         # Get all active users

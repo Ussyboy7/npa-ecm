@@ -181,7 +181,17 @@ def resolve_effective_document_rights(document, user=None) -> dict:
         if getattr(user, "division_id", None):
             matches_q |= Q(divisions=user.division_id)
         if getattr(user, "department_id", None):
+            matches_q |= Q(divisions__departments=user.department_id)
+        if getattr(user, "department_id", None):
             matches_q |= Q(departments=user.department_id)
+        if getattr(user, "directorate_id", None):
+            matches_q |= Q(directorates=user.directorate_id)
+        # Directorate grants reach units beneath them even when the account has
+        # no directorate_id of its own.
+        if getattr(user, "division_id", None):
+            matches_q |= Q(directorates__divisions=user.division_id)
+        if getattr(user, "department_id", None):
+            matches_q |= Q(directorates__divisions__departments=user.department_id)
         matches_q |= Q(offices__memberships__user=user, offices__memberships__is_active=True)
         if getattr(user, "grade_level", ""):
             matches_q |= Q(grade_levels__contains=[user.grade_level])
@@ -203,7 +213,6 @@ def resolve_effective_document_rights(document, user=None) -> dict:
         is_owner
         or is_superuser
         or access_level
-        or getattr(document, "sensitivity", "") == "public"
         or (
             getattr(document, "status", "") == "published"
             and getattr(document, "sensitivity", "") == "public"

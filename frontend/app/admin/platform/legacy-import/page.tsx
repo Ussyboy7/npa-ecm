@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { PlatformTabList } from "@/components/admin/PlatformTabList";
 import { Database } from "lucide-react";
 
@@ -30,7 +31,8 @@ export default function LegacyImportPage() {
       
       icon={Database}
     >
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
+        <AdminHubTabList />
         <PlatformTabList />
       </div>
       <div className="grid gap-4 md:grid-cols-2">

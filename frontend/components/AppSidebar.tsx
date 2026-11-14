@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   FileText, Settings, ChevronDown,
-  ChevronLeft, ChevronRight, Mail, Send, Archive, UserCog,
+  ChevronLeft, ChevronRight, Mail, Send, Archive,
   HelpCircle, Shield, FolderTree, LayoutTemplate, Target,
-  UserCheck, ScrollText, Search, FileCheck, ClipboardCheck,
-  Briefcase, PackageCheck, Bell, Activity, BarChart3,
+  UserCheck, ScrollText, Search, FileCheck,
+  Briefcase, PackageCheck, Bell, BarChart3,
   LifeBuoy,
 } from "lucide-react";
 import {
@@ -22,38 +22,20 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { useHomePath } from "@/hooks/use-home-path";
-import { useOrganization } from "@/contexts/OrganizationContext";
 import { SidebarNavItem, AdminNavItem } from "@/components/shared/SidebarNavItem";
 
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { currentUser, hydrated } = useCurrentUser();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const { officeMemberships } = useOrganization();
   const counts = useSidebarCounts(currentUser?.id);
-  const permissions = useUserPermissions(currentUser ?? undefined);
   const visibility = useSidebarVisibility();
   const homePath = useHomePath();
-
-  const userOfficeIds = useMemo(() => {
-    if (!currentUser) return [];
-    return officeMemberships
-      .filter((m) => m.userId === currentUser.id && m.isActive)
-      .map((m) => m.officeId);
-  }, [currentUser, officeMemberships]);
-
-  const hasCorrespondenceAccess = useMemo(() => (
-    permissions.canViewCorrespondenceRegistry ||
-    permissions.canDistribute ||
-    userOfficeIds.length > 0
-  ), [permissions.canViewCorrespondenceRegistry, permissions.canDistribute, userOfficeIds.length]);
 
   // Keep the sidebar canonical to the hydrated auth state. Until the current
   // user is resolved, do not render a partial permission-based navigation.
@@ -66,15 +48,19 @@ export function AppSidebar() {
     }
     if (path === '/inbox') return pathname === '/inbox';
     if (path === '/verify') return pathname.startsWith('/verify');
-    if (path === '/admin') return pathname === '/admin';
+    if (path === '/admin') return pathname === '/admin' || pathname.startsWith('/admin/platform');
     if (path === '/admin/organization') {
-      return pathname === '/admin/organization' || pathname.startsWith('/admin/organization/');
+      return (
+        pathname === '/admin/organization' ||
+        pathname.startsWith('/admin/organization/')
+      );
     }
     if (path === '/admin/records-governance') {
-      return pathname === '/admin/records-governance' || pathname.startsWith('/admin/records-governance/');
-    }
-    if (path === '/audit') {
-      return pathname === '/audit';
+      return (
+        pathname === '/admin/records-governance' ||
+        pathname.startsWith('/admin/records-governance/') ||
+        pathname === '/audit'
+      );
     }
     if (path === '/audit/forms') {
       return pathname === '/audit/forms' || pathname.startsWith('/audit/forms/');
@@ -82,7 +68,6 @@ export function AppSidebar() {
     if (path === '/admin/platform') {
       return pathname === '/admin/platform' || pathname.startsWith('/admin/platform/');
     }
-    if (path === '/admin/users-roles') return ['/admin/users-roles', '/admin/users', '/admin/roles', '/admin/assistants'].includes(pathname);
     if (path === '/admin/workflow-sla') return ['/admin/workflow-sla', '/admin/sla-config', '/admin/escalation-rules'].includes(pathname);
     if (path === '/foia') return pathname === '/foia' || pathname.startsWith('/foia/');
     return pathname === path || pathname.startsWith(path + '/');
@@ -98,15 +83,19 @@ export function AppSidebar() {
     visibility.showAllCases ||
     visibility.showRecordsArchives;
   const showOrganizationHub =
-    visibility.showOrganizationOffices || visibility.showExternalEntities;
+    visibility.showOrganizationOffices ||
+    visibility.showExternalEntities ||
+    visibility.showUsersRoles;
   const showRecordsSecurityHub =
-    visibility.showRecordsGovernance || visibility.showDrmPolicies;
-  const showAuditHub = visibility.showAuditCompliance;
+    visibility.showRecordsGovernance ||
+    visibility.showDrmPolicies ||
+    visibility.showAuditCompliance;
   const showPlatformHub =
     visibility.showSystemHealth ||
     visibility.showHelpdeskQueue ||
     visibility.showLegacyImport ||
     visibility.showIntegrationHub;
+  const showAdminHub = visibility.showAdminDashboard || showPlatformHub;
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border overflow-hidden">
@@ -148,36 +137,27 @@ export function AppSidebar() {
               {visibility.showMySent && (
                 <SidebarNavItem href="/correspondence/my-sent" icon={Send} label="My Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/my-sent')} badge={counts.mySent} badgeVariant="secondary" />
               )}
-              {visibility.showMyCases && (
-                <SidebarNavItem href="/cases/my" icon={Briefcase} label="My Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/my')} badge={counts.myCases} badgeVariant="secondary" description="Cases assigned to you" />
+              {(visibility.showMyCases || visibility.showOfficeCases || visibility.showAllCases) && (
+                <SidebarNavItem href="/cases?tab=my" icon={Briefcase} label="Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases')} badge={counts.myCases} badgeVariant="secondary" description="My, office, and organisation case views" />
               )}
-              {visibility.showDocumentsList && (
+              {(visibility.showDocumentsList || visibility.showFormsLibrary) && (
                 <SidebarNavItem
-                  href="/dms"
+                  href={visibility.showDocumentsList ? "/dms" : "/dms?tab=forms"}
                   icon={FileText}
-                  label="My Documents"
+                  label={visibility.showDocumentsList ? "Documents" : "Forms"}
                   isCollapsed={isCollapsed}
                   isActive={pathname === '/dms' || pathname === '/documents'}
                   badge={counts.pendingSignatures}
                   badgeVariant="destructive"
-                  description="Documents, pending signatures, and forms you signed"
+                  description={
+                    visibility.showDocumentsList
+                      ? "Documents, pending signatures, and forms you signed"
+                      : "Forms library available to your role"
+                  }
                 />
               )}
-              {visibility.showAuditForms && (
-                <SidebarNavItem
-                  href="/audit/forms"
-                  icon={ClipboardCheck}
-                  label="Forms"
-                  isCollapsed={isCollapsed}
-                  isActive={isActivePath('/audit/forms')}
-                  description="Office forms, checklists, and submissions"
-                />
-              )}
-              {visibility.showExecutiveApprovals && (
-                <SidebarNavItem href="/approvals" icon={FileCheck} label="Executive Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals') && searchParams.get('level') !== 'departmental'} badge={counts.executiveApprovals} badgeVariant="secondary" description="Executive Register — MD approvals" />
-              )}
-              {visibility.showDepartmentalApprovals && (
-                <SidebarNavItem href="/approvals?level=departmental" icon={ClipboardCheck} label="Departmental Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals') && searchParams.get('level') === 'departmental'} badge={undefined} badgeVariant="secondary" description="Departmental history — approvals and endorsements" />
+              {(visibility.showExecutiveApprovals || visibility.showDepartmentalApprovals) && (
+                <SidebarNavItem href="/approvals" icon={FileCheck} label="Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals')} badge={counts.executiveApprovals} badgeVariant="secondary" description="Executive and departmental approval registers" />
               )}
               {visibility.showNotifications && (
                 <SidebarNavItem href="/notifications" icon={Bell} label="Notifications" isCollapsed={isCollapsed} isActive={isActivePath('/notifications')} />
@@ -200,26 +180,14 @@ export function AppSidebar() {
                 {visibility.showOfficeSent && (
                   <SidebarNavItem href="/correspondence/office-sent" icon={PackageCheck} label="Office Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/office-sent')} badge={counts.officeSent} badgeVariant="secondary" description="Correspondence sent from your office" />
                 )}
-                {visibility.showOfficeCases && (
-                  <SidebarNavItem href="/cases/office" icon={Briefcase} label="Office Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/office')} badge={counts.officeCases} badgeVariant="secondary" description="Cases for your office seat" />
-                )}
-                {visibility.showAllCases && (
-                  <SidebarNavItem href="/cases/all" icon={Briefcase} label="All Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/all')} badge={counts.allCases} badgeVariant="secondary" description="Organisation-wide case oversight" />
-                )}
                 {(visibility.showRegisteredCorrespondence || visibility.showPhysicalRecords) && (
                   <SidebarNavItem
-                    href={
-                      visibility.showRegisteredCorrespondence
-                        ? "/correspondence/registered"
-                        : "/physical-documents"
-                    }
+                    href={visibility.showRegisteredCorrespondence ? "/correspondence/registered" : "/physical-documents"}
                     icon={Archive}
-                    label={visibility.showRegisteredCorrespondence ? "Registered" : "Physical"}
+                    label="Registry Records"
                     isCollapsed={isCollapsed}
-                    isActive={
-                      isActivePath('/correspondence/registered') || isActivePath('/physical-documents')
-                    }
-                    description="Registry of registered correspondence and physical check-in/out"
+                    isActive={isActivePath('/correspondence/registered') || isActivePath('/physical-documents')}
+                    description="Registered correspondence and physical check-in/out"
                   />
                 )}
                 {visibility.showRecordsArchives && (
@@ -272,14 +240,17 @@ export function AppSidebar() {
               <CollapsibleContent>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {visibility.showAdminDashboard && (
-                      <AdminNavItem href="/admin" icon={LayoutDashboard} label="Dashboard" isActive={isActivePath('/admin')} isCollapsed={isCollapsed} />
+                    {showAdminHub && (
+                      <AdminNavItem
+                        href="/admin"
+                        icon={LayoutDashboard}
+                        label={visibility.showAdminDashboard ? "Admin Overview" : "Platform"}
+                        isActive={isActivePath('/admin')}
+                        isCollapsed={isCollapsed}
+                      />
                     )}
                     {showOrganizationHub && (
                       <AdminNavItem href="/admin/organization" icon={FolderTree} label="Organization" isActive={isActivePath('/admin/organization')} isCollapsed={isCollapsed} />
-                    )}
-                    {visibility.showUsersRoles && (
-                      <AdminNavItem href="/admin/users-roles" icon={UserCog} label="Users & Roles" isActive={isActivePath('/admin/users-roles')} isCollapsed={isCollapsed} />
                     )}
                     {visibility.showWorkflowSLA && (
                       <AdminNavItem href="/admin/workflow-sla" icon={Target} label="Workflow & SLA" isActive={isActivePath('/admin/workflow-sla')} isCollapsed={isCollapsed} />
@@ -289,12 +260,6 @@ export function AppSidebar() {
                     )}
                     {showRecordsSecurityHub && (
                       <AdminNavItem href="/admin/records-governance" icon={Archive} label="Records & security" isActive={isActivePath('/admin/records-governance')} isCollapsed={isCollapsed} />
-                    )}
-                    {showAuditHub && (
-                      <AdminNavItem href="/audit" icon={ScrollText} label="Audit Trail" isActive={isActivePath('/audit')} isCollapsed={isCollapsed} />
-                    )}
-                    {showPlatformHub && (
-                      <AdminNavItem href="/admin/platform" icon={Activity} label="Platform" isActive={isActivePath('/admin/platform')} isCollapsed={isCollapsed} />
                     )}
                   </SidebarMenu>
                 </SidebarGroupContent>

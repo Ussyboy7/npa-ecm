@@ -28,6 +28,11 @@ from .services import (
 
 
 class RecordsAdminMixin:
+    def _ensure_records_page_access(self):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(self.request.user, "records_governance")
+
     def _ensure_records_admin(self):
         from organization.permission_utils import require_permission
 
@@ -41,6 +46,7 @@ class RetentionScheduleViewSet(RecordsAdminMixin, viewsets.ModelViewSet):
     pagination_class = CatalogPageNumberPagination
 
     def get_queryset(self):
+        self._ensure_records_page_access()
         qs = super().get_queryset()
         if self.request.query_params.get("active_only") == "true":
             qs = qs.filter(is_active=True)
@@ -69,6 +75,7 @@ class LegalHoldViewSet(RecordsAdminMixin, viewsets.ModelViewSet):
     pagination_class = CatalogPageNumberPagination
 
     def get_queryset(self):
+        self._ensure_records_page_access()
         qs = super().get_queryset()
         if self.request.query_params.get("active_only") == "true":
             qs = qs.filter(is_active=True)
@@ -127,6 +134,7 @@ class DisposalRequestViewSet(RecordsAdminMixin, viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
+        self._ensure_records_page_access()
         qs = super().get_queryset()
         status_filter = self.request.query_params.get("status")
         if status_filter:
@@ -247,8 +255,14 @@ class DisposalRequestViewSet(RecordsAdminMixin, viewsets.ModelViewSet):
 class RecordsReportViewSet(RecordsAdminMixin, viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
+    def _ensure_records_page_access(self):
+        from organization.permission_utils import require_page_access
+
+        require_page_access(self.request.user, "records_governance")
+
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
+        self._ensure_records_page_access()
         self._ensure_records_admin()
         from correspondence.models import Correspondence
 

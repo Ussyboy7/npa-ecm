@@ -243,6 +243,12 @@ class DocumentPermission(UUIDModel, TimeStampedModel):
         blank=True,
         related_name="document_permissions",
     )
+    directorates = models.ManyToManyField(
+        "organization.Directorate",
+        blank=True,
+        related_name="document_permissions",
+        help_text="Everyone whose division or department sits in these directorates.",
+    )
     grade_levels = models.JSONField(default=list, blank=True)
     users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="document_permissions")
 

@@ -40,6 +40,9 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
   const currentOffice = isRecord(item.current_office) ? item.current_office : undefined;
   const completionPackage = isRecord(item.completion_package) ? item.completion_package : undefined;
   const routingMetadata = isRecord(item.routing_metadata) ? item.routing_metadata : undefined;
+  const workflowTemplateDetails = isRecord(item.workflow_template_details)
+    ? item.workflow_template_details
+    : undefined;
 
   const currentApproverName = currentApprover
     ? (() => {
@@ -201,6 +204,7 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
     departmentName: asStringOptional(item.department_name) ?? (department ? asStringOptional(department.name) : undefined),
     directorateId: normalizeId(item.directorate ?? item.directorate_id),
     currentApproverId: normalizeId(item.current_approver ?? item.current_approver_id),
+    canTakeInitialAction: asBoolean(item.can_take_initial_action, false),
     createdById: normalizeId(item.created_by ?? item.created_by_id),
     direction: asOneOf(item.direction, ['upward', 'downward', 'lateral'] as const, 'upward'),
     currentApproverName,
@@ -250,9 +254,16 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
           id: asString(d.id),
           tracking_number: asString(d.tracking_number),
           status: asString(d.status),
-          location: isRecord(d.location)
-            ? { display_name: asString(d.location.display_name) }
+          location: asStringOptional(d.location_name)
+            ? { display_name: asString(d.location_name) }
             : undefined,
+          current_office: asStringOptional(d.current_office)
+            ? {
+                id: asStringOptional(d.current_office),
+                name: asStringOptional(d.current_office_name),
+              }
+            : undefined,
+          pending_handover_to_office_name: asStringOptional(d.pending_handover_to_office_name),
           checked_out_to: isRecord(d.checked_out_to)
             ? { name: asString(d.checked_out_to.name) }
             : undefined,
@@ -262,6 +273,32 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
     requiredApprovalLevel: asOneOfOptional(item.required_approval_level, ['departmental', 'executive', 'none'] as const) ?? 'departmental',
     amount: (typeof item.amount === 'string' || typeof item.amount === 'number') ? item.amount : null,
     strategicFlag: typeof item.strategic_flag === 'boolean' ? item.strategic_flag : false,
+    workflowTemplateId: normalizeId(item.workflow_template),
+    workflowTemplate: workflowTemplateDetails
+      ? {
+          id: asString(workflowTemplateDetails.id),
+          name: asString(workflowTemplateDetails.name),
+          description: asString(workflowTemplateDetails.description),
+          steps: Array.isArray(workflowTemplateDetails.steps)
+            ? workflowTemplateDetails.steps.filter(isRecord).map((step) => ({
+                id: asString(step.id),
+                order: asNumberOptional(step.order) ?? 0,
+                title: asString(step.title),
+                required_role: asString(step.required_role),
+                required_grade_level: asString(step.required_grade_level),
+                required_approval_level: asString(step.required_approval_level),
+                office_id: asStringOptional(step.office_id) ?? null,
+                office_name: asStringOptional(step.office_name) ?? null,
+                directorate_id: asStringOptional(step.directorate_id) ?? null,
+                directorate_name: asStringOptional(step.directorate_name) ?? null,
+                division_id: asStringOptional(step.division_id) ?? null,
+                division_name: asStringOptional(step.division_name) ?? null,
+                department_id: asStringOptional(step.department_id) ?? null,
+                department_name: asStringOptional(step.department_name) ?? null,
+              }))
+            : [],
+        }
+      : null,
     workflowState,
     activeParallelBranches: asNumberOptional(item.active_parallel_branches),
     completedParallelBranches: asNumberOptional(item.completed_parallel_branches),
@@ -272,6 +309,11 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
     isExternal: typeof item.is_external === 'boolean' ? item.is_external : undefined,
     routingMetadata: routingMetadataTyped,
     isRead: typeof item.is_read === 'boolean' ? item.is_read : undefined,
+    tags: Array.isArray(item.tags)
+      ? item.tags.filter(
+          (tag): tag is string => typeof tag === 'string' && tag.trim().length > 0,
+        )
+      : undefined,
     createdAt: asStringOptional(item.created_at),
     updatedAt: asStringOptional(item.updated_at),
   };
@@ -388,6 +430,7 @@ export const mapApiMinute = (item: ApiMinute): Minute => {
     responseDeadline: asStringOptional(item.response_deadline),
     // Parallel routing fields
     routingType: asOneOfOptional(item.routing_type, ['sequential', 'parallel', 'broadcast'] as const),
+    assignmentOutcome: asOneOfOptional(item.assignment_outcome, ['respond', 'treat', 'onward'] as const) ?? '',
     parallelGroupId: normalizeId(item.parallel_group_id),
     isParallelBranch: typeof item.is_parallel_branch === 'boolean' ? item.is_parallel_branch : undefined,
     parentMinuteId: normalizeId(item.parent_minute ?? item.parent_minute_id),

@@ -7,8 +7,39 @@ import { cn } from "@/lib/utils";
 const RadioGroup = React.forwardRef<
   React.ElementRef<typeof RadioGroupPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof RadioGroupPrimitive.Root>
->(({ className, ...props }, ref) => {
-  return <RadioGroupPrimitive.Root className={cn("grid gap-2", className)} {...props} ref={ref} />;
+>(({ className, onValueChange, onFocus, onBlur, ...props }, ref) => {
+  // Radix selects on focus only when its document-level "arrow key held" flag is
+  // set. That never applies here: RovingFocusGroup moves focus inside the keydown,
+  // but the resulting focusin is dispatched after keyup, once every key flag is
+  // cleared. So arrow keys moved focus without checking anything. Instead, follow
+  // focus that moves from one radio to another in this group (the roving tabindex
+  // means only arrow keys or a click can do that) and leave unrelated focus, such
+  // as a dialog focusing its first field on open, alone.
+  const lastFocusedValueRef = React.useRef<string | null>(null);
+
+  return (
+    <RadioGroupPrimitive.Root
+      {...props}
+      ref={ref}
+      className={cn("grid gap-2", className)}
+      onValueChange={onValueChange}
+      onFocus={(event) => {
+        onFocus?.(event);
+        const target = event.target as HTMLElement;
+        if (target.getAttribute?.("role") !== "radio" || target.hasAttribute("disabled")) return;
+        const value = target.getAttribute("value");
+        const movedBetweenRadios = lastFocusedValueRef.current !== null;
+        lastFocusedValueRef.current = value;
+        if (movedBetweenRadios && value) onValueChange?.(value);
+      }}
+      onBlur={(event) => {
+        onBlur?.(event);
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          lastFocusedValueRef.current = null;
+        }
+      }}
+    />
+  );
 });
 RadioGroup.displayName = RadioGroupPrimitive.Root.displayName;
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { UserCheck, Plus, Ban } from "lucide-react";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { ListRowCard } from "@/components/shared/ListRowCard";
 import { OrganizationTabList } from "@/components/admin/OrganizationTabList";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -408,40 +409,29 @@ export default function ActingAppointmentsPage() {
             />
           ) : (
             requests.map((req) => (
-              <div key={req.id} className="rounded-xl border border-border/60 bg-muted/20 p-4">
-                <div className="flex flex-row items-start justify-between gap-3 pb-2">
-                  <div>
-                    <p className="text-base font-semibold">{req.officeName}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      For {req.principalName} · requested by {req.requestedByName}
-                    </p>
+              <ListRowCard
+                key={req.id}
+                density="dense"
+                leading={<div className="rounded-md bg-primary/10 p-2 text-primary"><UserCheck className="h-4 w-4" /></div>}
+                actions={canManage ? (
+                  <div className="flex flex-wrap gap-1">
+                    <Button size="sm" className="h-8 px-2.5 text-xs" onClick={() => openAppointFromRequest(req)}>Appoint</Button>
+                    <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={() => void handleDismissRequest(req.id)} disabled={dismissingId === req.id}>
+                      {dismissingId === req.id ? "Dismissing…" : "Dismiss"}
+                    </Button>
                   </div>
-                  <Badge>{req.pendingItemCount} open items</Badge>
+                ) : null}
+              >
+                <div className="space-y-1.5">
+                  <p className="truncate text-sm font-semibold tracking-tight">{req.officeName}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">For {req.principalName} · requested by {req.requestedByName}</span>
+                    <Badge className="text-[10px]">{req.pendingItemCount} open items</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{req.reason}</p>
+                  {req.suggestedActingUserName ? <p className="text-xs text-muted-foreground">Suggested: {req.suggestedActingUserName}</p> : null}
                 </div>
-                <div className="space-y-3 text-sm">
-                  <p className="text-muted-foreground">{req.reason}</p>
-                  {req.suggestedActingUserName ? (
-                    <p className="text-muted-foreground">
-                      Suggested: {req.suggestedActingUserName}
-                    </p>
-                  ) : null}
-                  {canManage ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="compact" onClick={() => openAppointFromRequest(req)}>
-                        Appoint from request
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void handleDismissRequest(req.id)}
-                        disabled={dismissingId === req.id}
-                      >
-                        {dismissingId === req.id ? "Dismissing…" : "Dismiss"}
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+              </ListRowCard>
             ))
           )}
         </div>
@@ -458,50 +448,31 @@ export default function ActingAppointmentsPage() {
       ) : (
         <div className="grid gap-4">
           {appointments.map((appt) => (
-            <div key={appt.id} className="rounded-xl border border-border/60 bg-muted/20 p-4">
-              <div className="flex flex-row items-start justify-between gap-3 pb-2">
-                <div>
-                  <p className="text-base font-semibold">
-                    {appt.officeName}
-                    {appt.officeCode ? ` (${appt.officeCode})` : ""}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {appt.actingUserName} acting for {appt.principalName}
-                  </p>
+            <ListRowCard
+              key={appt.id}
+              density="dense"
+              leading={<div className="rounded-md bg-primary/10 p-2 text-primary"><UserCheck className="h-4 w-4" /></div>}
+              actions={appt.isActive && canManage ? (
+                <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => void handleEnd(appt.id)} disabled={endingId === appt.id}>
+                  <Ban className="mr-1.5 h-3.5 w-3.5" />
+                  {endingId === appt.id ? "Ending…" : "End appointment"}
+                </Button>
+              ) : null}
+            >
+              <div className="space-y-1.5">
+                <p className="truncate text-sm font-semibold tracking-tight">{appt.officeName}{appt.officeCode ? ` (${appt.officeCode})` : ""}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">{appt.actingUserName} acting for {appt.principalName}</span>
+                  <Badge variant={appt.isActive ? "default" : "secondary"} className="text-[10px]">
+                    {appt.isActive ? appt.isCurrentlyEffective ? "Active" : "Scheduled" : "Ended"}
+                  </Badge>
                 </div>
-                <Badge variant={appt.isActive ? "default" : "secondary"}>
-                  {appt.isActive
-                    ? appt.isCurrentlyEffective
-                      ? "Active"
-                      : "Scheduled"
-                    : "Ended"}
-                </Badge>
+                <p className="text-xs text-muted-foreground">
+                  From {formatDate(appt.startsAt)} · Until {formatDate(appt.endsAt)} · {appt.itemsTransferred} transferred{!appt.isActive ? ` · ${appt.itemsReclaimed} reclaimed` : ""}
+                </p>
+                {appt.reason ? <p className="text-xs text-muted-foreground">{appt.reason}</p> : null}
               </div>
-              <div className="space-y-3 text-sm">
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                  <span>From {formatDate(appt.startsAt)}</span>
-                  <span>Until {formatDate(appt.endsAt)}</span>
-                  <span>{appt.itemsTransferred} transferred</span>
-                  {!appt.isActive && (
-                    <span>{appt.itemsReclaimed} reclaimed</span>
-                  )}
-                </div>
-                {appt.reason ? (
-                  <p className="text-muted-foreground">{appt.reason}</p>
-                ) : null}
-                {appt.isActive && canManage ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleEnd(appt.id)}
-                    disabled={endingId === appt.id}
-                  >
-                    <Ban className="mr-2 h-3.5 w-3.5" />
-                    {endingId === appt.id ? "Ending…" : "End & reclaim seat"}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
+            </ListRowCard>
           ))}
         </div>
       )}

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PrimaryRoutePanel } from "@/components/correspondence/PrimaryRoutePanel";
-import type { BranchConfig } from "@/lib/parallel-routing";
+import type { AssignmentMergeStrategy, BranchConfig } from "@/lib/parallel-routing";
 import { buildParallelRecipients } from "@/lib/parallel-routing";
 import { getDivisionById } from "@/lib/npa-structure";
 import type { User } from "@/lib/npa-structure";
@@ -21,9 +21,10 @@ export type AuditRouteSubmitPayload = {
   attentionUserId: string | null;
   /** Single-route target office id */
   targetOfficeId?: string;
-  /** Parallel recipients for REFER */
-  parallelRecipients?: Array<{ user_id?: string; office_id?: string; purpose: string; minute_text: string }>;
-  mergeStrategy?: "all" | "any" | "majority" | "independent";
+  /** Separate assignment recipients for REFER */
+  parallelRecipients?: Array<{ user_id?: string; office_id?: string; purpose: string; minute_text: string; outcome: string }>;
+  /** Only set when separate assignments should be consolidated. */
+  mergeStrategy?: AssignmentMergeStrategy;
   ccUserIds: string[];
   ccOfficeIds: string[];
 };
@@ -64,10 +65,10 @@ export function AuditRouteDialog({
   const [forwardTo, setForwardTo] = useState("");
   const [targetOfficeId, setTargetOfficeId] = useState("");
   const [purpose, setPurpose] = useState<"action" | "information" | "approval">("action");
-  const [mergeStrategy, setMergeStrategy] = useState<"all" | "any" | "majority" | "independent">("all");
   const [parallelUserIds, setParallelUserIds] = useState<string[]>([]);
   const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
   const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>({});
+  const [mergeStrategy, setMergeStrategy] = useState<AssignmentMergeStrategy>("independent");
   const [distributionUserIds, setDistributionUserIds] = useState<string[]>([]);
   const [distributionOfficeIds, setDistributionOfficeIds] = useState<string[]>([]);
   const [personSearchQuery, setPersonSearchQuery] = useState("");
@@ -164,7 +165,7 @@ export function AuditRouteDialog({
         <DialogHeader>
           <DialogTitle>Route Audit Query</DialogTitle>
           <DialogDescription>
-            Uses the same Single / Parallel routing contract as correspondence. CC recipients are informational only.
+            Uses the same single recipient / assign separately contract as correspondence. CC recipients are informational only.
           </DialogDescription>
         </DialogHeader>
 
@@ -195,11 +196,11 @@ export function AuditRouteDialog({
             onParallelUserIdsChange={setParallelUserIds}
             parallelOfficeIds={parallelOfficeIds}
             onParallelOfficeIdsChange={setParallelOfficeIds}
-            mergeStrategy={mergeStrategy}
-            onMergeStrategyChange={setMergeStrategy}
             branchConfigs={branchConfigs}
             onBranchConfigsChange={setBranchConfigs}
             defaultBranchText={branchText}
+            mergeStrategy={mergeStrategy}
+            onMergeStrategyChange={setMergeStrategy}
             distributionUserIds={distributionUserIds}
             onDistributionUserIdsChange={setDistributionUserIds}
             distributionOfficeIds={distributionOfficeIds}

@@ -11,6 +11,7 @@ import {
   looksLikeExcelPaste,
   looksLikeOfficePaste,
   sanitizePastedRichText,
+  sanitizeRichText,
 } from '../sanitize-html';
 
 const REALISTIC_EXCEL = readFileSync(
@@ -95,6 +96,29 @@ describe('Office paste cleanup', () => {
     expect(cleaned).toMatch(/text-indent:\s*18px/i);
     expect(cleaned).toMatch(/float:\s*left/i);
     expect(cleaned).toMatch(/width:\s*50%/i);
+  });
+
+  it('drops unsafe CSS values from pasted styles while keeping safe ones', () => {
+    const input = `<html xmlns:o="urn:schemas-microsoft-com:office:office"><body>
+      <p class="MsoNormal" style="background-image:url(https://evil.test/x.png); text-align:center">A</p>
+      <p class="MsoNormal" style="margin-left:expression(alert(1)); text-indent:18px">B</p>
+      <p class="MsoNormal" style="margin-top:8px; behavior:url(x.htc)">C</p>
+      <img src="cid:x" style="float:left; width:50%" alt="pic" />
+    </body></html>`;
+    const cleaned = sanitizePastedRichText(input);
+    expect(cleaned).not.toMatch(/url\(/i);
+    expect(cleaned).not.toMatch(/expression/i);
+    expect(cleaned).not.toMatch(/behavior/i);
+    expect(cleaned).toMatch(/text-align:\s*center/i);
+    expect(cleaned).toMatch(/text-indent:\s*18px/i);
+    expect(cleaned).toMatch(/float:\s*left/i);
+  });
+
+  it('strips url() values from plain HTML paste styles (no Office markers)', () => {
+    const input = `<p style="background-image:url(https://evil.test/x.png); color:red">Plain</p>`;
+    const cleaned = sanitizeRichText(input);
+    expect(cleaned).not.toMatch(/url\(/i);
+    expect(cleaned).toMatch(/Plain/);
   });
 
   it('realistic Excel clipboard keeps grid + class-driven borders after TipTap load', () => {

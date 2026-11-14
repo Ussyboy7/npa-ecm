@@ -8,6 +8,8 @@ from .views import (
     DivisionViewSet,
     OfficeMembershipViewSet,
     OfficeViewSet,
+    ReferenceAllocationViewSet,
+    ReferenceSchemeViewSet,
     RoleViewSet,
 )
 from .calendar_views import ExecutiveCalendarEventViewSet
@@ -24,6 +26,10 @@ router.register(r"office-memberships", OfficeMembershipViewSet, basename="office
 router.register(r"calendar-events", ExecutiveCalendarEventViewSet, basename="calendar-event")
 router.register(r"acting-appointments", ActingAppointmentViewSet, basename="acting-appointment")
 router.register(r"acting-requests", ActingRequestViewSet, basename="acting-request")
+router.register(r"reference-schemes", ReferenceSchemeViewSet, basename="reference-scheme")
+router.register(
+    r"reference-allocations", ReferenceAllocationViewSet, basename="reference-allocation"
+)
 
 
 urlpatterns = router.urls

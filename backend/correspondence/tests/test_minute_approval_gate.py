@@ -1,10 +1,22 @@
 """TDD: Unified approval gate – departmental vs executive with endorsement."""
+from io import BytesIO
 import uuid
+from unittest import mock
+
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
-from accounts.models import User
-from correspondence.models import Correspondence, CorrespondenceDistribution
+from accounts.models import ExecutiveSignature, User
+from accounts.services import VerificationTokenService
+from correspondence.models import (
+    Correspondence,
+    CorrespondenceDistribution,
+    CorrespondenceDocumentLink,
+    Minute,
+)
+from dms.models import Document
 from organization.models import Directorate, Division, Department, Office, OfficeMembership, Role
 
 
@@ -37,7 +49,7 @@ class MinuteApprovalGateTests(TestCase):
         self.clerk_role = clerk_role
 
         # Users
-        self.md = User.objects.create_user(username="md_gate_test", password="x", grade_level="MDCS", system_role=md_role, directorate=self.directorate, division=self.div_finance, department=self.dept_finance)
+        self.md = User.objects.create_user(username="md_gate_test", email="md_gate_test@example.com", password="x", grade_level="MDCS", system_role=md_role, directorate=self.directorate, division=self.div_finance, department=self.dept_finance)
         OfficeMembership.objects.create(user=self.md, office=self.office_md, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
         OfficeMembership.objects.create(user=self.md, office=self.office_fin, assignment_role="principal", is_primary=False, is_active=True)
 
@@ -91,9 +103,131 @@ class MinuteApprovalGateTests(TestCase):
             payload.update(extra)
         return self.client.post(url, payload, format="json")
 
+    def _create_md_signature(self):
+        buffer = BytesIO()
+        Image.new("RGB", (200, 80), "white").save(buffer, format="PNG")
+        signature = ExecutiveSignature.objects.create(
+            user=self.md,
+            signature_image=SimpleUploadedFile(
+                "md-signature.png",
+                buffer.getvalue(),
+                content_type="image/png",
+            ),
+            require_2fa=True,
+        )
+        self.addCleanup(signature.signature_image.delete, save=False)
+        return signature
+
+    def test_md_approval_requires_2fa_when_enabled(self):
+        self._create_md_signature()
+        corr = self._make_corr(
+            required_level="executive",
+            division=self.div_finance,
+            department=self.dept_finance,
+            current_approver=self.md,
+            owning_office=self.office_md,
+        )
+
+        response = self._post_minute(self.md, corr, minute_text="MD approval")
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("verification_required", response.content.decode())
+        self.assertFalse(
+            Minute.objects.filter(
+                correspondence=corr,
+                action_type=Minute.ActionType.APPROVE,
+            ).exists()
+        )
+
+        token = VerificationTokenService.generate_token(
+            user_id=str(self.md.id),
+            purpose="seal_application",
+        )
+        with mock.patch(
+            "correspondence.minutes_views.MinuteSealService.apply_if_eligible"
+        ):
+            response = self._post_minute(
+                self.md,
+                corr,
+                minute_text="MD approval",
+                extra={"verification_token": token},
+            )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertTrue(
+            Minute.objects.filter(
+                correspondence=corr,
+                action_type=Minute.ActionType.APPROVE,
+            ).exists()
+        )
+
+    def test_md_approval_fails_closed_without_a_configured_2fa_method(self):
+        self.md.email = ""
+        self.md.save(update_fields=["email"])
+        self._create_md_signature()
+        corr = self._make_corr(
+            required_level="executive",
+            division=self.div_finance,
+            department=self.dept_finance,
+            current_approver=self.md,
+            owning_office=self.office_md,
+        )
+
+        response = self._post_minute(self.md, corr, minute_text="MD approval")
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("no_2fa_method", response.content.decode())
+        self.assertFalse(
+            Minute.objects.filter(
+                correspondence=corr,
+                action_type=Minute.ActionType.APPROVE,
+            ).exists()
+        )
+
+    @mock.patch(
+        "correspondence.minutes_views.ExecutiveApprovalPDFService.generate_and_store_approval_pdf"
+    )
+    def test_approval_automatically_generates_the_approved_copy(self, generate_pdf):
+        corr = self._make_corr(
+            required_level="executive",
+            division=self.div_finance,
+            department=self.dept_finance,
+            current_approver=self.md,
+            owning_office=self.office_md,
+        )
+        source = Document.objects.create(
+            title="Approval source memo",
+            document_type=Document.DocumentType.MEMO,
+            author=self.md,
+            role=Document.Role.PRIMARY,
+        )
+        CorrespondenceDocumentLink.objects.create(
+            correspondence=corr, document=source
+        )
+
+        resp = self._post_minute(self.md, corr, minute_text="MD final approval")
+
+        self.assertEqual(resp.status_code, 201, resp.content)
+        generate_pdf.assert_called_once()
+        self.assertEqual(
+            generate_pdf.call_args.kwargs["correspondence"].id, corr.id
+        )
+        self.assertEqual(
+            generate_pdf.call_args.kwargs["minute"].action_type,
+            "approve",
+        )
+
     def test_md_can_executive_approve(self):
         corr = self._make_corr(required_level="executive", division=self.div_finance, department=self.dept_finance, current_approver=self.md, owning_office=self.office_md)
         resp = self._post_minute(self.md, corr, minute_text="MD final approval")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        data = resp.json()
+        self.assertEqual(data.get("approval_level"), "executive")
+        self.assertEqual(data.get("approval_role"), "approval")
+
+    def test_md_approval_is_executive_for_departmental_requirement(self):
+        corr = self._make_corr(required_level="departmental", division=self.div_finance, department=self.dept_finance, current_approver=self.md)
+        resp = self._post_minute(self.md, corr, minute_text="MD approves departmental item")
         self.assertEqual(resp.status_code, 201, resp.content)
         data = resp.json()
         self.assertEqual(data.get("approval_level"), "executive")

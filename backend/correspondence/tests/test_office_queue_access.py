@@ -114,6 +114,43 @@ class OfficeQueueAccessTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn(self.item.reference_number, self._refs(response))
 
+    def test_archived_item_leaves_office_inbox(self):
+        """Archiving is a separate step after completion, so the tray must not
+        take the memo back once its status moves to archived."""
+        self.item.status = Correspondence.Status.ARCHIVED
+        self.item.save(update_fields=["status"])
+
+        self.client.force_authenticate(user=self.principal)
+        url = reverse("api_v1:correspondence-office-inbox")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.item.reference_number, self._refs(response))
+        self.assertEqual(response.data.get("count", 0), 0)
+        self.assertEqual(response.data["summary"]["total"], 0)
+
+    def test_completed_item_leaves_office_inbox(self):
+        self.item.status = Correspondence.Status.COMPLETED
+        self.item.save(update_fields=["status"])
+
+        self.client.force_authenticate(user=self.principal)
+        url = reverse("api_v1:correspondence-office-inbox")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.item.reference_number, self._refs(response))
+
+    def test_archived_item_not_counted_in_sidebar_badge(self):
+        self.item.status = Correspondence.Status.ARCHIVED
+        self.item.save(update_fields=["status"])
+
+        self.client.force_authenticate(user=self.principal)
+        url = reverse("api_v1:correspondence-sidebar-counts")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["officeInbox"], 0)
+
     def test_staff_sidebar_office_counts_zero(self):
         self.client.force_authenticate(user=self.staff)
         url = reverse("api_v1:correspondence-sidebar-counts")

@@ -10,6 +10,7 @@ from django.conf import settings
 from django.http import HttpResponseRedirect
 import pyotp
 import qrcode
+from qrcode.image.pil import PilImage
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -18,16 +19,20 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from audit.services import AuditService
+from common.throttles import OTPRateThrottle, PasswordChangeRateThrottle, TotpSetupRateThrottle
 from accounts.login_mfa import (
     available_login_mfa_methods,
     clear_mfa_challenge,
     create_mfa_challenge,
     get_challenge_user,
     get_or_create_login_security,
+    record_mfa_failure,
+    MFA_MAX_ATTEMPTS,
     send_login_email_otp,
     user_requires_login_mfa,
     verify_login_mfa_code,
 )
+from accounts.services import BackupCodeService, StepUpService, TotpVerificationService
 from accounts.models import LoginSecuritySettings, User
 from accounts.oidc import (
     build_authorization_url,
@@ -40,6 +45,7 @@ from accounts.oidc import (
 )
 from accounts.views import set_auth_token_cookies
 from organization.permission_utils import explain_access_context, explain_permission_denial
+from organization.permission_utils import resolve_page_access
 from organization.permissions_catalog import get_permission_catalog, get_permission_presets
 
 logger = logging.getLogger(__name__)
@@ -82,6 +88,15 @@ class AccessExplainView(APIView):
         return Response(payload)
 
 
+class PageAccessView(APIView):
+    """Return the authenticated user's resolved page access from backend rules."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"pages": resolve_page_access(request.user)})
+
+
 class PermissionCatalogView(APIView):
     """Return the canonical permission key catalog for admin UI."""
 
@@ -108,6 +123,7 @@ class LoginMFAStatusView(APIView):
                 "totp_confirmed": security.totp_confirmed,
                 "preferred_method": security.preferred_method,
                 "available_methods": available_login_mfa_methods(request.user, security),
+                "backup_codes_remaining": BackupCodeService.remaining(request.user),
                 "email": request.user.email,
             }
         )
@@ -118,39 +134,98 @@ class LoginMFAEnableView(APIView):
 
     def post(self, request):
         security = get_or_create_login_security(request.user)
+        available = available_login_mfa_methods(request.user, security)
+        if not {"email", "totp"}.intersection(available):
+            raise ValidationError(
+                {
+                    "detail": (
+                        "Add an email or confirm an authenticator app before enabling "
+                        "login MFA. Backup codes are not a primary sign-in method."
+                    )
+                }
+            )
         security.mfa_enabled = True
         security.save(update_fields=["mfa_enabled", "updated_at"])
+        from audit.models import ActivityLog
+
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            request=request,
+            description="Enabled login MFA",
+        )
         return Response({"mfa_enabled": True})
 
 
 class LoginMFADisableView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PasswordChangeRateThrottle]
 
     def post(self, request):
         security = get_or_create_login_security(request.user)
         if security.mfa_required:
             raise ValidationError({"detail": "MFA is required for your account and cannot be disabled."})
+        StepUpService.assert_verified(
+            request,
+            password=request.data.get("current_password"),
+            code=request.data.get("code"),
+        )
         security.mfa_enabled = False
         security.totp_secret = ""
         security.totp_confirmed = False
+        security.totp_last_used_step = 0
         security.save(
-            update_fields=["mfa_enabled", "totp_secret", "totp_confirmed", "updated_at"]
+            update_fields=[
+                "mfa_enabled",
+                "totp_secret",
+                "totp_confirmed",
+                "totp_last_used_step",
+                "updated_at",
+            ]
+        )
+        from audit.models import ActivityLog
+
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            request=request,
+            description="Disabled login MFA",
         )
         return Response({"mfa_enabled": False})
 
 
 class LoginTOTPSetupView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [TotpSetupRateThrottle]
 
     def post(self, request):
         security = get_or_create_login_security(request.user)
         force = bool(request.data.get("force_regenerate", False))
+        if security.totp_secret or force:
+            StepUpService.assert_verified(
+                request,
+                password=request.data.get("current_password"),
+                code=request.data.get("code"),
+            )
+        if force and not request.user.email:
+            if security.mfa_required:
+                raise ValidationError(
+                    {"detail": "Add an email fallback before replacing a required authenticator."}
+                )
         if not security.totp_secret or force:
             security.totp_secret = pyotp.random_base32()
             security.totp_confirmed = False
-            security.mfa_enabled = True
+            security.totp_last_used_step = 0
+            if not request.user.email and not security.mfa_required:
+                security.mfa_enabled = False
             security.save(
-                update_fields=["totp_secret", "totp_confirmed", "mfa_enabled", "updated_at"]
+                update_fields=[
+                    "totp_secret",
+                    "totp_confirmed",
+                    "totp_last_used_step",
+                    "mfa_enabled",
+                    "updated_at",
+                ]
             )
 
         totp = pyotp.TOTP(security.totp_secret)
@@ -158,7 +233,7 @@ class LoginTOTPSetupView(APIView):
             name=request.user.email or request.user.username,
             issuer_name="NPA ECM",
         )
-        qr = qrcode.make(uri, image_factory=qrcode.image.pil.PilImage)
+        qr = qrcode.make(uri, image_factory=PilImage)
         buffer = BytesIO()
         qr.save(buffer, format="PNG")
         qr_b64 = base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -174,6 +249,7 @@ class LoginTOTPSetupView(APIView):
 
 class LoginTOTPVerifyView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [OTPRateThrottle]
 
     def post(self, request):
         code = str(request.data.get("code", "")).strip()
@@ -184,8 +260,7 @@ class LoginTOTPVerifyView(APIView):
         if not security.totp_secret:
             raise ValidationError({"detail": "TOTP is not set up."})
 
-        totp = pyotp.TOTP(security.totp_secret)
-        if not totp.verify(code, valid_window=1):
+        if not TotpVerificationService.verify_and_consume(security, code):
             raise ValidationError({"detail": "Invalid verification code."})
 
         security.totp_confirmed = True
@@ -194,13 +269,30 @@ class LoginTOTPVerifyView(APIView):
         security.save(
             update_fields=["totp_confirmed", "mfa_enabled", "preferred_method", "updated_at"]
         )
-        return Response({"totp_confirmed": True, "mfa_enabled": True})
+        backup_codes = BackupCodeService.generate(request.user)
+
+        from audit.models import ActivityLog
+
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            request=request,
+            description="Confirmed login authenticator app",
+        )
+        return Response(
+            {
+                "totp_confirmed": True,
+                "mfa_enabled": True,
+                "backup_codes": backup_codes,
+            }
+        )
 
 
 class LoginMFAVerifyView(APIView):
     """Complete login after password step when MFA is required."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [OTPRateThrottle]
 
     def post(self, request):
         challenge_id = request.data.get("challenge_id")
@@ -220,6 +312,12 @@ class LoginMFAVerifyView(APIView):
             raise ValidationError({"method": f"Method '{method}' is not available."})
 
         if not verify_login_mfa_code(user, method, code):
+            attempts = record_mfa_failure(challenge_id)
+            if attempts >= MFA_MAX_ATTEMPTS:
+                clear_mfa_challenge(challenge_id)
+                raise AuthenticationFailed(
+                    "Too many failed verification attempts. Please sign in again."
+                )
             raise AuthenticationFailed("Invalid verification code.")
 
         clear_mfa_challenge(challenge_id)
@@ -247,6 +345,7 @@ class LoginMFARequestEmailView(APIView):
     """Send login email OTP during MFA challenge (unauthenticated)."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [OTPRateThrottle]
 
     def post(self, request):
         challenge_id = request.data.get("challenge_id")

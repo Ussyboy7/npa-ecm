@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -88,6 +89,14 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         EXECUTIVE = "executive", "Executive"
 
     reference_number = models.CharField(max_length=100, unique=True, blank=True)
+    reference_classification = models.ForeignKey(
+        "organization.ReferenceClassification",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="correspondences",
+        help_text="Classification segment used in the generated reference (AD/OP/CON…).",
+    )
     subject = models.CharField(max_length=500)
     treatment_response = models.TextField(blank=True, default="")
     body_html = models.TextField(blank=True)
@@ -184,6 +193,13 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     completion_summary_generated_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    pre_archive_status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        null=True,
+        blank=True,
+        help_text="Lifecycle status to restore when an archived record is returned to records.",
+    )
     archived_at = models.DateTimeField(null=True, blank=True)
     is_on_legal_hold = models.BooleanField(default=False, db_index=True)
     retention_schedule = models.ForeignKey(
@@ -218,6 +234,13 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     active_parallel_branches = models.IntegerField(default=0)
     completed_parallel_branches = models.IntegerField(default=0)
+    workflow_template = models.ForeignKey(
+        "workflow.WorkflowTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="correspondence_items",
+    )
     # Parent correspondence for responses (RE: correspondence)
     parent_correspondence = models.ForeignKey(
         "self",
@@ -570,6 +593,26 @@ class CorrespondenceAttachment(UUIDModel, TimeStampedModel):
     file_size = models.BigIntegerField(help_text="Size in bytes")
     file_url = models.URLField(blank=True)
 
+def minute_satisfies_assignment_outcome(minute, expected_outcome):
+    """Whether a recipient action fulfils the expected assignment outcome."""
+    if not expected_outcome:
+        # Legacy branch minutes predate explicit expected outcomes. Keep their
+        # existing any-action completion semantics.
+        return True
+    if expected_outcome == "treat":
+        return minute.action_type == "treat"
+    if expected_outcome == "onward":
+        return bool(minute.to_office_id or minute.to_user_id)
+    if minute.action_type == "treat":
+        # Treatment records a formal response, so it satisfies a Respond
+        # assignment even when the same action also routes onward.
+        return True
+    return (
+        minute.action_type in ("minute", "forward", "approve", "reject")
+        and not minute.to_office_id
+        and not minute.to_user_id
+    )
+
 
 class Minute(UUIDModel, TimeStampedModel):
     """
@@ -702,8 +745,19 @@ class Minute(UUIDModel, TimeStampedModel):
         ],
         default="sequential",
     )
-    parallel_group_id = models.UUIDField(null=True, blank=True)  # Group parallel minutes
+    parallel_group_id = models.UUIDField(null=True, blank=True)  # Group separate assignments
     is_parallel_branch = models.BooleanField(default=False)
+    assignment_outcome = models.CharField(
+        max_length=20,
+        choices=[
+            ("respond", "Respond"),
+            ("treat", "Treat document"),
+            ("onward", "Minute onward"),
+        ],
+        blank=True,
+        default="",
+        help_text="Outcome expected from the recipient of a separate assignment.",
+    )
     parent_minute = models.ForeignKey(
         "self",
         null=True,
@@ -719,7 +773,7 @@ class Minute(UUIDModel, TimeStampedModel):
             ("any", "Any one completes"),
             ("majority", "Majority completes"),
         ],
-        default="all",
+        default="independent",
     )
     # Branch originator tracking (for parallel routing)
     branch_originator = models.ForeignKey(
@@ -812,6 +866,17 @@ class Minute(UUIDModel, TimeStampedModel):
             return False  # Once opened, cannot edit
         if self.edit_window_expires_at and timezone.now() > self.edit_window_expires_at:
             return False  # Window expired
+        if self.correspondence_id and self.timestamp:
+            from django.db.models import Q
+
+            has_downstream_minute = type(self).objects.filter(
+                correspondence_id=self.correspondence_id,
+            ).exclude(pk=self.pk).filter(
+                Q(timestamp__gt=self.timestamp)
+                | Q(timestamp=self.timestamp, step_number__gt=self.step_number)
+            ).exists()
+            if has_downstream_minute:
+                return False  # A later minute has already been created
         return True
 
     @property
@@ -894,6 +959,83 @@ class Minute(UUIDModel, TimeStampedModel):
         return self.direction == self.Direction.DOWNWARD
 
 
+class ApprovalSnapshot(UUIDModel, TimeStampedModel):
+    """Immutable identity, approval trail, and PDF hash for an approved copy.
+
+    The generated PDF is stored separately from the source memo so later edits
+    to user, office, route, or correspondence records cannot rewrite history.
+    """
+
+    minute = models.OneToOneField(
+        Minute,
+        on_delete=models.CASCADE,
+        related_name="approval_snapshot",
+    )
+    correspondence = models.ForeignKey(
+        Correspondence,
+        on_delete=models.CASCADE,
+        related_name="approval_snapshots",
+    )
+    seal = models.ForeignKey(
+        "accounts.DocumentSeal",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_snapshots",
+    )
+    approved_document = models.ForeignKey(
+        "dms.Document",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approval_snapshots",
+    )
+    snapshot_version = models.PositiveSmallIntegerField(default=1)
+    document_reference = models.CharField(max_length=255, blank=True)
+    subject = models.TextField(blank=True)
+    approval_kind = models.CharField(max_length=100, blank=True)
+    approval_level = models.CharField(max_length=32, blank=True)
+    decision_route = models.CharField(max_length=255, blank=True)
+    minute_text = models.TextField(blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    signer_name = models.CharField(max_length=255, blank=True)
+    signer_personnel_number = models.CharField(max_length=50, blank=True)
+    signer_designation = models.CharField(max_length=255, blank=True)
+    signer_office = models.CharField(max_length=255, blank=True)
+    seal_serial = models.CharField(max_length=50, blank=True)
+    seal_verification_url = models.URLField(blank=True)
+    sealed_at = models.DateTimeField(null=True, blank=True)
+    minutes = models.JSONField(default=list, blank=True)
+    pdf_file = models.FileField(upload_to="approval_snapshots/", blank=True)
+    pdf_sha256 = models.CharField(max_length=64, blank=True, db_index=True)
+    pdf_generated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Approval Snapshot"
+        verbose_name_plural = "Approval Snapshots"
+
+    def __str__(self):
+        return f"Approval snapshot for minute {self.minute_id}"
+
+    def save(self, *args, **kwargs):
+        """Allow only first creation and the archived PDF attachment afterward."""
+        if not self._state.adding:
+            allowed = {
+                "approved_document",
+                "pdf_file",
+                "pdf_sha256",
+                "pdf_generated_at",
+                "updated_at",
+            }
+            update_fields = kwargs.get("update_fields")
+            if update_fields is None or not set(update_fields).issubset(allowed):
+                raise ValidationError(
+                    "Approval snapshots are immutable after creation."
+                )
+        return super().save(*args, **kwargs)
+
+
 class ReadReceipt(UUIDModel):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE
@@ -922,7 +1064,7 @@ class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
             ("any", "Any one completes"),
             ("majority", "Majority completes"),
         ],
-        default="all",
+        default="independent",
     )
     is_complete = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -940,85 +1082,60 @@ class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
         from django.utils import timezone
         from organization.models import OfficeMembership
 
-        # Get the *top-level* branch minutes in this parallel group. Subsequent
-        # minutes created while acting within a branch (sub-routing / responses)
-        # also carry is_parallel_branch=True via inheritance, but they are not
-        # independent branches and must not be counted as such.
-        # Identify the *top-level* branch minutes. Sub-routing / response minutes
-        # also carry is_parallel_branch=True (via inheritance) and share the group
-        # id, but they are not independent branches. A branch is defined by its
-        # original target office/user; the earliest minute for each distinct target
-        # is the top-level branch. (Replies do not set parent_minute_id, so parent
-        # linkage alone is not enough to distinguish them.)
-        parallel_minutes = Minute.objects.filter(
-            parallel_group_id=self.id,
-            is_parallel_branch=True,
-        ).select_related('to_office', 'correspondence').order_by('timestamp')
+        # A recipient branch is the earliest minute for each original target.
+        # Routing within a branch inherits the group flag, so it must not be
+        # counted as another recipient.
+        parallel_minutes = list(
+            Minute.objects.filter(
+                parallel_group_id=self.id,
+                is_parallel_branch=True,
+            ).select_related("to_office", "correspondence").order_by("timestamp")
+        )
+        has_explicit_assignments = any(m.assignment_outcome for m in parallel_minutes)
 
         top_level_branches = []
         seen_targets = set()
-        for m in parallel_minutes:
-            target = m.to_office_id or m.to_user_id
-            if not target or target in seen_targets:
+        for minute in parallel_minutes:
+            if has_explicit_assignments and not minute.assignment_outcome:
                 continue
-            seen_targets.add(target)
-            top_level_branches.append(m)
+            target = minute.to_office_id or minute.to_user_id
+            if target and target not in seen_targets:
+                seen_targets.add(target)
+                top_level_branches.append(minute)
 
-        # Recount total branches dynamically. Frontend-initiated parallel routes
-        # create branch minutes with a shared parallel_group_id but do not always
-        # persist a ParallelRoutingGroup row with total_branches populated.
         self.total_branches = len(top_level_branches)
 
-        # Count completed branches (branches where recipient has acted)
-        # A branch is complete if:
-        # 1. Correspondence is completed (all branches implicitly complete), OR
-        # 2. The recipient has created a subsequent minute/response
-        completed_branch_ids = set()
+        completed_count = 0
         for minute in top_level_branches:
-            # Check if correspondence is completed (all branches implicitly complete)
-            if self.correspondence.status == Correspondence.Status.COMPLETED:
-                completed_branch_ids.add(minute.id)
+            if (
+                self.correspondence.status == Correspondence.Status.COMPLETED
+                or minute.branch_completed_at
+            ):
+                completed_count += 1
                 continue
 
-            # Force-completed branch (non-response escalation) counts as done.
-            if minute.branch_completed_at:
-                completed_branch_ids.add(minute.id)
-                continue
-
-            # Determine the recipient user
-            # Priority: to_user (if set) > office principal > acting > highest grade
-            recipient_user_id = None
-
-            # First, check if to_user is explicitly set (for parallel routing or direct user routing)
-            if minute.to_user_id:
-                recipient_user_id = minute.to_user_id
-                recipient_acted = Minute.objects.filter(
-                    correspondence=self.correspondence,
-                    user_id=recipient_user_id,
-                    timestamp__gt=minute.timestamp,
-                ).exists()
-                if recipient_acted:
-                    completed_branch_ids.add(minute.id)
-            elif minute.to_office:
-                # Office-routed branch: the branch is complete once ANY active member of
-                # the target office has responded (created a subsequent minute). This
-                # supports office-level parallel routing where to_user is not set.
-                member_ids = list(
+            recipient_ids = (
+                [minute.to_user_id]
+                if minute.to_user_id
+                else list(
                     OfficeMembership.objects.filter(
-                        office=minute.to_office,
-                        is_active=True,
+                        office=minute.to_office, is_active=True
                     ).values_list("user_id", flat=True)
                 )
-                if member_ids:
-                    acted = Minute.objects.filter(
-                        correspondence=self.correspondence,
-                        user_id__in=member_ids,
-                        timestamp__gt=minute.timestamp,
-                    ).exists()
-                    if acted:
-                        completed_branch_ids.add(minute.id)
+            )
+            if any(
+                minute_satisfies_assignment_outcome(
+                    response, minute.assignment_outcome
+                )
+                for response in Minute.objects.filter(
+                    correspondence=self.correspondence,
+                    user_id__in=recipient_ids,
+                    timestamp__gt=minute.timestamp,
+                    is_recalled=False,
+                )
+            ):
+                completed_count += 1
 
-        completed_count = len(completed_branch_ids)
         self.completed_branches = completed_count
 
         # Check if group should be marked complete based on merge strategy
@@ -1031,9 +1148,9 @@ class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
             majority_threshold = (self.total_branches // 2) + 1
             should_complete = completed_count >= majority_threshold
         elif self.merge_strategy == "independent":
-            # Independent branches don't block each other, so we don't mark as complete
-            # The workflow can continue regardless
-            should_complete = False
+            # Branches never wait for one another. The group only closes for
+            # bookkeeping once every expected outcome has been recorded.
+            should_complete = completed_count >= self.total_branches
 
         if should_complete and not self.is_complete:
             self.is_complete = True
@@ -1839,6 +1956,7 @@ class PhysicalDocument(UUIDModel, TimeStampedModel, SoftDeleteModel):
     class Status(models.TextChoices):
         FILED = "filed", "Filed"
         CHECKED_OUT = "checked_out", "Checked Out"
+        IN_TRANSIT = "in_transit", "In Transit"
         ARCHIVED = "archived", "Archived"
         DESTROYED = "destroyed", "Destroyed"
         MISSING = "missing", "Missing"
@@ -1865,6 +1983,13 @@ class PhysicalDocument(UUIDModel, TimeStampedModel, SoftDeleteModel):
         null=True,
         blank=True,
         related_name="physical_documents",
+    )
+    current_office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="custodied_physical_documents",
     )
     status = models.CharField(
         max_length=20,
@@ -1895,6 +2020,53 @@ class PhysicalDocument(UUIDModel, TimeStampedModel, SoftDeleteModel):
     def __str__(self) -> str:
         name = self.description or f"Physical Doc #{self.tracking_number}"
         return f"{name} ({self.get_status_display()})"
+
+
+class PhysicalHandover(UUIDModel, TimeStampedModel):
+    """Auditable office-to-office custody transfer for a physical document."""
+
+    physical_document = models.ForeignKey(
+        PhysicalDocument,
+        on_delete=models.CASCADE,
+        related_name="handover_events",
+    )
+    from_office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.PROTECT,
+        related_name="physical_handovers_sent",
+    )
+    to_office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.PROTECT,
+        related_name="physical_handovers_received",
+    )
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="physical_handovers_sent",
+    )
+    received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="physical_handovers_received",
+    )
+    sent_at = models.DateTimeField(default=timezone.now)
+    received_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    receipt_notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-sent_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["physical_document"],
+                condition=models.Q(received_at__isnull=True),
+                name="unique_pending_physical_handover",
+            )
+        ]
 
 
 class ExternalEntity(UUIDModel, TimeStampedModel):

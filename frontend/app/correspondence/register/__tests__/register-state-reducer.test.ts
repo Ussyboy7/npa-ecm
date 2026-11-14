@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { registerReducer, createInitialState, RegisterState } from '../register-state-reducer';
 import type { RegisterAction } from '../register-state-reducer';
-import { createInitialRoutingConfig } from '../register-utils';
 
 const baseState: RegisterState = {
   currentStep: 'basics',
@@ -16,7 +15,7 @@ const baseState: RegisterState = {
     dispatchDate: '',
     priority: 'medium',
     referenceNumber: '',
-    assignTo: '',
+    referenceClassificationCode: '',
     divisionId: '',
     documentType: 'letter',
     tags: '',
@@ -37,10 +36,7 @@ const baseState: RegisterState = {
     divisions: [],
     departments: [],
   },
-  routingConfig: createInitialRoutingConfig(),
   ui: {
-    assignSearch: '',
-    officeSearch: '',
     submitting: false,
     errors: {},
     hasDraft: false,
@@ -117,12 +113,12 @@ describe('registerReducer', () => {
   it('handles UPDATE_FORM_DATA keeps errors for non-updated fields', () => {
     const state: RegisterState = {
       ...baseState,
-      ui: { ...baseState.ui, errors: { subject: 'Subject is required', assignTo: 'Assign is required' } },
+      ui: { ...baseState.ui, errors: { subject: 'Subject is required', recipientName: 'Recipient is required' } },
     };
     const action: RegisterAction = { type: 'UPDATE_FORM_DATA', payload: { subject: 'New' } };
     const next = registerReducer(state, action);
     expect(next.ui.errors.subject).toBeUndefined();
-    expect(next.ui.errors.assignTo).toBe('Assign is required');
+    expect(next.ui.errors.recipientName).toBe('Recipient is required');
   });
 
   it('handles ADD_DOCUMENT_FILES', () => {
@@ -240,15 +236,6 @@ describe('registerReducer', () => {
     };
     const next = registerReducer(baseState, action);
     expect(next.distributions.directorates).toEqual(['dir-1']);
-  });
-
-  it('handles SET_ASSIGN_SEARCH and SET_OFFICE_SEARCH', () => {
-    const a1: RegisterAction = { type: 'SET_ASSIGN_SEARCH', payload: 'john' };
-    const a2: RegisterAction = { type: 'SET_OFFICE_SEARCH', payload: 'office' };
-    const s1 = registerReducer(baseState, a1);
-    expect(s1.ui.assignSearch).toBe('john');
-    const s2 = registerReducer(s1, a2);
-    expect(s2.ui.officeSearch).toBe('office');
   });
 
   it('handles SET_HAS_DRAFT and SET_MOUNTED', () => {

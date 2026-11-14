@@ -75,7 +75,7 @@ class ActingAppointmentServiceTests(TestCase):
             created_by=self.admin,
         )
 
-    def test_appoint_reassigns_and_end_reclaims(self):
+    def test_appoint_marks_seat_and_end_reclaims(self):
         appointment = appoint_acting(
             office=self.office,
             principal=self.principal,
@@ -87,7 +87,9 @@ class ActingAppointmentServiceTests(TestCase):
         self.own_item.refresh_from_db()
 
         self.assertTrue(appointment.is_active)
-        self.assertEqual(self.open_item.current_approver_id, self.acting.id)
+        # Office-only acting keeps the principal as the personal approver; the
+        # acting user reaches the seat item through the office queue.
+        self.assertEqual(self.open_item.current_approver_id, self.principal.id)
         self.assertEqual(self.open_item.acting_appointment_id, appointment.id)
         self.assertEqual(self.open_item.acting_original_approver_id, self.principal.id)
         self.assertEqual(self.own_item.current_approver_id, self.acting.id)
@@ -146,4 +148,5 @@ class ActingAppointmentServiceTests(TestCase):
         response = view(request)
         self.assertEqual(response.status_code, 201)
         self.open_item.refresh_from_db()
-        self.assertEqual(self.open_item.current_approver_id, self.acting.id)
+        self.assertEqual(self.open_item.current_approver_id, self.principal.id)
+        self.assertIsNotNone(self.open_item.acting_appointment_id)

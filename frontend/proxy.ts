@@ -8,6 +8,8 @@ const isPublicPath = (pathname: string) => (
   pathname === '/'
   || pathname === '/login'
   || pathname.startsWith('/login/')
+  || pathname === '/set-password'
+  || pathname.startsWith('/set-password/')
   || pathname === '/verify'
   || pathname.startsWith('/verify/')
   || pathname === '/auth/callback'

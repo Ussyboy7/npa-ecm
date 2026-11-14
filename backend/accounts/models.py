@@ -9,7 +9,15 @@ from django.db import models
 from django.utils import timezone
 from datetime import timedelta
 
+from common.fields import EncryptedCharField
 from common.models import UUIDModel, TimeStampedModel
+from .storage import signature_storage
+
+
+def profile_photo_upload_path(instance, filename):
+    """Store user profile photos under a stable per-user directory."""
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+    return f"accounts/profiles/{instance.id}/{uuid.uuid4().hex[:12]}.{extension}"
 
 
 class User(AbstractUser):
@@ -46,6 +54,25 @@ class User(AbstractUser):
     )
     is_management = models.BooleanField(default=False)
     employee_id = models.CharField(max_length=50, blank=True)
+    personnel_number = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="NPA Person No. (distinct from Employee ID).",
+    )
+    honorific = models.CharField(max_length=20, blank=True)
+    middle_name = models.CharField(max_length=100, blank=True)
+    designation = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Human-readable job title from the nominal roll.",
+    )
+    phone = models.CharField(max_length=32, blank=True)
+    bio = models.TextField(max_length=500, blank=True)
+    profile_photo = models.ImageField(
+        upload_to=profile_photo_upload_path,
+        blank=True,
+        null=True,
+    )
     last_activity = models.DateTimeField(
         null=True,
         blank=True,
@@ -112,8 +139,9 @@ class LoginSecuritySettings(UUIDModel, TimeStampedModel):
         default=False,
         help_text="Administrator-forced MFA for this user",
     )
-    totp_secret = models.CharField(max_length=32, blank=True)
+    totp_secret = EncryptedCharField(max_length=255, blank=True)
     totp_confirmed = models.BooleanField(default=False)
+    totp_last_used_step = models.BigIntegerField(default=0)
     preferred_method = models.CharField(
         max_length=10,
         choices=PreferredMethod.choices,
@@ -131,16 +159,16 @@ def signature_upload_path(instance, filename):
     """Generate secure upload path for signatures."""
     ext = filename.split('.')[-1]
     unique_name = f"{instance.user.id}_{uuid.uuid4().hex[:8]}.{ext}"
-    return f"signatures/encrypted/{unique_name}"
+    return f"signatures/private/{unique_name}"
 
 
 class ExecutiveSignature(UUIDModel, TimeStampedModel):
     """
     Securely stores executive digital signatures for document approval seals.
-    
+
     Security features:
-    - Signatures are stored encrypted at rest
-    - Only accessible during seal generation (never directly downloadable)
+    - Signature files are encrypted at rest in private storage
+    - Retrieved only through authenticated signature endpoints
     - Protected by 2FA requirement for seal application
     - Audit trail for all signature operations
     """
@@ -151,10 +179,11 @@ class ExecutiveSignature(UUIDModel, TimeStampedModel):
         related_name="executive_signature",
     )
     
-    # The signature image (stored encrypted)
+    # The signature image
     signature_image = models.ImageField(
         upload_to=signature_upload_path,
-        help_text="Encrypted signature image (PNG recommended with transparent background)",
+        storage=signature_storage,
+        help_text="Signature image (PNG recommended with transparent background)",
     )
     
     # Original filename for reference
@@ -189,10 +218,14 @@ class ExecutiveSignature(UUIDModel, TimeStampedModel):
         default=True,
         help_text="Require 2FA verification before applying seal",
     )
+    email_otp_enabled = models.BooleanField(
+        default=True,
+        help_text="Allow email OTP as a seal second factor",
+    )
     
     # TOTP (Authenticator App) settings
-    totp_secret = models.CharField(
-        max_length=32,
+    totp_secret = EncryptedCharField(
+        max_length=255,
         blank=True,
         help_text="Base32 encoded TOTP secret for authenticator apps",
     )
@@ -204,6 +237,7 @@ class ExecutiveSignature(UUIDModel, TimeStampedModel):
         default=False,
         help_text="Whether user has confirmed TOTP setup by entering a valid code",
     )
+    totp_last_used_step = models.BigIntegerField(default=0)
     
     # Preferred 2FA method
     preferred_2fa_method = models.CharField(
@@ -239,14 +273,6 @@ class ExecutiveSignature(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"Signature for {self.user.get_full_name() or self.user.username}"
-
-    def save(self, *args, **kwargs):
-        # Auto-generate seal_office_title based on user's role if not set
-        if not self.seal_office_title and self.user:
-            role = self.user.system_role
-            if role:
-                self.seal_office_title = f"OFFICE OF THE {role.name.upper()}"
-        super().save(*args, **kwargs)
 
     def record_usage(self):
         """Record that this signature was used."""
@@ -407,6 +433,25 @@ class DocumentSeal(UUIDModel, TimeStampedModel):
         blank=True,
         help_text="Cached image of the generated seal",
     )
+
+    # SHA-256 of the exact rendered PNG. A cached file without a matching
+    # digest is untrusted and is regenerated from the immutable seal inputs.
+    seal_image_sha256 = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="SHA-256 of the server-rendered seal image",
+    )
+
+    # Immutable copy of the signature used for this seal. Signatures can be
+    # replaced later, so verification must not read through signature_used.
+    signature_image_snapshot = models.ImageField(
+        upload_to="seals/signatures/",
+        storage=signature_storage,
+        null=True,
+        blank=True,
+        help_text="Signature image as it existed when this seal was issued",
+    )
     
     # Seal metadata
     office_name = models.CharField(max_length=100)
@@ -425,6 +470,14 @@ class DocumentSeal(UUIDModel, TimeStampedModel):
 
     def __str__(self):
         return f"Seal {self.serial_number} by {self.sealed_by}"
+
+    @property
+    def signature_image(self):
+        """The immutable signature snapshot, or the live signature for legacy rows."""
+        if self.signature_image_snapshot:
+            return self.signature_image_snapshot
+        signature = self.signature_used
+        return signature.signature_image if signature else None
 
     @classmethod
     def generate_serial_number(cls, prefix: str = "NPA") -> str:
@@ -453,8 +506,8 @@ class SealOTP(UUIDModel, TimeStampedModel):
         related_name="seal_otps",
     )
     
-    code = models.CharField(
-        max_length=6,
+    code = EncryptedCharField(
+        max_length=255,
         help_text="6-digit OTP code",
     )
     
@@ -565,3 +618,24 @@ class SealOTP(UUIDModel, TimeStampedModel):
         self.used_at = timezone.now()
         self.save(update_fields=["is_used", "used_at"])
         return True
+
+
+class BackupCode(UUIDModel, TimeStampedModel):
+    """A hashed, single-use recovery code for login MFA."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="backup_codes",
+    )
+    code_hash = models.CharField(max_length=256)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["user", "used_at"], name="accounts_backup_user_used_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Backup code for {self.user.username}"

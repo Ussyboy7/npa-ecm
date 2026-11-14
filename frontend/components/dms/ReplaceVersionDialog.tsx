@@ -313,6 +313,8 @@ export const ReplaceVersionDialog = ({
                   placeholder="Edit the document content..."
                   showCharacterCount
                   showHeader={false}
+                  // The dialog body already scrolls; don't nest a second scroller.
+                  autoGrow
                   signatureImageUrl={userSignature?.imageData}
                 />
               </div>

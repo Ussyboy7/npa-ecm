@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { OfficeCombobox } from '@/components/correspondence/OfficeCombobox';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,6 @@ import {
   Building2,
   FileText,
   CheckCircle,
-  MessageSquare,
   AlertCircle,
   Search,
   X,
@@ -70,52 +70,15 @@ export const RoutingSection = ({
   onPersonSearchQueryChange,
   targetOfficeId,
   onTargetOfficeIdChange,
-  officeSearchQuery,
-  onOfficeSearchQueryChange,
-  officeFilterDirectorate,
-  onOfficeFilterDirectorateChange,
-  officeFilterDivision,
-  onOfficeFilterDivisionChange,
   purpose,
   onPurposeChange,
   offices,
-  directorates,
-  divisions,
   assistantList,
   approverList,
   suggestedNext,
   findUserById,
   getUserOfficeInfo,
 }: RoutingSectionProps) => {
-  // Filtered divisions based on selected directorate
-  const filteredOfficeDivisions = useMemo(() => {
-    if (officeFilterDirectorate === 'all') return divisions;
-    return divisions.filter(d => d.directorateId === officeFilterDirectorate);
-  }, [divisions, officeFilterDirectorate]);
-
-  // Filtered offices based on filters
-  const filteredOfficeOptions = useMemo(() => {
-    let result = [...offices];
-
-    if (officeFilterDirectorate !== 'all') {
-      result = result.filter(o => o.directorateId === officeFilterDirectorate);
-    }
-
-    if (officeFilterDivision !== 'all') {
-      result = result.filter(o => o.divisionId === officeFilterDivision);
-    }
-
-    if (officeSearchQuery.trim()) {
-      const query = officeSearchQuery.toLowerCase();
-      result = result.filter(o =>
-        o.name.toLowerCase().includes(query) ||
-        o.officeType?.toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [offices, officeFilterDirectorate, officeFilterDivision, officeSearchQuery]);
-
   // Filtered users for person search
   const filteredUsers = useMemo(() => {
     if (!personSearchQuery.trim()) return approverList;
@@ -164,9 +127,6 @@ export const RoutingSection = ({
                   onPersonSearchQueryChange('');
                 } else {
                   onTargetOfficeIdChange('');
-                  onOfficeSearchQueryChange('');
-                  onOfficeFilterDirectorateChange('all');
-                  onOfficeFilterDivisionChange('all');
                 }
               }}
             >
@@ -200,81 +160,18 @@ export const RoutingSection = ({
               )}
             </Label>
             {routeType === 'office' ? (
-              <div className="space-y-2">
-                {/* Filter Row */}
-                <div className="grid grid-cols-2 gap-2">
-                  <Select
-                    value={officeFilterDirectorate}
-                    onValueChange={(v) => {
-                      onOfficeFilterDirectorateChange(v);
-                      onOfficeFilterDivisionChange('all');
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Directorate" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Directorates</SelectItem>
-                      {directorates.map(d => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.shortName || d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={officeFilterDivision}
-                    onValueChange={onOfficeFilterDivisionChange}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Division" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Divisions</SelectItem>
-                      {filteredOfficeDivisions.map(d => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.shortName || d.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Office Dropdown */}
-                <Select
-                  value={targetOfficeId}
-                  onValueChange={(v) => {
-                    onTargetOfficeIdChange(v);
-                    onForwardToChange('');
-                  }}
-                >
-                  <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
-                    <SelectValue placeholder="Select office" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {filteredOfficeOptions.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">
-                        No offices found
-                      </div>
-                    ) : (
-                      filteredOfficeOptions.map(office => (
-                        <SelectItem key={office.id} value={office.id}>
-                          <div className="flex items-center justify-between gap-2 w-full">
-                            <span>{office.name}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase">
-                              {office.officeType}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {(officeFilterDirectorate !== 'all' || officeFilterDivision !== 'all') && (
-                  <p className="text-xs text-muted-foreground">
-                    Showing {filteredOfficeOptions.length} of {offices.length} offices
-                  </p>
-                )}
-              </div>
+              <OfficeCombobox
+                offices={offices}
+                value={targetOfficeId}
+                onSelect={(officeId) => {
+                  onTargetOfficeIdChange(officeId);
+                  onForwardToChange('');
+                }}
+                placeholder="Select office"
+                emptyMessage="No offices found"
+                ariaInvalid={Boolean(forwardToError)}
+                className="h-9"
+              />
             ) : (
               <Select
                 value={forwardTo}

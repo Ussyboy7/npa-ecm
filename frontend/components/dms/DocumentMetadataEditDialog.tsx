@@ -50,7 +50,6 @@ interface MetadataDraft {
   departmentId: string | undefined;
   tags: string;
   sensitivity: DocumentRecord['sensitivity'];
-  status: DocumentRecord['status'];
   drmPolicyId: string | null;
 }
 
@@ -84,14 +83,11 @@ export const DocumentMetadataEditDialog = ({
     departmentId: undefined,
     tags: '',
     sensitivity: 'internal',
-    status: 'draft',
     drmPolicyId: null,
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataErrors, setMetadataErrors] = useState<Record<string, string>>({});
-  const [pendingStatusChange, setPendingStatusChange] = useState<DocumentRecord['status'] | null>(null);
-  const [showStatusChangeConfirmation, setShowStatusChangeConfirmation] = useState(false);
   const [checkingReferenceNumber, setCheckingReferenceNumber] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [drmPolicies, setDrmPolicies] = useState<DocumentRightsPolicy[]>([]);
@@ -136,7 +132,6 @@ export const DocumentMetadataEditDialog = ({
         departmentId: document.departmentId,
         tags: document.tags.join(', '),
         sensitivity: document.sensitivity,
-        status: document.status,
         drmPolicyId: document.drmRights?.policy_id ?? null,
       });
       setHasUnsavedChanges(false);
@@ -239,7 +234,6 @@ export const DocumentMetadataEditDialog = ({
       metadataDraft.departmentId !== document.departmentId ||
       metadataDraft.tags !== document.tags.join(', ') ||
       metadataDraft.sensitivity !== document.sensitivity ||
-      metadataDraft.status !== document.status ||
       metadataDraft.drmPolicyId !== attachedPolicyId;
 
     setHasUnsavedChanges(hasChanges);
@@ -262,39 +256,6 @@ export const DocumentMetadataEditDialog = ({
     return Object.keys(errors).length === 0;
   };
 
-  const checkStatusChange = (newStatus: DocumentRecord['status']): boolean => {
-    if (!document) return false;
-    const oldStatus = document.status;
-
-    if (oldStatus === 'draft' && newStatus === 'published') {
-      return true;
-    }
-    if (oldStatus === 'published' && newStatus === 'archived') {
-      return true;
-    }
-    return false;
-  };
-
-  const handleStatusChange = (newStatus: DocumentRecord['status']) => {
-    if (checkStatusChange(newStatus)) {
-      setPendingStatusChange(newStatus);
-      setShowStatusChangeConfirmation(true);
-    } else {
-      setMetadataDraft({ ...metadataDraft, status: newStatus });
-      setHasUnsavedChanges(true);
-    }
-  };
-
-  const confirmStatusChange = () => {
-    if (pendingStatusChange) {
-      setMetadataDraft({ ...metadataDraft, status: pendingStatusChange });
-      setHasUnsavedChanges(true);
-      setPendingStatusChange(null);
-      setShowStatusChangeConfirmation(false);
-      toast.info('Status change will be saved when you click "Save Changes"');
-    }
-  };
-
   const handleSave = async () => {
     if (!document) return;
 
@@ -312,7 +273,6 @@ export const DocumentMetadataEditDialog = ({
       metadataDraft.departmentId !== document.departmentId ||
       metadataDraft.tags !== document.tags.join(', ') ||
       metadataDraft.sensitivity !== document.sensitivity ||
-      metadataDraft.status !== document.status ||
       metadataDraft.drmPolicyId !== (document.drmRights?.policy_id ?? null);
 
     if (!hasChanges) {
@@ -327,7 +287,6 @@ export const DocumentMetadataEditDialog = ({
         .map((tag) => tag.trim())
         .filter(Boolean);
 
-      const oldStatus = document.status;
       const updated = await updateDocumentMetadata(document.id, {
         title: metadataDraft.title,
         description: metadataDraft.description,
@@ -337,7 +296,6 @@ export const DocumentMetadataEditDialog = ({
         departmentId: metadataDraft.departmentId,
         tags,
         sensitivity: metadataDraft.sensitivity,
-        status: metadataDraft.status,
         drmPolicyId: metadataDraft.drmPolicyId,
       });
 
@@ -346,11 +304,7 @@ export const DocumentMetadataEditDialog = ({
       setMetadataErrors({});
       onOpenChange(false);
 
-      if (oldStatus !== updated.status) {
-        toast.success(`Document ${oldStatus} → ${updated.status}`);
-      } else {
-        toast.success('Document details updated');
-      }
+      toast.success('Document details updated');
     } catch (error: unknown) {
       logError('Failed to update metadata', error);
       const errorMessage = error instanceof Error ? error.message : 'Unable to update document';
@@ -371,7 +325,6 @@ export const DocumentMetadataEditDialog = ({
         departmentId: document.departmentId,
         tags: document.tags.join(', '),
         sensitivity: document.sensitivity,
-        status: document.status,
         drmPolicyId: document.drmRights?.policy_id ?? null,
       });
       setHasUnsavedChanges(false);
@@ -449,32 +402,6 @@ export const DocumentMetadataEditDialog = ({
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select
-                      value={metadataDraft.status}
-                      onValueChange={(value) => {
-                        const newStatus = value as DocumentRecord['status'];
-                        handleStatusChange(newStatus);
-                      }}
-                      aria-label="Document status"
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {document && metadataDraft.status !== document.status && (
-                      <p className="text-xs text-muted-foreground">
-                        Status will change from <span className="font-medium">{document.status}</span> to{' '}
-                        <span className="font-medium">{metadataDraft.status}</span>
-                      </p>
-                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -881,43 +808,6 @@ export const DocumentMetadataEditDialog = ({
         </DialogContent>
       </Dialog>
 
-      {/* Status Change Confirmation */}
-      {showStatusChangeConfirmation && pendingStatusChange && (
-        <Dialog open={showStatusChangeConfirmation} onOpenChange={setShowStatusChangeConfirmation}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Confirm Status Change</DialogTitle>
-              <DialogDescription>
-                You are about to change the document status from{' '}
-                <strong>{document.status}</strong> to <strong>{pendingStatusChange}</strong>.
-              </DialogDescription>
-              {pendingStatusChange === 'published' && (
-                <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded text-sm">
-                  Publishing this document will make it visible to users with appropriate permissions.
-                </div>
-              )}
-              {pendingStatusChange === 'archived' && (
-                <div className="mt-2 p-2 bg-secondary/10 border border-secondary/20 rounded text-sm">
-                  Archiving this document will move it to archived status. It can still be accessed but
-                  won't appear in active document lists.
-                </div>
-              )}
-            </DialogHeader>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPendingStatusChange(null);
-                  setShowStatusChangeConfirmation(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={confirmStatusChange}>Confirm Change</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </>
   );
 };

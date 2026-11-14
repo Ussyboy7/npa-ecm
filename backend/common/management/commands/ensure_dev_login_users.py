@@ -301,7 +301,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         password = options["password"]
         force_password = options["force_password"]
-        created = updated = 0
+        created = updated = skipped = 0
 
         for raw_spec in DEV_USERS:
             # Work on a shallow copy so the DEV_USERS tuple stays immutable across
@@ -314,6 +314,16 @@ class Command(BaseCommand):
                 continue
 
             username = spec["username"]
+
+            # Never resurrect an account that was deliberately deactivated
+            # (mock cleanup, offboarding). This command runs on every container
+            # start, so reactivating here would silently undo that work.
+            existing = User.objects.filter(username=username).first()
+            if existing is not None and not existing.is_active:
+                skipped += 1
+                self.stdout.write(f"Skipped {username} (deactivated)")
+                continue
+
             directorate_name = spec.pop("directorate_name", None)
             division_name = spec.pop("division_name", None)
             department_name = spec.pop("department_name", None)
@@ -361,6 +371,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Dev login users ready ({created} created, {updated} updated). Try superadmin / {password}!"
+                f"Dev login users ready ({created} created, {updated} updated, {skipped} skipped). "
+                f"Try superadmin / {password}!"
             )
         )

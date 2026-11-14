@@ -66,12 +66,56 @@ export interface UsersByRoleResponse {
   total_users: number;
 }
 
+export interface SecuritySummary {
+  superusers: number;
+  mfa_enabled: number;
+  mfa_coverage_pct: number;
+  mfa_required_missing: number;
+  impersonations_24h: number;
+  last_superuser_login: string | null;
+}
+
+export interface OrganizationHealth {
+  offices_without_principal: number;
+  users_without_role: number;
+  users_without_office: number;
+  open_items_owned_by_inactive: number;
+}
+
+export interface WorkloadSummary {
+  pending_escalations: number;
+  oldest_escalation_hours: number | null;
+  pending_approvals: number;
+  overdue_approvals: number;
+  open_correspondence: number;
+}
+
+export interface ActivityEntry {
+  id: string;
+  user: string;
+  action: string;
+  description: string;
+  timestamp: string;
+}
+
+export interface BackupSchedule {
+  scheduled: boolean;
+  task: string | null;
+}
+
 export interface DashboardAlerts {
   backup: BackupStatus;
   pending_escalations: number;
   integration_failures_24h: number;
   celery_beat_disabled: number;
   degraded_services: string[];
+  // Optional so a frontend deployed ahead of its backend degrades gracefully
+  // instead of crashing on a missing section.
+  backup_schedule?: BackupSchedule;
+  security?: SecuritySummary;
+  organization?: OrganizationHealth;
+  workload?: WorkloadSummary;
+  recent_activity?: ActivityEntry[];
 }
 
 export interface DashboardOverview {

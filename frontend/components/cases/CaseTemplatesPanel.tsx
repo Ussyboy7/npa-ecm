@@ -25,12 +25,12 @@ import {
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ListRowCard } from "@/components/shared/ListRowCard";
+import { TemplateHubRowActions } from "@/components/templates/TemplateHubRowActions";
 import { LoadingState } from "@/components/shared/LoadingState";
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
-  correspondenceQueueListStackClass,
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
@@ -166,32 +166,28 @@ export function CaseTemplatesPanel({ searchQuery, typeFilter }: CaseTemplatesPan
               }
             />
           ) : (
-            <div className={correspondenceQueueListStackClass}>
+            <div className="space-y-1.5">
               {filteredTemplates.map((template) => (
                 <ListRowCard
                   key={template.id}
-                  density="compact"
+                  density="dense"
                   onRowClick={() => openCreate(template)}
                   leading={(
-                    <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
+                    <div className={cn(correspondenceQueueLeadingBoxClass, "p-1.5", "bg-primary/10")}>
                       <Briefcase className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
                     </div>
                   )}
-                  actions={(
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 gap-1 text-xs"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openCreate(template);
-                      }}
-                    >
-                      <Plus className="h-3 w-3" />
-                      Create
-                    </Button>
-                  )}
+                  actions={
+                    <TemplateHubRowActions
+                      actions={[
+                        {
+                          label: "Create case",
+                          icon: <Plus className="h-4 w-4" />,
+                          onSelect: () => openCreate(template),
+                        },
+                      ]}
+                    />
+                  }
                 >
                   <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
                   {template.description ? (
@@ -199,7 +195,7 @@ export function CaseTemplatesPanel({ searchQuery, typeFilter }: CaseTemplatesPan
                       {template.description}
                     </p>
                   ) : null}
-                  <div className={correspondenceQueueMetaRowClass}>
+                  <div className={cn(correspondenceQueueMetaRowClass, "pt-1")}>
                     <span className={correspondenceQueueMetaItemClass}>
                       <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "capitalize")}>
                         {template.case_type_display || template.case_type}

@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
+import { getPlatformHomePath } from "@/lib/platform-navigation";
 import {
   fetchDashboardMetrics,
   fetchOnlineUsers,
@@ -22,22 +25,16 @@ import {
 } from "@/lib/admin-dashboard-api";
 import {
   Users,
-  Activity,
   CheckCircle,
   AlertTriangle,
   Server,
   Database,
   HardDrive,
-  Settings,
   Shield,
   FolderTree,
-  LifeBuoy,
   LayoutDashboard,
   Loader2,
   Download,
-  UserCog,
-  Webhook,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -90,11 +87,49 @@ function PerfRow({
   );
 }
 
+function Stat({
+  label,
+  value,
+  hint,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  tone?: "default" | "warning" | "danger" | "success";
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "text-red-600 dark:text-red-400"
+      : tone === "warning"
+        ? "text-yellow-600 dark:text-yellow-400"
+        : tone === "success"
+          ? "text-green-600 dark:text-green-400"
+          : "";
+  return (
+    <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</div>
+      {hint && <div className="text-[11px] text-muted-foreground/80">{hint}</div>}
+    </div>
+  );
+}
+
+function timeAgo(iso: string) {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 export default function AdminPage() {
   const { currentUser } = useCurrentUser();
   const visibility = useSidebarVisibility();
+  const router = useRouter();
+  const platformHome = getPlatformHomePath(visibility);
 
-  const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [usersByRole, setUsersByRole] = useState<UsersByRoleResponse | null>(null);
   const [alerts, setAlerts] = useState<DashboardAlerts | null>(null);
@@ -107,12 +142,18 @@ export default function AdminPage() {
   const isMountedRef = useRef(true);
   const inFlightRef = useRef(false);
 
+  useEffect(() => {
+    // Platform-only administrators land directly on their first Platform section.
+    if (!visibility.showAdminDashboard && platformHome) {
+      router.replace(platformHome);
+    }
+  }, [visibility.showAdminDashboard, platformHome, router]);
+
   const loadData = useCallback(async () => {
     if (!currentUser) return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     try {
-      setLoading(true);
       const [m, ur, al] = await Promise.all([
         visibility.showSystemHealth ? fetchDashboardMetrics() : Promise.resolve(null),
         visibility.showUsersRoles ? fetchUsersByRole() : Promise.resolve(null),
@@ -127,7 +168,6 @@ export default function AdminPage() {
         setPresenceWindow((m as DashboardMetrics).presenceWindowSeconds ?? 120);
       }
     } finally {
-      if (isMountedRef.current) setLoading(false);
       inFlightRef.current = false;
     }
   }, [currentUser, visibility]);
@@ -196,6 +236,33 @@ export default function AdminPage() {
       : `last ${Math.round(presenceWindow / 60)} min`;
 
   const backupStatus = metrics?.backup;
+  const degradedServices = (metrics?.systemHealth ?? []).filter((service) => service.status !== "healthy");
+  // Only incidents without a dedicated card of their own belong in the alert banner:
+  // services are in Infrastructure, backups in Backups, escalations in Workload.
+  const openAlerts = Array.from(
+    new Set([
+      ...(alerts?.integration_failures_24h
+        ? [`${alerts.integration_failures_24h} integration failure(s) in 24h`]
+        : []),
+      ...(alerts?.celery_beat_disabled ? ["Scheduled tasks disabled"] : []),
+    ]),
+  );
+  const systemDegraded = degradedServices.some(
+    (service) => service.status === "unhealthy" || service.status === "error",
+  );
+  const backupNeedsAttention =
+    backupStatus?.status === "missing" || backupStatus?.status === "warning";
+  const systemState = systemDegraded
+    ? "Degraded"
+    : openAlerts.length > 0 || backupNeedsAttention
+      ? "Attention required"
+      : "Operational";
+
+  const security = alerts?.security;
+  const organization = alerts?.organization;
+  const workload = alerts?.workload;
+  const recentActivity = alerts?.recent_activity;
+  const backupSchedule = alerts?.backup_schedule;
 
   const backupHealthy = backupStatus?.status === "healthy";
   const backupWarning = backupStatus?.status === "warning";
@@ -214,14 +281,31 @@ export default function AdminPage() {
       title="Administration Dashboard"
       subtitle="Enterprise system monitoring and user management"
       icon={LayoutDashboard}
+      tabs={<AdminHubTabList />}
     >
       <div className="space-y-6">
         {/* System Summary Bar */}
         <div className="rounded-xl bg-muted/30 border border-border/40 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             <div className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              <span className="text-sm font-medium text-green-700 dark:text-green-400">System Status: Operational</span>
+              {systemState === "Operational" ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <AlertTriangle
+                  className={`h-5 w-5 ${systemDegraded ? "text-red-500" : "text-yellow-500"}`}
+                />
+              )}
+              <span
+                className={`text-sm font-medium ${
+                  systemState === "Operational"
+                    ? "text-green-700 dark:text-green-400"
+                    : systemDegraded
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-yellow-700 dark:text-yellow-400"
+                }`}
+              >
+                System Status: {systemState}
+              </span>
             </div>
             <div className="hidden h-4 w-px bg-border sm:block" />
             <div className="flex items-center gap-2">
@@ -237,6 +321,7 @@ export default function AdminPage() {
                 <span className="text-muted-foreground"> ({presenceWindowLabel})</span>
               </button>
             </div>
+
           </div>
         </div>
 
@@ -244,99 +329,164 @@ export default function AdminPage() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Users by Role */}
-            {visibility.showUsersRoles && usersByRole && (
-              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
-                <div className="flex items-center justify-between pb-3">
-                  <h2 className="text-lg font-semibold">Users by Role</h2>
-                  <Link href="/admin/users-roles">
-                    <Button variant="ghost" size="sm">
-                      View All
-                    </Button>
-                  </Link>
-                </div>
-                <div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {usersByRole.roles
-                      .filter((r) => r.name !== "Unassigned")
-                      .sort((a, b) => b.count - a.count)
-                      .map((role) => {
-                        const pct =
-                          usersByRole.total_users > 0
-                            ? (role.count / usersByRole.total_users) * 100
-                            : 0;
-                        return (
-                          <div key={role.id ?? "unassigned"} className="flex items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm truncate">{role.name}</span>
-                                <span className="text-sm font-medium">{role.count}</span>
-                              </div>
-                              <Progress value={pct} className="h-1.5 mt-1" />
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    Total: {usersByRole.total_users} users
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* System Alerts */}
             {visibility.showSystemHealth && alerts && (
               <div className="rounded-xl border border-border/60 bg-card/30 p-4">
                 <div className="pb-3">
                   <h2 className="text-lg font-semibold">System Alerts</h2>
-                  <p className="text-sm text-muted-foreground">Backups, escalations, and items needing attention</p>
+                  <p className="text-sm text-muted-foreground">Integration delivery and scheduled jobs</p>
                 </div>
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/5 border border-green-500/10">
-                    <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-green-700 dark:text-green-300">
-                        No active incidents
-                      </p>
-                    </div>
-                  </div>
-
-                  {backupStatus && (
-                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/20">
-                      <Activity
-                        className={`h-5 w-5 flex-shrink-0 ${getStatusColor(backupStatus.status)}`}
-                      />
+                  {openAlerts.length === 0 ? (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/5 border border-green-500/10">
+                      <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
                       <div className="flex-1">
-                        <p className="text-sm font-medium">Backup status</p>
-                        <p className="text-xs text-muted-foreground">
-                          {backupStatus.last_backup
-                            ? `Last backup ${backupStatus.age_hours}h ago (${backupStatus.filename})`
-                            : "No backup files found"}
+                        <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                          No integration or scheduler issues
                         </p>
                       </div>
-                      <Badge
-                        variant={backupHealthy ? "default" : backupWarning ? "secondary" : "destructive"}
-                      >
-                        {backupStatus.status}
-                      </Badge>
                     </div>
-                  )}
-
-                  {alerts.pending_escalations > 0 && (
-                    <div className="flex items-center justify-between text-sm p-3 rounded-lg border">
-                      <span>{alerts.pending_escalations} pending escalation(s)</span>
-                      <Badge variant="destructive">Escalations</Badge>
-                    </div>
-                  )}
-
-                  {alerts.integration_failures_24h > 0 && (
-                    <div className="flex items-center justify-between text-sm p-3 rounded-lg border">
-                      <span>{alerts.integration_failures_24h} integration failure(s) in 24h</span>
-                      <Badge variant="destructive">Integrations</Badge>
+                  ) : (
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+                      <AlertTriangle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
+                          {openAlerts.length} item(s) need attention
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {openAlerts.slice(0, 3).join(" · ")}
+                          {openAlerts.length > 3 ? ` · +${openAlerts.length - 3} more` : ""}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Security & Access */}
+            {visibility.showSystemHealth && security && (
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="flex items-start justify-between pb-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-lg font-semibold">
+                      <Shield className="h-4 w-4 text-muted-foreground" />
+                      Security &amp; Access
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Privileged accounts and second-factor coverage
+                    </p>
+                  </div>
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href="/admin/organization?tab=people">Manage</Link>
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Stat
+                    label="Superusers"
+                    value={security.superusers}
+                    hint="break-glass accounts"
+                    tone={security.superusers > 1 ? "warning" : "default"}
+                  />
+                  <Stat
+                    label="MFA coverage"
+                    value={`${security.mfa_coverage_pct}%`}
+                    hint={`${security.mfa_enabled} account(s) enrolled`}
+                    tone={security.mfa_coverage_pct < 50 ? "warning" : "success"}
+                  />
+                  <Stat
+                    label="MFA forced, not enrolled"
+                    value={security.mfa_required_missing}
+                    tone={security.mfa_required_missing > 0 ? "danger" : "default"}
+                  />
+                  <Stat
+                    label="Impersonations (24h)"
+                    value={security.impersonations_24h}
+                    hint={
+                      security.last_superuser_login
+                        ? `Superuser last login ${timeAgo(security.last_superuser_login)}`
+                        : "Superuser has never logged in"
+                    }
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Organization Health */}
+            {visibility.showOrganizationOffices && organization && (
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="flex items-start justify-between pb-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-lg font-semibold">
+                      <FolderTree className="h-4 w-4 text-muted-foreground" />
+                      Organization Health
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Data gaps that block routing and approvals
+                    </p>
+                  </div>
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href="/admin/organization">Manage</Link>
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Stat
+                    label="Offices without principal"
+                    value={organization.offices_without_principal}
+                    hint="no approving principal"
+                    tone={organization.offices_without_principal > 0 ? "warning" : "success"}
+                  />
+                  <Stat
+                    label="Users without role"
+                    value={organization.users_without_role}
+                    tone={organization.users_without_role > 0 ? "warning" : "default"}
+                  />
+                  <Stat
+                    label="Users without office"
+                    value={organization.users_without_office}
+                    tone={organization.users_without_office > 0 ? "warning" : "default"}
+                  />
+                  <Stat
+                    label="Open items, deactivated author"
+                    value={organization.open_items_owned_by_inactive}
+                    hint="raised by inactive accounts"
+                    tone={organization.open_items_owned_by_inactive > 0 ? "danger" : "success"}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Recent Activity */}
+            {visibility.showSystemHealth && recentActivity && (
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="flex items-start justify-between pb-3">
+                  <div>
+                    <h2 className="text-lg font-semibold">Recent Activity</h2>
+                    <p className="text-sm text-muted-foreground">Last 10 audited actions</p>
+                  </div>
+                  <Link href="/audit">
+                    <Button variant="ghost" size="sm">
+                      Audit log
+                    </Button>
+                  </Link>
+                </div>
+                {recentActivity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No recent activity.</p>
+                ) : (
+                  <ul className="divide-y divide-border/60">
+                    {recentActivity.map((entry) => (
+                      <li key={entry.id} className="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
+                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-muted-foreground/50" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm">{entry.description}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {entry.user} · {entry.action} · {timeAgo(entry.timestamp)}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </div>
@@ -404,6 +554,10 @@ export default function AdminPage() {
                       );
                     })}
                   </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Uploaded media</span>
+                    <span>{metrics.performance.mediaStorageGb} GB</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -413,7 +567,11 @@ export default function AdminPage() {
               <div className="rounded-xl border border-border/60 bg-card/30 p-4">
                 <div className="pb-3">
                   <h2 className="text-lg font-semibold">Backups</h2>
-                  <p className="text-sm text-muted-foreground">Latest snapshot found on disk</p>
+                  <p className="text-sm text-muted-foreground">
+                    {backupStatus.last_backup
+                      ? "Latest snapshot found on disk"
+                      : "No backup snapshot found on disk"}
+                  </p>
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -427,6 +585,12 @@ export default function AdminPage() {
                           ? "Stale"
                           : "Missing"}
                     </Badge>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Scheduled job</span>
+                    <span className="truncate text-right">
+                      {backupSchedule?.scheduled ? backupSchedule.task : "None configured"}
+                    </span>
                   </div>
                   {backupStatus.last_backup && (
                     <>
@@ -463,6 +627,42 @@ export default function AdminPage() {
               </div>
             )}
 
+            {/* Workload */}
+            {visibility.showSystemHealth && workload && (
+              <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+                <div className="pb-3">
+                  <h2 className="text-lg font-semibold">Workload</h2>
+                  <p className="text-sm text-muted-foreground">Approvals and open correspondence</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Stat
+                    label="Pending approvals"
+                    value={workload.pending_approvals}
+                    hint={
+                      workload.overdue_approvals > 0
+                        ? `${workload.overdue_approvals} overdue`
+                        : "none overdue"
+                    }
+                    tone={workload.overdue_approvals > 0 ? "danger" : "default"}
+                  />
+                  <Stat
+                    label="Open correspondence"
+                    value={workload.open_correspondence}
+                  />
+                  <Stat
+                    label="Pending escalations"
+                    value={workload.pending_escalations}
+                    hint={
+                      workload.oldest_escalation_hours != null
+                        ? `oldest ${workload.oldest_escalation_hours}h`
+                        : "none waiting"
+                    }
+                    tone={workload.pending_escalations > 0 ? "warning" : "default"}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Performance */}
             {visibility.showSystemHealth && metrics && (
               <div className="rounded-xl border border-border/60 bg-card/30 p-4">
@@ -487,111 +687,52 @@ export default function AdminPage() {
                     sample={metrics.performance.responseTimeSample}
                     hint="5xx share (5 min window)"
                   />
-                  <PerfRow
-                    label="Uploaded media"
-                    value={`${metrics.performance.mediaStorageGb} GB`}
-                    hint="Files in MEDIA_ROOT"
-                  />
                 </div>
               </div>
             )}
 
-            {/* Quick Actions */}
-            <div className="rounded-xl border border-border/60 bg-card/30 p-4">
-              <h2 className="text-lg font-semibold pb-3">Quick Actions</h2>
-              <div>
-                <div className="grid grid-cols-2 gap-2">
-                  {visibility.showUsersRoles && (
-                    <Link href="/admin/users-roles">
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                      >
-                        <UserCog className="h-5 w-5 text-blue-500" />
-                        <span className="text-xs">Users &amp; Roles</span>
-                      </Button>
-                    </Link>
-                  )}
-                  {visibility.showOrganizationOffices && (
-                    <Link href="/admin/organization">
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                      >
-                        <FolderTree className="h-5 w-5 text-amber-500" />
-                        <span className="text-xs">Organization</span>
-                      </Button>
-                    </Link>
-                  )}
-                  {visibility.showSystemHealth && (
-                    <Link href="/admin/platform/health">
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                      >
-                        <Activity className="h-5 w-5 text-green-500" />
-                        <span className="text-xs">System Health</span>
-                      </Button>
-                    </Link>
-                  )}
-                  {visibility.showAuditCompliance && (
-                    <Link href="/audit">
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                      >
-                        <Shield className="h-5 w-5 text-rose-500" />
-                        <span className="text-xs">Audit &amp; Compliance</span>
-                      </Button>
-                    </Link>
-                  )}
-                  {visibility.showIntegrationHub && (
-                    <Link href="/admin/platform/integrations">
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                      >
-                        <Webhook className="h-5 w-5 text-violet-500" />
-                        <span className="text-xs">Integrations</span>
-                      </Button>
-                    </Link>
-                  )}
-                  {visibility.showTemplates && (
-                    <Link href="/admin/templates-hub">
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                      >
-                        <Zap className="h-5 w-5 text-cyan-500" />
-                        <span className="text-xs">Templates</span>
-                      </Button>
-                    </Link>
-                  )}
-                  {visibility.showHelpdeskQueue && (
-                    <Link href="/helpdesk">
-                      <Button
-                        variant="outline"
-                        className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                      >
-                        <LifeBuoy className="h-5 w-5 text-orange-500" />
-                        <span className="text-xs">Helpdesk</span>
-                      </Button>
-                    </Link>
-                  )}
-                  <Link href="/settings">
-                    <Button
-                      variant="outline"
-                      className="w-full h-auto py-3 flex flex-col items-center gap-1"
-                    >
-                      <Settings className="h-5 w-5 text-muted-foreground" />
-                      <span className="text-xs">Settings</span>
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
+
+        {/* Users by Role */}
+        {visibility.showUsersRoles && usersByRole && (
+          <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+            <div className="flex items-start justify-between pb-3">
+              <div>
+                <h2 className="text-lg font-semibold">Users by Role</h2>
+                <p className="text-sm text-muted-foreground">
+                  Top roles of {usersByRole.total_users.toLocaleString()} active users
+                </p>
+              </div>
+              <Link href="/admin/organization?tab=people">
+                <Button variant="ghost" size="sm">
+                  View all
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-5">
+              {usersByRole.roles
+                .filter((r) => r.count > 0)
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 5)
+                .map((role) => {
+                  const pct =
+                    usersByRole.total_users > 0
+                      ? (role.count / usersByRole.total_users) * 100
+                      : 0;
+                  return (
+                    <div key={role.id ?? "unassigned"}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm">{role.name}</span>
+                        <span className="text-sm font-medium">{role.count}</span>
+                      </div>
+                      <Progress value={pct} className="mt-1 h-1.5" />
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Online Users Modal */}

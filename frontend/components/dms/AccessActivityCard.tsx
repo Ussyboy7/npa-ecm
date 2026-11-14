@@ -257,7 +257,7 @@ export const AccessActivityCard = ({
               <p className="text-xs font-semibold tabular-nums">{stats.views}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground truncate">DL</p>
+              <p className="text-[10px] text-muted-foreground truncate">Downloads</p>
               <p className="text-xs font-semibold tabular-nums">{stats.downloads}</p>
             </div>
             <div className="min-w-0">

@@ -389,8 +389,12 @@ class DocumentVisibilityNullOrgTests(APITestCase):
     """A user with no division/department must not match permission rows that lack those FKs."""
 
     def setUp(self):
-        from organization.models import Directorate, Division
+        from organization.models import Directorate, Division, Role
 
+        document_role = Role.objects.create(
+            name="Null org document visibility role",
+            permissions={"can_access_document_management": True},
+        )
         directorate = Directorate.objects.create(name="Visibility Test Directorate", code="VTDIR")
         self.division = Division.objects.create(directorate=directorate, name="Visibility Test Division", code="VTD")
         self.author = User.objects.create_user(
@@ -402,6 +406,7 @@ class DocumentVisibilityNullOrgTests(APITestCase):
             email="vis_orgless@npa.gov.ng",
             password="pass12345",
             grade_level="MSS5",
+            system_role=document_role,
         )
         self.document = Document.objects.create(
             title="Division-only Confidential Report",

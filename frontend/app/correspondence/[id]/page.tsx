@@ -8,6 +8,16 @@ import { toast } from "@/components/ui/sonner";
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +27,7 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { useOrgUsers } from '@/hooks/use-org-users';
 import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
 import { apiFetch } from '@/lib/api-client';
+import { hasRolePermission } from '@/lib/permissions';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { getCorrespondencePreviewContext, getPrimaryLinkedDocument, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
@@ -182,7 +193,53 @@ const CorrespondenceDetailContent = () => {
   const [reassignUser, setReassignUser] = useState('');
   const [reassignReason, setReassignReason] = useState('');
   const [reassigning, setReassigning] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [showNoResponseConfirm, setShowNoResponseConfirm] = useState(false);
+  const [noResponseNote, setNoResponseNote] = useState('');
+  const [isCompleting, setIsCompleting] = useState(false);
   const canReassign = Boolean(activeUser?.isSuperuser);
+
+  const handleCompleteCorrespondence = async () => {
+    if (!correspondence) return;
+    setIsCompleting(true);
+    try {
+      await apiFetch(`/correspondence/items/${correspondence.id}/complete/`, {
+        method: 'POST',
+      });
+      setShowCompleteConfirm(false);
+      toast.success('Correspondence completed');
+      await syncFromApi();
+      await refreshDetail();
+      await refreshMinutes();
+      openModal('completion');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Could not complete correspondence');
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
+  const handleCompleteWithoutResponse = async () => {
+    if (!correspondence || !noResponseNote.trim()) return;
+    setIsCompleting(true);
+    try {
+      await apiFetch(`/correspondence/items/${correspondence.id}/complete-no-response/`, {
+        method: 'POST',
+        body: JSON.stringify({ minute_text: noResponseNote.trim() }),
+      });
+      setShowNoResponseConfirm(false);
+      setNoResponseNote('');
+      toast.success('Correspondence completed — no reply required');
+      await syncFromApi();
+      await refreshDetail();
+      await refreshMinutes();
+      openModal('completion');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Could not finish correspondence');
+    } finally {
+      setIsCompleting(false);
+    }
+  };
 
   const handleReassign = async () => {
     if (!correspondence || !reassignReason.trim()) {
@@ -343,7 +400,11 @@ const CorrespondenceDetailContent = () => {
 
   // A CC recipient has a distribution entry targeting them (user- or office-type).
   const isCCRecipient = !!userDistribution;
-  const distributionPurpose: 'action' | 'information' = (userDistribution?.purpose as 'action' | 'information') ?? 'action';
+  // Only CC/distribution recipients have a purpose; routed users must not be
+  // treated as CC for action branching.
+  const distributionPurpose: 'action' | 'information' | null = isCCRecipient
+    ? ((userDistribution?.purpose as 'action' | 'information') ?? 'action')
+    : null;
   const distributionEntryId = userDistribution?.id ?? null;
 
   const handleMarkRead = useCallback(async () => {
@@ -431,7 +492,11 @@ const CorrespondenceDetailContent = () => {
     String(correspondence?.currentApproverId) === String(activeDelegation.principalId);
   
   const isCurrentUserTurn: boolean = 
-    Boolean(correspondence?.currentApproverId === activeUser?.id || isDelegateeAndPrincipalTurn);
+    Boolean(
+      correspondence?.currentApproverId === activeUser?.id ||
+      isDelegateeAndPrincipalTurn ||
+      correspondence?.canTakeInitialAction
+    );
 
   // Check if last minute was recalled and routing was reverted
   const lastMinute = minutes[minutes.length - 1];
@@ -448,6 +513,52 @@ const CorrespondenceDetailContent = () => {
   const turnRestrictedDisabled = isCCRecipient
     ? false
     : (actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted));
+
+  // Mobile sticky bar must offer the same labels and gates as the desktop
+  // ActionsPanel. Update both together when action rules change.
+  const nonRecalledMinutes = minutes.filter((m) => !m.isRecalled);
+  const allMinutesAcknowledged =
+    nonRecalledMinutes.length > 0 && nonRecalledMinutes.every((m) => m.acknowledgedAt);
+  const allRoutedMinutesAcknowledged = nonRecalledMinutes
+    .filter((minute) => minute.toOfficeId || minute.toUserId)
+    .every((minute) => minute.acknowledgedAt);
+  const markedAsRead = Boolean(userDistribution?.readAt);
+  const mobilePrimaryLabel = isCCRecipient
+    ? 'Minute / Route'
+    : isAuditCase
+      ? 'Minute'
+      : correspondence?.direction === 'downward'
+        ? 'Minute & Route'
+        : activeUser?.gradeLevel === 'MDCS'
+          ? 'Minute & Approve'
+          : 'Endorse & Forward';
+  const mobileShowTreat = isForInformationOnly && !isCCRecipient
+    ? false
+    : isAuditCase
+      ? caseAuditState !== 'CLOSED'
+      : isCCRecipient
+        ? distributionPurpose === 'action'
+        : true;
+  const mobileTreatLabel = isAuditCase ? 'Respond' : 'Treat & Respond';
+  const mobileCanComplete = Boolean(
+    !isCompleted &&
+    !isCCRecipient &&
+    !isForInformationOnly &&
+    isCurrentUserTurn &&
+    hasRolePermission(activeUser, 'can_minute_correspondence') &&
+    allMinutesAcknowledged
+  );
+  const mobileCanCompleteNoResponse = Boolean(
+    !isCompleted &&
+    !isCCRecipient &&
+    !isForInformationOnly &&
+    isCurrentUserTurn &&
+    hasRolePermission(activeUser, 'can_minute_correspondence') &&
+    nonRecalledMinutes.length > 0 &&
+    allRoutedMinutesAcknowledged
+  );
+  const mobileCanDelegate = !activeDelegation;
+
   const hasCompletionPackage = previewContext.hasCompletionPackage;
   const completionGeneratedAt =
     correspondence?.completionPackage?.generatedAt ??
@@ -567,6 +678,8 @@ const CorrespondenceDetailContent = () => {
     turnRestrictedDisabled,
     hasCompletionPackage,
     completionGeneratedAt,
+    linkedDocuments,
+    onOpenLinkDocument: () => openModal('link-document'),
     activeDelegation,
     organizationUsers,
     offices,
@@ -581,7 +694,11 @@ const CorrespondenceDetailContent = () => {
     onReassign: () => setShowReassign(true),
     onOpenMinuteModal: () => openModal('minute'),
     onOpenTreatmentModal: () => openModal('treatment'),
-    onOpenCompletionModal: () => openModal('completion'),
+    onOpenCompletionModal: () => setShowCompleteConfirm(true),
+    onOpenNoResponseCompletionModal: () => {
+      setNoResponseNote('');
+      setShowNoResponseConfirm(true);
+    },
     onOpenDelegateModal: () => openModal('delegate'),
     onDownloadCompletionPackage: handleCompletionPackageDownload,
     onSyncFromApi: syncFromApi,
@@ -749,6 +866,69 @@ const CorrespondenceDetailContent = () => {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={showCompleteConfirm} onOpenChange={setShowCompleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Complete this correspondence?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This closes routing for this item and creates its completion record. It will not archive the item. Outward correspondence can still be dispatched separately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCompleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isCompleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleCompleteCorrespondence();
+              }}
+            >
+              {isCompleting ? 'Completing…' : 'Complete correspondence'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showNoResponseConfirm}
+        onOpenChange={(open) => {
+          if (!isCompleting) setShowNoResponseConfirm(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finish this memo without a reply?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Record why no further reply is needed and close routing. Previous routed minutes must be acknowledged. This completes the memo and generates its completion package, but does not create a response memo or archive the record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="no-response-final-note">Final action note *</Label>
+            <Textarea
+              id="no-response-final-note"
+              value={noResponseNote}
+              onChange={(event) => setNoResponseNote(event.target.value)}
+              placeholder="Explain why no further reply or action is required."
+              rows={4}
+              maxLength={5000}
+              disabled={isCompleting}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCompleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isCompleting || !noResponseNote.trim()}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleCompleteWithoutResponse();
+              }}
+            >
+              {isCompleting ? 'Finishing…' : 'Finish — no reply required'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <CorrespondenceDetailModals
         correspondence={correspondence}
         minutes={minutes}
@@ -784,6 +964,13 @@ const CorrespondenceDetailContent = () => {
         <MobileStickyActionBar
           isForInformationOnly={isForInformationOnly}
           distributionPurpose={distributionPurpose}
+          primaryLabel={mobilePrimaryLabel}
+          showTreat={mobileShowTreat}
+          treatLabel={mobileTreatLabel}
+          canComplete={mobileCanComplete}
+          canCompleteNoResponse={mobileCanCompleteNoResponse}
+          canDelegate={mobileCanDelegate}
+          markedAsRead={markedAsRead}
           onMinute={() => {
             goToRoutingTab();
             openModal('minute');
@@ -794,15 +981,16 @@ const CorrespondenceDetailContent = () => {
           }}
           onComplete={() => {
             goToRoutingTab();
-            openModal('completion');
+            setShowCompleteConfirm(true);
+          }}
+          onCompleteNoResponse={() => {
+            goToRoutingTab();
+            setNoResponseNote('');
+            setShowNoResponseConfirm(true);
           }}
           onDelegate={() => {
             goToRoutingTab();
             openModal('delegate');
-          }}
-          onForward={() => {
-            goToRoutingTab();
-            openModal('link-document');
           }}
           onMarkRead={handleMarkRead}
         />

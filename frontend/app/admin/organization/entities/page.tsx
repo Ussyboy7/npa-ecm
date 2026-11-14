@@ -5,18 +5,11 @@ import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { OrganizationTabList } from "@/components/admin/OrganizationTabList";
 import { StatStrip } from "@/components/shared/StatStrip";
+import { ListRowCard } from "@/components/shared/ListRowCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
@@ -223,61 +217,46 @@ export default function ExternalEntitiesPage() {
           {loading ? (
             <LoadingState message="Loading external entities…" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/60">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entities.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
-                        <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        No external entities yet. Add ministries and agencies used in correspondence.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    entities.map((entity) => (
-                      <TableRow key={entity.id}>
-                        <TableCell>
-                          <div className="font-medium">{entity.name}</div>
-                          {entity.acronym && (
-                            <div className="text-xs text-muted-foreground">{entity.acronym}</div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {entity.entity_type.replace("_", " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {entity.contact_email || entity.contact_phone || "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={entity.is_active ? "default" : "secondary"}>
-                            {entity.is_active ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(entity)}>
-                            Edit
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => void handleDelete(entity)}>
-                            Delete
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            entities.length === 0 ? (
+              <div className="rounded-xl border border-border/60 p-4">
+                <EmptyState
+                  icon={<Building2 className="h-10 w-10 opacity-50" />}
+                  title="No external entities yet"
+                  message="Add ministries, agencies, and organizations used in correspondence."
+                  variant="dashed"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {entities.map((entity) => (
+                  <ListRowCard
+                    key={entity.id}
+                    density="dense"
+                    leading={<div className="rounded-md bg-primary/10 p-2 text-primary"><Building2 className="h-4 w-4" /></div>}
+                    actions={
+                      <div className="flex gap-0.5">
+                        <Button variant="ghost" size="sm" className="h-8 px-2.5 text-xs" onClick={() => openEdit(entity)}>Edit</Button>
+                        <Button variant="ghost" size="sm" className="h-8 px-2.5 text-xs text-destructive hover:text-destructive" onClick={() => void handleDelete(entity)}>Delete</Button>
+                      </div>
+                    }
+                  >
+                    <div className="space-y-1.5">
+                      <p className="truncate text-sm font-semibold tracking-tight">{entity.name}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {entity.acronym ? <span className="text-xs text-muted-foreground">{entity.acronym}</span> : null}
+                        <Badge variant="outline" className="text-[10px] capitalize">{entity.entity_type.replace("_", " ")}</Badge>
+                        <Badge variant={entity.is_active ? "default" : "secondary"} className="text-[10px]">
+                          {entity.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      {entity.contact_email || entity.contact_phone ? (
+                        <p className="text-xs text-muted-foreground">{entity.contact_email || entity.contact_phone}</p>
+                      ) : null}
+                    </div>
+                  </ListRowCard>
+                ))}
+              </div>
+            )
           )}
         </div>
 

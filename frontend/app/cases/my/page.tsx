@@ -1,19 +1,5 @@
-"use client";
-
-import { CasesListContent } from "../components/CasesListContent";
-import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { redirect } from "next/navigation";
 
 export default function MyCasesPage() {
-  return (
-    <ErrorBoundary>
-      <>
-        <CasesListContent 
-          scope="my"
-          title="My Cases"
-          description="Cases assigned to you personally"
-        />
-      </>
-    </ErrorBoundary>
-  );
+  redirect("/cases?tab=my");
 }
-

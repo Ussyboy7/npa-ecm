@@ -59,7 +59,7 @@ function batchStatusBadge(status: BatchUpload["status"]) {
   return <Badge className={styles[status]}>{status}</Badge>;
 }
 
-/** Scan / batch / OCR job queue — lives under My Documents (Capture tab). */
+/** Scan / batch / OCR job queue — rendered on the standalone /capture page. */
 export function CaptureJobsPanel() {
   const [scanOpen, setScanOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
@@ -137,8 +137,16 @@ export function CaptureJobsPanel() {
   const completedJobs = jobs.filter((j) => j.status === "completed").slice(0, 20);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('capture:stats', { detail: { active: activeJobs.length, completed: jobs.filter((j) => j.status === "completed").length, batches: batches.length } }));
-  }, [activeJobs.length, jobs, batches.length]);
+    const detail = {
+      active: activeJobs.length,
+      completed: jobs.filter((j) => j.status === "completed").length,
+    };
+    // Defer so the page that renders this panel can attach its listener first.
+    const handle = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("capture:stats", { detail }));
+    }, 0);
+    return () => window.clearTimeout(handle);
+  }, [activeJobs.length, jobs]);
 
   const filteredActive = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -243,7 +251,7 @@ export function CaptureJobsPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Header chrome (Scan/Batch), stats, and filter bar now live in DocumentsListPage so layout matches My Documents */}
+      {/* Header chrome (Scan/Batch), stats, and search live on the /capture page. */}
 
       <Tabs defaultValue="jobs" className="space-y-4">
         <TabsList>

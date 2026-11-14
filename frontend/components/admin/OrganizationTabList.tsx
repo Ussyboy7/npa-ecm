@@ -9,7 +9,7 @@ function orgTabActive(section: string) {
     if (pathname.startsWith("/admin/organization/acting")) return section === "acting";
     if (pathname.startsWith("/admin/organization/entities")) return section === "entities";
     if (pathname === "/admin/organization" || pathname.startsWith("/admin/organization?")) {
-      const current = searchTab || "structure";
+      const current = searchTab === "memberships" ? "offices" : searchTab || "structure";
       return current === section;
     }
     return false;
@@ -32,11 +32,6 @@ function OrganizationTabListInner() {
         isActive: orgTabActive("offices"),
       },
       {
-        href: "/admin/organization?tab=memberships",
-        label: "Memberships",
-        isActive: orgTabActive("memberships"),
-      },
-      {
         href: "/admin/organization?tab=locations",
         label: "Locations",
         isActive: orgTabActive("locations"),
@@ -48,6 +43,13 @@ function OrganizationTabListInner() {
       },
     );
   }
+  if (visibility.showUsersRoles) {
+    tabs.push({
+      href: "/admin/organization?tab=people",
+      label: "People & access",
+      isActive: orgTabActive("people"),
+    });
+  }
   if (visibility.showExternalEntities) {
     tabs.push({
       href: "/admin/organization/entities",
@@ -56,7 +58,7 @@ function OrganizationTabListInner() {
     });
   }
   if (tabs.length === 0) return null;
-  return <HubTabList tabs={tabs} />;
+  return <HubTabList tabs={tabs} appearance="outlined" />;
 }
 
 export function OrganizationTabList() {

@@ -62,6 +62,8 @@ export interface OfficeMembership {
   officeId: string;
   officeName?: string;
   userId: string;
+  userName?: string;
+  userUsername?: string;
   assignmentRole: string;
   isPrimary: boolean;
   canRegister: boolean;
@@ -178,6 +180,10 @@ export type CreateUserInput = {
   departmentId?: string | null;
   isActive?: boolean;
   employeeId?: string | null;
+  personnelNumber?: string | null;
+  honorific?: string | null;
+  middleName?: string | null;
+  designation?: string | null;
 };
 
 export type UpdateUserInput = {
@@ -192,5 +198,9 @@ export type UpdateUserInput = {
   isActive?: boolean;
   email?: string;
   employeeId?: string | null;
+  personnelNumber?: string | null;
+  honorific?: string | null;
+  middleName?: string | null;
+  designation?: string | null;
   password?: string;
 };

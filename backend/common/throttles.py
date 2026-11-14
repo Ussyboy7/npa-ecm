@@ -13,3 +13,7 @@ class OTPRateThrottle(UserRateThrottle):
 
 class PasswordChangeRateThrottle(UserRateThrottle):
     scope = "password_change"
+
+
+class TotpSetupRateThrottle(UserRateThrottle):
+    scope = "totp_setup"

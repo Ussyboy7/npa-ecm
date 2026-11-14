@@ -7,6 +7,7 @@ import traceback
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
@@ -20,6 +21,8 @@ from rest_framework.exceptions import ValidationError
 
 from audit.models import ActivityLog
 from audit.services import AuditService
+from accounts.models import ExecutiveSignature
+from accounts.services import SealTwoFactorService
 from common.pagination import StandardPageNumberPagination
 from notifications.models import Notification
 from notifications.services import NotificationService
@@ -30,8 +33,10 @@ from .models import (
     CaseCorrespondenceLink,
     Correspondence,
     CorrespondenceDistribution,
+    CorrespondenceDocumentLink,
     Minute,
     ParallelRoutingGroup,
+    minute_satisfies_assignment_outcome,
 )
 from .serializers import MinuteSerializer, ParallelRoutingGroupSerializer
 from .services import (
@@ -85,7 +90,31 @@ class MinuteViewSet(viewsets.ModelViewSet):
         # MD / Superuser see all. ED sees directorate, GM sees division, AGM/staff sees department.
         # This makes /approvals org-scoped rather than global.
         user = getattr(self.request, "user", None)
-        is_register_query = (has_seal is not None and has_seal_bool) or (approval_level is not None) or (approval_role is not None)
+        action_type = self.request.query_params.get("action_type")
+        is_register_query = (
+            self.action == "approval_pdf"
+            or (has_seal is not None and has_seal_bool)
+            or approval_level is not None
+            or approval_role is not None
+            or action_type == Minute.ActionType.APPROVE
+        )
+        if is_register_query and user and getattr(user, "is_authenticated", False):
+            from organization.permission_utils import require_page_access
+
+            if self.action != "approval_pdf":
+                requested_level = (approval_level or "").lower()
+                page_id = {
+                    "executive": "approvals_executive",
+                    "departmental": "approvals_departmental",
+                }.get(requested_level, "approvals")
+                require_page_access(user, page_id)
+                if requested_level != "executive":
+                    from organization.permission_utils import resolve_page_access
+
+                    if not resolve_page_access(user)["approvals_executive"]["allowed"]:
+                        queryset = queryset.exclude(
+                            approval_level=Minute.ApprovalLevel.EXECUTIVE
+                        )
         if user and getattr(user, "is_authenticated", False):
             is_super = bool(getattr(user, "is_superuser", False))
             role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
@@ -96,7 +125,26 @@ class MinuteViewSet(viewsets.ModelViewSet):
             elif is_register_query:
                 # Only scope the approvals/sealed listing; keep other minute lists unscoped
                 # (inbox, pending_approvals, detail views) to avoid breaking routing flows.
-                if getattr(user, "department_id", None):
+                md_office_ids = list(
+                    OfficeMembership.objects.filter(
+                        user=user,
+                        is_active=True,
+                        office__is_active=True,
+                        office__office_type=Office.OfficeTier.MANAGING_DIRECTOR,
+                    ).values_list("office_id", flat=True)
+                )
+                if md_office_ids:
+                    # MD-office staff (e.g. the MD's secretary) see MD approvals
+                    # from their office even when their own HR assignment belongs
+                    # to another division or department.
+                    queryset = queryset.filter(
+                        Q(from_office_id__in=md_office_ids)
+                        | Q(user__grade_level__iexact="MDCS")
+                        | Q(
+                            user__system_role__name__icontains="Managing Director"
+                        )
+                    )
+                elif getattr(user, "department_id", None):
                     queryset = queryset.filter(
                         Q(from_office__department_id=user.department_id)
                         | Q(correspondence__department_id=user.department_id)
@@ -129,9 +177,9 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="pending-approvals")
     def pending_approvals(self, request):
-        from organization.permission_utils import require_permission
+        from organization.permission_utils import require_page_access
 
-        require_permission(request.user, "can_access_approvals")
+        require_page_access(request.user, "approvals")
         user = request.user
         qs = (
             Minute.objects.select_related("correspondence")
@@ -169,6 +217,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
         return Response({"results": results, "count": len(results)})
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -197,6 +246,9 @@ class MinuteViewSet(viewsets.ModelViewSet):
             correspondence = serializer.validated_data["correspondence"]
         if correspondence.status == Correspondence.Status.COMPLETED:
             raise ValidationError({"detail": "Completed correspondence cannot be updated."})
+        MinuteRouterService.enforce_initial_office_turn(
+            self.request.user, correspondence
+        )
         current_office = correspondence.current_office
 
         to_user = serializer.validated_data.get("to_user")
@@ -263,6 +315,17 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 serializer.validated_data["approval_level"] = expected_level
                 serializer.validated_data["approval_role"] = expected_role
 
+        if action_type == "approve" and MinuteRouterService._is_md(self.request.user):
+            signature = ExecutiveSignature.objects.filter(
+                user=self.request.user, is_active=True
+            ).first()
+            if signature:
+                SealTwoFactorService.assert_can_seal(
+                    self.request.user,
+                    signature,
+                    verification_token=self.request.data.get("verification_token"),
+                )
+
         minute, _ = MinuteRouterService.save_minute_with_delegation(
             serializer, self.request, correspondence, from_office,
         )
@@ -300,12 +363,32 @@ class MinuteViewSet(viewsets.ModelViewSet):
         if branch_originator_to_route_to and branch_originator_to_route_to.id != self.request.user.id:
             merge_strategy = ParallelBranchService.get_merge_strategy(minute, parallel_minutes_to_user)
             is_completing = (
-                (minute.action_type == Minute.ActionType.APPROVE and not minute.to_office)
-                or (minute.action_type in [Minute.ActionType.MINUTE, Minute.ActionType.FORWARD] and not minute.to_office)
+                minute.action_type
+                in (
+                    Minute.ActionType.MINUTE,
+                    Minute.ActionType.FORWARD,
+                    Minute.ActionType.APPROVE,
+                    Minute.ActionType.TREAT,
+                )
+                and not minute.to_office_id
+                and not minute.to_user_id
             )
-            if is_completing and merge_strategy == "independent":
+            branch = parallel_minutes_to_user.exclude(
+                assignment_outcome=""
+            ).first()
+            outcome_satisfied = (
+                not branch
+                or minute_satisfies_assignment_outcome(
+                    minute, branch.assignment_outcome
+                )
+            )
+            if (
+                is_completing
+                and merge_strategy == "independent"
+                and outcome_satisfied
+            ):
                 if ParallelBranchService.route_completing_branch(
-                    minute, correspondence, branch_originator_to_route_to, self.request.user,
+                    correspondence, branch_originator_to_route_to, self.request.user,
                 ):
                     is_completing_parallel_branch = True
                     office_updated = True
@@ -323,6 +406,33 @@ class MinuteViewSet(viewsets.ModelViewSet):
         )
         office_updated = office_updated or _office_updated
         approver_updated = approver_updated or _approver_updated
+
+        is_final_approval = (
+            minute.action_type == Minute.ActionType.APPROVE
+            and minute.approval_role == "approval"
+            and (
+                correspondence.required_approval_level != Correspondence.RequiredApprovalLevel.EXECUTIVE
+                or minute.approval_level == Minute.ApprovalLevel.EXECUTIVE
+            )
+        )
+        is_formal_issue = bool(minute.to_office_id or minute.to_user_id) and (
+            (
+                minute.action_type in (
+                    Minute.ActionType.MINUTE,
+                    Minute.ActionType.FORWARD,
+                    Minute.ActionType.TREAT,
+                )
+                and minute.purpose != "approval"
+            )
+            or is_final_approval
+        )
+        if is_formal_issue:
+            CorrespondenceDocumentService.publish_documents_on_issue(
+                correspondence,
+                user=self.request.user,
+                request=self.request,
+                minutes=[minute],
+            )
 
         if office_updated or approver_updated:
             update_fields = ["updated_at"]
@@ -362,7 +472,34 @@ class MinuteViewSet(viewsets.ModelViewSet):
             },
         )
 
-        MinuteSealService.apply_if_eligible(minute, self.request.user, correspondence, self.request, action_type)
+        MinuteSealService.apply_if_eligible(
+            minute,
+            self.request.user,
+            correspondence,
+            self.request,
+            action_type,
+            two_factor_verified=True,
+        )
+
+        # An approval must leave a stored approved copy, not only generate one
+        # when someone later opens the PDF download. Only attempt this when a
+        # source memo is linked; the service stores the copy against it.
+        if (
+            minute.action_type == Minute.ActionType.APPROVE
+            and CorrespondenceDocumentLink.objects.filter(
+                correspondence=correspondence
+            ).exists()
+        ):
+            try:
+                ExecutiveApprovalPDFService.generate_and_store_approval_pdf(
+                    minute=minute,
+                    correspondence=correspondence,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to auto-generate approved copy for minute %s",
+                    minute.id,
+                )
 
         if not parallel_group_completed and correspondence.current_approver and correspondence.current_approver.id != self.request.user.id:
             NotificationService.create_notification(
@@ -400,7 +537,15 @@ class MinuteViewSet(viewsets.ModelViewSet):
         from django.http import HttpResponse
         import traceback
 
+        from organization.permission_utils import require_page_access
+
         minute = self.get_object()
+        approval_page = (
+            "approvals_executive"
+            if minute.approval_level == Minute.ApprovalLevel.EXECUTIVE
+            else "approvals_departmental"
+        )
+        require_page_access(request.user, approval_page)
 
         # Tier-aware: allow any approve minute (executive or departmental) and any minute with an approval_level set (endorsement)
         _is_approval = minute.action_type == Minute.ActionType.APPROVE or getattr(minute, "approval_level", None) is not None
@@ -411,7 +556,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            pdf_bytes = ExecutiveApprovalPDFService.generate_approval_pdf(
+            pdf_bytes = ExecutiveApprovalPDFService.generate_and_store_approval_pdf(
                 minute=minute,
                 correspondence=minute.correspondence
             )
@@ -433,7 +578,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
         if not minute.can_be_edited():
             raise ValidationError({
-                "detail": "This minute cannot be edited. It has either been opened/acted upon or the 30-minute window has expired."
+                "detail": "This minute cannot be edited. It may have been opened, recalled, followed by another minute, or passed its edit window."
             })
 
         if minute.user_id != request.user.id:
@@ -838,13 +983,14 @@ class MinuteViewSet(viewsets.ModelViewSet):
         return Response(response_data)
 
     @action(detail=False, methods=["post"], url_path="parallel-route")
+    @transaction.atomic
     def parallel_route(self, request):
         user = request.user
         MinuteRouterService.check_permissions(user, "minute", request=request)
 
         correspondence_id = request.data.get("correspondence_id")
         recipients = request.data.get("recipients", [])
-        merge_strategy = request.data.get("merge_strategy", "all")
+        merge_strategy = request.data.get("merge_strategy", "independent")
         parent_minute_id = request.data.get("parent_minute_id")
 
         if not correspondence_id or not recipients:
@@ -854,7 +1000,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
         if len(recipients) < 2:
             raise ValidationError({
-                "detail": "Parallel routing requires at least 2 recipients."
+                "detail": "Separate assignments require at least 2 recipients."
             })
 
         recipient_keys = [
@@ -874,6 +1020,8 @@ class MinuteViewSet(viewsets.ModelViewSet):
             correspondence = Correspondence.objects.get(id=correspondence_id)
         except Correspondence.DoesNotExist:
             raise ValidationError({"detail": "Correspondence not found."})
+
+        MinuteRouterService.enforce_initial_office_turn(user, correspondence)
 
         parent_minute = None
         if parent_minute_id:

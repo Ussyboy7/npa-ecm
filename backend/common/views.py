@@ -10,7 +10,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import connection
-from django.db.models import Count
+from django.db.models import Count, Exists, Max, Min, OuterRef, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -301,8 +301,17 @@ def _check_backup_status() -> dict:
     }
 
 
+ADMIN_ALERTS_CACHE_KEY = "admin_dashboard_alerts:v2"
+ADMIN_ALERTS_CACHE_TTL = 30
+
+
 class AdminDashboardAlertsView(APIView):
-    """Admin dashboard: alerts needing admin attention."""
+    """Admin dashboard: alerts needing admin attention.
+
+    The payload is global (not per-user) and every card tolerates a few
+    seconds of staleness, so it is cached briefly. Counts are aggregated per
+    table rather than issued one per stat.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -311,44 +320,188 @@ class AdminDashboardAlertsView(APIView):
 
         require_permission(request.user, "can_access_system_health")
 
-        from analytics.models import Escalation
-        from integrations.models import IntegrationLog
-
-        now = timezone.now()
-
-        backup = _check_backup_status()
-
-        pending_escalations = Escalation.objects.filter(
-            status__in=[Escalation.Status.PENDING, Escalation.Status.SENT]
-        ).count()
-
-        integration_failures_24h = IntegrationLog.objects.filter(
-            created_at__gte=now - timedelta(hours=24),
-            status="failed",
-        ).count()
-
-        celery_beat_disabled = 0
         try:
-            from django_celery_beat.models import PeriodicTask
+            cached = cache.get(ADMIN_ALERTS_CACHE_KEY)
+        except Exception:
+            cached = None
+        if cached is not None:
+            return Response(cached)
 
-            celery_beat_disabled = PeriodicTask.objects.filter(enabled=False).count()
+        payload = self._build_payload()
+        try:
+            cache.set(ADMIN_ALERTS_CACHE_KEY, payload, ADMIN_ALERTS_CACHE_TTL)
         except Exception:
             pass
+        return Response(payload)
+
+    @staticmethod
+    def _build_payload() -> dict:
+        from accounts.models import User
+        from analytics.models import Escalation
+        from audit.models import ActivityLog
+        from correspondence.models import Correspondence
+        from integrations.models import IntegrationLog
+        from organization.models import Office, OfficeMembership
+        from workflow.models import ApprovalTask
+
+        now = timezone.now()
+        since_24h = now - timedelta(hours=24)
+        today = timezone.localdate()
+
+        backup = _check_backup_status()
 
         services, _ = _check_services()
         degraded_services = [
             name for name, status in services.items() if status != "healthy"
         ]
 
-        return Response(
-            {
-                "backup": backup,
-                "pending_escalations": pending_escalations,
-                "integration_failures_24h": integration_failures_24h,
-                "celery_beat_disabled": celery_beat_disabled,
-                "degraded_services": degraded_services,
-            }
+        # One aggregate for every user-level stat (single pass over accounts_user).
+        user_stats = User.objects.filter(is_active=True).aggregate(
+            total=Count("id"),
+            superusers=Count("id", filter=Q(is_superuser=True)),
+            without_role=Count("id", filter=Q(system_role__isnull=True)),
+            mfa_enabled=Count("id", filter=Q(login_security__mfa_enabled=True)),
+            mfa_required_missing=Count(
+                "id",
+                filter=Q(
+                    login_security__mfa_required=True,
+                    login_security__mfa_enabled=False,
+                ),
+            ),
+            last_superuser_login=Max("last_login", filter=Q(is_superuser=True)),
         )
+        active_user_count = user_stats["total"] or 0
+        mfa_enabled = user_stats["mfa_enabled"] or 0
+
+        # Exists() keeps this an indexed anti-join instead of a NOT IN subquery.
+        users_without_office = (
+            User.objects.filter(is_active=True)
+            .annotate(
+                _has_active_office=Exists(
+                    OfficeMembership.objects.filter(
+                        user=OuterRef("pk"), is_active=True
+                    )
+                )
+            )
+            .filter(_has_active_office=False)
+            .count()
+        )
+
+        offices_without_principal = (
+            Office.objects.filter(is_active=True)
+            .annotate(
+                active_principals=Count(
+                    "memberships",
+                    filter=Q(
+                        memberships__is_active=True,
+                        memberships__assignment_role=OfficeMembership.AssignmentRole.PRINCIPAL,
+                        memberships__user__is_active=True,
+                    ),
+                )
+            )
+            .filter(active_principals=0)
+            .count()
+        )
+
+        open_correspondence = Correspondence.objects.filter(is_deleted=False).exclude(
+            status__in=[
+                Correspondence.Status.COMPLETED,
+                Correspondence.Status.ARCHIVED,
+                Correspondence.Status.WITHDRAWN,
+            ]
+        )
+        correspondence_stats = open_correspondence.aggregate(
+            total=Count("id"),
+            inactive_owned=Count("id", filter=Q(created_by__is_active=False)),
+        )
+
+        escalation_stats = Escalation.objects.filter(
+            status__in=[Escalation.Status.PENDING, Escalation.Status.SENT]
+        ).aggregate(count=Count("id"), oldest=Min("created_at"))
+
+        approval_stats = ApprovalTask.objects.filter(
+            status__in=[ApprovalTask.Status.PENDING, ApprovalTask.Status.IN_PROGRESS]
+        ).aggregate(
+            count=Count("id"),
+            overdue=Count("id", filter=Q(due_date__lt=today)),
+        )
+
+        integration_failures_24h = IntegrationLog.objects.filter(
+            created_at__gte=since_24h,
+            status="failed",
+        ).count()
+
+        impersonations_24h = ActivityLog.objects.filter(
+            action=ActivityLog.ActionType.USER_IMPERSONATED,
+            timestamp__gte=since_24h,
+        ).count()
+
+        celery_beat_disabled = 0
+        backup_task = None
+        try:
+            from django_celery_beat.models import PeriodicTask
+
+            beat_stats = PeriodicTask.objects.aggregate(
+                disabled=Count("id", filter=Q(enabled=False)),
+                backup=Max("name", filter=Q(enabled=True, name__icontains="backup")),
+            )
+            celery_beat_disabled = beat_stats["disabled"] or 0
+            backup_task = beat_stats["backup"]
+        except Exception:
+            pass
+
+        recent_activity = [
+            {
+                "id": str(log.id),
+                "user": log.user.get_full_name() or log.user.username if log.user else "System",
+                "action": log.get_action_display(),
+                "description": log.description,
+                "timestamp": log.timestamp.isoformat(),
+            }
+            for log in ActivityLog.objects.select_related("user").order_by("-timestamp")[:10]
+        ]
+
+        pending_escalations = escalation_stats["count"] or 0
+        oldest_escalation = escalation_stats["oldest"]
+
+        return {
+            "backup": backup,
+            "backup_schedule": {"scheduled": bool(backup_task), "task": backup_task},
+            "pending_escalations": pending_escalations,
+            "integration_failures_24h": integration_failures_24h,
+            "celery_beat_disabled": celery_beat_disabled,
+            "degraded_services": degraded_services,
+            "security": {
+                "superusers": user_stats["superusers"] or 0,
+                "mfa_enabled": mfa_enabled,
+                "mfa_coverage_pct": round(mfa_enabled / active_user_count * 100, 1)
+                if active_user_count
+                else 0,
+                "mfa_required_missing": user_stats["mfa_required_missing"] or 0,
+                "impersonations_24h": impersonations_24h,
+                "last_superuser_login": user_stats["last_superuser_login"].isoformat()
+                if user_stats["last_superuser_login"]
+                else None,
+            },
+            "organization": {
+                "offices_without_principal": offices_without_principal,
+                "users_without_role": user_stats["without_role"] or 0,
+                "users_without_office": users_without_office,
+                "open_items_owned_by_inactive": correspondence_stats["inactive_owned"] or 0,
+            },
+            "workload": {
+                "pending_escalations": pending_escalations,
+                "oldest_escalation_hours": round(
+                    (now - oldest_escalation).total_seconds() / 3600, 1
+                )
+                if oldest_escalation
+                else None,
+                "pending_approvals": approval_stats["count"] or 0,
+                "overdue_approvals": approval_stats["overdue"] or 0,
+                "open_correspondence": correspondence_stats["total"] or 0,
+            },
+            "recent_activity": recent_activity,
+        }
 
 
 class OnlineUsersView(APIView):
@@ -387,6 +540,9 @@ class SystemMetricsView(APIView):
         import shutil
 
         api_uptime_seconds = int(time.time() - _START_TIME)
+        api_started_at = timezone.localtime(
+            timezone.now() - timedelta(seconds=api_uptime_seconds)
+        )
         api_uptime_hours = api_uptime_seconds // 3600
         api_uptime_minutes = (api_uptime_seconds % 3600) // 60
         if api_uptime_hours > 0:
@@ -415,6 +571,14 @@ class SystemMetricsView(APIView):
             pass
 
         db_engine = "PostgreSQL"
+        db_reachable = False
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            db_reachable = True
+        except Exception:
+            pass
 
         media_root = getattr(settings, "MEDIA_ROOT", "/app/media")
         disk_info = {"total_gb": 0, "free_gb": 0, "used_pct": 0}
@@ -451,11 +615,11 @@ class SystemMetricsView(APIView):
                         "status": "healthy",
                         "icon": "Server",
                         "uptime": api_uptime_text,
-                        "detail": f"Process started {timezone.now().strftime('%H:%M')}",
+                        "detail": f"Process started {api_started_at.strftime('%H:%M')}",
                     },
                     {
                         "name": "Database",
-                        "status": "healthy" if db_uptime_text else "unknown",
+                        "status": "healthy" if db_reachable else "unhealthy",
                         "icon": "Database",
                         "uptime": db_uptime_text,
                         "detail": f"Engine: {db_engine}",

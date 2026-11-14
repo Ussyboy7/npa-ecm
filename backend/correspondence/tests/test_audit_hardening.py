@@ -200,6 +200,26 @@ class AuditHardeningTests(TestCase):
         count_after_second = CaseCorrespondenceLink.objects.filter(case=case).count()
         self.assertEqual(count_after_first, count_after_second, "Duplicate REFER should not create second Correspondence")
 
+    def test_superuser_can_certify_without_completed_workflow(self):
+        """Superusers may CERTIFY an AWAITING_CERTIFICATION query with no signature workflow; others may not."""
+        sub, fd = self._make_form_document()
+        from correspondence.services.case_audit import create_audit_case_for_submission
+        case = create_audit_case_for_submission(sub, form_document=fd)
+        case.metadata["audit_state"] = "AWAITING_CERTIFICATION"
+        case.save(update_fields=["metadata"])
+        url = f"/api/v1/correspondence/cases/{case.id}/actions/"
+        # Non-superuser without a completed workflow is still refused by the workflow gate
+        self.client.force_authenticate(user=self.officer)
+        resp = self.client.post(url, {"action": "CERTIFY"}, format="json")
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("completed signature workflow", str(resp.data))
+        # Superuser passes the workflow gate
+        superuser = User.objects.create_superuser(username=f"su_hard_{uuid.uuid4().hex[:6]}", email=f"su_{uuid.uuid4().hex[:6]}@example.com", password="x")
+        self.client.force_authenticate(user=superuser)
+        resp = self.client.post(url, {"action": "CERTIFY"}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data.get("audit_state"), "CERTIFIED")
+
     def test_share_vs_route_distinction(self):
         """DMS Share (user) -> Shared with Me, not Office Inbox. Audit REFER -> Office Inbox, not Shared with Me."""
         sub, fd = self._make_form_document()

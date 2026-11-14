@@ -12,14 +12,32 @@ interface DocumentMetadataCardProps {
 export function DocumentMetadataCard({ document }: DocumentMetadataCardProps) {
   const hasDescription = Boolean(document.description?.trim());
   const hasTags = Boolean(document.tags && document.tags.length > 0);
+  const publicationHistory = document.publicationHistory ?? [];
+  const hasPublicationHistory = publicationHistory.length > 0;
 
-  if (!hasDescription && !hasTags) {
+  if (!hasDescription && !hasTags && !hasPublicationHistory) {
     return null;
   }
 
   return (
     <div className="rounded-xl bg-muted/30 px-3 py-2.5 space-y-2.5 min-w-0">
       <p className="text-[13px] font-semibold tracking-tight">About</p>
+      {hasPublicationHistory && (
+        <div className="space-y-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Publication history</p>
+          {publicationHistory.map((event) => (
+            <div key={`${event.publishedVersionId ?? event.correspondenceId}-${event.timestamp}`} className="rounded-lg bg-background/80 p-2.5 space-y-1">
+              <p className="text-xs font-medium">
+                Published {new Date(event.timestamp).toLocaleString()}
+                {event.publishedVersionNumber ? ` · v${event.publishedVersionNumber}` : ""}
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Via {event.correspondenceReference || event.correspondenceSubject || "correspondence"} ({event.issueType === "dispatch" ? "dispatch" : "formal issue"})
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
       {hasDescription && (
         <div className="min-w-0 overflow-hidden">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">

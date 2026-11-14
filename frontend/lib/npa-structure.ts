@@ -129,6 +129,8 @@ export type Correspondence = {
     tracking_number: string;
     status: string;
     location?: { display_name: string };
+    current_office?: { id?: string; name?: string };
+    pending_handover_to_office_name?: string;
     checked_out_to?: { name: string };
     created_at: string;
   }>;
@@ -166,6 +168,7 @@ export type Correspondence = {
   departmentName?: string;
   directorateId?: string;
   currentApproverId?: string;
+  canTakeInitialAction?: boolean;
   createdById?: string;
   direction: 'upward' | 'downward' | 'lateral';
   currentApproverName?: string;
@@ -205,7 +208,9 @@ export type Correspondence = {
   } | null;
   completionSummaryGeneratedAt?: string;
   caseId?: string;
-  // Parallel routing fields
+  // Configured route template and parallel routing state
+  workflowTemplateId?: string;
+  workflowTemplate?: import('@/lib/types/workflow').CorrespondenceWorkflowTemplate | null;
   workflowState?: 'sequential' | 'parallel' | 'merged' | 'waiting_merge';
   activeParallelBranches?: number;
   completedParallelBranches?: number;
@@ -247,6 +252,9 @@ export type ParallelBranch = {
   targetId: string;
   targetLabel: string;
   status: ParallelBranchStatus;
+  expectedOutcome: 'respond' | 'treat' | 'onward';
+  completedOutcome: 'respond' | 'treat' | 'onward' | null;
+  completedAction: string | null;
   deadline: string | null;
   branchOriginatorId: string | null;
 };
@@ -312,6 +320,7 @@ export type Minute = {
   responseDeadline?: string;
   // Parallel routing fields
   routingType?: 'sequential' | 'parallel' | 'broadcast';
+  assignmentOutcome?: 'respond' | 'treat' | 'onward' | '';
   parallelGroupId?: string;
   isParallelBranch?: boolean;
   parentMinuteId?: string;
@@ -368,10 +377,19 @@ export type User = {
   name: string;
   email: string;
   employeeId: string;
+  personnelNumber?: string;
+  honorific?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  designation?: string;
   gradeLevel: string;
   directorate?: string;
   division?: string;
   department?: string;
+  directorateName?: string;
+  divisionName?: string;
+  departmentName?: string;
   systemRole: string;
   avatar?: string;
   active: boolean;

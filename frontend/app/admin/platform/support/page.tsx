@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { PlatformTabList } from "@/components/admin/PlatformTabList";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,8 @@ export default function AdminHelpdeskPage() {
             },
           ]}
         />}>
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
+        <AdminHubTabList />
         <PlatformTabList />
       </div>
 

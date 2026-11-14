@@ -70,9 +70,10 @@ export const RoleFormModal = ({
 
   // Memoize users with role
   const usersWithRole = useMemo(() => {
-    return existingRole
-      ? users.filter((u) => u.systemRole === existingRole.id)
-      : [];
+    if (!existingRole) return [];
+    return users.filter(
+      (u) => u.systemRole === existingRole.name || u.systemRole === existingRole.id,
+    );
   }, [existingRole, users]);
 
   // Check for duplicate role name

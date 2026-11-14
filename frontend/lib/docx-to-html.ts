@@ -4,6 +4,9 @@
  */
 import mammoth from "mammoth";
 import { convertMetafileToDataUrl } from "emf-converter";
+import { readZipTextEntry } from "./docx-zip";
+import { applyWordFormatting } from "./word-format-import";
+import { applyWordTableFormatting } from "./word-table-import";
 
 const METAFILE_TYPES = new Set([
   "image/x-emf",
@@ -43,12 +46,27 @@ async function imageToSrc(image: MammothImage): Promise<{ src: string }> {
 }
 
 export async function convertDocxArrayBufferToHtml(arrayBuffer: ArrayBuffer): Promise<string> {
-  const result = await mammoth.convertToHtml(
-    { arrayBuffer },
-    {
-      includeDefaultStyleMap: true,
-      convertImage: mammoth.images.imgElement((image) => imageToSrc(image as MammothImage)),
-    },
-  );
-  return result.value || "";
+  const [result, documentXml, stylesXml] = await Promise.all([
+    mammoth.convertToHtml(
+      { arrayBuffer },
+      {
+        includeDefaultStyleMap: true,
+        convertImage: mammoth.images.imgElement((image) => imageToSrc(image as MammothImage)),
+      },
+    ),
+    readZipTextEntry(arrayBuffer, "word/document.xml").catch(() => null),
+    readZipTextEntry(arrayBuffer, "word/styles.xml").catch(() => null),
+  ]);
+
+  const html = result.value || "";
+  if (!html || !documentXml) return html;
+
+  try {
+    // mammoth keeps structure only; restore the fonts, sizes, colours,
+    // spacing, table rules and column widths the user wrote with in Word.
+    const formatted = applyWordFormatting(html, { documentXml, stylesXml });
+    return applyWordTableFormatting(formatted, { documentXml, stylesXml });
+  } catch {
+    return html;
+  }
 }

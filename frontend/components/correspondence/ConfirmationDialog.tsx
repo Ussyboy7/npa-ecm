@@ -50,6 +50,8 @@ export const ConfirmationDialog = ({
   data,
   disabled = false
 }: ConfirmationDialogProps) => {
+  const isApproval = data.actionType === 'approve';
+
   return (
     <AlertDialog
       open={isOpen}
@@ -61,10 +63,12 @@ export const ConfirmationDialog = ({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-accent" />
-            Confirm {type === 'minute' ? 'Minute Submission' : 'Response Submission'}
+            {isApproval ? 'Confirm Approval' : `Confirm ${type === 'minute' ? 'Minute Submission' : 'Response Submission'}`}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Please review the details before submitting. This action cannot be undone.
+            {isApproval
+              ? 'Review the approval details. Confirming records the approval and routes the record to the selected destination.'
+              : 'Please review the details before submitting. This action cannot be undone.'}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -100,7 +104,7 @@ export const ConfirmationDialog = ({
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-success" />
                     <Badge variant={data.actionType === 'approve' ? 'default' : 'secondary'}>
-                      {data.actionType === 'approve' ? 'Approve & Forward' : 'Minute Only'}
+                      {data.actionType === 'approve' ? 'Approve & Route' : 'Minute Only'}
                     </Badge>
                     {data.direction && (
                       <Badge variant="outline">
@@ -200,8 +204,12 @@ export const ConfirmationDialog = ({
             disabled={disabled}
             className="bg-gradient-primary hover:opacity-90"
           >
-            <Send className="h-4 w-4 mr-2" />
-            Confirm & Send
+            {isApproval ? (
+              <CheckCircle className="h-4 w-4 mr-2" />
+            ) : (
+              <Send className="h-4 w-4 mr-2" />
+            )}
+            {isApproval ? 'Approve & Route' : 'Confirm & Send'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -30,6 +30,7 @@ import {
 import {
   Search,
   BookOpen,
+  Building2,
   RefreshCw,
   LogOut,
   LogIn,
@@ -90,6 +91,10 @@ interface UserBrief {
 
 interface PhysicalDocument {
   id: string;
+  current_office: string | null;
+  current_office_name: string;
+  pending_handover_to_office_id: string | null;
+  pending_handover_to_office_name: string | null;
   tracking_number: string;
   barcode: string;
   correspondence: string | null;
@@ -97,13 +102,30 @@ interface PhysicalDocument {
   document: string | null;
   location: string;
   location_name: string;
-  status: 'filed' | 'checked_out' | 'archived' | 'destroyed' | 'missing';
+  status: 'filed' | 'checked_out' | 'in_transit' | 'archived' | 'destroyed' | 'missing';
   description: string;
   checked_out_to: UserBrief | null;
   checked_out_at: string | null;
   expected_return_at: string | null;
   notes: string;
   created_at: string;
+}
+
+interface HandoverEvent {
+  id: string;
+  from_office_name: string;
+  to_office_name: string;
+  sent_by_name: string;
+  received_by_name: string;
+  sent_at: string;
+  received_at: string | null;
+  notes: string;
+  receipt_notes: string;
+}
+
+interface OfficeOption {
+  id: string;
+  name: string;
 }
 
 interface CheckOutEvent {
@@ -119,6 +141,8 @@ interface CheckOutEvent {
 
 function PhysicalDocumentsForm() {
   const [locations, setLocations] = useState<Location[]>([]);
+  const [offices, setOffices] = useState<OfficeOption[]>([]);
+  const [pendingReceiptIds, setPendingReceiptIds] = useState<Set<string>>(new Set());
   const [documents, setDocuments] = useState<PhysicalDocument[]>([]);
   const [count, setCount] = useState(0);
   const pagination = usePagination({ totalCount: count });
@@ -137,10 +161,21 @@ function PhysicalDocumentsForm() {
   const [checkOutNotes, setCheckOutNotes] = useState('');
   const [expectedReturnAt, setExpectedReturnAt] = useState('');
 
+  const [handoverOpen, setHandoverOpen] = useState(false);
+  const [handoverDoc, setHandoverDoc] = useState<PhysicalDocument | null>(null);
+  const [handoverOfficeId, setHandoverOfficeId] = useState('');
+  const [handoverNotes, setHandoverNotes] = useState('');
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptDoc, setReceiptDoc] = useState<PhysicalDocument | null>(null);
+  const [receiptLocationId, setReceiptLocationId] = useState('');
+  const [receiptNotes, setReceiptNotes] = useState('');
+  const [handoverEvents, setHandoverEvents] = useState<HandoverEvent[]>([]);
+
   // Register document state
   const [registerOpen, setRegisterOpen] = useState(false);
   const [registerForm, setRegisterForm] = useState({
     location_id: '',
+    custodian_office_id: '',
     description: '',
   });
 
@@ -187,6 +222,7 @@ function PhysicalDocumentsForm() {
       const rows = unwrapResults<PhysicalDocument>(data);
       setDocuments(rows);
       setCount(typeof data.count === 'number' ? data.count : rows.length);
+      void fetchPendingReceipts();
     } catch (err) {
       logError('Failed to fetch physical documents', err);
       setError('Failed to load physical documents.');
@@ -207,9 +243,28 @@ function PhysicalDocumentsForm() {
     }
   };
 
+  const fetchOffices = async () => {
+    try {
+      const list = await fetchAllCatalogPaginated<OfficeOption>('/organization/offices/?is_active=true&ordering=name');
+      setOffices(list);
+    } catch {
+      setOffices([]);
+    }
+  };
+
+  const fetchPendingReceipts = async () => {
+    try {
+      const result = await apiFetch<{ physical_document_ids: string[] }>('/correspondence/physical-documents/my-handover/');
+      setPendingReceiptIds(new Set(result.physical_document_ids));
+    } catch {
+      setPendingReceiptIds(new Set());
+    }
+  };
+
   useEffect(() => {
     fetchLocations();
     fetchUsers();
+    fetchOffices();
   }, []);
 
   useEffect(() => {
@@ -242,6 +297,50 @@ function PhysicalDocumentsForm() {
     }
   };
 
+  const handleHandover = async () => {
+    if (!handoverDoc || !handoverOfficeId) return;
+    setSubmitting(true);
+    try {
+      await apiFetch(`/correspondence/physical-documents/${handoverDoc.id}/handover/`, {
+        method: 'POST',
+        body: JSON.stringify({ to_office: handoverOfficeId, notes: handoverNotes }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      toast.success('Physical copy sent; awaiting recipient confirmation');
+      setHandoverOpen(false);
+      setHandoverDoc(null);
+      setHandoverOfficeId('');
+      setHandoverNotes('');
+      fetchDocuments();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send physical copy');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmReceipt = async () => {
+    if (!receiptDoc || !receiptLocationId) return;
+    setSubmitting(true);
+    try {
+      await apiFetch(`/correspondence/physical-documents/${receiptDoc.id}/confirm-receipt/`, {
+        method: 'POST',
+        body: JSON.stringify({ location: receiptLocationId, notes: receiptNotes }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      toast.success('Receipt confirmed and custody transferred');
+      setReceiptOpen(false);
+      setReceiptDoc(null);
+      setReceiptLocationId('');
+      setReceiptNotes('');
+      fetchDocuments();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to confirm receipt');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleCheckIn = async (doc: PhysicalDocument) => {
     try {
       await apiFetch(`/correspondence/physical-documents/${doc.id}/check-in/`, {
@@ -264,8 +363,13 @@ function PhysicalDocumentsForm() {
     }
     setSubmitting(true);
     try {
+      if (!registerForm.custodian_office_id) {
+        toast.error('Select the office responsible for this physical copy.');
+        return;
+      }
       const body: Record<string, unknown> = {
         location: registerForm.location_id,
+        current_office: registerForm.custodian_office_id,
         description: registerForm.description.trim(),
       };
       await apiFetch('/correspondence/physical-documents/', {
@@ -275,7 +379,7 @@ function PhysicalDocumentsForm() {
       });
       toast.success('Physical document registered');
       setRegisterOpen(false);
-      setRegisterForm({ location_id: '', description: '' });
+      setRegisterForm({ location_id: '', custodian_office_id: '', description: '' });
       fetchDocuments();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to register document';
@@ -305,11 +409,14 @@ function PhysicalDocumentsForm() {
     setHistoryOpen(true);
     setHistoryLoading(true);
     setHistoryEvents([]);
+    setHandoverEvents([]);
     try {
-      const events = await apiFetch<CheckOutEvent[]>(
-        `/correspondence/physical-documents/${doc.id}/checkout-events/`,
-      );
+      const [events, transfers] = await Promise.all([
+        apiFetch<CheckOutEvent[]>(`/correspondence/physical-documents/${doc.id}/checkout-events/`),
+        apiFetch<HandoverEvent[]>(`/correspondence/physical-documents/${doc.id}/handover-events/`),
+      ]);
       setHistoryEvents(events);
+      setHandoverEvents(transfers);
     } catch (err) {
       logError('Failed to fetch checkout history', err);
       toast.error('Failed to load history');
@@ -322,6 +429,8 @@ function PhysicalDocumentsForm() {
     switch (status) {
       case 'checked_out':
         return <Badge variant="destructive" className={correspondenceQueueBadgeClass}>Checked Out</Badge>;
+      case 'in_transit':
+        return <Badge variant="secondary" className={correspondenceQueueBadgeClass}>In Transit</Badge>;
       case 'filed':
         return (
           <Badge
@@ -455,6 +564,10 @@ function PhysicalDocumentsForm() {
                     <Button size="compact" onClick={() => void handleCheckIn(doc)}>
                       <LogIn className="h-4 w-4" /> Check In
                     </Button>
+                  ) : doc.status === 'in_transit' && pendingReceiptIds.has(doc.id) ? (
+                    <Button size="compact" onClick={() => { setReceiptDoc(doc); setReceiptOpen(true); }}>
+                      <LogIn className="h-4 w-4" /> Confirm receipt
+                    </Button>
                   ) : doc.status === 'missing' ? (
                     <Button size="compact" variant="outline" onClick={() => void handleUpdateStatus(doc, 'filed')}>
                       <RotateCcw className="h-4 w-4" /> Recovered
@@ -485,6 +598,9 @@ function PhysicalDocumentsForm() {
                               </DropdownMenuItem>
                               {doc.status === 'filed' ? (
                                 <>
+                                  <DropdownMenuItem onClick={() => { setHandoverDoc(doc); setHandoverOpen(true); }}>
+                                    <LogOut className="h-4 w-4 mr-2" /> Send to office
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => void handleUpdateStatus(doc, 'archived')}>
                                     <RotateCcw className="h-4 w-4 mr-2" /> Archive
                                   </DropdownMenuItem>
@@ -520,10 +636,22 @@ function PhysicalDocumentsForm() {
                           </Badge>
                         </div>
                         {doc.checked_out_at ? (
-                          <span className={correspondenceQueueDateClass}>{formatDateShort(doc.checked_out_at)}</span>
+                          <span className={correspondenceQueueDateClass}>Checked out {formatDateShort(doc.checked_out_at)}</span>
                         ) : null}
                       </div>
                       <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                        {doc.status === 'in_transit' && doc.pending_handover_to_office_name ? (
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <LogOut className={correspondenceQueueMetaIconClass} />
+                            <span>On the way to {doc.pending_handover_to_office_name}</span>
+                          </span>
+                        ) : null}
+                        {doc.current_office_name ? (
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <Building2 className={correspondenceQueueMetaIconClass} />
+                            <span>Custodian: {doc.current_office_name}</span>
+                          </span>
+                        ) : null}
                         {doc.correspondence_ref && doc.correspondence ? (
                           <Link
                             href={`/correspondence/${doc.correspondence}`}
@@ -592,6 +720,18 @@ function PhysicalDocumentsForm() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="reg-office">Custodian Office *</Label>
+                <Select
+                  value={registerForm.custodian_office_id}
+                  onValueChange={(value) => setRegisterForm({ ...registerForm, custodian_office_id: value })}
+                >
+                  <SelectTrigger id="reg-office"><SelectValue placeholder="Select custodian office" /></SelectTrigger>
+                  <SelectContent>
+                    {offices.map((office) => <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="reg-desc">Description *</Label>
                 <Input
                   id="reg-desc"
@@ -604,6 +744,62 @@ function PhysicalDocumentsForm() {
                 {submitting ? 'Registering...' : 'Register Document'}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={handoverOpen} onOpenChange={(open) => { setHandoverOpen(open); if (!open) setHandoverDoc(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Send physical copy to another office</DialogTitle>
+              <DialogDescription>
+                The record will remain in transit until someone at the receiving office confirms it arrived.
+              </DialogDescription>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">{handoverDoc?.description || handoverDoc?.tracking_number}</p>
+            <div className="space-y-2">
+              <Label htmlFor="handover-office">Receiving office *</Label>
+              <Select value={handoverOfficeId} onValueChange={setHandoverOfficeId}>
+                <SelectTrigger id="handover-office"><SelectValue placeholder="Select receiving office" /></SelectTrigger>
+                <SelectContent>
+                  {offices.filter((office) => office.id !== handoverDoc?.current_office).map((office) => (
+                    <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="handover-notes">Handover note (optional)</Label>
+              <Input id="handover-notes" value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} placeholder="Courier, messenger, or handover details" />
+            </div>
+            <Button onClick={handleHandover} disabled={!handoverOfficeId || submitting}>
+              {submitting ? 'Recording handover…' : 'Record handover'}
+            </Button>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={receiptOpen} onOpenChange={(open) => { setReceiptOpen(open); if (!open) setReceiptDoc(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirm physical copy received</DialogTitle>
+              <DialogDescription>Confirm the paper arrived and record where it is now filed.</DialogDescription>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">{receiptDoc?.description || receiptDoc?.tracking_number}</p>
+            <div className="space-y-2">
+              <Label htmlFor="receipt-location">Received location *</Label>
+              <Select value={receiptLocationId} onValueChange={setReceiptLocationId}>
+                <SelectTrigger id="receipt-location"><SelectValue placeholder="Select storage location" /></SelectTrigger>
+                <SelectContent>
+                  {locations.map((location) => <SelectItem key={location.id} value={location.id}>{location.display_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="receipt-notes">Receipt note (optional)</Label>
+              <Input id="receipt-notes" value={receiptNotes} onChange={(event) => setReceiptNotes(event.target.value)} placeholder="Condition or receipt details" />
+            </div>
+            <Button onClick={handleConfirmReceipt} disabled={!receiptLocationId || submitting}>
+              {submitting ? 'Confirming…' : 'Confirm receipt'}
+            </Button>
           </DialogContent>
         </Dialog>
 
@@ -669,7 +865,7 @@ function PhysicalDocumentsForm() {
         <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
           <DialogContent size="md">
             <DialogHeader>
-              <DialogTitle>Check-Out History</DialogTitle>
+              <DialogTitle>Physical Custody History</DialogTitle>
               <DialogDescription>
                 {historyDoc?.description || historyDoc?.tracking_number || ''}
               </DialogDescription>
@@ -677,11 +873,21 @@ function PhysicalDocumentsForm() {
             <div className="flex-1 overflow-y-auto min-h-0">
               {historyLoading ? (
                 <div className="py-8 text-center text-muted-foreground">Loading history...</div>
-              ) : historyEvents.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">No checkout events recorded.</div>
+              ) : historyEvents.length === 0 && handoverEvents.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">No custody events recorded.</div>
               ) : (
                 <div className="relative pl-6 space-y-0">
                   <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" />
+                  {handoverEvents.map((event) => (
+                    <div key={event.id} className="relative pb-5 last:pb-0">
+                      <div className={cn("absolute -left-[17px] top-1 h-2.5 w-2.5 rounded-full ring-2 ring-background", event.received_at ? "bg-success" : "bg-amber-500")} />
+                      <div className="text-xs text-muted-foreground">Sent {formatDateTime(event.sent_at)}</div>
+                      <div className="text-sm font-medium mt-0.5">{event.from_office_name} → {event.to_office_name}</div>
+                      <div className="text-xs text-muted-foreground">{event.sent_by_name || 'Sender'}{event.received_at ? ` · received ${formatDateTime(event.received_at)} by ${event.received_by_name || 'recipient'}` : ' · awaiting receipt'}</div>
+                      {event.notes ? <div className="text-xs text-muted-foreground mt-0.5">{event.notes}</div> : null}
+                      {event.receipt_notes ? <div className="text-xs text-muted-foreground mt-0.5">Receipt: {event.receipt_notes}</div> : null}
+                    </div>
+                  ))}
                   {historyEvents.map((event) => (
                     <div key={event.id} className="relative pb-5 last:pb-0">
                       <div className={cn(

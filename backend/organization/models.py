@@ -477,3 +477,168 @@ class ActingRequest(UUIDModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"ActingRequest {self.office} by {self.requested_by} ({self.status})"
+
+
+class ReferenceScheme(UUIDModel, TimeStampedModel):
+    """Configurable reference-number scheme for one organizational unit.
+
+    Produces references such as ``HQ/GM/ICT/AD/001`` where the segments are
+    location, authority tier, unit code and classification. Each classification
+    keeps its own continuous serial counter.
+    """
+
+    class ScopeType(models.TextChoices):
+        DIRECTORATE = "directorate", "Directorate"
+        DIVISION = "division", "Division"
+        DEPARTMENT = "department", "Department"
+
+    scope_type = models.CharField(max_length=16, choices=ScopeType.choices, db_index=True)
+    directorate = models.ForeignKey(
+        Directorate,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reference_schemes",
+    )
+    division = models.ForeignKey(
+        Division,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reference_schemes",
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reference_schemes",
+    )
+    location_code = models.CharField(max_length=16, default="HQ")
+    authority_code = models.CharField(
+        max_length=16,
+        help_text="Authority tier segment, e.g. MD, ED, GM or AGM.",
+    )
+    unit_code = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Unit segment, e.g. ICT, SA&DM. Leave blank to omit it (e.g. HQ/MD/AD/001).",
+    )
+    serial_length = models.PositiveSmallIntegerField(default=3)
+    description = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        ordering = ["scope_type", "unit_code"]
+        indexes = [
+            models.Index(fields=["scope_type", "is_active"]),
+            models.Index(fields=["unit_code"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["directorate"],
+                condition=models.Q(scope_type="directorate"),
+                name="unique_reference_scheme_per_directorate",
+            ),
+            models.UniqueConstraint(
+                fields=["division"],
+                condition=models.Q(scope_type="division"),
+                name="unique_reference_scheme_per_division",
+            ),
+            models.UniqueConstraint(
+                fields=["department"],
+                condition=models.Q(scope_type="department"),
+                name="unique_reference_scheme_per_department",
+            ),
+        ]
+
+    @property
+    def unit(self):
+        if self.scope_type == self.ScopeType.DIRECTORATE:
+            return self.directorate
+        if self.scope_type == self.ScopeType.DIVISION:
+            return self.division
+        return self.department
+
+    @property
+    def unit_name(self) -> str:
+        unit = self.unit
+        return getattr(unit, "name", "") or ""
+
+    def __str__(self) -> str:
+        return f"{self.get_scope_type_display()}: {self.unit_name} ({self.unit_code})"
+
+
+class ReferenceClassification(UUIDModel, TimeStampedModel):
+    """One classification (AD/OP/CON…) within a scheme, with its own counter."""
+
+    scheme = models.ForeignKey(
+        ReferenceScheme,
+        on_delete=models.CASCADE,
+        related_name="classifications",
+    )
+    code = models.CharField(max_length=8)
+    label = models.CharField(max_length=64)
+    next_serial = models.PositiveIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scheme", "code"],
+                name="unique_reference_classification_per_scheme",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.code} — {self.label}"
+
+
+class ReferenceAllocation(UUIDModel, TimeStampedModel):
+    """Ledger of every number issued, kept even if a scheme is later removed."""
+
+    scheme = models.ForeignKey(
+        ReferenceScheme,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="allocations",
+    )
+    classification = models.ForeignKey(
+        ReferenceClassification,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="allocations",
+    )
+    reference_number = models.CharField(max_length=100, unique=True)
+    scope_type = models.CharField(max_length=16, blank=True)
+    unit_code = models.CharField(max_length=32, blank=True)
+    classification_code = models.CharField(max_length=8, blank=True)
+    serial = models.PositiveIntegerField()
+    segments = models.JSONField(default=dict, blank=True)
+    correspondence = models.ForeignKey(
+        "correspondence.Correspondence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reference_allocations",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reference_allocations",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["reference_number"]),
+            models.Index(fields=["scheme", "serial"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.reference_number

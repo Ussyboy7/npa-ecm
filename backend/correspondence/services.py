@@ -1806,35 +1806,35 @@ class ExecutiveApprovalPDFService:
                 for label, value in seal_info:
                     story.append(Paragraph(f"<b>{label}:</b> {value}", normal_style))
                 
-                # Try to include seal image if available
-                if seal.seal_image:
-                    try:
-                        # Read the seal image directly from storage
-                        from django.core.files.storage import default_storage
-                        if default_storage.exists(seal.seal_image.name):
-                            with default_storage.open(seal.seal_image.name, 'rb') as img_file:
-                                img = Image.open(img_file)
-                                img.thumbnail((900, 900), Image.Resampling.LANCZOS)
-                                img_buffer = BytesIO()
-                                # Convert to RGB if necessary (for PNG with transparency)
-                                if img.mode in ('RGBA', 'LA', 'P'):
-                                    rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                                    if img.mode == 'P':
-                                        img = img.convert('RGBA')
-                                    rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-                                    img = rgb_img
-                                img.save(img_buffer, format='PNG')
-                                img_buffer.seek(0)
-                                
-                                story.append(Spacer(1, 0.1*inch))
-                                # Center the image
-                                from reportlab.platypus import Image as ReportLabImage
-                                seal_image_elem = ReportLabImage(img_buffer, width=144, height=144)
-                                story.append(seal_image_elem)
-                    except ImportError as e:
-                        logger.warning(f"PIL or reportlab not available for seal image: {e}")
-                    except Exception as e:
-                        logger.warning(f"Could not load seal image: {e}")
+                # Embed only the hash-verified server render, never the raw
+                # cached media file.
+                try:
+                    from accounts.services import SealGenerationService
+
+                    seal_png = SealGenerationService.ensure_seal_image(seal)
+                    if seal_png:
+                        img = Image.open(BytesIO(seal_png))
+                        img.thumbnail((900, 900), Image.Resampling.LANCZOS)
+                        img_buffer = BytesIO()
+                        # Convert to RGB if necessary (for PNG with transparency)
+                        if img.mode in ('RGBA', 'LA', 'P'):
+                            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                            if img.mode == 'P':
+                                img = img.convert('RGBA')
+                            rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                            img = rgb_img
+                        img.save(img_buffer, format='PNG')
+                        img_buffer.seek(0)
+
+                        story.append(Spacer(1, 0.1*inch))
+                        # Center the image
+                        from reportlab.platypus import Image as ReportLabImage
+                        seal_image_elem = ReportLabImage(img_buffer, width=144, height=144)
+                        story.append(seal_image_elem)
+                except ImportError as e:
+                    logger.warning(f"PIL or reportlab not available for seal image: {e}")
+                except Exception as e:
+                    logger.warning(f"Could not load seal image: {e}")
             
             story.append(Spacer(1, 0.15*inch))
         
@@ -2716,7 +2716,9 @@ class MinuteRouterService:
     def resolve_approval_levels(cls, user, correspondence):
         """Map required_approval_level + actor grade/role to actual approval_level/approval_role.
 
-        - required==EXECUTIVE and MD -> EXECUTIVE+APPROVAL
+        - MD/executive authority -> EXECUTIVE+APPROVAL regardless of the
+          correspondence requirement; the level records the authority
+          actually exercised.
         - required==EXECUTIVE and GM/AGM/ED or other non-MD -> DEPARTMENTAL+ENDORSEMENT
         - required==DEPARTMENTAL -> DEPARTMENTAL+APPROVAL
         - required==NONE -> DEPARTMENTAL+APPROVAL (final)
@@ -2724,10 +2726,11 @@ class MinuteRouterService:
         """
         from correspondence.models import Correspondence, Minute
 
+        if cls._is_md(user):
+            return (Minute.ApprovalLevel.EXECUTIVE, Minute.ApprovalRole.APPROVAL)
+
         required = getattr(correspondence, "required_approval_level", Correspondence.RequiredApprovalLevel.DEPARTMENTAL)
         if required == Correspondence.RequiredApprovalLevel.EXECUTIVE:
-            if cls._is_md(user):
-                return (Minute.ApprovalLevel.EXECUTIVE, Minute.ApprovalRole.APPROVAL)
             # GM/AGM/ED or any non-MD within scope -> endorsement
             return (Minute.ApprovalLevel.DEPARTMENTAL, Minute.ApprovalRole.ENDORSEMENT)
         # DEPARTMENTAL or NONE -> final approval
@@ -3530,7 +3533,15 @@ class MinuteSealService:
     """Handles digital seal generation for executive approvals."""
 
     @classmethod
-    def apply_if_eligible(cls, minute, user, correspondence, request, action_type):
+    def apply_if_eligible(
+        cls,
+        minute,
+        user,
+        correspondence,
+        request,
+        action_type,
+        two_factor_verified=False,
+    ):
         """Generate and apply a digital seal if the user is an MD with an active signature.
 
         Returns the seal if applied, else None.
@@ -3561,6 +3572,8 @@ class MinuteSealService:
                 user=user,
                 correspondence=correspondence,
                 request=request,
+                minute=minute,
+                two_factor_verified=two_factor_verified,
             )
 
             minute.seal_applied = seal

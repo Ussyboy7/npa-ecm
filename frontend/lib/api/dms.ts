@@ -8,6 +8,7 @@ export type {
   PermissionAccess,
   DocumentPermission,
   DocumentVersion,
+  DocumentPublicationEvent,
   DocumentCollaborator,
   DocumentComment,
   CreateDocumentCommentPayload,

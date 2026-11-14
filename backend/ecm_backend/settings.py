@@ -263,6 +263,7 @@ REST_FRAMEWORK = {
         "login": os.getenv("THROTTLE_LOGIN_RATE", "10/minute"),
         "otp": os.getenv("THROTTLE_OTP_RATE", "5/minute"),
         "password_change": os.getenv("THROTTLE_PASSWORD_CHANGE_RATE", "5/hour"),
+        "totp_setup": os.getenv("THROTTLE_TOTP_SETUP_RATE", "5/minute"),
     },
 }
 
@@ -429,6 +430,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Application URLs
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3002")
+# Externally reachable origin used in certificates and other public links.
+# Falls back to FRONTEND_BASE_URL when it is not configured separately.
+PUBLIC_APP_ORIGIN = os.getenv("PUBLIC_APP_ORIGIN", "")
 
 # ---------------------------------------------------------------------------
 # Login MFA & OIDC SSO (Phase 1)
@@ -451,3 +455,5 @@ OIDC_USERINFO_ENDPOINT = os.getenv("OIDC_USERINFO_ENDPOINT", "")
 
 # Fernet key (url-safe base64 32-byte); derived from SECRET_KEY if unset
 INTEGRATION_ENCRYPTION_KEY = os.getenv("INTEGRATION_ENCRYPTION_KEY", "")
+# Fernet key for signature files; derived from SECRET_KEY if unset.
+SIGNATURE_ENCRYPTION_KEY = os.getenv("SIGNATURE_ENCRYPTION_KEY", "")

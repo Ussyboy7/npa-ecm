@@ -25,6 +25,7 @@ import {
   getDocumentAccessLogs,
   downloadDocumentVersion,
   canDownloadDocument,
+  canShareDocument,
   canAccessExtractedText,
   canCopyDocumentText,
   type DocumentRecord,
@@ -316,7 +317,6 @@ const DocumentDetailContent = () => {
               ) : null}
 
               <DocumentMobileTabBar
-                commentsCount={unreadComments > 0 ? unreadComments : comments.length}
                 mobileActiveTab={mobileActiveTab}
                 onSetMobileActiveTab={setMobileActiveTab}
               />
@@ -364,6 +364,9 @@ const DocumentDetailContent = () => {
                   onCreateVersion: openVersionUpload,
                   onOpenCommentsDialog: handleOpenCommentsDialog,
                   onShare: openShareDialog,
+                  onPermissionsChanged: refreshDocument,
+                  onRelatedChanged: refreshDocument,
+                  canManageAccess: canShareDocument(document),
                   onViewActivityDetails: (log: DocumentAccessLog) => setSelectedAccessLog(log),
                   onRefreshAccessLogs: handleRefreshAccessLogs,
                   onPreviewVersion: (version: DocumentVersion) => setPreviewVersion(version),
@@ -372,8 +375,6 @@ const DocumentDetailContent = () => {
                   onVersionOCR: handleVersionOCR,
                   onCancelOCR: handleCancelOCR,
                   getUserInitials,
-                  divisionNameById: divisionLookup,
-                  departmentNameById: departmentLookup,
                   unreadComments,
                   onActiveTabChange: (tab) => {
                     if (tab === "comments") markCommentsSeen();

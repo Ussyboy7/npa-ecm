@@ -5,6 +5,7 @@ import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AuditFormsLibrary, type FormsSegment } from '@/components/forms/AuditFormsLibrary';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,15 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput, CheckCircle2, Scan, Upload } from 'lucide-react';
+import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileInput, Scan } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useSidebarVisibility } from '@/hooks/use-sidebar-visibility';
 import { queryDocumentsExtended, type DocumentRecord } from '@/lib/api/dms';
-import { listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
+import { listFormDocuments } from '@/lib/api/dms-forms';
 import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';
-import { CaptureJobsPanel } from '@/components/capture/CaptureJobsPanel';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
+import { formatDateShort } from '@/lib/correspondence-helpers';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ListRowCard } from '@/components/shared/ListRowCard';
@@ -35,7 +35,6 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import { StatStrip } from '@/components/shared/StatStrip';
-import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
@@ -55,21 +54,33 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
+type TabValue = 'documents' | 'forms';
+type DocumentScope = 'mine' | 'shared';
+
 function MyDocumentsForm() {
   const { currentUser } = useCurrentUser();
   const visibility = useSidebarVisibility();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
-  const initialTab =
-    tabFromUrl === 'pending-signatures' ||
-    tabFromUrl === 'signed-by-me' ||
-    tabFromUrl === 'shared' ||
-    tabFromUrl === 'my-documents' ||
-    (tabFromUrl === 'capture' && visibility.showContentCapture)
-      ? tabFromUrl
-      : 'my-documents';
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const requestedSegment = searchParams.get('segment');
+  const formsSegment =
+    tabFromUrl === 'pending-signatures'
+      ? 'pending'
+      : tabFromUrl === 'signed-by-me'
+        ? 'signed'
+        : requestedSegment === 'pending' || requestedSegment === 'submissions' || requestedSegment === 'signed'
+          ? requestedSegment
+          : 'available';
+  const initialTab: TabValue =
+    visibility.showFormsLibrary &&
+    (tabFromUrl === 'forms' || tabFromUrl === 'pending-signatures' || tabFromUrl === 'signed-by-me')
+      ? 'forms'
+      : 'documents';
+  const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
+  const [documentScope, setDocumentScope] = useState<DocumentScope>(
+    tabFromUrl === 'shared' || searchParams.get('scope') === 'shared' ? 'shared' : 'mine'
+  );
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,8 +89,14 @@ function MyDocumentsForm() {
   const [selectedType, setSelectedType] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [captureQuery, setCaptureQuery] = useState('');
-  const [captureStats, setCaptureStats] = useState<{ active: number; completed: number; batches: number } | null>(null);
+  const [formsStats, setFormsStats] = useState<{
+    available: number;
+    pending: number;
+    drafts: number;
+    submitted: number;
+    signed: number;
+  } | null>(null);
+  const [formsPendingCount, setFormsPendingCount] = useState(0);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -90,42 +107,49 @@ function MyDocumentsForm() {
   // Stats
   const [stats, setStats] = useState({ total: 0, draft: 0, published: 0, archived: 0 });
 
-  // Pending signatures state
-  const [pendingForms, setPendingForms] = useState<FormDocument[]>([]);
-  const [pendingLoading, setPendingLoading] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
-  const pendingRequestRef = useRef(0);
-  // Signed by me state
-  const [signedForms, setSignedForms] = useState<FormDocument[]>([]);
-  const [signedLoading, setSignedLoading] = useState(false);
-  const [signedCount, setSignedCount] = useState(0);
-  const signedRequestRef = useRef(0);
   const [createFormOpen, setCreateFormOpen] = useState(false);
 
-  // Keep tab in sync with ?tab= for deep links (e.g. pending signatures)
+  // Keep the workspace in sync with deep links, mapping the old tab names onto the
+  // two-tab layout (documents + forms) and sending ?tab=capture to its own page.
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (
-      tab === 'pending-signatures' ||
-      tab === 'signed-by-me' ||
-      tab === 'shared' ||
-      tab === 'my-documents' ||
-      (tab === 'capture' && visibility.showContentCapture)
-    ) {
-      setActiveTab(tab);
-    } else if (tab === 'capture' && !visibility.showContentCapture) {
-      setActiveTab('my-documents');
+    if (tab === 'capture') {
+      router.replace('/capture');
+      return;
     }
-  }, [searchParams, visibility.showContentCapture]);
+    if (tab === 'pending-signatures' || tab === 'signed-by-me' || (tab === 'forms' && visibility.showFormsLibrary)) {
+      setActiveTab('forms');
+      return;
+    }
+    setActiveTab('documents');
+    setDocumentScope(tab === 'shared' || searchParams.get('scope') === 'shared' ? 'shared' : 'mine');
+  }, [searchParams, visibility.showFormsLibrary, router]);
 
   const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
+    const nextTab: TabValue = tab === 'forms' && visibility.showFormsLibrary ? 'forms' : 'documents';
+    setActiveTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
-    if (tab === 'my-documents') {
-      params.delete('tab');
-    } else {
-      params.set('tab', tab);
-    }
+    params.delete('segment');
+    if (nextTab === 'forms') params.set('tab', 'forms');
+    else params.delete('tab');
+    const qs = params.toString();
+    router.replace(qs ? `/dms?${qs}` : '/dms', { scroll: false });
+  };
+
+  const handleScopeChange = (scope: DocumentScope) => {
+    setDocumentScope(scope);
+    const params = new URLSearchParams(searchParams.toString());
+    if (scope === 'shared') params.set('scope', 'shared');
+    else params.delete('scope');
+    const qs = params.toString();
+    router.replace(qs ? `/dms?${qs}` : '/dms', { scroll: false });
+  };
+
+  const handleFormsSegmentChange = (segment: FormsSegment) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', 'forms');
+    if (segment === 'available') params.delete('segment');
+    else params.set('segment', segment);
     const qs = params.toString();
     router.replace(qs ? `/dms?${qs}` : '/dms', { scroll: false });
   };
@@ -151,7 +175,7 @@ function MyDocumentsForm() {
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, debouncedSearch, selectedStatus, selectedType, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [documentScope, debouncedSearch, selectedStatus, selectedType, dateFrom, dateTo, sortBy, sortOrder]);
 
   const clearFilters = () => {
     setSelectedStatus('');
@@ -170,20 +194,9 @@ function MyDocumentsForm() {
     return '-updated_at';
   }, [sortBy, sortOrder]);
 
-  useEffect(() => {
-    const onStats = (e: Event) => setCaptureStats((e as CustomEvent).detail);
-    window.addEventListener('capture:stats', onStats as EventListener);
-    return () => window.removeEventListener('capture:stats', onStats as EventListener);
-  }, []);
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('capture:search', { detail: captureQuery }));
-  }, [captureQuery]);
-
-  // Load documents based on scope
+  // Load documents for the active scope
   useEffect(() => {
     if (!currentUser?.id) return;
-    if (activeTab === 'capture' || activeTab === 'pending-signatures' || activeTab === 'signed-by-me') return;
 
     const requestId = ++documentsRequestRef.current;
     const loadDocuments = async () => {
@@ -206,11 +219,10 @@ function MyDocumentsForm() {
           statusIn: selectedStatus ? [selectedStatus] : undefined,
           documentTypeIn: selectedType ? [selectedType] : undefined,
         };
-        if (activeTab === 'my-documents') {
-          response = await queryDocumentsExtended({ ...common, authorId: currentUser.id });
-        } else if (activeTab === 'shared') {
-          response = await queryDocumentsExtended({ ...common, sharedWithMe: true });
-        }
+        response =
+          documentScope === 'shared'
+            ? await queryDocumentsExtended({ ...common, sharedWithMe: true })
+            : await queryDocumentsExtended({ ...common, authorId: currentUser.id });
 
         if (requestId !== documentsRequestRef.current) return;
         setDocuments(Array.isArray(response.results) ? response.results : []);
@@ -229,15 +241,15 @@ function MyDocumentsForm() {
     };
 
     loadDocuments();
-  }, [activeTab, currentUser?.id, debouncedSearch, selectedStatus, selectedType, dateFrom, dateTo, ordering, pagination.page, pagination.pageSize, refreshKey]);
+  }, [documentScope, currentUser?.id, debouncedSearch, selectedStatus, selectedType, dateFrom, dateTo, ordering, pagination.page, pagination.pageSize, refreshKey]);
 
-  // Load stats
+  // Load stats for the active scope
   useEffect(() => {
-    if (!currentUser?.id || activeTab !== 'my-documents') return;
+    if (!currentUser?.id || activeTab !== 'documents') return;
     const loadStats = async () => {
       const countFor = async (statusIn?: string[]) => {
         const r = await queryDocumentsExtended({
-          authorId: currentUser.id,
+          ...(documentScope === 'shared' ? { sharedWithMe: true } : { authorId: currentUser.id }),
           page: 1,
           pageSize: 1,
           statusIn,
@@ -254,93 +266,23 @@ function MyDocumentsForm() {
       setStats({ total, draft, published, archived });
     };
     loadStats();
-  }, [currentUser?.id, activeTab, debouncedSearch, refreshKey]);
+  }, [currentUser?.id, activeTab, documentScope, debouncedSearch, refreshKey]);
 
-  // Prefetch badge counts for signature tabs
+  // Badge the Forms tab with work waiting on this user
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || !visibility.showFormsLibrary) return;
     let cancelled = false;
-    const loadCounts = async () => {
-      try {
-        const [pending, signed] = await Promise.all([
-          listFormDocuments({ page: 1, pageSize: 1, pendingMySignature: true }),
-          listFormDocuments({ page: 1, pageSize: 1, signedByMe: true }),
-        ]);
-        if (cancelled) return;
-        setPendingCount(pending.count);
-        setSignedCount(signed.count);
-      } catch (err: unknown) {
-        if (!cancelled) {
-          logError('Failed to load signature tab counts', err);
-        }
-      }
-    };
-    void loadCounts();
+    void listFormDocuments({ page: 1, pageSize: 1, pendingMySignature: true })
+      .then((result) => {
+        if (!cancelled) setFormsPendingCount(result.count);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) logError('Failed to load pending signature count', err);
+      });
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id, refreshKey]);
-
-  // Load pending signatures
-  useEffect(() => {
-    if (activeTab !== 'pending-signatures' || !currentUser?.id) return;
-
-    const requestId = ++pendingRequestRef.current;
-    const loadPending = async () => {
-      setPendingLoading(true);
-      try {
-        // Single backend filter: forms where this user still has a pending signature.
-        const matched = await fetchAllPaginatedResults<FormDocument>(
-          (page, ps) => listFormDocuments({ page, pageSize: ps, pendingMySignature: true }),
-        );
-
-        if (requestId !== pendingRequestRef.current) return;
-
-        setPendingForms(matched);
-        setPendingCount(matched.length);
-      } catch (err: unknown) {
-        if (requestId === pendingRequestRef.current) {
-          logError('Failed to load pending signatures', err);
-          setPendingForms([]);
-          setPendingCount(0);
-        }
-      } finally {
-        if (requestId === pendingRequestRef.current) setPendingLoading(false);
-      }
-    };
-    loadPending();
-  }, [activeTab, currentUser?.id, refreshKey]);
-
-  // Load forms the current user has already signed
-  useEffect(() => {
-    if (activeTab !== 'signed-by-me' || !currentUser?.id) return;
-
-    const requestId = ++signedRequestRef.current;
-    const loadSigned = async () => {
-      setSignedLoading(true);
-      try {
-        const matched = await fetchAllPaginatedResults<FormDocument>(
-          (page, ps) => listFormDocuments({ page, pageSize: ps, signedByMe: true }),
-        );
-
-        if (requestId !== signedRequestRef.current) return;
-
-        setSignedForms(matched);
-        setSignedCount(matched.length);
-      } catch (err: unknown) {
-        if (requestId === signedRequestRef.current) {
-          logError('Failed to load signed forms', err);
-          setSignedForms([]);
-          setSignedCount(0);
-        }
-      } finally {
-        if (requestId === signedRequestRef.current) setSignedLoading(false);
-      }
-    };
-    loadSigned();
-  }, [activeTab, currentUser?.id, refreshKey]);
-
-  const pendingPagination = usePagination({ initialPage: 1, totalCount: pendingCount });
+  }, [currentUser?.id, visibility.showFormsLibrary, refreshKey]);
 
   return (
     <>
@@ -353,24 +295,21 @@ function MyDocumentsForm() {
         </QueuePageShell>
       ) : (
         <QueuePageShell
-          title="My Documents"
+          title={activeTab === 'forms' ? 'Forms' : 'Documents'}
           subtitle={
-            activeTab === 'capture'
-              ? 'Scan, batch upload, and track OCR processing jobs'
-              : 'Create, manage, and find your documents'
+            activeTab === 'forms'
+              ? 'Start a form, sign what is waiting on you, and revisit your submissions.'
+              : documentScope === 'shared'
+                ? 'Documents colleagues have shared with you.'
+                : 'Create, manage, and find your documents.'
           }
           actions={(
             <>
-              {activeTab === 'capture' ? (
-                <>
-                  <Button size="compact" onClick={() => window.dispatchEvent(new CustomEvent('capture:scan'))}>
-                    <Scan className="h-4 w-4" /> Scan document
-                  </Button>
-                  <Button variant="secondary" size="compact" onClick={() => window.dispatchEvent(new CustomEvent('capture:batch'))}>
-                    <Upload className="h-4 w-4" /> Batch upload
-                  </Button>
-                </>
-              ) : (
+              {visibility.showContentCapture ? (
+                <Button variant="outline" size="compact" onClick={() => router.push('/capture')}>
+                  <Scan className="h-4 w-4" /> Capture jobs
+                </Button>
+              ) : null}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="compact">
@@ -388,19 +327,22 @@ function MyDocumentsForm() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              )}
               <ContextualHelp
-                title="Managing your documents"
-                description="Switch scope, then narrow the list with search and filters."
+                title={activeTab === 'forms' ? 'Working with forms' : 'Managing your documents'}
+                description={
+                  activeTab === 'forms'
+                    ? 'Pick a form to start, then track signatures and submissions.'
+                    : 'Switch scope, then narrow the list with search and filters.'
+                }
                 steps={
-                  visibility.showContentCapture
+                  activeTab === 'forms'
                     ? [
-                        'Use tabs for My Documents, Shared, signatures, or Capture (scan/OCR jobs).',
-                        'Search by title, reference, description, file text, or tags.',
-                        'Use Status/Type filters to find items faster.',
+                        'Available forms can be started as a draft at any time.',
+                        'Pending my signature shows forms waiting on you.',
+                        'My submissions holds your drafts and submitted forms.',
                       ]
                     : [
-                        'Use tabs to switch between My Documents, Shared, Pending Signatures, and Signed by Me.',
+                        'Switch between Mine and Shared with me.',
                         'Search by title, reference, description, file text, or tags.',
                         'Use Status/Type filters to find items faster.',
                       ]
@@ -409,15 +351,16 @@ function MyDocumentsForm() {
             </>
           )}
           stats={
-            activeTab === 'capture' && captureStats ? (
+            activeTab === 'forms' ? (
               <StatStrip
                 items={[
-                  { key: 'active', label: 'Active jobs', value: captureStats.active },
-                  { key: 'completed', label: 'Completed', value: captureStats.completed },
-                  { key: 'batches', label: 'Batch uploads', value: captureStats.batches },
+                  { key: 'available', label: 'Available forms', value: formsStats?.available ?? '—' },
+                  { key: 'pending', label: 'Pending signature', value: formsStats?.pending ?? '—' },
+                  { key: 'drafts', label: 'My drafts', value: formsStats?.drafts ?? '—' },
+                  { key: 'signed', label: 'Signed', value: formsStats?.signed ?? '—' },
                 ]}
               />
-            ) : activeTab === 'capture' ? null : (
+            ) : (
               <StatStrip
                 items={[
                   { key: 'total', label: 'Total', value: stats.total },
@@ -429,24 +372,33 @@ function MyDocumentsForm() {
             )
           }
         >
-        {activeTab === 'capture' ? (
-          <div className="rounded-xl bg-muted/30 p-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-[200px] flex-1 max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search capture jobs"
-                  value={captureQuery}
-                  onChange={(e) => setCaptureQuery(e.target.value)}
-                  className="h-8 pl-8 text-xs"
-                  aria-label="Search capture jobs"
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
+        {activeTab === 'forms' ? null : (
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex items-center gap-0.5 rounded-lg border border-border/60 bg-background/60 p-0.5"
+              role="group"
+              aria-label="Document scope"
+            >
+              <Button
+                size="compact"
+                variant={documentScope === 'mine' ? 'default' : 'ghost'}
+                className="h-7"
+                aria-pressed={documentScope === 'mine'}
+                onClick={() => handleScopeChange('mine')}
+              >
+                Mine
+              </Button>
+              <Button
+                size="compact"
+                variant={documentScope === 'shared' ? 'default' : 'ghost'}
+                className="h-7"
+                aria-pressed={documentScope === 'shared'}
+                onClick={() => handleScopeChange('shared')}
+              >
+                Shared with me
+              </Button>
+            </div>
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -505,51 +457,40 @@ function MyDocumentsForm() {
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
-            <TabsTrigger value="my-documents" className="text-xs px-2.5 py-1">My Documents</TabsTrigger>
-            <TabsTrigger value="shared" className="text-xs px-2.5 py-1">Shared with Me</TabsTrigger>
-            <TabsTrigger value="pending-signatures" className="text-xs px-2.5 py-1 relative">
-              Pending Signatures
-              {pendingCount > 0 && (
-                <Badge variant="destructive" className="ml-1.5 h-4 min-w-[1rem] px-1 text-[10px]">
-                  {pendingCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="signed-by-me" className="text-xs px-2.5 py-1 relative">
-              Signed by Me
-              {signedCount > 0 && (
-                <Badge variant="secondary" className="ml-1.5 h-4 min-w-[1rem] px-1 text-[10px]">
-                  {signedCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            {visibility.showContentCapture ? (
-              <TabsTrigger value="capture" className="text-xs px-2.5 py-1">
-                <Scan className="mr-1 h-3.5 w-3.5" />
-                Capture
+            <TabsTrigger value="documents" className="text-xs px-2.5 py-1">Documents</TabsTrigger>
+            {visibility.showFormsLibrary ? (
+              <TabsTrigger value="forms" className="text-xs px-2.5 py-1 gap-1.5">
+                Forms
+                {formsPendingCount > 0 && (
+                  <Badge variant="destructive" className="h-4 min-w-[1rem] px-1 text-[10px]">
+                    {formsPendingCount}
+                  </Badge>
+                )}
               </TabsTrigger>
             ) : null}
           </TabsList>
-          <TabsContent value="my-documents" className="mt-6">
-            <DocumentList documents={documents} loading={loading} error={error} emptyMessage="You haven't created any documents yet." />
+          <TabsContent value="documents" className="mt-6">
+            <DocumentList
+              documents={documents}
+              loading={loading}
+              error={error}
+              emptyMessage={
+                documentScope === 'shared'
+                  ? 'No documents have been shared with you.'
+                  : "You haven't created any documents yet."
+              }
+            />
           </TabsContent>
-          <TabsContent value="shared" className="mt-6">
-            <DocumentList documents={documents} loading={loading} error={error} emptyMessage="No documents have been shared with you." />
+          <TabsContent value="forms" className="mt-6">
+            <AuditFormsLibrary
+              segment={formsSegment}
+              onSegmentChange={handleFormsSegmentChange}
+              onStatsChange={setFormsStats}
+            />
           </TabsContent>
-          <TabsContent value="pending-signatures" className="mt-6">
-            <PendingSignaturesList forms={pendingForms} loading={pendingLoading} />
-          </TabsContent>
-          <TabsContent value="signed-by-me" className="mt-6">
-            <SignedByMeList forms={signedForms} loading={signedLoading} />
-          </TabsContent>
-          {visibility.showContentCapture ? (
-            <TabsContent value="capture" className="mt-6">
-              <CaptureJobsPanel />
-            </TabsContent>
-          ) : null}
         </Tabs>
 
-        {count > 0 && activeTab !== 'capture' && activeTab !== 'pending-signatures' && activeTab !== 'signed-by-me' ? (
+        {count > 0 && activeTab === 'documents' ? (
           <PaginationControls
             pagination={pagination}
             showPageSizeSelector={true}
@@ -822,129 +763,6 @@ function DocumentCard({ doc, showRoleBadge }: { doc: DocumentRecord; showRoleBad
           <span className="truncate">Created: {formatDateShort(doc.createdAt)}</span>
         </span>
       </div>
-    </ListRowCard>
-  );
-}
-
-function PendingSignaturesList({ forms, loading }: { forms: FormDocument[]; loading: boolean }) {
-  if (loading) {
-    return <LoadingState message="Loading pending signatures…" />;
-  }
-
-  if (forms.length === 0) {
-    return (
-      <EmptyState
-        icon={<FileCheck className={registryQueueEmptyIconClass} />}
-        title="All caught up"
-        message="No documents require your signature."
-        variant="dashed"
-      />
-    );
-  }
-
-  return (
-    <div className={correspondenceQueueListStackClass}>
-      {forms.map((form) => (
-        <FormSignatureRow
-          key={form.id}
-          form={form}
-          tone="pending"
-          badge="Action required"
-          meta="Awaiting your signature"
-        />
-      ))}
-    </div>
-  );
-}
-
-function SignedByMeList({ forms, loading }: { forms: FormDocument[]; loading: boolean }) {
-  if (loading) {
-    return <LoadingState message="Loading forms you signed…" />;
-  }
-
-  if (forms.length === 0) {
-    return (
-      <EmptyState
-        icon={<CheckCircle2 className={registryQueueEmptyIconClass} />}
-        title="No signed forms yet"
-        message="Forms you sign will appear here after you complete your signature step."
-        variant="dashed"
-      />
-    );
-  }
-
-  return (
-    <div className={correspondenceQueueListStackClass}>
-      {forms.map((form) => (
-        <FormSignatureRow
-          key={form.id}
-          form={form}
-          tone="signed"
-          badge={form.status === 'completed' ? 'Completed' : 'Signed by you'}
-          meta={form.status === 'completed' ? 'Workflow complete' : 'Your signature recorded'}
-        />
-      ))}
-    </div>
-  );
-}
-
-function FormSignatureRow({
-  form,
-  tone,
-  badge,
-  meta,
-}: {
-  form: FormDocument;
-  tone: 'pending' | 'signed';
-  badge: string;
-  meta: string;
-}) {
-  const leadingClass =
-    tone === 'pending'
-      ? 'bg-amber-500/10'
-      : 'bg-emerald-500/10';
-  const iconClass =
-    tone === 'pending'
-      ? 'text-amber-600 dark:text-amber-400'
-      : 'text-emerald-600 dark:text-emerald-400';
-  const badgeClass =
-    tone === 'pending'
-      ? 'bg-amber-500'
-      : 'bg-emerald-600';
-  const Icon = tone === 'pending' ? FileCheck : CheckCircle2;
-
-  return (
-    <ListRowCard
-      density="compact"
-      href={`/forms/${form.document.id}`}
-      leading={(
-        <div className={cn(correspondenceQueueLeadingBoxClass, leadingClass)}>
-          <Icon className={cn(correspondenceQueueLeadingIconClass, iconClass)} />
-        </div>
-      )}
-    >
-      <h4 className={correspondenceQueueSubjectClass}>{form.document.title}</h4>
-      <p className="text-xs text-muted-foreground truncate mt-0.5">
-        {form.template?.name || 'Form'}
-      </p>
-      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <Badge variant="default" className={cn(correspondenceQueueBadgeClass, badgeClass)}>
-          {badge}
-        </Badge>
-        <span className={correspondenceQueueDateClass}>
-          Updated {formatDateTime(form.updated_at)}
-        </span>
-      </div>
-      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
-        <span className={correspondenceQueueMetaItemClass}>
-          <FileText className={correspondenceQueueMetaIconClass} />
-          <span className="truncate">Form ID: {form.id.slice(0, 8).toUpperCase()}</span>
-        </span>
-        <span className={correspondenceQueueMetaItemClass}>
-          <Users className={correspondenceQueueMetaIconClass} />
-          <span>{meta}</span>
-        </span>
-      </div>
-    </ListRowCard>
+        </ListRowCard>
   );
 }

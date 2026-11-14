@@ -15,7 +15,6 @@ export const REGISTER_CONSTANTS = {
 export const FORM_STEPS = [
   { id: 'basics' as const, label: 'Basic Info' },
   { id: 'sender' as const, label: 'Parties' },
-  { id: 'routing' as const, label: 'Routing' },
   { id: 'documents' as const, label: 'Documents' },
 ] as const;
 

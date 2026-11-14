@@ -43,21 +43,60 @@ def find_retention_schedule(correspondence: Correspondence) -> Optional[Retentio
         | Q(record_type=RetentionSchedule.RecordType.ALL)
     )
 
-    if correspondence.division_id:
-        match = qs.filter(division_id=correspondence.division_id).first()
+    division_id = correspondence.division_id
+    if not division_id and correspondence.department_id:
+        division_id = correspondence.department.division_id
+    directorate_id = (
+        correspondence.division.directorate_id
+        if correspondence.division_id and correspondence.division
+        else None
+    )
+    if not directorate_id and division_id:
+        from organization.models import Division
+
+        directorate_id = Division.objects.filter(pk=division_id).values_list(
+            "directorate_id", flat=True
+        ).first()
+    if not division_id and correspondence.owning_office_id:
+        division_id = correspondence.owning_office.division_id
+        directorate_id = directorate_id or correspondence.owning_office.directorate_id
+        if not directorate_id and correspondence.owning_office.department_id:
+            directorate_id = correspondence.owning_office.department.division.directorate_id
+
+    department_id = correspondence.department_id
+    if not department_id and correspondence.owning_office_id:
+        department_id = correspondence.owning_office.department_id
+    level_scope = {
+        Correspondence.ArchiveLevel.DEPARTMENT: ("department_id", department_id),
+        Correspondence.ArchiveLevel.DIVISION: ("division_id", division_id),
+        Correspondence.ArchiveLevel.DIRECTORATE: ("directorate_id", directorate_id),
+    }.get(correspondence.archive_level)
+    if level_scope and level_scope[1]:
+        field, unit_id = level_scope
+        match = qs.filter(archive_level=correspondence.archive_level, **{field: unit_id}).first()
         if match:
             return match
-        if correspondence.division and correspondence.division.directorate_id:
-            match = qs.filter(directorate_id=correspondence.division.directorate_id).first()
-            if match:
-                return match
 
-    if correspondence.archive_level:
-        match = qs.filter(archive_level=correspondence.archive_level).first()
+    # Keep legacy scoped schedules as fallback when no filing-level-specific
+    # schedule exists; exact filing-level matches always take precedence.
+    if department_id:
+        match = qs.filter(department_id=department_id).first()
+        if match:
+            return match
+    if division_id:
+        match = qs.filter(division_id=division_id).first()
+        if match:
+            return match
+    if directorate_id:
+        match = qs.filter(directorate_id=directorate_id).first()
         if match:
             return match
 
-    return qs.filter(division__isnull=True, directorate__isnull=True, archive_level="").first()
+    return qs.filter(
+        division__isnull=True,
+        directorate__isnull=True,
+        archive_level="",
+    ).first()
 
 
 def calculate_disposal_due(correspondence: Correspondence) -> Optional[datetime]:

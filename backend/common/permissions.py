@@ -23,6 +23,20 @@ class IsSystemAdminRole(permissions.BasePermission):
         return user_role in self.ADMIN_ROLES
 
 
+class CanAccessAdministration(permissions.BasePermission):
+    """Allow only users whose role grants administration access."""
+
+    message = "You do not have access to administration views."
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        from organization.permission_utils import user_has_permission
+
+        return user_has_permission(request.user, "can_access_administration")
+
+
 class IsExecutiveGrade(permissions.BasePermission):
     """Allow read access to all authenticated users, but write access only to
     users whose ``grade_level`` is MDCS, EDCS, or MSS1.

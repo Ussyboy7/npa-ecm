@@ -19,7 +19,7 @@ import {
   Send,
 } from 'lucide-react';
 import type { Minute } from '@/lib/npa-structure';
-import { formatDateTime } from '@/lib/correspondence-helpers';
+import { formatRoutingDateTime } from '@/lib/datetime';
 import { SealBadge } from '@/components/seals/SealBadge';
 import { logWarn } from '@/lib/client-logger';
 import { cn } from '@/lib/utils';
@@ -42,9 +42,18 @@ interface MinuteThreadPanelProps {
   scrollable?: boolean;
 }
 
-function isTopLevelParallelBranch(minute: Minute, minutesById: Map<string, Minute>): boolean {
+function isTopLevelParallelBranch(
+  minute: Minute,
+  minutesById: Map<string, Minute>,
+  hasExplicitAssignments: boolean,
+): boolean {
   if (!minute.isParallelBranch) return false;
   if (!minute.toUserId && !minute.toOfficeId) return false;
+  if (minute.assignmentOutcome) return true;
+  // In an Assign separately group, only the original branches carry an
+  // expected outcome. Later routing within a branch must not look like a
+  // new assignment header.
+  if (hasExplicitAssignments) return false;
   if (!minute.parentMinuteId) return true;
   const parent = minutesById.get(minute.parentMinuteId);
   return !parent?.isParallelBranch;
@@ -53,8 +62,14 @@ function isTopLevelParallelBranch(minute: Minute, minutesById: Map<string, Minut
 function branchHeaderLabel(minute: Minute): string {
   if (minute.toUserName) return minute.toUserName;
   if (minute.toOfficeName) return minute.toOfficeName;
-  return 'Parallel branch';
+  return 'Assignment';
 }
+
+const ASSIGNMENT_OUTCOME_LABELS: Record<'respond' | 'treat' | 'onward', string> = {
+  respond: 'Respond',
+  treat: 'Treat document',
+  onward: 'Minute onward',
+};
 
 export const MinuteThreadPanel = ({
   minutes,
@@ -90,6 +105,10 @@ export const MinuteThreadPanel = ({
     () => new Map(minutes.map((m) => [m.id, m])),
     [minutes],
   );
+  const hasExplicitAssignments = useMemo(
+    () => minutes.some((minute) => Boolean(minute.assignmentOutcome)),
+    [minutes],
+  );
 
   return (
     <main className={panelClass}>
@@ -113,16 +132,28 @@ export const MinuteThreadPanel = ({
               </div>
               <p className={corrType.itemTitle}>No minutes yet</p>
               <p className="mt-1 text-xs text-muted-foreground max-w-[220px] mx-auto leading-relaxed">
-                Review the document, then use Minute to route this correspondence.
+                Review the document, then use the routing actions to send it on.
               </p>
             </div>
           ) : (
             <ol className="relative space-y-0">
               {minutes.map((minuteItem, idx) => {
-                const showBranchHeader = isTopLevelParallelBranch(minuteItem, minutesById);
+                const showBranchHeader = isTopLevelParallelBranch(
+                  minuteItem,
+                  minutesById,
+                  hasExplicitAssignments,
+                );
                 const user = lookupUser(minuteItem.userId);
                 const ActionIcon = getActionIcon(minuteItem.actionType);
                 const isDownward = minuteItem.direction === 'downward';
+                const hasDownstreamMinute = minutes.some(
+                  (candidate) =>
+                    candidate.correspondenceId === minuteItem.correspondenceId &&
+                    (new Date(candidate.timestamp).getTime() > new Date(minuteItem.timestamp).getTime() ||
+                      (new Date(candidate.timestamp).getTime() === new Date(minuteItem.timestamp).getTime() &&
+                        candidate.stepNumber > minuteItem.stepNumber)),
+                );
+                const canEditMinute = Boolean(minuteItem.canBeEdited && !hasDownstreamMinute);
                 const isOwn = String(minuteItem.userId) === String(activeUserId);
                 const displayName = user?.name ?? minuteItem.userName ?? 'Unknown user';
                 let systemRole = user?.systemRole ?? minuteItem.userSystemRole ?? 'Team Member';
@@ -136,7 +167,7 @@ export const MinuteThreadPanel = ({
                     ? `${minuteItem.fromOfficeName} → ${minuteItem.toUserName}`
                     : minuteItem.toOfficeName || (shouldShowRole ? systemRole : '');
                 const hasActions =
-                  (minuteItem.canBeEdited && isOwn) ||
+                  (canEditMinute && isOwn) ||
                   (minuteItem.canBeRecalled && !isMinuteRecalled(minuteItem) && isOwn) ||
                   (!minuteItem.isAdditional &&
                     !isCompleted &&
@@ -149,11 +180,24 @@ export const MinuteThreadPanel = ({
                       <div className="mb-2 ml-11 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5">
                         <Users className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span className={cn(corrType.caption, 'font-medium text-primary')}>
-                          Branch → {branchHeaderLabel(minuteItem)}
+                          Assignment → {branchHeaderLabel(minuteItem)}
                         </span>
+                        {minuteItem.assignmentOutcome && (
+                          <Badge variant="secondary" className="text-[10px] h-5">
+                            Expects: {ASSIGNMENT_OUTCOME_LABELS[minuteItem.assignmentOutcome]}
+                          </Badge>
+                        )}
                         {minuteItem.mergeStrategy && (
                           <Badge variant="outline" className="text-[10px] h-5 ml-auto">
-                            {minuteItem.mergeStrategy === 'all' ? 'Wait for all' : minuteItem.mergeStrategy}
+                            {minuteItem.mergeStrategy === 'all'
+                              ? 'Consolidated'
+                              : minuteItem.mergeStrategy === 'independent'
+                                ? 'Independent'
+                                : minuteItem.mergeStrategy === 'any'
+                                  ? 'First response'
+                                  : minuteItem.mergeStrategy === 'majority'
+                                    ? 'Majority'
+                                    : minuteItem.mergeStrategy}
                           </Badge>
                         )}
                       </div>
@@ -201,24 +245,21 @@ export const MinuteThreadPanel = ({
                       </Avatar>
                     </div>
 
-                    {/* Content — div (not button) so Edit/Recall/Add Note buttons are not nested */}
+                    {/* Content — the summary is its own button so the actions
+                        below are siblings, not nested inside a button. */}
                     <div
-                      role="button"
-                      tabIndex={0}
                       className={cn(
-                        'group mb-4 flex-1 min-w-0 rounded-2xl border px-3.5 py-3 text-left transition-colors cursor-pointer',
+                        'group mb-4 flex-1 min-w-0 rounded-2xl border px-1 py-1 text-left transition-colors',
                         'border-transparent bg-transparent hover:bg-muted/40',
                         isOwn && 'bg-muted/25 hover:bg-muted/45',
                         minuteItem.isRecalled && 'opacity-70',
                       )}
-                      onClick={() => onMinuteClick(minuteItem)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onMinuteClick(minuteItem);
-                        }
-                      }}
                     >
+                      <button
+                        type="button"
+                        className="block w-full rounded-xl px-2.5 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => onMinuteClick(minuteItem)}
+                      >
                       <div className="flex items-start justify-between gap-2 min-w-0">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -281,7 +322,7 @@ export const MinuteThreadPanel = ({
                       </p>
 
                       <div className={cn('mt-2 flex items-center gap-x-2 gap-y-1 flex-wrap', corrType.caption)}>
-                        <span>{formatDateTime(minuteItem.timestamp)}</span>
+                        <span>{formatRoutingDateTime(minuteItem.timestamp)}</span>
                         <span className="text-muted-foreground/40">·</span>
                         <span>Step {minuteItem.stepNumber}</span>
                         {minuteItem.dispatchedAt && !minuteItem.isRecalled && (
@@ -311,11 +352,12 @@ export const MinuteThreadPanel = ({
                           </>
                         )}
                       </div>
+                      </button>
 
                       {minuteItem.signature && (
                         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                           <ImageIcon className="h-3 w-3" />
-                          <span>Signed {formatDateTime(minuteItem.signature.appliedAt)}</span>
+                          <span>Signed {formatRoutingDateTime(minuteItem.signature.appliedAt)}</span>
                         </div>
                       )}
                       {minuteItem.sealData ? (
@@ -350,7 +392,7 @@ export const MinuteThreadPanel = ({
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => e.stopPropagation()}
                         >
-                          {minuteItem.canBeEdited && isOwn && (
+                          {canEditMinute && isOwn && (
                             <>
                               <Button
                                 variant="ghost"

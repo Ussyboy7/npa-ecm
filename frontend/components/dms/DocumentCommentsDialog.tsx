@@ -1,19 +1,28 @@
 "use client";
 
-import { logError } from '@/lib/client-logger';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { logError } from "@/lib/client-logger";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   addDocumentComment,
   deleteDocumentComment,
@@ -21,13 +30,14 @@ import {
   resolveDocumentComment,
   type DocumentComment,
   type DocumentVersion,
-} from '@/lib/api/dms';
-import { type User } from '@/lib/npa-structure';
-import { useOrganization } from '@/contexts/OrganizationContext';
+} from "@/lib/api/dms";
+import { type User } from "@/lib/npa-structure";
 import { useOrgUsers } from "@/hooks/use-org-users";
-import { formatDateTime } from '@/lib/correspondence-helpers';
+import { formatDateTime } from "@/lib/correspondence-helpers";
+import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/components/ui/sonner";
-import { CheckCircle2, MessageCircle, Undo2, XCircle, Reply } from 'lucide-react';
+import { CheckCircle2, Loader2, MessageSquare, Reply, Send, Trash2, Undo2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DocumentCommentsDialogProps {
   open: boolean;
@@ -38,6 +48,16 @@ interface DocumentCommentsDialogProps {
   onCommentsUpdated?: (comments: DocumentComment[]) => void;
 }
 
+type Scope = "all" | "version";
+
+function relativeTime(iso: string): string {
+  try {
+    return formatDistanceToNow(new Date(iso), { addSuffix: true });
+  } catch {
+    return "";
+  }
+}
+
 export const DocumentCommentsDialog = ({
   open,
   onOpenChange,
@@ -46,384 +66,412 @@ export const DocumentCommentsDialog = ({
   currentUser,
   onCommentsUpdated,
 }: DocumentCommentsDialogProps) => {
-  const [comment, setComment] = useState('');
   const [comments, setComments] = useState<DocumentComment[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draft, setDraft] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState('');
-  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const {} = useOrganization();
+  const [replyText, setReplyText] = useState("");
+  const [scope, setScope] = useState<Scope>("all");
+  const [commentToDelete, setCommentToDelete] = useState<DocumentComment | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
   const { users } = useOrgUsers();
 
   const userLookup = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
-  // Load comments when dialog opens
+  const initials = useCallback(
+    (userId: string) => {
+      const name = userLookup.get(userId)?.name;
+      if (!name) return "?";
+      return name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? "")
+        .join("");
+    },
+    [userLookup],
+  );
+
+  // Always load the whole document so the scope filter can't hide a thread.
   useEffect(() => {
     if (!open) return;
+    let ignore = false;
 
-    const loadComments = async () => {
+    const load = async () => {
+      setIsLoading(true);
       try {
-        const results = await getDocumentComments(documentId, version?.id ?? null);
-        const ordered = [...results].sort(
-          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
-        setComments(ordered);
+        const results = await getDocumentComments(documentId);
+        if (!ignore) {
+          setComments(
+            [...results].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+            ),
+          );
+        }
       } catch (error: unknown) {
-        logError('Failed to load document comments', error);
-        setComments([]);
+        logError("Failed to load document comments", error);
+        if (!ignore) setComments([]);
+      } finally {
+        if (!ignore) setIsLoading(false);
       }
     };
 
-    void loadComments();
-  }, [open, documentId, version?.id]);
+    void load();
+    return () => {
+      ignore = true;
+    };
+  }, [open, documentId]);
 
-  // Sync comments to parent component after state updates
-  // Use a ref to track if this is the initial load to avoid calling on mount
-  const isInitialLoad = useRef(true);
-  
-  useEffect(() => {
-    if (!open) {
-      isInitialLoad.current = true;
-      return;
-    }
-    
-    // Skip callback on initial load (comments are loaded separately)
-    if (isInitialLoad.current) {
-      isInitialLoad.current = false;
-      return;
-    }
-    
-    // Call callback after state updates (not during render)
-    if (onCommentsUpdated) {
-      onCommentsUpdated(comments);
-    }
-  }, [comments, onCommentsUpdated, open]);
+  const visible = useMemo(
+    () =>
+      scope === "version" && version
+        ? comments.filter((comment) => comment.versionId === version.id)
+        : comments,
+    [comments, scope, version],
+  );
 
-  const resolvedCount = useMemo(() => comments.filter((item) => item.resolved).length, [comments]);
-
-  // Organize comments into threads (top-level comments with their replies)
-  const commentThreads = useMemo(() => {
-    const topLevel = comments.filter((c) => !c.parentId);
+  const threads = useMemo(() => {
+    const topLevel = visible.filter((comment) => !comment.parentId);
     return topLevel.map((parent) => ({
       parent,
-      replies: comments.filter((c) => c.parentId === parent.id),
+      replies: visible.filter((comment) => comment.parentId === parent.id),
     }));
-  }, [comments]);
+  }, [visible]);
 
-  const handleAddComment = async (parentId?: string | null) => {
-    if (!currentUser) {
-      toast.error('Select a user before adding comments.');
-      return;
-    }
-    
-    // Ensure parentId is actually a string or null/undefined, not an event object
-    const actualParentId = typeof parentId === 'string' ? parentId : (parentId === null ? null : undefined);
-    
-    // Get the value directly from the textarea ref as a fallback, or from state
-    const textareaRef = actualParentId ? replyTextareaRef : commentTextareaRef;
-    const stateValue = actualParentId ? replyText : comment;
-    const directValue = textareaRef.current?.value || '';
-    
-    // Use direct value from textarea if state is empty (handles race conditions)
-    const textToSubmit = stateValue || directValue;
-    
-    // Check if textToSubmit exists and has content after trimming
-    if (!textToSubmit || typeof textToSubmit !== 'string') {
-      toast.error('Comment cannot be empty.');
-      return;
-    }
-    
-    const trimmedText = textToSubmit.trim();
-    if (!trimmedText || trimmedText.length === 0) {
-      toast.error('Comment cannot be empty.');
-      return;
-    }
-    
-    setIsSubmitting(true);
-    try {
-      const newComment = await addDocumentComment({
-        authorId: currentUser.id,
-        content: trimmedText,
-        documentId,
-        versionId: version?.id ?? null,
-        parentId: actualParentId ?? null,
-      });
-      setComments((prev) => {
-        return [...prev, newComment];
-      });
-      if (actualParentId) {
-        setReplyText('');
-        setReplyingTo(null);
-      } else {
-        setComment('');
+  const openCount = visible.filter((comment) => !comment.resolved).length;
+  const versionCount = version
+    ? comments.filter((comment) => comment.versionId === version.id).length
+    : 0;
+
+  const publish = useCallback(
+    (next: DocumentComment[]) => {
+      setComments(next);
+      onCommentsUpdated?.(next);
+    },
+    [onCommentsUpdated],
+  );
+
+  const submitComment = useCallback(
+    async (parentId?: string) => {
+      if (!currentUser) {
+        toast.error("Select a user before adding comments.");
+        return;
       }
-      toast.success(actualParentId ? 'Reply added' : 'Comment added');
+      const text = (parentId ? replyText : draft).trim();
+      if (!text) return;
+
+      setIsSubmitting(true);
+      try {
+        // Comments are document-level unless the reader narrowed to one
+        // version, so "All versions" really is the whole conversation.
+        const created = await addDocumentComment({
+          authorId: currentUser.id,
+          content: text,
+          documentId,
+          versionId: scope === "version" ? version?.id ?? null : null,
+          parentId: parentId ?? null,
+        });
+        publish([...comments, created]);
+        if (parentId) {
+          setReplyText("");
+          setReplyingTo(null);
+        } else {
+          setDraft("");
+        }
+        toast.success(parentId ? "Reply added" : "Comment added");
+      } catch (error: unknown) {
+        logError("Failed to add comment", error);
+        toast.error("Failed to add comment");
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [comments, currentUser, documentId, draft, publish, replyText, scope, version?.id],
+  );
+
+  const toggleResolved = async (comment: DocumentComment, resolved: boolean) => {
+    try {
+      const updated = await resolveDocumentComment(comment.id, resolved);
+      if (!updated) return;
+      publish(comments.map((item) => (item.id === comment.id ? updated : item)));
+      toast.success(resolved ? "Comment resolved" : "Comment re-opened");
     } catch (error: unknown) {
-      logError('Error adding comment:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add comment. Please try again.';
-      toast.error(`Failed to add comment: ${errorMessage}`);
-      logError('Failed to add comment', error);
+      logError("Failed to toggle comment resolution", error);
+      toast.error("Unable to update comment status");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!commentToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteDocumentComment(commentToDelete.id);
+      publish(
+        comments.filter(
+          (item) => item.id !== commentToDelete.id && item.parentId !== commentToDelete.id,
+        ),
+      );
+      toast.success("Comment removed");
+      setCommentToDelete(null);
+    } catch (error: unknown) {
+      logError("Failed to delete comment", error);
+      toast.error("Unable to remove comment");
     } finally {
-      setIsSubmitting(false);
+      setIsDeleting(false);
     }
   };
 
-  const handleStartReply = (commentId: string) => {
-    setReplyingTo(commentId);
-    setReplyText('');
-  };
-
-  const handleCancelReply = () => {
-    setReplyingTo(null);
-    setReplyText('');
-  };
-
-  const handleResolveToggle = async (commentId: string, resolved: boolean) => {
-    try {
-      const updated = await resolveDocumentComment(commentId, resolved);
-    if (!updated) return;
-    setComments((prev) => {
-      return prev.map((item) => (item.id as string === commentId ? updated : item));
-    });
-    toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
-      } catch (error: unknown) {
-      logError('Failed to toggle comment resolution', error);
-      toast.error('Unable to update comment status');
+  const handleComposerKey = (event: React.KeyboardEvent<HTMLTextAreaElement>, parentId?: string) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void submitComment(parentId);
     }
   };
 
-  const handleDelete = async (commentId: string) => {
-    if (!confirm('Are you sure you want to delete this comment? This will also delete all replies.')) {
-      return;
-    }
-    try {
-      await deleteDocumentComment(commentId);
-      // Remove the comment and all its replies
-      setComments((prev) => {
-        return prev.filter((item) => item.id as string !== commentId && item.parentId !== commentId);
-      });
-      toast.success('Comment and replies removed');
-      } catch (error: unknown) {
-      logError('Failed to delete comment', error);
-      toast.error('Unable to delete comment');
-    }
-  };
+  const renderComment = (comment: DocumentComment, isReply: boolean) => {
+    const author = userLookup.get(comment.authorId);
+    return (
+      <div
+        className={cn(
+          "space-y-1.5 rounded-xl px-3 py-2.5",
+          isReply ? "bg-muted/30" : "bg-muted/50",
+          comment.resolved && "opacity-75",
+        )}
+      >
+        <div className="flex items-start gap-2 min-w-0">
+          <Avatar className={cn("shrink-0", isReply ? "h-5 w-5" : "h-6 w-6")}>
+            <AvatarFallback className="text-[9px]">{initials(comment.authorId)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="text-xs font-medium truncate">{author?.name ?? "Unknown"}</p>
+              {comment.resolved ? (
+                <Badge variant="secondary" className="h-4 px-1 text-[10px] gap-0.5 shrink-0">
+                  <CheckCircle2 className="h-2.5 w-2.5" /> Resolved
+                </Badge>
+              ) : null}
+              <span
+                className="ml-auto text-[10px] text-muted-foreground whitespace-nowrap shrink-0"
+                title={formatDateTime(comment.createdAt)}
+              >
+                {relativeTime(comment.createdAt)}
+              </span>
+            </div>
+            <p className="text-[13px] leading-snug whitespace-pre-line break-words mt-0.5">
+              {comment.content}
+            </p>
+          </div>
+        </div>
 
-  const heading = version ? `Comments for Version ${version.versionNumber}` : 'Document Comments';
+        <div className="flex items-center gap-0.5 pl-8">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[11px] gap-1"
+            onClick={() => {
+              setReplyingTo(replyingTo === comment.id ? null : comment.id);
+              setReplyText("");
+            }}
+            aria-label={`Reply to ${author?.name ?? "comment"}`}
+          >
+            <Reply className="h-3 w-3" />
+            Reply
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[11px] gap-1"
+            onClick={() => void toggleResolved(comment, !comment.resolved)}
+            aria-label={comment.resolved ? "Re-open comment" : "Mark comment as resolved"}
+          >
+            {comment.resolved ? <Undo2 className="h-3 w-3" /> : <CheckCircle2 className="h-3 w-3" />}
+            {comment.resolved ? "Re-open" : "Resolve"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 ml-auto text-muted-foreground hover:text-destructive"
+            onClick={() => setCommentToDelete(comment)}
+            aria-label="Remove comment"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg" height="fill">
-        <DialogHeader>
-          <DialogTitle>{heading}</DialogTitle>
-          <DialogDescription>
-            Collaborate with your team using threaded comments. {resolvedCount}/{comments.length} resolved.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div>
+        {replyingTo === comment.id ? (
+          <div className="pl-8 space-y-1.5">
             <Textarea
-              ref={commentTextareaRef}
-              value={comment}
-              onChange={(event) => {
-                const value = event.target.value;
-                setComment(value);
-                // Comment onChange:
-              }}
-              placeholder="Add a comment to discuss this document..."
-              rows={4}
+              ref={replyRef}
+              value={replyText}
+              onChange={(event) => setReplyText(event.target.value)}
+              onKeyDown={(event) => handleComposerKey(event, comment.id)}
+              placeholder={`Reply to ${author?.name?.split(" ")[0] ?? "this comment"}...`}
+              rows={2}
+              className="min-h-[52px] resize-none text-[13px]"
+              autoFocus
             />
-            <div className="mt-2 flex justify-end gap-2">
+            <div className="flex justify-end gap-1.5">
               <Button
                 variant="ghost"
-                onClick={() => setComment('')}
-                disabled={!comment}
-                className="gap-1"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setReplyingTo(null);
+                  setReplyText("");
+                }}
               >
-                <Undo2 className="h-4 w-4" />
-                Clear
+                Cancel
               </Button>
-              <Button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleAddComment();
-                }} 
-                disabled={isSubmitting || !comment.trim()}
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => void submitComment(comment.id)}
+                disabled={isSubmitting || !replyText.trim()}
               >
-                Add Comment
+                Reply
               </Button>
             </div>
           </div>
+        ) : null}
+      </div>
+    );
+  };
 
-          <ScrollArea className="max-h-[400px] rounded-md border border-border">
-            <div className="divide-y">
-              {commentThreads.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground text-sm">
-                  No comments yet. Start the discussion above.
-                </div>
-              ) : (
-                commentThreads.map(({ parent, replies }) => {
-                  const parentAuthor = userLookup.get(parent.authorId);
-                  return (
-                    <div key={parent.id} className="p-4 space-y-3 bg-background/60">
-                      {/* Parent Comment */}
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1 flex-1">
-                            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
-                              <MessageCircle className="h-3.5 w-3.5 text-primary" />
-                              <span>{parentAuthor ? parentAuthor.name : 'Unknown User'}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {formatDateTime(parent.createdAt)}
-                              </span>
-                              {parent.resolved && (
-                                <Badge variant="secondary" className="gap-1">
-                                  <CheckCircle2 className="h-3 w-3" /> Resolved
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground whitespace-pre-line">{parent.content}</p>
-                          </div>
-                          <div className="flex gap-1 flex-shrink-0">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleStartReply(parent.id)}
-                              title="Reply to comment"
-                            >
-                              <Reply className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleResolveToggle(parent.id, !parent.resolved)}
-                              title={parent.resolved ? 'Re-open comment' : 'Mark as resolved'}
-                            >
-                              {parent.resolved ? (
-                                <Undo2 className="h-3.5 w-3.5" />
-                              ) : (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive"
-                              onClick={() => handleDelete(parent.id)}
-                              title="Delete comment"
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent size="lg" height="fill" className="gap-3">
+          <DialogHeader className="shrink-0 pr-8">
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" aria-hidden="true" />
+              Comments
+            </DialogTitle>
+            <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+              <span>
+                {openCount} open
+                {visible.length > openCount ? ` · ${visible.length} total` : ""}
+              </span>
+              {version ? (
+                <span className="flex items-center gap-1">
+                  {(
+                    [
+                      { value: "all" as const, label: "All versions" },
+                      { value: "version" as const, label: `Version ${version.versionNumber}` },
+                    ]
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setScope(option.value)}
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] transition-colors",
+                        scope === option.value
+                          ? "bg-primary text-primary-foreground font-medium"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80",
+                      )}
+                    >
+                      {option.label}
+                      {option.value === "version" ? ` · ${versionCount}` : ""}
+                    </button>
+                  ))}
+                </span>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
 
-                        {/* Reply Input */}
-                        {replyingTo === parent.id && (
-                          <div className="ml-6 mt-2 space-y-2 border-l-2 border-primary/20 pl-4">
-                            <Textarea
-                              ref={replyTextareaRef}
-                              value={replyText}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setReplyText(value);
-                                // Reply onChange:
-                              }}
-                              placeholder="Write a reply..."
-                              rows={2}
-                              className="text-sm"
-                            />
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleCancelReply}
-                                disabled={isSubmitting}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleAddComment(parent.id)}
-                                disabled={isSubmitting || !replyText.trim()}
-                              >
-                                Reply
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Replies */}
-                        {replies.length > 0 && (
-                          <div className="ml-6 space-y-2 border-l-2 border-muted pl-4">
-                            {replies.map((reply) => {
-                              const replyAuthor = userLookup.get(reply.authorId);
-                              return (
-                                <div key={reply.id} className="p-3 bg-muted/30 rounded-lg space-y-2">
-                                  <div className="flex items-start justify-between gap-4">
-                                    <div className="space-y-1 flex-1">
-                                      <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-foreground">
-                                        <Reply className="h-3 w-3 text-muted-foreground" />
-                                        <span>{replyAuthor ? replyAuthor.name : 'Unknown User'}</span>
-                                        <span className="text-[10px] text-muted-foreground">
-                                          {formatDateTime(reply.createdAt)}
-                                        </span>
-                                        {reply.resolved && (
-                                          <Badge variant="secondary" className="h-4 text-[10px] gap-1">
-                                            <CheckCircle2 className="h-2.5 w-2.5" /> Resolved
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <p className="text-xs text-muted-foreground whitespace-pre-line">{reply.content}</p>
-                                    </div>
-                                    <div className="flex gap-1 flex-shrink-0">
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() => handleResolveToggle(reply.id, !reply.resolved)}
-                                        title={reply.resolved ? 'Re-open reply' : 'Mark as resolved'}
-                                      >
-                                        {reply.resolved ? (
-                                          <Undo2 className="h-3 w-3" />
-                                        ) : (
-                                          <CheckCircle2 className="h-3 w-3 text-success" />
-                                        )}
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 text-destructive"
-                                        onClick={() => handleDelete(reply.id)}
-                                        title="Delete reply"
-                                      >
-                                        <XCircle className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading comments…
+              </div>
+            ) : threads.length === 0 ? (
+              <p className="py-10 text-center text-xs text-muted-foreground">
+                {scope === "version" && version
+                  ? `No comments on version ${version.versionNumber} yet.`
+                  : "No comments yet. Start the discussion below."}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {threads.map(({ parent, replies }) => (
+                  <li key={parent.id} className="space-y-1.5">
+                    {renderComment(parent, false)}
+                    {replies.length > 0 ? (
+                      <div className="ml-4 pl-3 border-l-2 border-border/60 space-y-1.5">
+                        {replies.map((reply) => (
+                          <div key={reply.id}>{renderComment(reply, true)}</div>
+                        ))}
                       </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </ScrollArea>
-        </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className="shrink-0 space-y-1.5 border-t border-border/60 pt-3">
+            <Textarea
+              ref={commentRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => handleComposerKey(event)}
+              placeholder="Write a comment..."
+              rows={2}
+              className="min-h-[52px] resize-none text-[13px]"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] text-muted-foreground">
+                Ctrl/⌘ + Enter to post
+                {version && scope === "version" ? ` · on v${version.versionNumber}` : ""}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => void submitComment()}
+                  disabled={isSubmitting || !draft.trim()}
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Send className="h-3 w-3" />
+                  )}
+                  Post
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={Boolean(commentToDelete)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setCommentToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this comment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The comment and any replies will be deleted for everyone. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void confirmDelete()}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Removing…" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };

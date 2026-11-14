@@ -26,10 +26,7 @@ import { StatStrip } from "@/components/shared/StatStrip";
 import {
   fetchEscalationRules,
   fetchEscalationSummary,
-  fetchSLAConfigurations,
-  fetchSLATargets,
   type EscalationSummary,
-  type SLATargets,
 } from "@/lib/sla-client";
 import { logError } from "@/lib/client-logger";
 
@@ -38,9 +35,6 @@ function WorkflowSLAForm() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>("sla");
   const [searchQuery, setSearchQuery] = useState("");
-  const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
-  const [slaRuleCount, setSlaRuleCount] = useState(0);
-  const [slaActiveRuleCount, setSlaActiveRuleCount] = useState(0);
   const [escalationSummary, setEscalationSummary] = useState<EscalationSummary | null>(null);
   const [escalationRuleCount, setEscalationRuleCount] = useState(0);
 
@@ -55,25 +49,18 @@ function WorkflowSLAForm() {
   }, [searchParams]);
 
   const loadPageStats = useCallback(async () => {
+    // SLA targets and rules are rendered by the tab itself; only escalations
+    // need page-level summary stats.
+    if (activeTab !== "escalation") return;
     try {
-      if (activeTab === "sla") {
-        const [configs, targets] = await Promise.all([
-          fetchSLAConfigurations(),
-          fetchSLATargets(),
-        ]);
-        setSlaRuleCount(configs.length);
-        setSlaActiveRuleCount(configs.filter((c) => c.isActive).length);
-        setSlaTargets(targets);
-      } else {
-        const [summary, rules] = await Promise.all([
-          fetchEscalationSummary(),
-          fetchEscalationRules(),
-        ]);
-        setEscalationSummary(summary);
-        setEscalationRuleCount(rules.length);
-      }
+      const [summary, rules] = await Promise.all([
+        fetchEscalationSummary(),
+        fetchEscalationRules(),
+      ]);
+      setEscalationSummary(summary);
+      setEscalationRuleCount(rules.length);
     } catch (error: unknown) {
-      logError("Failed to load workflow & SLA stats:", error);
+      logError("Failed to load escalation stats:", error);
     }
   }, [activeTab]);
 
@@ -92,22 +79,15 @@ function WorkflowSLAForm() {
       ? "Configure automatic escalations and notifications for SLA breaches."
       : "Configure Service Level Agreement targets and thresholds.";
 
-  const statItems = useMemo(() => {
-    if (activeTab === "escalation") {
-      return [
-        { key: "rules", label: "Escalation rules", value: escalationRuleCount },
-        { key: "pending", label: "Pending escalations", value: escalationSummary?.pending ?? 0 },
-        { key: "triggered", label: "Triggered this week", value: escalationSummary?.triggeredThisWeek ?? 0 },
-        { key: "resolved", label: "Resolved today", value: escalationSummary?.resolvedToday ?? 0 },
-      ];
-    }
-    return [
-      { key: "advanced", label: "Advanced rules", value: slaRuleCount },
-      { key: "active", label: "Active rules", value: slaActiveRuleCount },
-      { key: "urgent", label: "Urgent target", value: slaTargets ? `${slaTargets.urgent}h` : "—" },
-      { key: "low", label: "Low priority target", value: slaTargets ? `${slaTargets.low}h` : "—" },
-    ];
-  }, [activeTab, slaRuleCount, slaActiveRuleCount, slaTargets, escalationRuleCount, escalationSummary]);
+  const escalationStats = useMemo(
+    () => [
+      { key: "rules", label: "Escalation rules", value: escalationRuleCount },
+      { key: "pending", label: "Pending escalations", value: escalationSummary?.pending ?? 0 },
+      { key: "triggered", label: "Triggered this week", value: escalationSummary?.triggeredThisWeek ?? 0 },
+      { key: "resolved", label: "Resolved today", value: escalationSummary?.resolvedToday ?? 0 },
+    ],
+    [escalationRuleCount, escalationSummary],
+  );
 
   const headerActions = (
     <>
@@ -150,9 +130,16 @@ function WorkflowSLAForm() {
           icon={Target}
           actions={headerActions}
         >
-        <StatStrip items={statItems} />
+        {activeTab === "escalation" && <StatStrip items={escalationStats} />}
 
-        <div className="rounded-xl bg-muted/30 p-2">
+        <div className="mt-4">
+          <TabsList>
+            <TabsTrigger value="sla" className="text-xs px-2.5 py-1">SLA targets</TabsTrigger>
+            <TabsTrigger value="escalation" className="text-xs px-2.5 py-1">Escalations</TabsTrigger>
+          </TabsList>
+        </div>
+
+        <div className="mt-4 rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -170,19 +157,11 @@ function WorkflowSLAForm() {
           </div>
         </div>
 
-        <div className="mt-4">
-          <TabsList>
-            <TabsTrigger value="sla" className="text-xs px-2.5 py-1">SLA targets</TabsTrigger>
-            <TabsTrigger value="escalation" className="text-xs px-2.5 py-1">Escalations</TabsTrigger>
-          </TabsList>
-        </div>
-
           <TabsContent value="sla" className="mt-2 focus-visible:outline-none">
             <SLAConfigurationTab
               ref={slaRef}
               searchQuery={searchQuery}
               hideAddRuleButton
-              onDataChange={loadPageStats}
             />
           </TabsContent>
 

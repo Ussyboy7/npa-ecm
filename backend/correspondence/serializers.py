@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from django.urls import reverse
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 
 from accounts.serializers import UserSerializer
 
 User = get_user_model()
-from organization.models import Department, Division, Directorate, Office
+from organization.models import Department, Division, Directorate, Office, OfficeMembership
 
 from .models import (
     Case,
@@ -31,8 +32,11 @@ from .models import (
     DispatchRecord,
     Minute,
     ParallelRoutingGroup,
+    Location,
+    PhysicalDocument,
 )
 from .physical_serializers import PhysicalDocumentSerializer
+from workflow.models import WorkflowTemplate
 
 
 class CorrespondenceDocumentLinkSerializer(serializers.ModelSerializer):
@@ -40,6 +44,31 @@ class CorrespondenceDocumentLinkSerializer(serializers.ModelSerializer):
         model = CorrespondenceDocumentLink
         fields = ["id", "correspondence", "document", "notes", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        from dms.models import Document
+        from .reference_utils import memo_reference_conflict
+
+        correspondence = attrs.get("correspondence") or getattr(
+            self.instance, "correspondence", None
+        )
+        document = attrs.get("document") or getattr(self.instance, "document", None)
+        if (
+            correspondence is None
+            or document is None
+            or document.document_type != Document.DocumentType.MEMO
+            or document.role != Document.Role.PRIMARY
+        ):
+            return attrs
+
+        version = document.versions.order_by("-version_number").first()
+        conflict = memo_reference_conflict(
+            version.content_html if version else "",
+            correspondence.reference_number,
+        )
+        if conflict:
+            raise serializers.ValidationError({"document": conflict})
+        return attrs
 
 
 class CorrespondenceAttachmentSerializer(serializers.ModelSerializer):
@@ -145,6 +174,14 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
 
 
 class MinuteSerializer(serializers.ModelSerializer):
+    workflow_template = serializers.PrimaryKeyRelatedField(
+        queryset=WorkflowTemplate.objects.filter(
+            applies_to=WorkflowTemplate.AppliesTo.CORRESPONDENCE,
+        ),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
     user = UserSerializer(read_only=True)
     user_id = serializers.PrimaryKeyRelatedField(
         source="user",
@@ -210,11 +247,36 @@ class MinuteSerializer(serializers.ModelSerializer):
     )
     correspondence_details = serializers.SerializerMethodField()
 
+    def validate_workflow_template(self, value):
+        correspondence = self.initial_data.get("correspondence")
+        if value and correspondence:
+            existing_template_id = Correspondence.objects.filter(pk=correspondence).values_list(
+                "workflow_template_id", flat=True
+            ).first()
+            if existing_template_id not in (None, value.id):
+                raise serializers.ValidationError(
+                    "A workflow template is already assigned to this correspondence."
+                )
+            if existing_template_id is None and not value.is_active:
+                raise serializers.ValidationError("Select an active correspondence workflow template.")
+        return value
+
+
+    def create(self, validated_data):
+        workflow_template = validated_data.pop("workflow_template", None)
+        minute = super().create(validated_data)
+        correspondence = minute.correspondence
+        if workflow_template and not correspondence.workflow_template_id:
+            correspondence.workflow_template = workflow_template
+            correspondence.save(update_fields=["workflow_template", "updated_at"])
+        return minute
+
     class Meta:
         model = Minute
         fields = [
             "id",
             "correspondence",
+            "workflow_template",
             "user",
             "user_id",
             "grade_level",
@@ -266,6 +328,7 @@ class MinuteSerializer(serializers.ModelSerializer):
             "routing_type",
             "parallel_group_id",
             "is_parallel_branch",
+            "assignment_outcome",
             "parent_minute",
             "parent_minute_id",
             "merge_strategy",
@@ -352,6 +415,9 @@ class MinuteSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         action_type = attrs.get("action_type", getattr(self.instance, "action_type", None))
+        template = attrs.get("workflow_template")
+        if template and template.applies_to != WorkflowTemplate.AppliesTo.CORRESPONDENCE:
+            raise serializers.ValidationError({"workflow_template": "Select a correspondence workflow template."})
         # minute_text is stored as minute_text; DRF field is minute_text
         text = attrs.get("minute_text", getattr(self.instance, "minute_text", None) if self.instance else None)
         if action_type == "approve":
@@ -417,19 +483,20 @@ class MinuteSerializer(serializers.ModelSerializer):
         seal = obj.seal_applied
         request = self.context.get('request')
         
-        # Get seal image URL (if generated and saved)
-        seal_image_url = None
-        if seal.seal_image:
-            if request:
-                seal_image_url = request.build_absolute_uri(seal.seal_image.url)
-            else:
-                from django.conf import settings
-                base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:8002')
-                seal_image_url = f"{base_url}{seal.seal_image.url}"
+        # The verified endpoint serves the server-rendered image and repairs a
+        # missing or hash-mismatched cache instead of exposing stored media.
+        seal_image_path = reverse(
+            "api_v1:seal_image", kwargs={"serial_number": seal.serial_number}
+        )
+        seal_image_url = (
+            request.build_absolute_uri(seal_image_path)
+            if request
+            else seal_image_path
+        )
         
         # Signature image: use proxy URL so it loads cross-origin (CORS-safe)
         signature_image_url = None
-        if seal.signature_used and getattr(seal.signature_used, 'signature_image', None) and seal.signature_used.signature_image and request:
+        if seal.signature_image and request:
             signature_image_url = request.build_absolute_uri(
                 f"/api/v1/accounts/seal/signature-image/{seal.serial_number}/"
             )
@@ -488,6 +555,8 @@ class DispatchRecordSerializer(serializers.ModelSerializer):
 
 
 class CorrespondenceSerializer(serializers.ModelSerializer):
+    workflow_template = serializers.PrimaryKeyRelatedField(read_only=True)
+    workflow_template_details = serializers.SerializerMethodField()
     created_by = UserSerializer(read_only=True)
     created_by_id = serializers.PrimaryKeyRelatedField(
         source="created_by",
@@ -531,12 +600,17 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
     owning_office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
     current_office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
+    reference_classification_code = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    reference_classification = serializers.SerializerMethodField()
+    physical_location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.filter(is_active=True), write_only=True, required=False
+    )
+    physical_documents = PhysicalDocumentSerializer(many=True, read_only=True)
     owning_office_name = serializers.CharField(source="owning_office.name", read_only=True)
     current_office_name = serializers.CharField(source="current_office.name", read_only=True)
     attachments = CorrespondenceAttachmentSerializer(many=True, read_only=True)
     distribution = CorrespondenceDistributionSerializer(many=True, read_only=True)
     minutes = MinuteSerializer(many=True, read_only=True)
-    # physical_documents = PhysicalDocumentSerializer(many=True, read_only=True)
     linked_document_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         source="linked_documents",
@@ -556,7 +630,18 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     routing_metadata = serializers.SerializerMethodField()
     parallel_branches = serializers.SerializerMethodField()
     related_responses = serializers.SerializerMethodField()
+    can_take_initial_action = serializers.SerializerMethodField()
     is_read = serializers.BooleanField(read_only=True)
+
+    def get_reference_classification(self, obj):
+        classification = getattr(obj, "reference_classification", None)
+        if classification is None:
+            return None
+        return {
+            "id": str(classification.id),
+            "code": classification.code,
+            "label": classification.label,
+        }
 
     def validate_reference_number(self, value):
         """
@@ -567,24 +652,49 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         return value
 
     def validate_status(self, value):
-        """Prevent invalid status transitions at the serializer level."""
-        if self.instance and self.instance.status == 'completed' and value != 'completed':
+        """Require the guarded completion action for status transitions to completed."""
+        if value == Correspondence.Status.COMPLETED and (
+            self.instance is None or self.instance.status != Correspondence.Status.COMPLETED
+        ):
+            raise serializers.ValidationError(
+                "Use the completion action to complete correspondence."
+            )
+        if self.instance and self.instance.status == Correspondence.Status.COMPLETED and value != Correspondence.Status.COMPLETED:
             raise serializers.ValidationError("Cannot change status of a completed correspondence.")
         return value
 
     def validate(self, attrs):
-        """Cross-field validation for correspondence."""
+        """Cross-field validation for correspondence and declared physical custody."""
         direction = attrs.get('direction', getattr(self.instance, 'direction', None))
         source = attrs.get('source', getattr(self.instance, 'source', None))
         if direction == 'outward' and not source:
             raise serializers.ValidationError({"source": "Source is required for outward correspondence."})
+
+        has_physical_copy = attrs.get(
+            "has_physical_copy", getattr(self.instance, "has_physical_copy", False)
+        )
+        physical_location = attrs.get("physical_location")
+        if not has_physical_copy and physical_location:
+            raise serializers.ValidationError({"has_physical_copy": "Select physical-copy tracking before entering its location."})
         return attrs
+
+    def create(self, validated_data):
+        model_data = validated_data.copy()
+        model_data.pop("physical_location", None)
+        model_data.pop("reference_classification_code", None)
+        return super().create(model_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("physical_location", None)
+        validated_data.pop("reference_classification_code", None)
+        return super().update(instance, validated_data)
 
     class Meta:
         model = Correspondence
         fields = [
             "id",
             "reference_number",
+            "reference_classification",
             "subject",
             "treatment_response",
             "body_html",
@@ -613,6 +723,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "created_by_id",
             "current_approver",
             "current_approver_id",
+            "can_take_initial_action",
             "acting_appointment_id",
             "acting_original_approver_id",
             "acting_principal_name",
@@ -637,6 +748,8 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "classification_reason",
             # Parallel routing fields
             "workflow_state",
+            "workflow_template",
+            "workflow_template_details",
             "active_parallel_branches",
             "completed_parallel_branches",
             "parallel_branches",
@@ -646,6 +759,9 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "case",
             "case_id",
             "has_physical_copy",
+            "physical_location",
+            "reference_classification_code",
+            "physical_documents",
             # Routing concept metadata
             "flow_type",
             "is_inward",
@@ -675,7 +791,51 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "current_office_name",
             "completion_package",
             "completion_summary_generated_at",
+            "workflow_template",
+            "workflow_template_details",
         ]
+
+    def get_can_take_initial_action(self, obj) -> bool:
+        view = self.context.get("view")
+        action = getattr(view, "action", None)
+        if action not in (None, "retrieve", "create", "update", "partial_update"):
+            return False
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        from .services import MinuteRouterService
+
+        return MinuteRouterService.can_take_initial_office_action(user, obj)
+
+    def get_workflow_template_details(self, obj):
+        template = getattr(obj, "workflow_template", None)
+        if not template:
+            return None
+        return {
+            "id": str(template.id),
+            "name": template.name,
+            "description": template.description,
+            "steps": [
+                {
+                    "id": str(step.id),
+                    "order": step.order,
+                    "title": step.title,
+                    "required_role": step.required_role,
+                    "required_grade_level": step.required_grade_level,
+                    "required_approval_level": step.required_approval_level,
+                    "office_id": str(step.office_id) if step.office_id else None,
+                    "office_name": step.office.name if step.office_id else None,
+                    "directorate_id": str(step.directorate_id) if step.directorate_id else None,
+                    "directorate_name": step.directorate.name if step.directorate_id else None,
+                    "division_id": str(step.division_id) if step.division_id else None,
+                    "division_name": step.division.name if step.division_id else None,
+                    "department_id": str(step.department_id) if step.department_id else None,
+                    "department_name": step.department.name if step.department_id else None,
+                }
+                for step in template.steps.all()
+            ],
+        }
 
     def get_acting_principal_name(self, obj) -> str:
         principal = getattr(obj, "acting_original_approver", None)
@@ -843,31 +1003,58 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             return None
         from django.utils import timezone
 
-        from .models import Minute
+        from .models import Minute, minute_satisfies_assignment_outcome
         from organization.models import OfficeMembership
 
-        minutes = (
+        minutes = list(
             Minute.objects.filter(correspondence=obj, is_parallel_branch=True)
             .select_related("to_office", "to_user", "branch_originator")
             .order_by("timestamp")
         )
 
+        # Groups created as separate assignments have an explicit expected
+        # outcome on each original branch. Later routing within a branch
+        # inherits the group flag but has no expected outcome, so exclude it
+        # from the recipient list and completion counts.
+        assigned_group_ids = {
+            m.parallel_group_id
+            for m in minutes
+            if m.parallel_group_id and m.assignment_outcome
+        }
+
         top_level = []
         seen = set()
         for m in minutes:
+            if m.parallel_group_id in assigned_group_ids and not m.assignment_outcome:
+                continue
             target = m.to_office_id or m.to_user_id
             if not target or target in seen:
                 continue
             seen.add(target)
             top_level.append(m)
 
+        def first_outcome_response(recipient_ids, branch):
+            responses = Minute.objects.filter(
+                correspondence=obj,
+                user_id__in=recipient_ids,
+                timestamp__gt=branch.timestamp,
+                is_recalled=False,
+            ).order_by("timestamp")
+            for response in responses:
+                if minute_satisfies_assignment_outcome(
+                    response, branch.assignment_outcome
+                ):
+                    return response
+            return None
+
         now = timezone.now()
         branches = []
         for minute in top_level:
+            completed_minute = None
             if minute.to_user_id:
-                recipient_acted = Minute.objects.filter(
-                    correspondence=obj, user_id=minute.to_user_id, timestamp__gt=minute.timestamp
-                ).exists()
+                completed_minute = first_outcome_response(
+                    [minute.to_user_id], minute
+                )
                 target_label = (
                     minute.to_user.get_full_name() or minute.to_user.username
                     if minute.to_user
@@ -881,14 +1068,8 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
                         office=minute.to_office, is_active=True
                     ).values_list("user_id", flat=True)
                 )
-                recipient_acted = (
-                    Minute.objects.filter(
-                        correspondence=obj,
-                        user_id__in=member_ids,
-                        timestamp__gt=minute.timestamp,
-                    ).exists()
-                    if member_ids
-                    else False
+                completed_minute = (
+                    first_outcome_response(member_ids, minute) if member_ids else None
                 )
                 target_label = minute.to_office.name if minute.to_office else "Unknown"
                 target_kind = "office"
@@ -899,7 +1080,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             force_completed = bool(minute.branch_completed_at)
             completed = (
                 force_completed
-                or recipient_acted
+                or completed_minute is not None
                 or obj.status == Correspondence.Status.COMPLETED
             )
             overdue = bool(minute.response_deadline and minute.response_deadline < now and not completed)
@@ -912,6 +1093,23 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
                 if overdue
                 else "pending"
             )
+            completed_action = completed_minute.action_type if completed_minute else None
+            if (
+                completed_minute
+                and minute.assignment_outcome == "treat"
+                and completed_action == Minute.ActionType.TREAT
+            ):
+                completed_outcome = "treat"
+            elif completed_minute and (
+                completed_minute.to_office_id or completed_minute.to_user_id
+            ):
+                completed_outcome = "onward"
+            elif completed_action == Minute.ActionType.TREAT:
+                completed_outcome = "treat"
+            elif completed_action:
+                completed_outcome = "respond"
+            else:
+                completed_outcome = None
             branches.append(
                 {
                     "minute_id": str(minute.id),
@@ -920,6 +1118,9 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
                     "target_id": target_id,
                     "target_label": target_label,
                     "status": status,
+                    "expected_outcome": minute.assignment_outcome or "respond",
+                    "completed_outcome": completed_outcome,
+                    "completed_action": completed_action,
                     "deadline": minute.response_deadline.isoformat() if minute.response_deadline else None,
                     "branch_originator_id": str(minute.branch_originator_id)
                     if minute.branch_originator_id
@@ -1418,8 +1619,13 @@ class CorrespondenceTemplateSerializer(serializers.ModelSerializer):
 
 
 class CorrespondenceDraftSerializer(serializers.ModelSerializer):
-    """Serializer for correspondence drafts."""
-    
+    """Serializer for correspondence drafts.
+
+    Registration drafts are form-data-only and do not carry minute content.
+    Minute and treatment drafts still require content.
+    """
+
+    content = serializers.CharField(required=False, allow_blank=True)
     user = UserSerializer(read_only=True)
     correspondence_id = serializers.PrimaryKeyRelatedField(
         source="correspondence",
@@ -1449,7 +1655,21 @@ class CorrespondenceDraftSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "user", "correspondence", "created_at", "updated_at"]
-    
+
+    def validate(self, attrs):
+        draft_type = attrs.get("draft_type") or getattr(self.instance, "draft_type", None)
+        if draft_type != CorrespondenceDraft.DraftType.REGISTRATION:
+            content = attrs.get("content")
+            if content is not None and not content.strip():
+                raise serializers.ValidationError(
+                    {"content": "Draft content is required for minute and treatment drafts."}
+                )
+            if self.instance is None and content is None:
+                raise serializers.ValidationError(
+                    {"content": "Draft content is required for minute and treatment drafts."}
+                )
+        return attrs
+
     def get_correspondence(self, obj):
         """Return minimal correspondence info."""
         if obj.correspondence is None:
