@@ -5,12 +5,15 @@ import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { RefreshCw } from 'lucide-react';
 import { StatStrip } from '@/components/shared/StatStrip';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { AnalyticsPanel } from './AnalyticsPanel';
+import {
+  AnalyticsFilterBar,
+  AnalyticsHeaderSlots,
+  AnalyticsRefreshAction,
+} from './AnalyticsHeaderSlots';
 import { appType } from '@/lib/app-type';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api-client';
@@ -133,39 +136,76 @@ export const CaseAnalyticsTab = () => {
       (stats?.top_assignments.by_user.length ?? 0) >
     0;
 
+  const headerStats = stats ? (
+    <StatStrip
+      items={[
+        {
+          key: 'total',
+          label: 'Total Cases',
+          value: stats.summary.total_cases,
+          hint: `Cases opened in the last ${rangeDays} days`,
+        },
+        {
+          key: 'resolution',
+          label: 'Resolution Rate',
+          value:
+            stats.summary.total_cases > 0
+              ? `${((stats.summary.resolved_cases / stats.summary.total_cases) * 100).toFixed(1)}%`
+              : '—',
+          hint: `${stats.summary.resolved_cases} of ${stats.summary.total_cases} resolved`,
+        },
+        {
+          key: 'open',
+          label: 'Open Cases',
+          value: stats.summary.open_cases,
+          hint:
+            stats.summary.total_cases > 0
+              ? `${((stats.summary.open_cases / stats.summary.total_cases) * 100).toFixed(1)}% of total`
+              : 'Currently open',
+        },
+        {
+          key: 'avg',
+          label: 'Avg Resolution',
+          value: stats.summary.avg_resolution_days
+            ? `${stats.summary.avg_resolution_days.toFixed(1)} days`
+            : '—',
+          hint: 'Average time to resolve',
+        },
+      ]}
+    />
+  ) : loading ? (
+    <Skeleton className="h-[68px] rounded-xl" />
+  ) : undefined;
+
+  const headerActions = (
+    <AnalyticsRefreshAction
+      loading={loading}
+      lastUpdated={lastUpdated}
+      onRefresh={retry}
+      idleLabel="Cases opened in this range"
+    />
+  );
+
   return (
     <ClientErrorBoundary>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className={appType.caption}>Period</span>
-            <Select value={String(rangeDays)} onValueChange={(value) => setRangeDays(Number(value))}>
-              <SelectTrigger className="h-8 w-40 text-xs" aria-label="Case analytics period">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="90">Last 90 days</SelectItem>
-                <SelectItem value="180">Last 6 months</SelectItem>
-                <SelectItem value="365">Last year</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className={appType.caption} role="status">
-              {loading
-                ? 'Updating…'
-                : lastUpdated
-                  ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                  : 'Cases opened in this range'}
-            </span>
-            <Button type="button" variant="outline" size="sm" onClick={retry} disabled={loading}>
-              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              Refresh
-            </Button>
-          </div>
-        </div>
+        <AnalyticsHeaderSlots stats={headerStats} actions={headerActions} />
+
+        <AnalyticsFilterBar>
+          <span className={appType.caption}>Period</span>
+          <Select value={String(rangeDays)} onValueChange={(value) => setRangeDays(Number(value))}>
+            <SelectTrigger className="h-8 w-40 text-xs" aria-label="Case analytics period">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="90">Last 90 days</SelectItem>
+              <SelectItem value="180">Last 6 months</SelectItem>
+              <SelectItem value="365">Last year</SelectItem>
+            </SelectContent>
+          </Select>
+        </AnalyticsFilterBar>
 
         {error && !stats ? (
           <ErrorState
@@ -176,11 +216,6 @@ export const CaseAnalyticsTab = () => {
           />
         ) : loading && !stats ? (
           <div className="space-y-4" aria-busy="true" aria-live="polite">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {[0, 1, 2, 3].map((index) => (
-                <Skeleton key={index} className="h-16 rounded-xl" />
-              ))}
-            </div>
             <Skeleton className="h-[280px] rounded-xl" />
             <Skeleton className="h-[220px] rounded-xl" />
             <Skeleton className="h-[280px] rounded-xl" />
@@ -188,43 +223,6 @@ export const CaseAnalyticsTab = () => {
           </div>
         ) : stats ? (
           <>
-            <StatStrip
-              items={[
-                {
-                  key: 'total',
-                  label: 'Total Cases',
-                  value: stats.summary.total_cases,
-                  hint: `Cases opened in the last ${rangeDays} days`,
-                },
-                {
-                  key: 'resolution',
-                  label: 'Resolution Rate',
-                  value:
-                    stats.summary.total_cases > 0
-                      ? `${((stats.summary.resolved_cases / stats.summary.total_cases) * 100).toFixed(1)}%`
-                      : '—',
-                  hint: `${stats.summary.resolved_cases} of ${stats.summary.total_cases} resolved`,
-                },
-                {
-                  key: 'open',
-                  label: 'Open Cases',
-                  value: stats.summary.open_cases,
-                  hint:
-                    stats.summary.total_cases > 0
-                      ? `${((stats.summary.open_cases / stats.summary.total_cases) * 100).toFixed(1)}% of total`
-                      : 'Currently open',
-                },
-                {
-                  key: 'avg',
-                  label: 'Avg Resolution',
-                  value: stats.summary.avg_resolution_days
-                    ? `${stats.summary.avg_resolution_days.toFixed(1)} days`
-                    : '—',
-                  hint: 'Average time to resolve',
-                },
-              ]}
-            />
-
             {error && (
               <div
                 className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm"

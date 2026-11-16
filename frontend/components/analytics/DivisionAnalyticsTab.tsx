@@ -16,10 +16,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { AnalyticsPanel } from "./AnalyticsPanel";
+import {
+  AnalyticsFilterBar,
+  AnalyticsHeaderSlots,
+  AnalyticsRefreshAction,
+} from "./AnalyticsHeaderSlots";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   fetchEnhancedDivisionPerformance,
@@ -28,7 +32,6 @@ import {
   type EnhancedSLAAnalytics,
 } from "@/lib/sla-client";
 import { useThemeChartColors } from "@/hooks/use-theme-chart-colors";
-import { RefreshCw } from "lucide-react";
 import { appType } from "@/lib/app-type";
 import { cn } from "@/lib/utils";
 
@@ -189,9 +192,53 @@ export function DivisionAnalyticsTab() {
   const retry = () => setRetryToken((token) => token + 1);
   const isLoadingFirst = loading && !data;
 
+  const headerStats = data ? (
+    <StatStrip
+      items={[
+        {
+          key: "divisions",
+          label: "Active Divisions",
+          value: divisions.length,
+          hint: "With workload in this period",
+        },
+        {
+          key: "workload",
+          label: "Total Workload",
+          value: data.summary.totalWorkload,
+          hint: "Items handled",
+        },
+        {
+          key: "completion",
+          label: "Avg Completion",
+          value: `${data.summary.avgCompletionRate}%`,
+          hint: "Across active units",
+        },
+        {
+          key: "sla",
+          label: "Avg SLA Compliance",
+          value: avgSlaCompliance !== null ? `${avgSlaCompliance}%` : "—",
+          hint: slaError ? "SLA data unavailable" : "Across active units",
+        },
+      ]}
+    />
+  ) : isLoadingFirst ? (
+    <Skeleton className="h-[68px] rounded-xl" />
+  ) : undefined;
+
+  const headerActions = (
+    <AnalyticsRefreshAction
+      loading={loading}
+      lastUpdated={lastUpdated}
+      onRefresh={retry}
+      idleLabel="Division and port metrics"
+    />
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <AnalyticsHeaderSlots stats={headerStats} actions={headerActions} />
+
+      <AnalyticsFilterBar>
         <div className="flex items-center gap-2">
           <span className={appType.caption}>Period</span>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -221,20 +268,7 @@ export function DivisionAnalyticsTab() {
             </SelectContent>
           </Select>
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <span className={appType.caption} role="status">
-            {loading
-              ? "Updating…"
-              : lastUpdated
-                ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                : "Division and port metrics"}
-          </span>
-          <Button type="button" variant="outline" size="sm" onClick={retry} disabled={loading}>
-            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-            Refresh
-          </Button>
-        </div>
-      </div>
+      </AnalyticsFilterBar>
 
       {error && !data ? (
         <ErrorState
@@ -245,11 +279,6 @@ export function DivisionAnalyticsTab() {
         />
       ) : isLoadingFirst ? (
         <div className="space-y-4" aria-busy="true" aria-live="polite">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((index) => (
-              <Skeleton key={index} className="h-16 rounded-xl" />
-            ))}
-          </div>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Skeleton className="h-[300px] rounded-xl" />
             <Skeleton className="h-[300px] rounded-xl" />
@@ -259,35 +288,6 @@ export function DivisionAnalyticsTab() {
         </div>
       ) : data ? (
         <>
-          <StatStrip
-            items={[
-              {
-                key: "divisions",
-                label: "Active Divisions",
-                value: divisions.length,
-                hint: "With workload in this period",
-              },
-              {
-                key: "workload",
-                label: "Total Workload",
-                value: data.summary.totalWorkload,
-                hint: "Items handled",
-              },
-              {
-                key: "completion",
-                label: "Avg Completion",
-                value: `${data.summary.avgCompletionRate}%`,
-                hint: "Across active units",
-              },
-              {
-                key: "sla",
-                label: "Avg SLA Compliance",
-                value: avgSlaCompliance !== null ? `${avgSlaCompliance}%` : "—",
-                hint: slaError ? "SLA data unavailable" : "Across active units",
-              },
-            ]}
-          />
-
           {error && (
             <div
               className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm"

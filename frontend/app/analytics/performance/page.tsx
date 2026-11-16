@@ -6,6 +6,7 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { AnalyticsTabList } from "@/components/analytics/AnalyticsTabList";
+import { ANALYTICS_HEADER_SLOT_IDS } from "@/components/analytics/AnalyticsHeaderSlots";
 import { PerformanceAnalyticsTab } from "@/components/analytics/PerformanceAnalyticsTab";
 import { BarChart3 } from "lucide-react";
 
@@ -23,16 +24,20 @@ export default function PerformanceAnalyticsPage() {
             subtitle="SLA compliance, turnaround times, and efficiency metrics"
             icon={BarChart3}
             tabs={<AnalyticsTabList />}
+            stats={<div id={ANALYTICS_HEADER_SLOT_IDS.stats} />}
             actions={
-              <ContextualHelp
-                title="How to use Performance Analytics"
-                description="Monitor SLA compliance and operational efficiency."
-                steps={[
-                  "Select the reporting period.",
-                  "Review SLA compliance and turnaround metrics.",
-                  "Compare division and role-level performance.",
-                ]}
-              />
+              <>
+                <div id={ANALYTICS_HEADER_SLOT_IDS.actions} />
+                <ContextualHelp
+                  title="How to use Performance Analytics"
+                  description="Monitor SLA compliance and operational efficiency."
+                  steps={[
+                    "Select the reporting period.",
+                    "Review SLA compliance and turnaround metrics.",
+                    "Compare division and role-level performance.",
+                  ]}
+                />
+              </>
             }
           >
             <PerformanceAnalyticsTab />

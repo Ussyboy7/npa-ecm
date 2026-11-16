@@ -25,10 +25,14 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  RefreshCw,
 } from 'lucide-react';
 import { StatStrip } from '@/components/shared/StatStrip';
 import { AnalyticsPanel } from './AnalyticsPanel';
+import {
+  AnalyticsFilterBar,
+  AnalyticsHeaderSlots,
+  AnalyticsRefreshAction,
+} from './AnalyticsHeaderSlots';
 import { fetchExecutiveAnalytics, type ExecutiveAnalytics } from '@/lib/analytics-client';
 import {
   fetchEnhancedSLAAnalytics,
@@ -318,87 +322,82 @@ export const ExecutiveDashboardTab = () => {
   const attentionLoading = loadingSections.executive || loadingSections.escalations;
   const attentionFailed = sectionFailed.executive || sectionFailed.escalations;
 
+  const headerStats =
+    loadingSections.sla && !slaData ? (
+      <Skeleton className="h-[68px] rounded-xl" />
+    ) : slaData ? (
+      <StatStrip
+        items={[
+          {
+            key: 'total',
+            label: 'Total items',
+            value: slaSummary.total,
+            hint: `In the last ${rangeDays} days`,
+          },
+          {
+            key: 'compliance',
+            label: 'SLA Compliance',
+            value: `${slaSummary.complianceRate}%`,
+            hint: `${slaSummary.compliant} of ${slaSummary.total} within SLA`,
+          },
+          {
+            key: 'at-risk',
+            label: 'At Risk',
+            value: slaSummary.atRisk,
+            hint: 'Approaching SLA deadline',
+          },
+          {
+            key: 'breached',
+            label: 'SLA Breached',
+            value: slaSummary.breached,
+            hint:
+              slaSummary.total > 0
+                ? `${((slaSummary.breached / slaSummary.total) * 100).toFixed(1)}% of total`
+                : 'Past deadline',
+          },
+        ]}
+      />
+    ) : undefined;
+
+  const headerActions = (
+    <AnalyticsRefreshAction
+      loading={isLoading}
+      lastUpdated={lastUpdated}
+      onRefresh={refresh}
+    />
+  );
+
   return (
     <ClientErrorBoundary>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className={appType.caption}>Range</span>
-            <div
-              className="inline-flex rounded-lg border border-border/60 p-0.5"
-              role="group"
-              aria-label="Analytics date range"
-            >
-              {RANGE_OPTIONS.map((days) => (
-                <Button
-                  key={days}
-                  type="button"
-                  size="sm"
-                  variant={rangeDays === days ? 'secondary' : 'ghost'}
-                  className="h-7 px-2.5 text-xs"
-                  aria-pressed={rangeDays === days}
-                  onClick={() => setRangeDays(days)}
-                >
-                  {days}d
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {isLoading ? (
-              <span className={appType.caption} role="status">
-                Updating…
-              </span>
-            ) : lastUpdated ? (
-              <span className={appType.caption}>
-                Updated{' '}
-                {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            ) : null}
-            <Button type="button" variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
-              <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
-              Refresh
-            </Button>
-          </div>
-        </div>
+        <AnalyticsHeaderSlots stats={headerStats} actions={headerActions} />
 
-        {loadingSections.sla && !slaData ? (
-          <Skeleton className="h-[68px] rounded-xl" />
-        ) : slaData ? (
-          <StatStrip
-            items={[
-              {
-                key: 'total',
-                label: 'Total items',
-                value: slaSummary.total,
-                hint: `In the last ${rangeDays} days`,
-              },
-              {
-                key: 'compliance',
-                label: 'SLA Compliance',
-                value: `${slaSummary.complianceRate}%`,
-                hint: `${slaSummary.compliant} of ${slaSummary.total} within SLA`,
-              },
-              {
-                key: 'at-risk',
-                label: 'At Risk',
-                value: slaSummary.atRisk,
-                hint: 'Approaching SLA deadline',
-              },
-              {
-                key: 'breached',
-                label: 'SLA Breached',
-                value: slaSummary.breached,
-                hint:
-                  slaSummary.total > 0
-                    ? `${((slaSummary.breached / slaSummary.total) * 100).toFixed(1)}% of total`
-                    : 'Past deadline',
-              },
-            ]}
-          />
-        ) : (
+        <AnalyticsFilterBar>
+          <span className={appType.caption}>Range</span>
+          <div
+            className="inline-flex rounded-lg border border-border/60 p-0.5"
+            role="group"
+            aria-label="Analytics date range"
+          >
+            {RANGE_OPTIONS.map((days) => (
+              <Button
+                key={days}
+                type="button"
+                size="sm"
+                variant={rangeDays === days ? 'secondary' : 'ghost'}
+                className="h-7 px-2.5 text-xs"
+                aria-pressed={rangeDays === days}
+                onClick={() => setRangeDays(days)}
+              >
+                {days}d
+              </Button>
+            ))}
+          </div>
+        </AnalyticsFilterBar>
+
+        {!loadingSections.sla && !slaData ? (
           <SectionError message="SLA summary unavailable." onRetry={refresh} />
-        )}
+        ) : null}
 
         {slaData && sectionFailed.sla ? (
           <SectionError message="Couldn’t refresh the SLA summary." onRetry={refresh} />

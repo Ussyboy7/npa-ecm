@@ -6,10 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
 import { StatStrip } from '@/components/shared/StatStrip';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { AnalyticsPanel } from './AnalyticsPanel';
+import {
+  AnalyticsFilterBar,
+  AnalyticsHeaderSlots,
+  AnalyticsRefreshAction,
+} from './AnalyticsHeaderSlots';
 import {
   Bar,
   BarChart,
@@ -22,7 +26,6 @@ import {
 } from 'recharts';
 import { fetchPerformanceAnalytics, type PerformanceAnalytics } from '@/lib/analytics-client';
 import { useThemeChartColors } from '@/hooks/use-theme-chart-colors';
-import { RefreshCw } from 'lucide-react';
 import { appType } from '@/lib/app-type';
 import { cn } from '@/lib/utils';
 
@@ -106,37 +109,73 @@ export const PerformanceAnalyticsTab = () => {
 
   const retry = () => setRetryToken((token) => token + 1);
 
+  const headerStats = data ? (
+    <StatStrip
+      items={[
+        {
+          key: 'compliance',
+          label: 'SLA Compliance',
+          value: slaMetrics.total > 0 ? `${slaMetrics.complianceRate}%` : '—',
+          hint:
+            slaMetrics.total > 0
+              ? `${slaMetrics.compliant} of ${slaMetrics.total} within SLA`
+              : 'No items in this period',
+        },
+        {
+          key: 'turnaround',
+          label: 'Avg Turnaround',
+          value:
+            slaMetrics.total > 0 ? `${turnaroundMetrics.average.toFixed(1)} days` : '—',
+          hint: 'From request to completion',
+        },
+        {
+          key: 'breached',
+          label: 'SLA Breached',
+          value: slaMetrics.breached,
+          hint:
+            slaMetrics.total > 0
+              ? `${((slaMetrics.breached / slaMetrics.total) * 100).toFixed(1)}% of total`
+              : 'No items',
+        },
+        {
+          key: 'total',
+          label: 'Total Items',
+          value: slaMetrics.total,
+          hint: 'Correspondence processed',
+        },
+      ]}
+    />
+  ) : loading ? (
+    <Skeleton className="h-[68px] rounded-xl" />
+  ) : undefined;
+
+  const headerActions = (
+    <AnalyticsRefreshAction
+      loading={loading}
+      lastUpdated={lastUpdated}
+      onRefresh={retry}
+      idleLabel="Completed correspondence in this period"
+    />
+  );
+
   return (
     <ClientErrorBoundary>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className={appType.caption}>Period</span>
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="h-8 w-44 text-xs" aria-label="Performance period">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="90">Last 90 days</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className={appType.caption} role="status">
-              {loading
-                ? 'Updating…'
-                : lastUpdated
-                  ? `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                  : 'Completed correspondence in this period'}
-            </span>
-            <Button type="button" variant="outline" size="sm" onClick={retry} disabled={loading}>
-              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-              Refresh
-            </Button>
-          </div>
-        </div>
+        <AnalyticsHeaderSlots stats={headerStats} actions={headerActions} />
+
+        <AnalyticsFilterBar>
+          <span className={appType.caption}>Period</span>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="h-8 w-44 text-xs" aria-label="Performance period">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="90">Last 90 days</SelectItem>
+            </SelectContent>
+          </Select>
+        </AnalyticsFilterBar>
 
         {error && !data ? (
           <ErrorState
@@ -147,55 +186,12 @@ export const PerformanceAnalyticsTab = () => {
           />
         ) : loading && !data ? (
           <div className="space-y-4" aria-busy="true" aria-live="polite">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {[0, 1, 2, 3].map((index) => (
-                <Skeleton key={index} className="h-16 rounded-xl" />
-              ))}
-            </div>
             <Skeleton className="h-[300px] rounded-xl" />
             <Skeleton className="h-[260px] rounded-xl" />
             <span className="sr-only">Loading performance analytics…</span>
           </div>
         ) : data ? (
           <>
-            <StatStrip
-              items={[
-                {
-                  key: 'compliance',
-                  label: 'SLA Compliance',
-                  value: slaMetrics.total > 0 ? `${slaMetrics.complianceRate}%` : '—',
-                  hint:
-                    slaMetrics.total > 0
-                      ? `${slaMetrics.compliant} of ${slaMetrics.total} within SLA`
-                      : 'No items in this period',
-                },
-                {
-                  key: 'turnaround',
-                  label: 'Avg Turnaround',
-                  value:
-                    slaMetrics.total > 0
-                      ? `${turnaroundMetrics.average.toFixed(1)} days`
-                      : '—',
-                  hint: 'From request to completion',
-                },
-                {
-                  key: 'breached',
-                  label: 'SLA Breached',
-                  value: slaMetrics.breached,
-                  hint:
-                    slaMetrics.total > 0
-                      ? `${((slaMetrics.breached / slaMetrics.total) * 100).toFixed(1)}% of total`
-                      : 'No items',
-                },
-                {
-                  key: 'total',
-                  label: 'Total Items',
-                  value: slaMetrics.total,
-                  hint: 'Correspondence processed',
-                },
-              ]}
-            />
-
             {error && (
               <div
                 className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm"
