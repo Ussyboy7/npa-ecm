@@ -48,6 +48,25 @@ from workflow.models import ApprovalTask, TaskAction, WorkflowStep, WorkflowTemp
 User = get_user_model()
 
 
+def parse_structure_data(content: str) -> dict:
+    """Parse organization_data.json, tolerating standalone section headers."""
+    import re
+
+    cleaned_lines = []
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if re.match(r"^[A-Z][A-Z\s&()]+$", stripped) and not any(
+            char in stripped for char in ("{", "}", "[", "]", '"', ",", ":")
+        ):
+            continue
+        cleaned_lines.append(line)
+
+    cleaned_content = "\n".join(cleaned_lines)
+    if not cleaned_content.strip().startswith("{"):
+        cleaned_content = "{" + cleaned_content
+    return json.loads(cleaned_content)
+
+
 class Command(BaseCommand):
     help = "Seed demo data for development environments."
 
@@ -119,31 +138,7 @@ class Command(BaseCommand):
         if not data_path.exists():
             raise FileNotFoundError("Expected organization_data.json to seed organization structure")
         
-        # Read file content
-        content = data_path.read_text()
-        
-        # Strip section header comments (standalone lines like "MD", "ED F&A", etc.)
-        # These are organizational markers but not valid JSON
-        import re
-        lines = content.split('\n')
-        cleaned_lines = []
-        for line in lines:
-            stripped = line.strip()
-            # Skip lines that are just uppercase text (section headers)
-            # Pattern: standalone uppercase text, possibly with spaces, &, parentheses
-            if re.match(r'^[A-Z][A-Z\s&()]+$', stripped) and not any(c in stripped for c in ['{', '}', '[', ']', '"', ',', ':']):
-                continue  # Skip this comment line
-            cleaned_lines.append(line)
-        
-        cleaned_content = '\n'.join(cleaned_lines)
-        
-        # Ensure file starts with { if it doesn't
-        if not cleaned_content.strip().startswith('{'):
-            cleaned_content = '{' + cleaned_content
-        
-        # Parse JSON
-        data = json.loads(cleaned_content)
-        return data
+        return parse_structure_data(data_path.read_text())
 
     def _reset_organization_units(self) -> None:
         self.stdout.write("Purging existing organization hierarchy…")
