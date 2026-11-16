@@ -103,6 +103,27 @@ class AuthAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("npa_ecm_access_token", response.cookies)
 
+    def test_legacy_refresh_token_can_bootstrap_without_csrf(self):
+        refresh = RefreshToken.for_user(self.user)
+
+        response = self.client.post(
+            reverse("api_v1:token_refresh"),
+            {"refresh": str(refresh)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("npa_ecm_access_token", response.cookies)
+        self.assertIn("npa_ecm_session", response.cookies)
+
+    def test_cookie_only_refresh_still_requires_csrf(self):
+        refresh = RefreshToken.for_user(self.user)
+        self.client.cookies["npa_ecm_refresh_token"] = str(refresh)
+
+        response = self.client.post(reverse("api_v1:token_refresh"), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     @patch("accounts.views_auth.resolve_username_from_claims", return_value="oidcuser")
     @patch("accounts.views_auth.fetch_userinfo")
     @patch("accounts.views_auth.exchange_code_for_tokens", return_value={"access_token": "provider-token"})

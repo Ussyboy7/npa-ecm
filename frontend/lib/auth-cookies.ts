@@ -6,3 +6,4 @@ export const AUTH_SESSION_COOKIE_NAME = "npa_ecm_session";
 export const AUTH_IMPERSONATING_COOKIE_NAME = "npa_ecm_impersonating";
 export const AUTH_ORIGINAL_USER_COOKIE_NAME = "npa_ecm_original_user_id";
 export const LEGACY_ACCESS_COOKIE_NAME = "access_token";
+export const LEGACY_REFRESH_COOKIE_NAME = "refresh_token";

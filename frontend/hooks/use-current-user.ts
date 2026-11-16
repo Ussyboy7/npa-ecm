@@ -11,6 +11,7 @@ import {
   AUTH_CHANGED_EVENT,
   apiFetch,
   clearTokens,
+  ensureAuthSession,
   hasTokens,
   isImpersonatingUser,
 } from "@/lib/api-client";
@@ -130,7 +131,7 @@ export const useCurrentUser = () => {
     // Start new fetch
     globalUserState.loading = true;
     globalFetchPromise = (async () => {
-      if (!hasTokens()) {
+      if (!(await ensureAuthSession())) {
         globalUserState.user = null;
         globalUserState.hydrated = true;
         globalUserState.loading = false;

@@ -3,10 +3,14 @@
 import { logWarn } from './client-logger';
 import { clearIdentityCaches } from './identity-cache';
 import {
+  AUTH_ACCESS_COOKIE_NAME,
   AUTH_CSRF_COOKIE_NAME,
   AUTH_IMPERSONATING_COOKIE_NAME,
   AUTH_ORIGINAL_USER_COOKIE_NAME,
+  AUTH_REFRESH_COOKIE_NAME,
   AUTH_SESSION_COOKIE_NAME,
+  LEGACY_ACCESS_COOKIE_NAME,
+  LEGACY_REFRESH_COOKIE_NAME,
 } from './auth-cookies';
 
 const isBrowser = () => typeof window !== "undefined";
@@ -66,16 +70,42 @@ export const clearTokens = () => {
   clearCookieValue(AUTH_CSRF_COOKIE_NAME);
   clearCookieValue(AUTH_IMPERSONATING_COOKIE_NAME);
   clearCookieValue(AUTH_ORIGINAL_USER_COOKIE_NAME);
+  // Pre-migration cookies were readable. New httpOnly cookies ignore these
+  // client-side deletions and are cleared by the server response instead.
+  clearCookieValue(AUTH_ACCESS_COOKIE_NAME);
+  clearCookieValue(AUTH_REFRESH_COOKIE_NAME);
+  clearCookieValue(LEGACY_ACCESS_COOKIE_NAME);
+  clearCookieValue(LEGACY_REFRESH_COOKIE_NAME);
   notifyAuthChanged();
 };
 
-export const hasTokens = () => Boolean(getCookieValue(AUTH_SESSION_COOKIE_NAME));
+const hasSessionMarker = () => Boolean(getCookieValue(AUTH_SESSION_COOKIE_NAME));
+
+const hasReadableLegacyAuthCookies = () => Boolean(
+  getCookieValue(AUTH_ACCESS_COOKIE_NAME)
+  || getCookieValue(AUTH_REFRESH_COOKIE_NAME)
+  || getCookieValue(LEGACY_ACCESS_COOKIE_NAME)
+  || getCookieValue(LEGACY_REFRESH_COOKIE_NAME)
+);
+
+export const hasTokens = () => hasSessionMarker() || hasReadableLegacyAuthCookies();
 
 /**
  * Ask the server to rotate the httpOnly cookies from its refresh cookie. The
  * browser cannot inspect that cookie, so this is the only reliable resume path.
  */
 export const restoreAuthCookies = async (): Promise<boolean> => attemptTokenRefresh();
+
+/**
+ * Resume a browser session at boot. Sessions created before the HttpOnly
+ * migration have readable auth cookies but no session marker, so they must
+ * refresh once to receive the marker and server-owned cookies.
+ */
+export const ensureAuthSession = async (): Promise<boolean> => {
+  if (hasSessionMarker()) return true;
+  if (!hasReadableLegacyAuthCookies()) return false;
+  return attemptTokenRefresh();
+};
 
 export const getBaseUrl = (): string => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -104,9 +134,13 @@ async function attemptTokenRefresh(): Promise<boolean> {
 
   refreshPromise = (async () => {
     try {
+      const legacyRefreshToken = hasSessionMarker()
+        ? null
+        : getCookieValue(AUTH_REFRESH_COOKIE_NAME) || getCookieValue(LEGACY_REFRESH_COOKIE_NAME);
       const res = await fetch(`${getBaseUrl()}/accounts/auth/token/refresh/`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
+        body: legacyRefreshToken ? JSON.stringify({ refresh: legacyRefreshToken }) : undefined,
         credentials: "include",
       });
       if (!res.ok) {
