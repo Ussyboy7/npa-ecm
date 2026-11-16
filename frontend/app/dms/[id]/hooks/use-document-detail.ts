@@ -16,7 +16,7 @@ import {
   type DocumentRelatedCorrespondenceItem,
 } from '@/lib/api/dms';
 
-import { isAccessDeniedError } from '@/lib/api-errors';
+import { isAccessDeniedError } from '@/lib/api-error';
 
 export function useDocumentDetail(documentId: string | undefined) {
   const { currentUser } = useCurrentUser();

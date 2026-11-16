@@ -3,7 +3,6 @@ import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut, Shield, Bell, HelpCircle, UserCog, Clock, Calendar, Settings, Inbox, AlertTriangle, X } from "lucide-react";
 import { NotificationBell } from "./notifications/NotificationBell";
@@ -23,11 +22,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { SimplifiedRoleSwitcher } from "./SimplifiedRoleSwitcher";
+import { SimplifiedRoleSwitcher } from "@/components/RoleSwitcher";
 import { formatDate } from '@/lib/datetime';
 
 export const TopBar = () => {
-  const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
   const { currentUser, hydrated, isImpersonating } = useCurrentUser();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);

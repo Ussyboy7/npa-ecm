@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { handleAuthenticationError } from '@/lib/auth-errors';
-import { isAccessDeniedError } from '@/lib/api-errors';
+import { isAccessDeniedError } from '@/lib/api-error';
 import { apiFetch, isAbortError } from '@/lib/api-client';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/api/dms';
 import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';

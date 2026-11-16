@@ -3,11 +3,11 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from audit.models import ActivityLog
-from .drm import resolve_effective_document_rights
-from .models import Document, DocumentPermission, DocumentRightsPolicy, DocumentVersion
+from ..drm import resolve_effective_document_rights
+from ..models import Document, DocumentPermission, DocumentRightsPolicy, DocumentVersion
 from accounts.models import User
-from organization.models import Department, Directorate, Division
-from .visibility import documents_visible_to
+from organization.models import Department, Directorate, Division, Role
+from ..visibility import documents_visible_to
 
 
 class DocumentModelTests(TestCase):
@@ -31,19 +31,27 @@ class DocumentModelTests(TestCase):
 class DocumentAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
+        role = Role.objects.create(
+            name="Document API test role",
+            permissions={
+                "can_access_document_management": True,
+                "can_create_documents": True,
+            },
+        )
         self.user = User.objects.create_user(
             username="apiuser",
             password="testpass123",
+            system_role=role,
         )
         self.client.force_authenticate(user=self.user)
 
     def test_list_documents_empty(self):
-        url = reverse("api_v1:dms:document-list")
+        url = reverse("api_v1:document-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_create_document(self):
-        url = reverse("api_v1:dms:document-list")
+        url = reverse("api_v1:document-list")
         response = self.client.post(url, {
             "title": "New Document",
             "document_type": "memo",
@@ -53,7 +61,7 @@ class DocumentAPITests(TestCase):
 
     def test_create_document_requires_auth(self):
         self.client.force_authenticate(user=None)
-        url = reverse("api_v1:dms:document-list")
+        url = reverse("api_v1:document-list")
         response = self.client.post(url, {
             "title": "Unauthorized Document",
         })
@@ -169,7 +177,11 @@ class DocumentVersionViewSetTests(TestCase):
         self.client.force_authenticate(user=other_user)
         url = reverse("api_v1:document-version-replace", args=[version.id])
         response = self.client.post(url, {"file_url": "data:text/plain;base64,dGVzdA=="})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # Versions of documents outside the user's visibility resolve as 404, not 403.
+        self.assertIn(
+            response.status_code,
+            {status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND},
+        )
 
 
 class DocumentPermissionViewSetTests(TestCase):
@@ -190,7 +202,7 @@ class DocumentPermissionViewSetTests(TestCase):
         )
         self.client.force_authenticate(user=self.owner)
         response = self.client.post(
-            reverse("api_v1:dms:document-permission-list"),
+            reverse("api_v1:document-permission-list"),
             {"document": str(self.document.id), "access": "read", "user_ids": [str(self.other.id)]},
             format="json",
         )
@@ -200,7 +212,7 @@ class DocumentPermissionViewSetTests(TestCase):
     def test_other_user_cannot_enumerate_permission_records(self):
         self.client.force_authenticate(user=self.other)
 
-        response = self.client.get(reverse("api_v1:dms:document-permission-list"))
+        response = self.client.get(reverse("api_v1:document-permission-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 0)
@@ -209,7 +221,7 @@ class DocumentPermissionViewSetTests(TestCase):
         self.client.force_authenticate(user=self.other)
 
         response = self.client.patch(
-            reverse("api_v1:dms:document-permission-detail", args=[self.permission_id]),
+            reverse("api_v1:document-permission-detail", args=[self.permission_id]),
             {"access": "admin"},
             format="json",
         )

@@ -71,7 +71,7 @@ const SUPERUSER_PROFILE: PermissionProfile = {
   allowedArchiveLevels: ["department", "division", "directorate"],
 };
 
-function perm(user: User | null | undefined, key: string): boolean {
+function perm(user: Pick<User, "rolePermissions"> | null | undefined, key: string): boolean {
   return Boolean(user?.rolePermissions?.[key]);
 }
 
@@ -96,6 +96,14 @@ function buildArchiveLevels(user: User | null | undefined): ArchiveLevel[] {
 
 export function hasRolePermission(user: User | null | undefined, key: string): boolean {
   return perm(user, key);
+}
+
+/** True when the user holds any of the given backend role permissions. */
+export function hasAnyRolePermission(
+  user: Pick<User, "rolePermissions"> | null | undefined,
+  keys: readonly string[],
+): boolean {
+  return keys.some((key) => perm(user, key));
 }
 
 export const getPermissionProfile = (user?: User | null): PermissionProfile => {

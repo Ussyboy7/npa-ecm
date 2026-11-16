@@ -7,7 +7,7 @@ import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatSealDate, formatSealDateLong } from "@/lib/date-formatters";
+import { formatSealDate, formatSealDateLong } from "@/lib/datetime";
 import { toast } from "@/components/ui/sonner";
 import { checkSealDocument, type SealDocumentCheck, type SealVerification } from "@/lib/api/seal-verification";
 

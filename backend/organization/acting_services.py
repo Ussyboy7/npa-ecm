@@ -525,11 +525,8 @@ def user_is_office_member(user, office: Office) -> bool:
 
 
 def user_can_resolve_acting_requests(user) -> bool:
-    if getattr(user, "is_superuser", False):
-        return True
-    return user_has_permission(user, "can_manage_org_structure") or user_has_permission(
-        user, "can_manage_users"
-    )
+    """Resolving requests needs the same admin scope as managing appointments."""
+    return user_can_manage_acting(user)
 
 
 def _notify_acting_admins(*, title: str, message: str, sender, related_id: str, action_url: str):

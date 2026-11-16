@@ -1,4 +1,7 @@
 import type { User } from "@/lib/npa-structure";
+import { hasAnyRolePermission } from "@/lib/permissions";
+
+const ACTING_ADMIN_PERMISSIONS = ["can_manage_org_structure", "can_manage_users"] as const;
 
 export interface OrganizationActingCapabilities {
   canAccess: boolean;
@@ -12,8 +15,7 @@ export function getOrganizationActingCapabilities(
 ): OrganizationActingCapabilities {
   const canAdminister = Boolean(
     user?.isSuperuser ||
-    user?.rolePermissions?.can_manage_org_structure ||
-    user?.rolePermissions?.can_manage_users,
+    hasAnyRolePermission(user, ACTING_ADMIN_PERMISSIONS),
   );
 
   return {

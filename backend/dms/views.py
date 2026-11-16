@@ -939,7 +939,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
             version_number=next_version,
         )
 
-    @action(detail=True, methods=["post"], url_path="replace")
+    @action(detail=True, methods=["post"], url_path="replace", url_name="replace")
     def replace_version(self, request, pk=None):
         """Replace an existing version with new file content."""
         version = self.get_object()

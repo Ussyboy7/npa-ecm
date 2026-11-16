@@ -20,67 +20,15 @@ export type GradeLevel = {
   approvalAuthority: number;
 };
 
-export type Directorate = {
-  id: string;
-  name: string;
-  code?: string;
-  shortName?: string;
-  description?: string;
-  executiveDirectorId?: string;
-  isActive?: boolean;
-};
-
-export type Division = {
-  id: string;
-  name: string;
-  code?: string;
-  shortName?: string;
-  directorateId?: string;
-  generalManagerId?: string | null;
-  description?: string;
-  isActive?: boolean;
-};
-
-export type Department = {
-  id: string;
-  name: string;
-  code?: string;
-  shortName?: string;
-  divisionId?: string;
-  assistantGeneralManagerId?: string | null;
-  description?: string;
-  isActive?: boolean;
-};
-
-export type Office = {
-  id: string;
-  name: string;
-  code: string;
-  officeType: string;
-  directorateId?: string | null;
-  divisionId?: string | null;
-  departmentId?: string | null;
-  parentId?: string | null;
-  description?: string;
-  isActive: boolean;
-  allowExternalIntake: boolean;
-  allowLateralRouting: boolean;
-};
-
-export type OfficeMembership = {
-  id: string;
-  officeId: string;
-  officeName?: string;
-  userId: string;
-  assignmentRole: string;
-  isPrimary: boolean;
-  canRegister: boolean;
-  canRoute: boolean;
-  canApprove: boolean;
-  startsAt?: string;
-  endsAt?: string;
-  isActive: boolean;
-};
+// Organization shapes are defined once in organization-types; re-exported here
+// so existing routing/correspondence imports keep working.
+export type {
+  Directorate,
+  Division,
+  Department,
+  Office,
+  OfficeMembership,
+} from './organization-types';
 
 export type DistributionRecipient = {
   id: string;

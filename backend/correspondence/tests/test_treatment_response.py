@@ -134,10 +134,19 @@ class TreatAndRespondEndpointTests(APITestCase):
 
     def test_treat_and_respond_creates_minute_and_response(self):
         payload = {
-            "minute_text": "Approved with corrections.",
-            "response_subject": "Response to test inquiry",
-            "response_body_html": "<p>Please find attached the requested documents.</p>",
-            "direction": "downward",
+            "minute": {
+                "user_id": str(self.user.id),
+                "minute_text": "Approved with corrections.",
+                "action_type": "treat",
+            },
+            "response": {
+                "reference_number": f"NPA/RESP/{uuid.uuid4().hex[:8].upper()}",
+                "subject": "Response to test inquiry",
+                "body_html": "<p>Please find attached the requested documents.</p>",
+                "sender_name": "Unit Test",
+                "sender_organization": "QA",
+                "direction": "downward",
+            },
         }
         response = self.client.post(
             f"/api/v1/correspondence/items/{self.correspondence.id}/treat-and-respond/",
@@ -145,7 +154,7 @@ class TreatAndRespondEndpointTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 201, response.data)
-        self.assertIn("created_response_id", response.data)
+        self.assertIn("id", response.data)
         self.assertEqual(Minute.objects.filter(correspondence=self.correspondence).count(), 1)
         minute = Minute.objects.filter(correspondence=self.correspondence).first()
         self.assertEqual(minute.minute_text, "Approved with corrections.")
@@ -153,21 +162,37 @@ class TreatAndRespondEndpointTests(APITestCase):
         self.correspondence.refresh_from_db()
         self.assertEqual(self.correspondence.status, Correspondence.Status.PENDING)
         self.assertIsNone(self.correspondence.completed_at)
+        response_correspondence = Correspondence.objects.get(id=response.data["id"])
+        self.assertEqual(response_correspondence.parent_correspondence_id, self.correspondence.id)
+        self.assertEqual(response_correspondence.subject, "Response to test inquiry")
+        self.assertEqual(response_correspondence.direction, "downward")
 
     def test_treat_and_respond_requires_minute_text(self):
         response = self.client.post(
             f"/api/v1/correspondence/items/{self.correspondence.id}/treat-and-respond/",
-            {"response_subject": "Response", "response_body_html": "<p>Body</p>"},
+            {
+                "response": {
+                    "reference_number": f"NPA/RESP/{uuid.uuid4().hex[:8].upper()}",
+                    "subject": "Response",
+                    "body_html": "<p>Body</p>",
+                }
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("minute", response.data)
+        self.assertIn("minute", response.data["details"])
 
     def test_treat_and_respond_requires_response_data(self):
         response = self.client.post(
             f"/api/v1/correspondence/items/{self.correspondence.id}/treat-and-respond/",
-            {"minute_text": "Some minute text"},
+            {
+                "minute": {
+                    "user_id": str(self.user.id),
+                    "minute_text": "Some minute text",
+                    "action_type": "treat",
+                }
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("response", response.data)
+        self.assertIn("response", response.data["details"])
