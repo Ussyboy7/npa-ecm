@@ -7,10 +7,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.NEXT_PUBLIC_API_URL = 'http://api.test';
 
-import { apiFetch, clearTokens, hasTokens, login, restoreAuthCookies } from '../api-client';
+import {
+  apiFetch,
+  clearTokens,
+  ensureAuthSession,
+  hasTokens,
+  login,
+  restoreAuthCookies,
+} from '../api-client';
 
 const SESSION_COOKIE = 'npa_ecm_session';
 const CSRF_COOKIE = 'npa_ecm_csrf_token';
+const ACCESS_COOKIE = 'npa_ecm_access_token';
+const REFRESH_COOKIE = 'npa_ecm_refresh_token';
+const LEGACY_ACCESS_COOKIE = 'access_token';
+const LEGACY_REFRESH_COOKIE = 'refresh_token';
 
 const readCookie = (name: string) =>
   document.cookie
@@ -49,8 +60,16 @@ describe('httpOnly cookie sessions', () => {
 
   beforeEach(() => {
     storage = installStorage();
-    expireCookie(SESSION_COOKIE);
-    expireCookie(CSRF_COOKIE);
+    for (const name of [
+      SESSION_COOKIE,
+      CSRF_COOKIE,
+      ACCESS_COOKIE,
+      REFRESH_COOKIE,
+      LEGACY_ACCESS_COOKIE,
+      LEGACY_REFRESH_COOKIE,
+    ]) {
+      expireCookie(name);
+    }
   });
 
   afterEach(() => {
@@ -62,6 +81,22 @@ describe('httpOnly cookie sessions', () => {
     expect(hasTokens()).toBe(false);
     setCookie(SESSION_COOKIE, '1');
     expect(hasTokens()).toBe(true);
+  });
+
+  it('resumes a pre-migration session without a readable marker', async () => {
+    setCookie(ACCESS_COOKIE, 'legacy-access');
+    setCookie(REFRESH_COOKIE, 'legacy-refresh');
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(hasTokens()).toBe(true);
+    await expect(ensureAuthSession()).resolves.toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('/accounts/auth/token/refresh/');
+    expect(JSON.parse(init.body)).toEqual({ refresh: 'legacy-refresh' });
+    expect(new Headers(init.headers).get('X-CSRF-Token')).toBeNull();
   });
 
   it('refreshes through the cookie endpoint with the CSRF header', async () => {
@@ -77,6 +112,7 @@ describe('httpOnly cookie sessions', () => {
     expect(String(url)).toContain('/accounts/auth/token/refresh/');
     expect(init.credentials).toBe('include');
     expect(new Headers(init.headers).get('X-CSRF-Token')).toBe('csrf-value');
+    expect(init.body).toBeUndefined();
     expect(storage.getItem('access_token')).toBeNull();
     expect(storage.getItem('refresh_token')).toBeNull();
   });

@@ -877,7 +877,11 @@ class CookieTokenRefreshView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        refresh_raw = get_refresh_token_from_cookies(request)
+        # Pre-migration sessions have a readable refresh cookie but no CSRF
+        # cookie. An explicit body token is not ambient, so it can safely
+        # bootstrap those sessions; cookie-only refreshes still require CSRF.
+        explicit_refresh = str(request.data.get("refresh") or "").strip()
+        refresh_raw = explicit_refresh or get_refresh_token_from_cookies(request)
         if not refresh_raw:
             response = Response(
                 {"detail": "No refresh session is available."},
@@ -885,7 +889,7 @@ class CookieTokenRefreshView(APIView):
             )
             clear_auth_token_cookies(response, request=request)
             return response
-        if not csrf_token_is_valid(request):
+        if not explicit_refresh and not csrf_token_is_valid(request):
             raise PermissionDenied("CSRF verification failed.")
 
         serializer = TokenRefreshSerializer(data={"refresh": refresh_raw})
