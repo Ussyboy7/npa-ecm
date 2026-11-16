@@ -8,6 +8,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 from organization.models import Directorate, Division, Office, OfficeMembership, Role
 from accounts.nominal_roll_mapping import resolve_office_code, resolve_role
 from .models import User, SealOTP
@@ -89,6 +90,19 @@ class AuthAPITests(TestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_login_ignores_stale_auth_cookies_without_csrf(self):
+        stale_access = RefreshToken.for_user(self.user).access_token
+        self.client.cookies["npa_ecm_access_token"] = str(stale_access)
+        self.client.cookies["npa_ecm_session"] = "1"
+
+        response = self.client.post(self.login_url, {
+            "username": "testuser",
+            "password": "testpass123",
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("npa_ecm_access_token", response.cookies)
+
     @patch("accounts.views_auth.resolve_username_from_claims", return_value="oidcuser")
     @patch("accounts.views_auth.fetch_userinfo")
     @patch("accounts.views_auth.exchange_code_for_tokens", return_value={"access_token": "provider-token"})
@@ -123,6 +137,60 @@ class AuthAPITests(TestCase):
         self.assertNotIn("refresh=", response["Location"])
         self.assertIn("npa_ecm_access_token", response.cookies)
         self.assertIn("npa_ecm_refresh_token", response.cookies)
+
+
+class LoginMFAStaleCookieTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="mfa-cookie-user",
+            email="mfa-cookie@example.com",
+            password="testpass123",
+            is_active=True,
+        )
+
+    def test_mfa_verification_ignores_stale_auth_cookies_without_csrf(self):
+        from .login_mfa import create_mfa_challenge
+
+        otp = SealOTP.create_for_user(
+            user=self.user,
+            purpose="login",
+            validity_minutes=10,
+        )
+        challenge = create_mfa_challenge(self.user)
+        stale_access = RefreshToken.for_user(self.user).access_token
+        self.client.cookies["npa_ecm_access_token"] = str(stale_access)
+        self.client.cookies["npa_ecm_session"] = "1"
+
+        response = self.client.post(
+            reverse("api_v1:token_mfa_verify"),
+            {
+                "challenge_id": challenge["challenge_id"],
+                "code": otp.code,
+                "method": "email",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("npa_ecm_access_token", response.cookies)
+
+    def test_mfa_email_request_ignores_stale_auth_cookies_without_csrf(self):
+        from .login_mfa import create_mfa_challenge
+
+        challenge = create_mfa_challenge(self.user)
+        stale_access = RefreshToken.for_user(self.user).access_token
+        self.client.cookies["npa_ecm_access_token"] = str(stale_access)
+        self.client.cookies["npa_ecm_session"] = "1"
+
+        response = self.client.post(
+            reverse("api_v1:login_mfa_email_request"),
+            {"challenge_id": challenge["challenge_id"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 class InitialPasswordSetTests(TestCase):

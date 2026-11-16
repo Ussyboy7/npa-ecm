@@ -693,6 +693,9 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
 class AuthTokenObtainPairView(TokenObtainPairView):
     serializer_class = AuthTokenObtainPairSerializer
     throttle_classes = [LoginRateThrottle]
+    # Signing in must not authenticate an existing session: a stale cookie
+    # without a CSRF token would otherwise reject the request before login.
+    authentication_classes = []
 
     def post(self, request, *args, **kwargs):
         """Handle login; return MFA challenge when required."""
