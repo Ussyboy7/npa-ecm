@@ -2,30 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api-client';
-import { getDocumentsSharedByUser } from '@/lib/dms-logs';
 
 export interface SidebarCounts {
   officeInbox: number;
-  unreadInboxCount: number;
   myInbox: number;
-  myWork: number;
-  mySent: number;
-  officeSent: number;
   delegated: number;
-  secretaryInbox: number;
-  myCases: number;
-  officeCases: number;
-  allCases: number;
-  executiveApprovals: number;
-  myDocuments: number;
-  drafts: number;
+  pendingApprovals: number;
   pendingSignatures: number;
 }
 
 const INITIAL_COUNTS: SidebarCounts = {
-  officeInbox: 0, unreadInboxCount: 0, myInbox: 0, myWork: 0, mySent: 0, officeSent: 0,
-  delegated: 0, secretaryInbox: 0, myCases: 0, officeCases: 0,
-  allCases: 0, executiveApprovals: 0, myDocuments: 0, drafts: 0, pendingSignatures: 0,
+  officeInbox: 0, myInbox: 0, delegated: 0,
+  pendingSignatures: 0,
+  pendingApprovals: 0,
 };
 
 const SIDEBAR_COUNTS_TTL_MS = 60 * 1000;
@@ -40,19 +29,9 @@ const notifyListeners = (): void => {
 
 const normalizeCounts = (raw: Partial<SidebarCounts> | Record<string, number>): SidebarCounts => ({
   officeInbox: Number(raw.officeInbox ?? 0),
-  unreadInboxCount: Number(raw.unreadInboxCount ?? 0),
   myInbox: Number(raw.myInbox ?? 0),
-  myWork: Number(raw.myWork ?? 0),
-  mySent: Number(raw.mySent ?? 0),
-  officeSent: Number(raw.officeSent ?? 0),
   delegated: Number(raw.delegated ?? 0),
-  secretaryInbox: Number(raw.secretaryInbox ?? 0),
-  myCases: Number(raw.myCases ?? 0),
-  officeCases: Number(raw.officeCases ?? 0),
-  allCases: Number(raw.allCases ?? 0),
-  executiveApprovals: Number(raw.executiveApprovals ?? 0),
-  myDocuments: Number(raw.myDocuments ?? 0),
-  drafts: Number(raw.drafts ?? 0),
+  pendingApprovals: Number(raw.pendingApprovals ?? 0),
   pendingSignatures: Number(raw.pendingSignatures ?? 0),
 });
 
@@ -67,42 +46,42 @@ export const seedSidebarCounts = (
   }
 };
 
-export const invalidateSidebarCounts = (): void => {
+export const invalidateSidebarCounts = (options?: { notify?: boolean }): void => {
   cachedCounts = null;
   cachedAt = 0;
   fetchPromise = null;
-  notifyListeners();
+  if (options?.notify !== false) {
+    notifyListeners();
+  }
 };
 
 /** Invalidate cache and refetch counts (deduped). Call after correspondence actions. */
-export const bumpSidebarCounts = (userId?: string): void => {
-  invalidateSidebarCounts();
-  void fetchSidebarCounts(undefined, true, userId)
+export const bumpSidebarCounts = (): void => {
+  invalidateSidebarCounts({ notify: false });
+  void fetchSidebarCounts(undefined, true, true)
     .then(() => notifyListeners())
     .catch(() => {});
 };
 
-const fetchSidebarCounts = async (signal?: AbortSignal, force = false, userId?: string): Promise<SidebarCounts> => {
+const fetchSidebarCounts = async (
+  signal?: AbortSignal,
+  force = false,
+  refreshServerCache = false,
+): Promise<SidebarCounts> => {
   const now = Date.now();
   if (!force && cachedCounts && now - cachedAt < SIDEBAR_COUNTS_TTL_MS) {
     return cachedCounts;
   }
-  if (!force && fetchPromise) {
+  if (fetchPromise) {
     return fetchPromise;
   }
 
   const fetchFromApi = async (): Promise<SidebarCounts> => {
-    const data = await apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/', { signal });
-    const counts = normalizeCounts(data);
-    if (userId) {
-      try {
-        const { count: sharedCount } = await getDocumentsSharedByUser(userId, { pageSize: 1, signal });
-        counts.mySent += sharedCount;
-      } catch {
-        // Shared documents count is optional
-      }
-    }
-    return counts;
+    const endpoint = refreshServerCache
+      ? '/correspondence/items/sidebar-counts/?refresh=1'
+      : '/correspondence/items/sidebar-counts/';
+    const data = await apiFetch<SidebarCounts>(endpoint, { signal });
+    return normalizeCounts(data);
   };
 
   fetchPromise = fetchFromApi()
@@ -118,7 +97,7 @@ const fetchSidebarCounts = async (signal?: AbortSignal, force = false, userId?: 
   return fetchPromise;
 };
 
-export function useSidebarCounts(userId?: string) {
+export function useSidebarCounts() {
   const [counts, setCounts] = useState<SidebarCounts>(cachedCounts ?? INITIAL_COUNTS);
 
   const refreshCounts = useCallback(() => {
@@ -126,16 +105,16 @@ export function useSidebarCounts(userId?: string) {
       setCounts(cachedCounts);
       return;
     }
-    void fetchSidebarCounts(undefined, false, userId)
+    void fetchSidebarCounts(undefined, false)
       .then((data) => setCounts(data))
       .catch(() => {});
-  }, [userId]);
+  }, []);
 
   useEffect(() => {
     listeners.add(refreshCounts);
 
     const controller = new AbortController();
-    void fetchSidebarCounts(controller.signal, !!userId, userId)
+    void fetchSidebarCounts(controller.signal, true)
       .then((data) => {
         if (!controller.signal.aborted) {
           setCounts(data);
@@ -147,7 +126,7 @@ export function useSidebarCounts(userId?: string) {
       listeners.delete(refreshCounts);
       controller.abort();
     };
-  }, [refreshCounts, userId]);
+  }, [refreshCounts]);
 
   return counts;
 }
