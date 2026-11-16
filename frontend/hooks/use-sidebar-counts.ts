@@ -67,32 +67,42 @@ export const seedSidebarCounts = (
   }
 };
 
-export const invalidateSidebarCounts = (): void => {
+export const invalidateSidebarCounts = (options?: { notify?: boolean }): void => {
   cachedCounts = null;
   cachedAt = 0;
   fetchPromise = null;
-  notifyListeners();
+  if (options?.notify !== false) {
+    notifyListeners();
+  }
 };
 
 /** Invalidate cache and refetch counts (deduped). Call after correspondence actions. */
 export const bumpSidebarCounts = (userId?: string): void => {
-  invalidateSidebarCounts();
-  void fetchSidebarCounts(undefined, true, userId)
+  invalidateSidebarCounts({ notify: false });
+  void fetchSidebarCounts(undefined, true, userId, true)
     .then(() => notifyListeners())
     .catch(() => {});
 };
 
-const fetchSidebarCounts = async (signal?: AbortSignal, force = false, userId?: string): Promise<SidebarCounts> => {
+const fetchSidebarCounts = async (
+  signal?: AbortSignal,
+  force = false,
+  userId?: string,
+  refreshServerCache = false,
+): Promise<SidebarCounts> => {
   const now = Date.now();
   if (!force && cachedCounts && now - cachedAt < SIDEBAR_COUNTS_TTL_MS) {
     return cachedCounts;
   }
-  if (!force && fetchPromise) {
+  if (fetchPromise) {
     return fetchPromise;
   }
 
   const fetchFromApi = async (): Promise<SidebarCounts> => {
-    const data = await apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/', { signal });
+    const endpoint = refreshServerCache
+      ? '/correspondence/items/sidebar-counts/?refresh=1'
+      : '/correspondence/items/sidebar-counts/';
+    const data = await apiFetch<SidebarCounts>(endpoint, { signal });
     const counts = normalizeCounts(data);
     if (userId) {
       try {
