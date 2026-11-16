@@ -1,6 +1,7 @@
 """Custom middleware for WebSocket JWT authentication."""
 
 from urllib.parse import parse_qs
+from http.cookies import SimpleCookie
 from django.contrib.auth.models import AnonymousUser
 from django.db import close_old_connections
 from channels.middleware import BaseMiddleware
@@ -47,7 +48,7 @@ class JWTAuthMiddleware(BaseMiddleware):
         # Close old database connections
         close_old_connections()
 
-        # Get token from query string or headers
+        # Get token from query string, Authorization header, or httpOnly cookie.
         query_string = parse_qs(scope.get("query_string", b"").decode())
         token = query_string.get("token", [None])[0]
         
@@ -57,6 +58,19 @@ class JWTAuthMiddleware(BaseMiddleware):
             auth_header = headers.get(b"authorization", b"").decode()
             if auth_header.startswith("Bearer "):
                 token = auth_header[7:]
+
+        if not token:
+            headers = dict(scope.get("headers", []))
+            cookie_header = headers.get(b"cookie", b"").decode()
+            if cookie_header:
+                cookies = SimpleCookie()
+                try:
+                    cookies.load(cookie_header)
+                except Exception:
+                    cookies = SimpleCookie()
+                cookie = cookies.get("npa_ecm_access_token") or cookies.get("access_token")
+                if cookie:
+                    token = cookie.value
 
         # Authenticate user
         if token:

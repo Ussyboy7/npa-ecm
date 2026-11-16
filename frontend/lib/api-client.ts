@@ -5,15 +5,10 @@ import { clearIdentityCaches } from './identity-cache';
 
 const isBrowser = () => typeof window !== "undefined";
 const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
-const ACCESS_TOKEN_KEY = "access_token";
-const REFRESH_TOKEN_KEY = "refresh_token";
-const ACCESS_TOKEN_EXP_KEY = "access_token_exp";
-const ACCESS_COOKIE_NAME = "npa_ecm_access_token";
-const REFRESH_COOKIE_NAME = "npa_ecm_refresh_token";
-const LEGACY_ACCESS_COOKIE_NAME = "access_token";
-const LEGACY_REFRESH_COOKIE_NAME = "refresh_token";
-const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
-const DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
+const SESSION_COOKIE_NAME = "npa_ecm_session";
+const CSRF_COOKIE_NAME = "npa_ecm_csrf_token";
+const IMPERSONATING_COOKIE_NAME = "npa_ecm_impersonating";
+const ORIGINAL_USER_COOKIE_NAME = "npa_ecm_original_user_id";
 
 const getCookieValue = (name: string): string | null => {
   if (!isBrowser()) return null;
@@ -23,12 +18,6 @@ const getCookieValue = (name: string): string | null => {
   if (!cookie) return null;
   const value = cookie.split("=").slice(1).join("=");
   return value ? decodeURIComponent(value) : null;
-};
-
-const setCookieValue = (name: string, value: string, maxAgeSeconds: number) => {
-  if (!isBrowser()) return;
-  const secure = window.location.protocol === "https:" ? "; secure" : "";
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; samesite=lax${secure}`;
 };
 
 const clearCookieValue = (name: string) => {
@@ -43,100 +32,39 @@ const notifyAuthChanged = (invalidateIdentityCaches = true) => {
   window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 };
 
-const getStorage = (): Storage | null => {
-  if (!isBrowser()) return null;
-  try {
-    return window.localStorage ?? null;
-  } catch {
-    return null;
-  }
+const authHeaders = (headers?: HeadersInit): Headers => {
+  const requestHeaders = new Headers(headers);
+  const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
+  if (csrfToken) requestHeaders.set("X-CSRF-Token", csrfToken);
+  return requestHeaders;
 };
 
-// Simple auth helpers for NPA-ECM
-export const getStoredAccessToken = () => {
-  if (!isBrowser()) return null;
-  const storage = getStorage();
-  return (
-    storage?.getItem(ACCESS_TOKEN_KEY)
-    || getCookieValue(ACCESS_COOKIE_NAME)
-  );
-};
+// JWTs live in httpOnly cookies. These helpers remain for callers that still
+// ask whether a browser session exists, but no token is readable by JavaScript.
+export const getStoredAccessToken = () => null;
+export const getStoredRefreshToken = () => null;
 
-export const getStoredRefreshToken = () => {
-  if (!isBrowser()) return null;
-  const storage = getStorage();
-  return (
-    storage?.getItem(REFRESH_TOKEN_KEY)
-    || getCookieValue(REFRESH_COOKIE_NAME)
-  );
-};
-
-type StoreTokensOptions = { invalidateIdentityCaches?: boolean };
-
-export const storeTokens = (
-  accessToken: string,
-  refreshToken: string,
-  expiresInSeconds?: number,
-  options: StoreTokensOptions = {},
-) => {
-  if (!isBrowser()) return;
-  const storage = getStorage();
-  const accessTtlSeconds = expiresInSeconds ?? DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
-  const expiresAt = Date.now() + accessTtlSeconds * 1000;
-  storage?.setItem(ACCESS_TOKEN_KEY, accessToken);
-  storage?.setItem(REFRESH_TOKEN_KEY, refreshToken);
-  storage?.setItem(ACCESS_TOKEN_EXP_KEY, expiresAt.toString());
-  setCookieValue(ACCESS_COOKIE_NAME, accessToken, accessTtlSeconds);
-  setCookieValue(REFRESH_COOKIE_NAME, refreshToken, DEFAULT_REFRESH_TOKEN_TTL_SECONDS);
-  clearCookieValue(LEGACY_ACCESS_COOKIE_NAME);
-  clearCookieValue(LEGACY_REFRESH_COOKIE_NAME);
-  notifyAuthChanged(options.invalidateIdentityCaches !== false);
+/** @deprecated Tokens are set by the server in httpOnly cookies. */
+export const storeTokens = (..._args: unknown[]) => {
+  notifyAuthChanged();
 };
 
 export const clearTokens = () => {
   if (!isBrowser()) return;
-  const storage = getStorage();
-  storage?.removeItem(ACCESS_TOKEN_KEY);
-  storage?.removeItem(REFRESH_TOKEN_KEY);
-  storage?.removeItem(ACCESS_TOKEN_EXP_KEY);
-  clearCookieValue(ACCESS_COOKIE_NAME);
-  clearCookieValue(REFRESH_COOKIE_NAME);
+  clearCookieValue(SESSION_COOKIE_NAME);
+  clearCookieValue(CSRF_COOKIE_NAME);
+  clearCookieValue(IMPERSONATING_COOKIE_NAME);
+  clearCookieValue(ORIGINAL_USER_COOKIE_NAME);
   notifyAuthChanged();
 };
 
-export const hasTokens = () => {
-  const token = getStoredAccessToken();
-  return Boolean(token);
-};
+export const hasTokens = () => Boolean(getCookieValue(SESSION_COOKIE_NAME));
 
 /**
- * Re-establish the auth cookies from a session that still has tokens in storage.
- *
- * `proxy.ts` gates every non-public route on the access cookie, but tokens are
- * refreshed into localStorage; once the cookie lapses, a signed-in user gets
- * bounced to /login on every deep link. Returns true when the session is
- * usable afterwards (refreshing first if the stored token has expired).
+ * Ask the server to rotate the httpOnly cookies from its refresh cookie. The
+ * browser cannot inspect that cookie, so this is the only reliable resume path.
  */
-export const restoreAuthCookies = async (): Promise<boolean> => {
-  if (!isBrowser()) return false;
-  const storage = getStorage();
-  const accessToken = storage?.getItem(ACCESS_TOKEN_KEY);
-  const refreshToken = storage?.getItem(REFRESH_TOKEN_KEY);
-  if (!accessToken || !refreshToken) return false;
-
-  const expiresAt = Number(storage?.getItem(ACCESS_TOKEN_EXP_KEY) || 0);
-  if (expiresAt && expiresAt - 60_000 <= Date.now()) {
-    // Expired (or about to): the refresh flow rewrites both cookies on success.
-    return attemptTokenRefresh();
-  }
-
-  const ttlSeconds = expiresAt
-    ? Math.max(60, Math.floor((expiresAt - Date.now()) / 1000))
-    : DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
-  setCookieValue(ACCESS_COOKIE_NAME, accessToken, ttlSeconds);
-  setCookieValue(REFRESH_COOKIE_NAME, refreshToken, DEFAULT_REFRESH_TOKEN_TTL_SECONDS);
-  return true;
-};
+export const restoreAuthCookies = async (): Promise<boolean> => attemptTokenRefresh();
 
 export const getBaseUrl = (): string => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -148,7 +76,8 @@ export const getBaseUrl = (): string => {
 
 type FetchOptions = RequestInit & {
   skipAuth?: boolean;
-  responseType?: "json" | "text" | "blob";
+  /** "raw" returns the Response so callers can read headers alongside a blob. */
+  responseType?: "json" | "text" | "blob" | "raw";
 };
 
 export const isAbortError = (error: unknown): boolean => {
@@ -163,26 +92,18 @@ async function attemptTokenRefresh(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    const refreshToken = getStoredRefreshToken();
-    if (!refreshToken) return false;
     try {
       const res = await fetch(`${getBaseUrl()}/accounts/auth/token/refresh/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh: refreshToken }),
+        headers: authHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
       });
       if (!res.ok) {
         clearTokens();
         return false;
       }
-      const data = await res.json();
-      storeTokens(
-        data.access,
-        typeof data.refresh === "string" ? data.refresh : refreshToken,
-        data.expires_in ?? 3600,
-        { invalidateIdentityCaches: false },
-      );
+      // The response rotates the httpOnly cookies; there is nothing to store.
+      notifyAuthChanged(false);
       return true;
     } catch {
       clearTokens();
@@ -196,21 +117,14 @@ async function attemptTokenRefresh(): Promise<boolean> {
 
 export const apiFetch = async <T = unknown>(path: string, options: FetchOptions = {}): Promise<T> => {
   const {
-    skipAuth,
+    skipAuth: _skipAuth,
     responseType,
     headers,
     ...rest
   } = options;
 
   const execute = async (): Promise<T> => {
-    const requestHeaders = new Headers(headers);
-
-    if (!skipAuth) {
-      const token = getStoredAccessToken();
-      if (token) {
-        requestHeaders.set("Authorization", `Bearer ${token}`);
-      }
-    }
+    const requestHeaders = authHeaders(headers);
 
     if (!requestHeaders.has("Content-Type") && rest.body && !(rest.body instanceof FormData)) {
       requestHeaders.set("Content-Type", "application/json");
@@ -242,6 +156,8 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
       throw err;
     }
 
+    if (responseType === 'raw') return response as T;
+
     if (response.status === 204) {
       return undefined as T;
     }
@@ -255,7 +171,7 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
     return await execute();
   } catch (error: unknown) {
     if (isAbortError(error)) throw error;
-    if ((error as Record<string, unknown>)?.status === 401 && !skipAuth && !path.includes("token/refresh/")) {
+    if ((error as Record<string, unknown>)?.status === 401 && !path.includes("token/refresh/")) {
       const refreshed = await attemptTokenRefresh();
       if (refreshed) {
         return await execute();
@@ -267,9 +183,10 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
 };
 
 export interface LoginResponse {
-  access: string;
-  refresh: string;
+  access?: string;
+  refresh?: string;
   user?: unknown;
+  detail?: string;
 }
 
 export interface LoginMFAChallengeResponse {
@@ -305,7 +222,8 @@ export const login = async (username: string, password: string): Promise<LoginSt
 
     const data = (await response.json()) as LoginStepResponse;
     if (!isMfaChallenge(data)) {
-      storeTokens(data.access, data.refresh);
+      // Login set the httpOnly cookies in this response.
+      notifyAuthChanged();
     }
     return data;
   } catch (error: unknown) {
@@ -332,7 +250,7 @@ export const verifyLoginMFA = async (
       method,
     }),
   });
-  storeTokens(data.access, data.refresh);
+  notifyAuthChanged();
   return data;
 };
 
@@ -350,125 +268,50 @@ export const fetchOidcStatus = async (): Promise<{ enabled: boolean }> =>
   apiFetch<{ enabled: boolean }>("/accounts/auth/oidc/status/");
 
 export const logout = () => {
-  const refresh = getStoredRefreshToken();
+  // The server owns the httpOnly refresh cookie, so it must clear the session.
+  const request = fetch(`${getBaseUrl()}/accounts/auth/logout/`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    credentials: "include",
+  }).catch((error) => {
+    logWarn("Failed to clear server session", error);
+  });
 
-  // Clear the browser session immediately so logout never leaves the app in a
-  // blank intermediate state while the best-effort blacklist request runs.
   clearTokens();
   clearOriginalTokens();
-
-  if (refresh) {
-    void fetch(`${getBaseUrl()}/accounts/auth/token/blacklist/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refresh }),
-      credentials: "include",
-    }).catch((error) => {
-      logWarn("Failed to blacklist token", error);
-    });
-  }
+  void request;
 };
 
-export const storeOriginalTokens = (userId?: string) => {
-  if (!isBrowser()) return;
-  const access = getStoredAccessToken();
-  const refresh = getStoredRefreshToken();
-  if (!access || !refresh) return;
-  localStorage.setItem('original_access_token', access);
-  localStorage.setItem('original_refresh_token', refresh);
-  const expiresAt = localStorage.getItem(ACCESS_TOKEN_EXP_KEY);
-  if (expiresAt) {
-    localStorage.setItem('original_access_exp', expiresAt);
-  }
-  if (userId) {
-    localStorage.setItem('original_user_id', userId);
-  } else {
-    // Try to decode user ID from current access token
-    try {
-      const payload = JSON.parse(atob(access.split('.')[1] || ''));
-      const uid = payload.user_id || payload.sub || payload.id;
-      if (uid) localStorage.setItem('original_user_id', String(uid));
-    } catch {
-      // ignore
-    }
-  }
-};
+/** @deprecated Impersonation is tracked by server-set cookies now. */
+export const storeOriginalTokens = (_userId?: string) => {};
 
 export const clearOriginalTokens = () => {
   if (!isBrowser()) return;
-  localStorage.removeItem('original_access_token');
-  localStorage.removeItem('original_refresh_token');
-  localStorage.removeItem('original_access_exp');
-  localStorage.removeItem('original_user_id');
+  clearCookieValue(IMPERSONATING_COOKIE_NAME);
+  clearCookieValue(ORIGINAL_USER_COOKIE_NAME);
 };
 
-export const getOriginalTokens = () => {
-  if (!isBrowser()) return null;
-  const access = localStorage.getItem('original_access_token');
-  const refresh = localStorage.getItem('original_refresh_token');
-  if (!access || !refresh) return null;
-  const expiresAtRaw = localStorage.getItem('original_access_exp');
-  const expiresAt = expiresAtRaw ? Number(expiresAtRaw) : undefined;
-  return { access, refresh, expiresAt };
-};
+/** @deprecated Tokens are no longer readable from JavaScript. */
+export const getOriginalTokens = () => null;
 
-export const getOriginalUserId = (): string | null => {
-  if (!isBrowser()) return null;
-  return localStorage.getItem('original_user_id');
-};
+export const getOriginalUserId = (): string | null => getCookieValue(ORIGINAL_USER_COOKIE_NAME);
 
-export const hasOriginalTokens = () => {
-  const tokens = getOriginalTokens();
-  return Boolean(tokens && tokens.access && tokens.refresh);
-};
+export const hasOriginalTokens = () => Boolean(getCookieValue(IMPERSONATING_COOKIE_NAME));
 
-export const isImpersonatingUser = (currentUserId?: string | null): boolean => {
-  if (!hasOriginalTokens()) return false;
-  let originalId = getOriginalUserId();
-  if (!originalId) {
-    // Back-compat for sessions stored before original_user_id existed — decode from token
-    try {
-      const tokens = getOriginalTokens();
-      if (tokens?.access) {
-        const payload = JSON.parse(atob(tokens.access.split('.')[1] || ''));
-        originalId = String(payload.user_id || payload.sub || payload.id || '');
-        if (originalId) localStorage.setItem('original_user_id', originalId);
-      }
-    } catch {
-      // ignore
-    }
-  }
-  if (!originalId || !currentUserId) return true;
-  const same = String(originalId) === String(currentUserId);
-  if (same) {
-    // Auto-clear stale impersonation where we ended up back on original user
-    clearOriginalTokens();
-    return false;
-  }
-  return true;
-};
+export const isImpersonatingUser = (_currentUserId?: string | null): boolean =>
+  Boolean(getCookieValue(IMPERSONATING_COOKIE_NAME));
 
 export const impersonateUser = async (userId: string) => {
-  const response = await fetch(`${getBaseUrl()}/accounts/auth/impersonate/`, {
+  const data = await apiFetch<{ user?: unknown }>("/accounts/auth/impersonate/", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getStoredAccessToken()}`,
-    },
-    credentials: "include",
     body: JSON.stringify({ user_id: userId }),
   });
-  if (!response.ok) {
-    const body = await response.text();
-    let detail = `HTTP ${response.status}`;
-    try {
-      const parsed = JSON.parse(body);
-      detail = parsed.detail || detail;
-    } catch {}
-    throw new Error(detail);
-  }
-  const data = await response.json();
-  storeTokens(data.access, data.refresh, data.expires_in ?? 3600);
+  notifyAuthChanged();
+  return data;
+};
+
+export const returnToPrimaryUser = async () => {
+  await apiFetch("/accounts/auth/impersonate/return/", { method: "POST" });
+  clearOriginalTokens();
+  notifyAuthChanged();
 };

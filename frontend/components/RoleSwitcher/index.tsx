@@ -15,15 +15,10 @@ import {
   apiFetch,
   hasTokens,
   impersonateUser,
-  storeOriginalTokens,
-  clearOriginalTokens,
-  getOriginalTokens,
   getOriginalUserId,
-  storeTokens,
-  hasOriginalTokens,
+  returnToPrimaryUser,
 } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
-import { logError } from "@/lib/client-logger";
 import {
   getRecentUsers,
   addRecentUser,
@@ -221,31 +216,11 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       return;
     }
 
-    const originalTokens = getOriginalTokens();
-    if (originalTokens?.expiresAt) {
-      const timeRemaining = originalTokens.expiresAt - Date.now();
-      if (timeRemaining <= 0) {
-        toast.error("Your original session has expired. Please log in again.");
-        clearOriginalTokens();
-        return;
-      }
-      if (timeRemaining < 60 * 1000) {
-        toast.warning("Your original session is about to expire. You may need to log in again soon.");
-      }
-    }
-
     // If picking the original user, just return to primary instead of re-impersonating same user
     const originalUserId = getOriginalUserId();
     if (originalUserId && selectedUser.id === originalUserId) {
       setConfirmDialogOpen(false);
-      const origTokens = getOriginalTokens();
-      if (!origTokens?.access || !origTokens?.refresh) {
-        toast.info("You are already using your primary account");
-        return;
-      }
-      const secondsRemaining = origTokens.expiresAt ? Math.max(0, Math.floor((origTokens.expiresAt - Date.now()) / 1000)) : undefined;
-      storeTokens(origTokens.access, origTokens.refresh, secondsRemaining);
-      clearOriginalTokens();
+      await returnToPrimaryUser();
       toast.success("Returned to your primary account");
       onClose?.();
       setTimeout(() => window.location.reload(), 500);
@@ -254,11 +229,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
 
     setIsSwitching(true);
     setConfirmDialogOpen(false);
-
-    const hadOriginalTokens = hasOriginalTokens();
-    if (!isImpersonating && !hadOriginalTokens) {
-      storeOriginalTokens(currentUser.id);
-    }
 
     try {
       const freshUser = await apiFetch<Record<string, unknown>>(`/accounts/users/${selectedUser.id}/`);
@@ -296,20 +266,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       const message = error instanceof Error ? error.message : "Unable to switch user";
       toast.error(message);
 
-      if (hadOriginalTokens) {
-        const originalTokens = getOriginalTokens();
-        if (originalTokens?.access && originalTokens.refresh) {
-          try {
-            const secondsRemaining = originalTokens.expiresAt
-              ? Math.max(0, Math.floor((originalTokens.expiresAt - Date.now()) / 1000))
-              : undefined;
-            storeTokens(originalTokens.access, originalTokens.refresh, secondsRemaining);
-          } catch (restoreError) {
-            logError("Failed to restore original tokens", restoreError);
-          }
-        }
-      }
-
       if (mountedRef.current) {
         setIsSwitching(false);
       }
@@ -319,32 +275,13 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   };
 
   const handleReset = async () => {
-    const originalTokens = getOriginalTokens();
-
-    if (!originalTokens?.access || !originalTokens.refresh) {
+    if (!isImpersonating) {
       toast.info("You are already using your primary account");
       return;
     }
 
-    if (originalTokens.expiresAt) {
-      const timeRemaining = originalTokens.expiresAt - Date.now();
-      if (timeRemaining <= 0) {
-        toast.error("Your original session has expired. Please log in again.");
-        clearOriginalTokens();
-        onClose?.();
-        return;
-      }
-      if (timeRemaining < 60 * 1000) {
-        toast.warning("Your original session is about to expire. You may need to log in again soon.");
-      }
-    }
-
     try {
-      const secondsRemaining = originalTokens.expiresAt
-        ? Math.max(0, Math.floor((originalTokens.expiresAt - Date.now()) / 1000))
-        : undefined;
-      storeTokens(originalTokens.access, originalTokens.refresh, secondsRemaining);
-      clearOriginalTokens();
+      await returnToPrimaryUser();
       toast.success("Returned to your primary account");
 
       onClose?.();

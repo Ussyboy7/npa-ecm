@@ -1,11 +1,43 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useCurrentUser } from './use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from './use-role-checks';
+import type { PageId } from '@/lib/authorization-pages';
+import {
+  getPagePermissionsSnapshot,
+  getServerPagePermissionsSnapshot,
+  loadPagePermissions,
+  subscribePagePermissions,
+} from '@/lib/page-permissions-cache';
+
+export { invalidatePagePermissionsCache } from '@/lib/page-permissions-cache';
+
+function usePageAccess(userId: string | null | undefined) {
+  const snapshot = useSyncExternalStore(
+    subscribePagePermissions,
+    getPagePermissionsSnapshot,
+    getServerPagePermissionsSnapshot,
+  );
+
+  useEffect(() => {
+    if (!userId) return;
+    void loadPagePermissions(userId, async () => {
+      const response = await apiFetch<{ pages: Record<string, { allowed: boolean }> }>(
+        "/accounts/auth/permissions/pages/",
+      );
+      return response.pages ?? {};
+    });
+  }, [userId, snapshot.version]);
+
+  return snapshot.userId === userId ? snapshot.pages : null;
+}
 
 
 export interface SidebarVisibility {
+  /** True once page permissions, role data, and the user's office memberships are available. */
+  isVisibilityReady: boolean;
+
   // My Workspace
   showDashboard: boolean;
   showMyInbox: boolean;
@@ -49,6 +81,7 @@ export interface SidebarVisibility {
   showAdministration: boolean;
   showAdminDashboard: boolean;
   showOrganizationOffices: boolean;
+  showOrganizationActing: boolean;
   showUsersRoles: boolean;
   showWorkflowSLA: boolean;
   showRecordsGovernance: boolean;
@@ -78,26 +111,21 @@ export interface SidebarVisibility {
  */
 export function useSidebarVisibility(): SidebarVisibility {
   const { currentUser } = useCurrentUser();
-  const [pageAccess, setPageAccess] = useState<Record<string, { allowed: boolean }> | null>(null);
-  useEffect(() => {
-    let active = true;
-    setPageAccess(null);
-    if (!currentUser?.id) return () => { active = false; };
-    apiFetch<{ pages: Record<string, { allowed: boolean }> }>("/accounts/auth/permissions/pages/")
-      .then((response) => {
-        if (active) setPageAccess(response.pages ?? {});
-      })
-      .catch(() => {
-        if (active) setPageAccess({});
-      });
-    return () => { active = false; };
-  }, [currentUser?.id]);
-  const { officeMemberships, assistantAssignments, roles, offices } = useOrganization();
+  const pageAccess = usePageAccess(currentUser?.id);
+  const {
+    officeMemberships,
+    assistantAssignments,
+    roles,
+    offices,
+    myOfficeMembershipsLoaded,
+    isOrganizationReady,
+  } = useOrganization();
   const roleChecks = useRoleChecks();
 
   return useMemo(() => {
-    if (!currentUser || !pageAccess) {
+    if (!currentUser || !pageAccess || !myOfficeMembershipsLoaded || !isOrganizationReady) {
       return {
+        isVisibilityReady: false,
         showDashboard: false,
         showMyInbox: false,
         showMySent: false,
@@ -130,6 +158,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showAdministration: false,
         showAdminDashboard: false,
         showOrganizationOffices: false,
+        showOrganizationActing: false,
         showUsersRoles: false,
         showWorkflowSLA: false,
         showRecordsGovernance: false,
@@ -150,7 +179,7 @@ export function useSidebarVisibility(): SidebarVisibility {
       };
     }
 
-    const allowedPage = (pageId: string) => Boolean(pageAccess?.[pageId]?.allowed);
+    const allowedPage = (pageId: PageId) => Boolean(pageAccess?.[pageId]?.allowed);
     const isSuperAdmin = roleChecks.isSuperAdmin;
     
     const perms: Record<string, boolean> = {
@@ -242,6 +271,11 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showCaseAnalytics = analyticsOn && has("can_access_analytics");
 
     const showOrganizationOffices = adminOn && has("can_manage_org_structure");
+    const showOrganizationActing =
+      hasOfficeMembership ||
+      isSuperAdmin ||
+      has("can_manage_org_structure") ||
+      has("can_manage_users");
     const showUsersRoles =
       adminOn && (has("can_manage_users") || has("can_manage_roles"));
     const showWorkflowSLA = adminOn && has("can_manage_org_structure");
@@ -266,6 +300,7 @@ export function useSidebarVisibility(): SidebarVisibility {
 
     const showAdministration =
       showOrganizationOffices ||
+      showOrganizationActing ||
       showUsersRoles ||
       showWorkflowSLA ||
       showRecordsGovernance ||
@@ -279,6 +314,7 @@ export function useSidebarVisibility(): SidebarVisibility {
       showIntegrationHub;
 
     return {
+      isVisibilityReady: true,
       showDashboard,
       showMyInbox,
       showMySent,
@@ -312,6 +348,7 @@ export function useSidebarVisibility(): SidebarVisibility {
       showAdministration,
       showAdminDashboard,
       showOrganizationOffices,
+      showOrganizationActing,
       showUsersRoles,
       showWorkflowSLA,
       showRecordsGovernance,
@@ -337,6 +374,8 @@ export function useSidebarVisibility(): SidebarVisibility {
     roles,
     offices,
     pageAccess,
+    myOfficeMembershipsLoaded,
+    isOrganizationReady,
   ]);
 }
 

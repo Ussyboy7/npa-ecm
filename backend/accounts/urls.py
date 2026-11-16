@@ -4,13 +4,13 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import (
     TokenBlacklistView,
-    TokenRefreshView,
     TokenVerifyView,
 )
 
 from .views import (
     ApplySealView,
     AuthImpersonateView,
+    AuthImpersonateReturnView,
     AuthTokenObtainPairView,
     BackupCodeStatusView,
     ChangePasswordView,
@@ -19,6 +19,8 @@ from .views import (
     DisableEmailOTPView,
     DisableTOTPView,
     GenerateBackupCodesView,
+    CookieTokenRefreshView,
+    LogoutView,
     ExecutiveSignatureView,
     InitialPasswordSetView,
     RequestEmailOTPView,
@@ -64,10 +66,12 @@ urlpatterns = [
     # Auth endpoints
     path("auth/token/", AuthTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/token/mfa/", LoginMFAVerifyView.as_view(), name="token_mfa_verify"),
-    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("auth/token/refresh/", CookieTokenRefreshView.as_view(), name="token_refresh"),
     path("auth/token/verify/", TokenVerifyView.as_view(), name="token_verify"),
     path("auth/token/blacklist/", TokenBlacklistView.as_view(), name="token_blacklist"),
     path("auth/impersonate/", AuthImpersonateView.as_view(), name="token_impersonate"),
+    path("auth/impersonate/return/", AuthImpersonateReturnView.as_view(), name="token_impersonate_return"),
+    path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("auth/me/", CurrentUserView.as_view(), name="current_user"),
     path("auth/me/photo/", CurrentUserPhotoView.as_view(), name="current_user_photo"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="change_password"),

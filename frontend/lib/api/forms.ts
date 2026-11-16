@@ -1,6 +1,6 @@
 /** API client for forms and templates. */
 
-import { apiFetch, getBaseUrl, getStoredAccessToken } from "@/lib/api-client";
+import { apiFetch, getBaseUrl } from "@/lib/api-client";
 import { fetchAllPaginated } from "@/lib/pagination-utils";
 import type { FormTemplate, FormSubmission, FormSubmissionListItem, FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
@@ -31,12 +31,7 @@ const buildSignaturesCacheKey = (params?: {
   workflow?: string;
   status?: string;
 }) => {
-  // Scope by access token so impersonation / login switches never reuse another
-  // user's pending-signature list.
-  const token = getStoredAccessToken() ?? "";
-  const tokenScope = token ? token.slice(-24) : "anon";
   return JSON.stringify({
-    scope: tokenScope,
     workflow: params?.workflow ?? null,
     status: params?.status ?? null,
   });

@@ -246,7 +246,7 @@ export const endEditorSession = async (sessionId: string): Promise<void> => {
 
 // ============ REAL-TIME COLLABORATION (WebSocket) ============
 
-export const createDocumentEditorWebSocket = (documentId: string, token: string): DocumentEditorWebSocket => {
+export const createDocumentEditorWebSocket = (documentId: string): DocumentEditorWebSocket => {
   let ws: WebSocket | null = null;
   const callbacks: Record<string, ((data: Record<string, unknown>) => void)[]> = {};
 
@@ -270,7 +270,8 @@ export const createDocumentEditorWebSocket = (documentId: string, token: string)
     connect: () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = process.env.NEXT_PUBLIC_WS_URL || window.location.host.replace(':3002', ':8002');
-      const url = `${protocol}//${host}/ws/documents/${documentId}/edit/?token=${token}`;
+      // The WebSocket handshake authenticates from the httpOnly session cookie.
+      const url = `${protocol}//${host}/ws/documents/${documentId}/edit/`;
 
       ws = new WebSocket(url);
 

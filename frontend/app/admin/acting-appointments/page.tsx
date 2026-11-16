@@ -2,11 +2,12 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { APP_ROUTES } from "@/lib/authorization-pages";
 
 export default function ActingAppointmentsRedirect() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/admin/organization/acting");
+    router.replace(APP_ROUTES.adminActingAppointments);
   }, [router]);
   return null;
 }

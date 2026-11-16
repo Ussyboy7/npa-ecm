@@ -43,7 +43,7 @@ from accounts.oidc import (
     pop_oidc_state,
     resolve_username_from_claims,
 )
-from accounts.views import set_auth_token_cookies
+from accounts.views import clear_impersonation_cookies, set_auth_token_cookies
 from organization.permission_utils import explain_access_context, explain_permission_denial
 from organization.permission_utils import resolve_page_access
 from organization.permissions_catalog import get_permission_catalog, get_permission_presets
@@ -336,7 +336,8 @@ class LoginMFAVerifyView(APIView):
         except Exception as exc:
             logger.warning("Failed to audit MFA login: %s", exc)
 
-        response = Response(tokens)
+        response = Response({"detail": "MFA verified."})
+        clear_impersonation_cookies(response, request=request)
         set_auth_token_cookies(response, tokens["access"], tokens["refresh"], request=request)
         return response
 
@@ -437,5 +438,6 @@ class OIDCCallbackView(APIView):
         tokens = issue_tokens_for_user(user)
         frontend = settings.FRONTEND_BASE_URL.rstrip("/")
         response = HttpResponseRedirect(f"{frontend}/auth/callback")
+        clear_impersonation_cookies(response, request=request)
         set_auth_token_cookies(response, tokens["access"], tokens["refresh"], request=request)
         return response

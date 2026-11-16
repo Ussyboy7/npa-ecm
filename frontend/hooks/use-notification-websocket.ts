@@ -4,7 +4,6 @@ import { logError, logInfo, logWarn } from '@/lib/client-logger';
 import { useEffect, useState, useCallback } from 'react';
 import { useCurrentUser } from './use-current-user';
 import type { User } from '@/lib/npa-structure';
-import { getStoredAccessToken } from '@/lib/api-client';
 import { type Notification } from '@/lib/api/notifications';
 import {
   NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS,
@@ -89,7 +88,7 @@ class WebSocketManager {
 
     try {
       const url = this.getWebSocketUrl();
-      logInfo('Attempting WebSocket connection', { url, hasToken: !!getStoredAccessToken() });
+      logInfo('Attempting WebSocket connection', { url });
 
       const ws = new WebSocket(url);
 
@@ -97,13 +96,8 @@ class WebSocketManager {
         logInfo('WebSocket connected for notifications');
         this.isConnecting = false;
 
-        // Send authentication token as first message after connect
-        const token = getStoredAccessToken();
-        if (token) {
-          ws.send(JSON.stringify({ type: 'authenticate', token }));
-        } else {
-          logWarn('No token available for WebSocket authentication');
-        }
+        // Authentication comes from the httpOnly session cookie during the
+        // handshake; the server sends `authenticated` automatically.
       };
 
       ws.onmessage = (event) => {

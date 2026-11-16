@@ -6,7 +6,7 @@ import { isRecord } from "@/lib/type-utils";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
 import { isPublicAppPath } from "@/lib/app-shell-paths";
-import { apiFetch, clearTokens, hasOriginalTokens, hasTokens, isImpersonatingUser, getOriginalUserId } from "@/lib/api-client";
+import { apiFetch, clearTokens, hasTokens, isImpersonatingUser } from "@/lib/api-client";
 
 const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
 

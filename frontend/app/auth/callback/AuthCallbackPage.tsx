@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { hasTokens, storeTokens } from "@/lib/api-client";
+import { hasTokens } from "@/lib/api-client";
 import { LoadingState } from "@/components/shared/LoadingState";
 
 export default function AuthCallbackPage() {
@@ -10,18 +10,10 @@ export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const access = searchParams.get("access");
-    const refresh = searchParams.get("refresh");
     const error = searchParams.get("sso_error");
 
     if (error) {
       router.replace(`/login?sso_error=${encodeURIComponent(error)}`);
-      return;
-    }
-
-    if (access && refresh) {
-      storeTokens(access, refresh);
-      router.replace("/dashboard");
       return;
     }
 

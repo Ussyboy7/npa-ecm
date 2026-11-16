@@ -1,17 +1,16 @@
 /**
- * The proxy gates routes on the auth cookie, while a session only refreshes
- * tokens in localStorage. Without a resync, an expired cookie silently bounces
- * a signed-in user to /login on every deep link — the login page now resumes
- * via restoreAuthCookies(), which these tests pin down.
+ * Browser sessions are owned by the server: access and refresh JWTs are
+ * httpOnly, so the client resumes by asking the refresh endpoint to rotate the
+ * cookies. These tests pin down that boundary and the CSRF header it requires.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.NEXT_PUBLIC_API_URL = 'http://api.test';
 
-import { clearTokens, restoreAuthCookies } from '../api-client';
+import { clearTokens, hasTokens, restoreAuthCookies } from '../api-client';
 
-const ACCESS_COOKIE = 'npa_ecm_access_token';
-const REFRESH_COOKIE = 'npa_ecm_refresh_token';
+const SESSION_COOKIE = 'npa_ecm_session';
+const CSRF_COOKIE = 'npa_ecm_csrf_token';
 
 const readCookie = (name: string) =>
   document.cookie
@@ -21,11 +20,14 @@ const readCookie = (name: string) =>
     .slice(1)
     .join('=') ?? null;
 
+const setCookie = (name: string, value: string) => {
+  document.cookie = `${name}=${value}; path=/; samesite=lax`;
+};
+
 const expireCookie = (name: string) => {
   document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
 };
 
-/** jsdom in this setup exposes cookies but no Storage; install our own. */
 const installStorage = (): Storage => {
   const map = new Map<string, string>();
   const storage: Storage = {
@@ -42,13 +44,13 @@ const installStorage = (): Storage => {
   return storage;
 };
 
-describe('restoreAuthCookies', () => {
+describe('httpOnly cookie sessions', () => {
   let storage: Storage;
 
   beforeEach(() => {
     storage = installStorage();
-    expireCookie(ACCESS_COOKIE);
-    expireCookie(REFRESH_COOKIE);
+    expireCookie(SESSION_COOKIE);
+    expireCookie(CSRF_COOKIE);
   });
 
   afterEach(() => {
@@ -56,63 +58,45 @@ describe('restoreAuthCookies', () => {
     vi.unstubAllGlobals();
   });
 
-  const seedSession = (accessExpiresAt: number) => {
-    storage.setItem('access_token', 'stored-access');
-    storage.setItem('refresh_token', 'stored-refresh');
-    storage.setItem('access_token_exp', String(accessExpiresAt));
-  };
-
-  it('re-writes the cookie a signed-in session lost', async () => {
-    seedSession(Date.now() + 60 * 60 * 1000);
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(restoreAuthCookies()).resolves.toBe(true);
-
-    // This is exactly what proxy.ts reads.
-    expect(readCookie(ACCESS_COOKIE)).toBe('stored-access');
-    expect(readCookie(REFRESH_COOKIE)).toBe('stored-refresh');
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('reports a session from the readable marker, never a JWT', () => {
+    expect(hasTokens()).toBe(false);
+    setCookie(SESSION_COOKIE, '1');
+    expect(hasTokens()).toBe(true);
   });
 
-  it('refreshes an expired token before reporting the session usable', async () => {
-    seedSession(Date.now() - 60 * 1000);
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ access: 'refreshed-access', refresh: 'refreshed-refresh', expires_in: 3600 }),
-    });
+  it('refreshes through the cookie endpoint with the CSRF header', async () => {
+    setCookie(SESSION_COOKIE, '1');
+    setCookie(CSRF_COOKIE, 'csrf-value');
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(restoreAuthCookies()).resolves.toBe(true);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/accounts/auth/token/refresh/');
-    expect(readCookie(ACCESS_COOKIE)).toBe('refreshed-access');
-    expect(storage.getItem('access_token')).toBe('refreshed-access');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('/accounts/auth/token/refresh/');
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('X-CSRF-Token')).toBe('csrf-value');
+    expect(storage.getItem('access_token')).toBeNull();
+    expect(storage.getItem('refresh_token')).toBeNull();
   });
 
-  it('reports failure when the refresh token is rejected', async () => {
-    seedSession(Date.now() - 60 * 1000);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+  it('clears the readable session when the refresh is rejected', async () => {
+    setCookie(SESSION_COOKIE, '1');
+    setCookie(CSRF_COOKIE, 'csrf-value');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
 
     await expect(restoreAuthCookies()).resolves.toBe(false);
-    expect(readCookie(ACCESS_COOKIE)).toBeNull();
+
+    expect(readCookie(SESSION_COOKIE)).toBeNull();
+    expect(readCookie(CSRF_COOKIE)).toBeNull();
   });
 
-  it('does nothing when the browser holds no session', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  it('does not keep a JS-visible copy of the session on failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
 
     await expect(restoreAuthCookies()).resolves.toBe(false);
-    expect(readCookie(ACCESS_COOKIE)).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
 
-  it('does nothing when only an access token survived', async () => {
-    storage.setItem('access_token', 'stored-access');
-    vi.stubGlobal('fetch', vi.fn());
-
-    await expect(restoreAuthCookies()).resolves.toBe(false);
-    expect(readCookie(ACCESS_COOKIE)).toBeNull();
+    expect(storage.length).toBe(0);
   });
 });

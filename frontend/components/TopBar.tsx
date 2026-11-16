@@ -8,7 +8,7 @@ import { LogOut, Shield, Bell, HelpCircle, UserCog, Clock, Calendar, Settings, I
 import { NotificationBell } from "./notifications/NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
-import { hasTokens, logout, getOriginalTokens } from "@/lib/api-client";
+import { hasTokens, logout } from "@/lib/api-client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -92,10 +92,6 @@ export const TopBar = () => {
 
   // Check if impersonating - only after mount to avoid hydration mismatch
   const isCurrentlyImpersonating = mounted && isImpersonating;
-  const originalTokens = mounted ? getOriginalTokens() : null;
-  const tokenExpiresSoon = originalTokens?.expiresAt 
-    ? (originalTokens.expiresAt - Date.now()) < 5 * 60 * 1000 // Less than 5 minutes
-    : false;
 
   return (
     <>
@@ -107,9 +103,6 @@ export const TopBar = () => {
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
               <span className="font-medium">
                 You are impersonating <strong>{currentUser?.name || currentUser?.username || 'another user'}</strong>
-                {tokenExpiresSoon && (
-                  <span className="ml-2 text-xs">(Original session expires soon)</span>
-                )}
               </span>
             </div>
             <Button

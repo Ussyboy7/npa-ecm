@@ -25,7 +25,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from common.pagination import CatalogPageNumberPagination
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from audit.services import AuditService
@@ -50,6 +52,16 @@ from .serializers import (
     SignatureTemplateSerializer,
     UserSignaturePreferencesSerializer,
 )
+from .auth_cookies import (
+    AUTH_IMPERSONATING_COOKIE_NAME,
+    AUTH_ORIGINAL_REFRESH_COOKIE_NAME,
+    clear_auth_token_cookies,
+    clear_impersonation_cookies,
+    csrf_token_is_valid,
+    get_refresh_token_from_cookies,
+    set_auth_token_cookies,
+    set_impersonation_cookies,
+)
 
 # For TOTP
 import pyotp
@@ -62,43 +74,6 @@ except ImportError:
     QRCODE_AVAILABLE = False
 
 from PIL import Image, ImageOps, UnidentifiedImageError
-
-
-AUTH_ACCESS_COOKIE_NAME = "npa_ecm_access_token"
-AUTH_REFRESH_COOKIE_NAME = "npa_ecm_refresh_token"
-
-
-def _use_secure_auth_cookies(request=None) -> bool:
-    frontend_base_url = getattr(settings, "FRONTEND_BASE_URL", "")
-    frontend_uses_https = str(frontend_base_url).startswith("https://")
-    return bool((request and request.is_secure()) or frontend_uses_https)
-
-
-def set_auth_token_cookies(response, access_token: str, refresh_token: str, request=None) -> None:
-    access_lifetime = settings.SIMPLE_JWT.get("ACCESS_TOKEN_LIFETIME")
-    refresh_lifetime = settings.SIMPLE_JWT.get("REFRESH_TOKEN_LIFETIME")
-    access_max_age = int(access_lifetime.total_seconds()) if access_lifetime else 3600
-    refresh_max_age = int(refresh_lifetime.total_seconds()) if refresh_lifetime else 7 * 24 * 60 * 60
-    secure = _use_secure_auth_cookies(request)
-
-    response.set_cookie(
-        AUTH_ACCESS_COOKIE_NAME,
-        access_token,
-        max_age=access_max_age,
-        secure=secure,
-        httponly=False,
-        samesite="Lax",
-        path="/",
-    )
-    response.set_cookie(
-        AUTH_REFRESH_COOKIE_NAME,
-        refresh_token,
-        max_age=refresh_max_age,
-        secure=secure,
-        httponly=False,
-        samesite="Lax",
-        path="/",
-    )
 
 
 def process_signature_background(image_bytes, threshold=200, fade_width=30):
@@ -762,10 +737,10 @@ class AuthTokenObtainPairView(TokenObtainPairView):
 
         refresh = serializer.validated_data["refresh"]
         access = serializer.validated_data["access"]
-        response = Response(
-            {"refresh": str(refresh), "access": str(access)},
-            status=status.HTTP_200_OK,
-        )
+        # Never expose JWTs to JavaScript. The browser keeps them in httpOnly
+        # cookies; legacy API clients can still use the token endpoints directly.
+        response = Response({"detail": "Signed in."}, status=status.HTTP_200_OK)
+        clear_impersonation_cookies(response, request=request)
         set_auth_token_cookies(response, str(access), str(refresh), request=request)
 
         if user:
@@ -842,14 +817,113 @@ class AuthImpersonateView(APIView):
             metadata={"target_username": target.username, "target_id": str(target.id)},
         )
 
-        data = {
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user": UserSerializer(target).data,
-            "expires_in": expires_in,
-        }
-        response = Response(data, status=status.HTTP_200_OK)
-        set_auth_token_cookies(response, data["access"], data["refresh"], request=request)
+        response = Response(
+            {"user": UserSerializer(target).data, "expires_in": expires_in},
+            status=status.HTTP_200_OK,
+        )
+        # Keep the administrator's original refresh token server-side so the
+        # browser never needs to hold or replay it from JavaScript.
+        if not request.COOKIES.get(AUTH_IMPERSONATING_COOKIE_NAME):
+            original_refresh = get_refresh_token_from_cookies(request)
+            if original_refresh:
+                set_impersonation_cookies(
+                    response,
+                    request,
+                    original_refresh,
+                    request.user.id,
+                )
+        set_auth_token_cookies(
+            response,
+            str(refresh.access_token),
+            str(refresh),
+            request=request,
+        )
+        return response
+
+
+class AuthImpersonateReturnView(APIView):
+    """Restore the administrator session stored when impersonation began."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        original_refresh = request.COOKIES.get(AUTH_ORIGINAL_REFRESH_COOKIE_NAME)
+        if not request.COOKIES.get(AUTH_IMPERSONATING_COOKIE_NAME) or not original_refresh:
+            raise ValidationError({"detail": "No impersonation session is active."})
+
+        try:
+            refresh = RefreshToken(original_refresh)
+            original_user = User.objects.get(pk=refresh.get("user_id"), is_superuser=True, is_active=True)
+        except (TokenError, User.DoesNotExist, TypeError):
+            response = Response(
+                {"detail": "Your original session has expired. Please sign in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            clear_auth_token_cookies(response, request=request)
+            return response
+
+        new_refresh = RefreshToken.for_user(original_user)
+        response = Response({"detail": "Returned to your primary account."})
+        clear_impersonation_cookies(response, request=request)
+        set_auth_token_cookies(
+            response,
+            str(new_refresh.access_token),
+            str(new_refresh),
+            request=request,
+        )
+        return response
+
+
+class CookieTokenRefreshView(APIView):
+    """Refresh JWTs from the httpOnly refresh cookie and rotate both cookies."""
+
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        refresh_raw = get_refresh_token_from_cookies(request)
+        if not refresh_raw:
+            response = Response(
+                {"detail": "No refresh session is available."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            clear_auth_token_cookies(response, request=request)
+            return response
+        if not csrf_token_is_valid(request):
+            raise PermissionDenied("CSRF verification failed.")
+
+        serializer = TokenRefreshSerializer(data={"refresh": refresh_raw})
+        if not serializer.is_valid():
+            response = Response(
+                {"detail": "Your session has expired. Please sign in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            clear_auth_token_cookies(response, request=request)
+            return response
+
+        access = serializer.validated_data["access"]
+        refresh = serializer.validated_data.get("refresh", refresh_raw)
+        response = Response({"detail": "Session refreshed."})
+        set_auth_token_cookies(response, str(access), str(refresh), request=request)
+        return response
+
+
+class LogoutView(APIView):
+    """Blacklist the refresh token and clear all browser session cookies."""
+
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        refresh_raw = get_refresh_token_from_cookies(request)
+        if refresh_raw and csrf_token_is_valid(request):
+            try:
+                RefreshToken(refresh_raw).blacklist()
+            except TokenError:
+                pass
+
+        response = Response(status=status.HTTP_204_NO_CONTENT)
+        clear_auth_token_cookies(response, request=request)
         return response
 
 

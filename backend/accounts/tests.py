@@ -50,10 +50,36 @@ class AuthAPITests(TestCase):
             "password": "testpass123",
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
         self.assertIn("npa_ecm_access_token", response.cookies)
         self.assertIn("npa_ecm_refresh_token", response.cookies)
+        self.assertIn("npa_ecm_csrf_token", response.cookies)
+        self.assertTrue(response.cookies["npa_ecm_access_token"]["httponly"])
+        self.assertTrue(response.cookies["npa_ecm_refresh_token"]["httponly"])
+        self.assertFalse(response.cookies["npa_ecm_csrf_token"]["httponly"])
+
+    def test_cookie_session_requires_csrf_for_unsafe_requests(self):
+        login = self.client.post(self.login_url, {
+            "username": "testuser",
+            "password": "testpass123",
+        })
+        csrf = login.cookies["npa_ecm_csrf_token"].value
+
+        me = self.client.get(reverse("api_v1:current_user"))
+        self.assertEqual(me.status_code, status.HTTP_200_OK)
+        self.assertEqual(str(me.data["id"]), str(self.user.id))
+
+        blocked = self.client.post(reverse("api_v1:change_password"), {}, format="json")
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+
+        allowed = self.client.post(
+            reverse("api_v1:change_password"),
+            {},
+            format="json",
+            HTTP_X_CSRF_TOKEN=csrf,
+        )
+        self.assertEqual(allowed.status_code, status.HTTP_400_BAD_REQUEST)
 
 
     def test_login_failure(self):

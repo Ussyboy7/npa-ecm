@@ -243,7 +243,7 @@ BACKUP_DIR = os.getenv("BACKUP_DIR", str(BASE_DIR / "backups" / "local"))
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication"
+        "accounts.authentication.CookieJWTAuthentication"
     ],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -288,6 +288,16 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-csrf-token",
+    "x-requested-with",
+]
 
 # Allow iframe embedding for same-origin (needed for PDF previews)
 X_FRAME_OPTIONS = "SAMEORIGIN"

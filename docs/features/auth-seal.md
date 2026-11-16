@@ -32,4 +32,4 @@
 - `SYSTEM_ROLE_SUPER_ADMIN` in `lib/constants.ts`
 
 ## Recent Changes
-- **Auth cookie migration**: Tokens moved from `localStorage` to HTTP-only secure cookies (`npa_ecm_access_token`, `npa_ecm_refresh_token`). `api-client.ts` rewritten to use `getCookieValue`/`setCookieValue`/`clearCookieValue` helpers. Auth callback updated for cookie-based tokens. Proxy updated for cookie forwarding.
+- **Auth cookie migration**: Access and refresh JWTs live only in HTTP-only cookies (`npa_ecm_access_token`, `npa_ecm_refresh_token`) set by the server. The client never reads or writes them; it resumes a session through the cookie-based refresh endpoint. Unsafe cookie-authenticated requests carry `X-CSRF-Token` from the readable `npa_ecm_csrf_token` cookie. Logout and impersonation restoration are server-driven so no token is exposed to JavaScript.
