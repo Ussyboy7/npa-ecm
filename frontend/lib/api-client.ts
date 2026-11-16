@@ -2,13 +2,16 @@
 
 import { logWarn } from './client-logger';
 import { clearIdentityCaches } from './identity-cache';
+import {
+  AUTH_CSRF_COOKIE_NAME,
+  AUTH_IMPERSONATING_COOKIE_NAME,
+  AUTH_ORIGINAL_USER_COOKIE_NAME,
+  AUTH_SESSION_COOKIE_NAME,
+} from './auth-cookies';
 
 const isBrowser = () => typeof window !== "undefined";
-const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
-const SESSION_COOKIE_NAME = "npa_ecm_session";
-const CSRF_COOKIE_NAME = "npa_ecm_csrf_token";
-const IMPERSONATING_COOKIE_NAME = "npa_ecm_impersonating";
-const ORIGINAL_USER_COOKIE_NAME = "npa_ecm_original_user_id";
+export const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
+export const AUTH_BROADCAST_CHANNEL = "npa_ecm_auth";
 
 const getCookieValue = (name: string): string | null => {
   if (!isBrowser()) return null;
@@ -30,11 +33,19 @@ const notifyAuthChanged = (invalidateIdentityCaches = true) => {
   if (!isBrowser()) return;
   if (invalidateIdentityCaches) clearIdentityCaches();
   window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+  if (typeof BroadcastChannel === "undefined") return;
+  try {
+    const channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL);
+    channel.postMessage("auth-changed");
+    channel.close();
+  } catch {
+    // Cross-tab sync is best-effort; the local event already fired.
+  }
 };
 
 const authHeaders = (headers?: HeadersInit): Headers => {
   const requestHeaders = new Headers(headers);
-  const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
+  const csrfToken = getCookieValue(AUTH_CSRF_COOKIE_NAME);
   if (csrfToken) requestHeaders.set("X-CSRF-Token", csrfToken);
   return requestHeaders;
 };
@@ -51,14 +62,14 @@ export const storeTokens = (..._args: unknown[]) => {
 
 export const clearTokens = () => {
   if (!isBrowser()) return;
-  clearCookieValue(SESSION_COOKIE_NAME);
-  clearCookieValue(CSRF_COOKIE_NAME);
-  clearCookieValue(IMPERSONATING_COOKIE_NAME);
-  clearCookieValue(ORIGINAL_USER_COOKIE_NAME);
+  clearCookieValue(AUTH_SESSION_COOKIE_NAME);
+  clearCookieValue(AUTH_CSRF_COOKIE_NAME);
+  clearCookieValue(AUTH_IMPERSONATING_COOKIE_NAME);
+  clearCookieValue(AUTH_ORIGINAL_USER_COOKIE_NAME);
   notifyAuthChanged();
 };
 
-export const hasTokens = () => Boolean(getCookieValue(SESSION_COOKIE_NAME));
+export const hasTokens = () => Boolean(getCookieValue(AUTH_SESSION_COOKIE_NAME));
 
 /**
  * Ask the server to rotate the httpOnly cookies from its refresh cookie. The
@@ -287,19 +298,19 @@ export const storeOriginalTokens = (_userId?: string) => {};
 
 export const clearOriginalTokens = () => {
   if (!isBrowser()) return;
-  clearCookieValue(IMPERSONATING_COOKIE_NAME);
-  clearCookieValue(ORIGINAL_USER_COOKIE_NAME);
+  clearCookieValue(AUTH_IMPERSONATING_COOKIE_NAME);
+  clearCookieValue(AUTH_ORIGINAL_USER_COOKIE_NAME);
 };
 
 /** @deprecated Tokens are no longer readable from JavaScript. */
 export const getOriginalTokens = () => null;
 
-export const getOriginalUserId = (): string | null => getCookieValue(ORIGINAL_USER_COOKIE_NAME);
+export const getOriginalUserId = (): string | null => getCookieValue(AUTH_ORIGINAL_USER_COOKIE_NAME);
 
-export const hasOriginalTokens = () => Boolean(getCookieValue(IMPERSONATING_COOKIE_NAME));
+export const hasOriginalTokens = () => Boolean(getCookieValue(AUTH_IMPERSONATING_COOKIE_NAME));
 
 export const isImpersonatingUser = (_currentUserId?: string | null): boolean =>
-  Boolean(getCookieValue(IMPERSONATING_COOKIE_NAME));
+  Boolean(getCookieValue(AUTH_IMPERSONATING_COOKIE_NAME));
 
 export const impersonateUser = async (userId: string) => {
   const data = await apiFetch<{ user?: unknown }>("/accounts/auth/impersonate/", {

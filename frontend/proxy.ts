@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-
-const ACCESS_COOKIE_NAME = 'npa_ecm_access_token';
-const LEGACY_ACCESS_COOKIE_NAME = 'access_token';
+import { AUTH_ACCESS_COOKIE_NAME, LEGACY_ACCESS_COOKIE_NAME } from './lib/auth-cookies';
 
 const isPublicPath = (pathname: string) => (
   pathname === '/'
@@ -31,7 +29,7 @@ export function proxy(request: NextRequest) {
     });
   }
 
-  const token = request.cookies.get(ACCESS_COOKIE_NAME)?.value
+  const token = request.cookies.get(AUTH_ACCESS_COOKIE_NAME)?.value
     ?? request.cookies.get(LEGACY_ACCESS_COOKIE_NAME)?.value
     ?? request.headers.get('authorization')?.replace('Bearer ', '');
 

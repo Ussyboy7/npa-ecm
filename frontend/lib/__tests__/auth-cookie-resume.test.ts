@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.NEXT_PUBLIC_API_URL = 'http://api.test';
 
-import { clearTokens, hasTokens, restoreAuthCookies } from '../api-client';
+import { apiFetch, clearTokens, hasTokens, login, restoreAuthCookies } from '../api-client';
 
 const SESSION_COOKIE = 'npa_ecm_session';
 const CSRF_COOKIE = 'npa_ecm_csrf_token';
@@ -98,5 +98,39 @@ describe('httpOnly cookie sessions', () => {
     await expect(restoreAuthCookies()).resolves.toBe(false);
 
     expect(storage.length).toBe(0);
+  });
+
+  it('does not persist login tokens in browser storage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ detail: 'Signed in.' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await login('user', 'password');
+
+    expect(storage.length).toBe(0);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.credentials).toBe('include');
+  });
+
+  it('sends the CSRF header instead of a bearer token on API calls', async () => {
+    setCookie(SESSION_COOKIE, '1');
+    setCookie(CSRF_COOKIE, 'csrf-value');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await apiFetch('/secure', { method: 'POST', body: JSON.stringify({}) });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const headers = new Headers(init.headers);
+    expect(headers.get('X-CSRF-Token')).toBe('csrf-value');
+    expect(headers.get('Authorization')).toBeNull();
+    expect(init.credentials).toBe('include');
   });
 });

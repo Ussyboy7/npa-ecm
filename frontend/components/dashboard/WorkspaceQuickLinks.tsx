@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { APP_ROUTES } from '@/lib/authorization-pages';
+import { APP_ROUTES } from '@/lib/authorization';
 
 interface WorkspaceQuickLinksProps {
   showOfficeInbox?: boolean;

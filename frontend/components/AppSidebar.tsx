@@ -9,32 +9,36 @@ import {
   FileText, Settings, ChevronDown,
   ChevronLeft, ChevronRight, Mail, Send, Archive,
   HelpCircle, Shield, FolderTree, LayoutTemplate, Target,
-  UserCheck, ScrollText, Search, FileCheck,
-  Briefcase, PackageCheck, Bell, BarChart3,
+  ScrollText, Search, FileCheck,
+  Briefcase, PackageCheck, Bell,
   LifeBuoy,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarHeader, SidebarGroup,
   SidebarGroupContent, SidebarGroupLabel, SidebarMenu,
-  SidebarMenuButton, SidebarMenuItem, useSidebar,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
-import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
+import type { SidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { useHomePath } from "@/hooks/use-home-path";
 import { SidebarNavItem, AdminNavItem } from "@/components/shared/SidebarNavItem";
+import { APP_ROUTES, PAGE_ROUTES } from "@/lib/authorization";
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  visibility: SidebarVisibility;
+}
+
+export function AppSidebar({ visibility }: AppSidebarProps) {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const { currentUser, hydrated } = useCurrentUser();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const counts = useSidebarCounts(currentUser?.id);
-  const visibility = useSidebarVisibility();
+  const counts = useSidebarCounts();
   const homePath = useHomePath();
 
   // Keep the sidebar canonical to the hydrated auth state. Until the current
@@ -43,21 +47,21 @@ export function AppSidebar() {
 
   const isActivePath = (path: string) => {
     if (!mounted || !pathname) return false;
-    if (path === '/dms') {
+    if (path === APP_ROUTES.dms) {
       return pathname === '/dms' || pathname.startsWith('/dms/') || pathname === '/documents' || pathname.startsWith('/documents/');
     }
-    if (path === '/inbox') return pathname === '/inbox';
-    if (path === '/verify') return pathname.startsWith('/verify');
-    if (path === '/admin') return pathname === '/admin' || pathname.startsWith('/admin/platform');
-    if (path === '/admin/organization') {
+    if (path === APP_ROUTES.myInbox) return pathname === APP_ROUTES.myInbox;
+    if (path === APP_ROUTES.verify) return pathname.startsWith(APP_ROUTES.verify);
+    if (path === APP_ROUTES.admin) return pathname === APP_ROUTES.admin || pathname.startsWith('/admin/platform');
+    if (path === APP_ROUTES.adminOrganization) {
       return (
-        pathname === '/admin/organization' ||
+        pathname === APP_ROUTES.adminOrganization ||
         pathname.startsWith('/admin/organization/')
       );
     }
-    if (path === '/admin/records-governance') {
+    if (path === APP_ROUTES.adminRecordsGovernance) {
       return (
-        pathname === '/admin/records-governance' ||
+        pathname === APP_ROUTES.adminRecordsGovernance ||
         pathname.startsWith('/admin/records-governance/') ||
         pathname === '/audit'
       );
@@ -68,8 +72,8 @@ export function AppSidebar() {
     if (path === '/admin/platform') {
       return pathname === '/admin/platform' || pathname.startsWith('/admin/platform/');
     }
-    if (path === '/admin/workflow-sla') return ['/admin/workflow-sla', '/admin/sla-config', '/admin/escalation-rules'].includes(pathname);
-    if (path === '/foia') return pathname === '/foia' || pathname.startsWith('/foia/');
+    if (path === APP_ROUTES.adminWorkflowSla) return [APP_ROUTES.adminWorkflowSla, '/admin/sla-config', '/admin/escalation-rules'].includes(pathname);
+    if (path === APP_ROUTES.foia) return pathname === APP_ROUTES.foia || pathname.startsWith('/foia/');
     return pathname === path || pathname.startsWith(path + '/');
   };
 
@@ -84,6 +88,7 @@ export function AppSidebar() {
     visibility.showRecordsArchives;
   const showOrganizationHub =
     visibility.showOrganizationOffices ||
+    visibility.showOrganizationActing ||
     visibility.showExternalEntities ||
     visibility.showUsersRoles;
   const showRecordsSecurityHub =
@@ -96,6 +101,13 @@ export function AppSidebar() {
     visibility.showLegacyImport ||
     visibility.showIntegrationHub;
   const showAdminHub = visibility.showAdminDashboard || showPlatformHub;
+  const organizationHref =
+    visibility.showOrganizationActing &&
+    !visibility.showOrganizationOffices &&
+    !visibility.showUsersRoles &&
+    !visibility.showExternalEntities
+      ? APP_ROUTES.adminActingAppointments
+      : APP_ROUTES.adminOrganization;
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border overflow-hidden">
@@ -132,22 +144,23 @@ export function AppSidebar() {
             <SidebarMenu>
               <SidebarNavItem href={homePath} icon={LayoutDashboard} label="Dashboard" isCollapsed={isCollapsed} isActive={pathname === homePath} />
               {visibility.showMyInbox && (
-                <SidebarNavItem href="/inbox" icon={Mail} label="My Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/inbox')} badge={counts.myInbox} badgeVariant="destructive" description="Correspondence assigned to you" />
+                <SidebarNavItem href={PAGE_ROUTES.my_inbox} icon={Mail} label="My Inbox" isCollapsed={isCollapsed} isActive={isActivePath(PAGE_ROUTES.my_inbox)} badge={counts.myInbox} badgeLabel="assigned item" badgeVariant="destructive" description="Correspondence assigned to you" />
               )}
               {visibility.showMySent && (
-                <SidebarNavItem href="/correspondence/my-sent" icon={Send} label="My Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/my-sent')} badge={counts.mySent} badgeVariant="secondary" />
+                <SidebarNavItem href={PAGE_ROUTES.my_sent} icon={Send} label="My Sent" isCollapsed={isCollapsed} isActive={isActivePath(PAGE_ROUTES.my_sent)} />
               )}
               {(visibility.showMyCases || visibility.showOfficeCases || visibility.showAllCases) && (
-                <SidebarNavItem href="/cases?tab=my" icon={Briefcase} label="Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases')} badge={counts.myCases} badgeVariant="secondary" description="My, office, and organisation case views" />
+                <SidebarNavItem href={PAGE_ROUTES.cases} icon={Briefcase} label="Cases" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.casesBase)} description="My, office, and organisation case views" />
               )}
               {(visibility.showDocumentsList || visibility.showFormsLibrary) && (
                 <SidebarNavItem
-                  href={visibility.showDocumentsList ? "/dms" : "/dms?tab=forms"}
+                  href={visibility.showDocumentsList ? PAGE_ROUTES.documents : APP_ROUTES.documentsForms}
                   icon={FileText}
                   label={visibility.showDocumentsList ? "Documents" : "Forms"}
                   isCollapsed={isCollapsed}
-                  isActive={pathname === '/dms' || pathname === '/documents'}
+                  isActive={pathname === APP_ROUTES.dms || pathname === APP_ROUTES.documents}
                   badge={counts.pendingSignatures}
+                  badgeLabel="pending signature"
                   badgeVariant="destructive"
                   description={
                     visibility.showDocumentsList
@@ -157,10 +170,10 @@ export function AppSidebar() {
                 />
               )}
               {(visibility.showExecutiveApprovals || visibility.showDepartmentalApprovals) && (
-                <SidebarNavItem href="/approvals" icon={FileCheck} label="Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals')} badge={counts.executiveApprovals} badgeVariant="secondary" description="Executive and departmental approval registers" />
+                <SidebarNavItem href={PAGE_ROUTES.approvals} icon={FileCheck} label="Approvals" isCollapsed={isCollapsed} isActive={isActivePath(PAGE_ROUTES.approvals)} badge={counts.pendingApprovals} badgeLabel="pending approval" badgeVariant="secondary" description="Executive and departmental approval registers" />
               )}
               {visibility.showNotifications && (
-                <SidebarNavItem href="/notifications" icon={Bell} label="Notifications" isCollapsed={isCollapsed} isActive={isActivePath('/notifications')} />
+                <SidebarNavItem href={APP_ROUTES.notifications} icon={Bell} label="Notifications" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.notifications)} />
               )}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -175,23 +188,23 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {visibility.showOfficeInbox && (
-                  <SidebarNavItem href="/correspondence/inbox" icon={Mail} label="Office Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/inbox')} badge={counts.officeInbox} badgeVariant="destructive" description="All items in the office inbox" />
+                  <SidebarNavItem href={PAGE_ROUTES.office_inbox} icon={Mail} label="Office Inbox" isCollapsed={isCollapsed} isActive={isActivePath(PAGE_ROUTES.office_inbox)} badge={counts.officeInbox} badgeLabel="queued item" badgeVariant="destructive" description="All items in the office inbox" />
                 )}
                 {visibility.showOfficeSent && (
-                  <SidebarNavItem href="/correspondence/office-sent" icon={PackageCheck} label="Office Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/office-sent')} badge={counts.officeSent} badgeVariant="secondary" description="Correspondence sent from your office" />
+                  <SidebarNavItem href={APP_ROUTES.officeSent} icon={PackageCheck} label="Office Sent" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.officeSent)} description="Correspondence sent from your office" />
                 )}
                 {(visibility.showRegisteredCorrespondence || visibility.showPhysicalRecords) && (
                   <SidebarNavItem
-                    href={visibility.showRegisteredCorrespondence ? "/correspondence/registered" : "/physical-documents"}
+                    href={visibility.showRegisteredCorrespondence ? PAGE_ROUTES.registered : PAGE_ROUTES.physical_records}
                     icon={Archive}
                     label="Registry Records"
                     isCollapsed={isCollapsed}
-                    isActive={isActivePath('/correspondence/registered') || isActivePath('/physical-documents')}
+                    isActive={isActivePath(PAGE_ROUTES.registered) || isActivePath(PAGE_ROUTES.physical_records)}
                     description="Registered correspondence and physical check-in/out"
                   />
                 )}
                 {visibility.showRecordsArchives && (
-                  <SidebarNavItem href="/correspondence/records" icon={Archive} label="Archives" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/records')} />
+                  <SidebarNavItem href={PAGE_ROUTES.records} icon={Archive} label="Archives" isCollapsed={isCollapsed} isActive={isActivePath(PAGE_ROUTES.records)} />
                 )}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -205,22 +218,11 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarNavItem href="/search" icon={Search} label="Search" isCollapsed={isCollapsed} isActive={isActivePath('/search')} description="Find documents, correspondence, and cases" />
-                <SidebarNavItem href="/acting" icon={UserCheck} label="Acting" isCollapsed={isCollapsed} isActive={isActivePath('/acting')} description="Appoint or request office seat succession" />
+                <SidebarNavItem href={APP_ROUTES.search} icon={Search} label="Search" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.search)} description="Find documents, correspondence, and cases" />
                 {visibility.showFOIA && (
-                  <SidebarNavItem href="/foia" icon={ScrollText} label="FOIA" isCollapsed={isCollapsed} isActive={isActivePath('/foia')} description="Freedom of Information Act requests" />
+                  <SidebarNavItem href={APP_ROUTES.foia} icon={ScrollText} label="FOIA" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.foia)} description="Freedom of Information Act requests" />
                 )}
-                <SidebarNavItem href="/verify" icon={Shield} label="Verify" isCollapsed={isCollapsed} isActive={isActivePath('/verify')} description="Verify digital executive seals" />
-                {visibility.showAnalyticsReports && (
-                  <SidebarNavItem
-                    href="/analytics"
-                    icon={BarChart3}
-                    label="Analytics"
-                    isCollapsed={isCollapsed}
-                    isActive={pathname.startsWith('/analytics')}
-                    description="Executive, performance, division, and case analytics"
-                  />
-                )}
+                <SidebarNavItem href={APP_ROUTES.verify} icon={Shield} label="Verify" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.verify)} description="Verify digital executive seals" />
               </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -242,24 +244,24 @@ export function AppSidebar() {
                   <SidebarMenu>
                     {showAdminHub && (
                       <AdminNavItem
-                        href="/admin"
+                        href={PAGE_ROUTES.admin_overview}
                         icon={LayoutDashboard}
                         label={visibility.showAdminDashboard ? "Admin Overview" : "Platform"}
-                        isActive={isActivePath('/admin')}
+                        isActive={isActivePath(PAGE_ROUTES.admin_overview)}
                         isCollapsed={isCollapsed}
                       />
                     )}
                     {showOrganizationHub && (
-                      <AdminNavItem href="/admin/organization" icon={FolderTree} label="Organization" isActive={isActivePath('/admin/organization')} isCollapsed={isCollapsed} />
+                      <AdminNavItem href={organizationHref} icon={FolderTree} label="Organization" isActive={isActivePath(APP_ROUTES.adminOrganization)} isCollapsed={isCollapsed} />
                     )}
                     {visibility.showWorkflowSLA && (
-                      <AdminNavItem href="/admin/workflow-sla" icon={Target} label="Workflow & SLA" isActive={isActivePath('/admin/workflow-sla')} isCollapsed={isCollapsed} />
+                      <AdminNavItem href={APP_ROUTES.adminWorkflowSla} icon={Target} label="Workflow & SLA" isActive={isActivePath(APP_ROUTES.adminWorkflowSla)} isCollapsed={isCollapsed} />
                     )}
                     {visibility.showTemplates && (
-                      <AdminNavItem href="/admin/templates-hub" icon={LayoutTemplate} label="Templates" isActive={isActivePath('/admin/templates-hub')} isCollapsed={isCollapsed} />
+                      <AdminNavItem href={PAGE_ROUTES.templates} icon={LayoutTemplate} label="Templates" isActive={isActivePath(PAGE_ROUTES.templates)} isCollapsed={isCollapsed} />
                     )}
                     {showRecordsSecurityHub && (
-                      <AdminNavItem href="/admin/records-governance" icon={Archive} label="Records & security" isActive={isActivePath('/admin/records-governance')} isCollapsed={isCollapsed} />
+                      <AdminNavItem href={PAGE_ROUTES.records_governance} icon={Archive} label="Records & security" isActive={isActivePath(PAGE_ROUTES.records_governance)} isCollapsed={isCollapsed} />
                     )}
                   </SidebarMenu>
                 </SidebarGroupContent>
@@ -275,22 +277,10 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActivePath('/settings')}>
-                  <Link href="/settings"><Settings className="h-4 w-4" />{!isCollapsed && <span>Settings</span>}</Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActivePath('/help')}>
-                  <Link href="/help"><HelpCircle className="h-4 w-4" />{!isCollapsed && <span>Help & Guides</span>}</Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <SidebarNavItem href={APP_ROUTES.settings} icon={Settings} label="Settings" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.settings)} />
+              <SidebarNavItem href={APP_ROUTES.help} icon={HelpCircle} label="Help & Guides" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.help)} />
               {visibility.showHelpdeskSubmit && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActivePath('/helpdesk')}>
-                    <Link href="/helpdesk"><LifeBuoy className="h-4 w-4" />{!isCollapsed && <span>Get Support</span>}</Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <SidebarNavItem href={APP_ROUTES.helpdesk} icon={LifeBuoy} label="Get Support" isCollapsed={isCollapsed} isActive={isActivePath(APP_ROUTES.helpdesk)} />
               )}
 
             </SidebarMenu>

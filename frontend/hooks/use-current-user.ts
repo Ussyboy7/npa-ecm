@@ -6,9 +6,14 @@ import { isRecord } from "@/lib/type-utils";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
 import { isPublicAppPath } from "@/lib/app-shell-paths";
-import { apiFetch, clearTokens, hasTokens, isImpersonatingUser } from "@/lib/api-client";
-
-const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
+import {
+  AUTH_BROADCAST_CHANNEL,
+  AUTH_CHANGED_EVENT,
+  apiFetch,
+  clearTokens,
+  hasTokens,
+  isImpersonatingUser,
+} from "@/lib/api-client";
 
 const toOptionalString = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
@@ -205,17 +210,10 @@ export const useCurrentUser = () => {
     const handleAuthChanged = () => {
       if (globalUserState.loading) return;
       globalUserState.hydrated = false;
-      void performGlobalFetch();
-    };
-    const handleStorageChanged = (event: StorageEvent) => {
-      if (!["access_token", "refresh_token", "npa_ecm_access_token", "npa_ecm_refresh_token", "original_access_token", "original_refresh_token"].includes(event.key ?? "")) {
-        return;
-      }
-      if (globalUserState.loading) return;
-      globalUserState.hydrated = false;
       if (!hasTokens()) {
         globalUserState.user = null;
         globalUserState.hydrated = true;
+        globalUserState.loading = false;
         notifySubscribers();
         if (!isPublicAppPath(window.location.pathname)) {
           window.location.assign('/login');
@@ -224,11 +222,14 @@ export const useCurrentUser = () => {
       }
       void performGlobalFetch();
     };
+    const channel = typeof BroadcastChannel !== "undefined"
+      ? new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
+      : null;
+    channel?.addEventListener("message", handleAuthChanged);
     window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
-    window.addEventListener("storage", handleStorageChanged);
     return () => {
+      channel?.close();
       window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChanged);
-      window.removeEventListener("storage", handleStorageChanged);
     };
   }, [performGlobalFetch]);
 

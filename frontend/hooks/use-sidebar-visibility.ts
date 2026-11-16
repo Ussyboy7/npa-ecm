@@ -3,7 +3,7 @@ import { useCurrentUser } from './use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from './use-role-checks';
-import type { PageId } from '@/lib/authorization-pages';
+import type { PageId, PermissionKey, SidebarPermissionKey } from '@/lib/authorization';
 import {
   getPagePermissionsSnapshot,
   getServerPagePermissionsSnapshot,
@@ -186,8 +186,8 @@ export function useSidebarVisibility(): SidebarVisibility {
       ...(roles.find((r) => r.id === currentUser.systemRole || r.name === currentUser.systemRole)?.permissions ?? {}),
       ...(currentUser.rolePermissions ?? {}),
     };
-    const has = (key: string) => Boolean(perms[key]);
-    const section = (sidebarKey: string, defaultOn: boolean) =>
+    const has = (key: PermissionKey) => Boolean(perms[key]);
+    const section = (sidebarKey: SidebarPermissionKey, defaultOn: boolean) =>
       sidebarKey in perms ? Boolean(perms[sidebarKey]) : defaultOn;
 
     const QUEUE_ROLES = new Set(['principal', 'acting', 'secretariat']);
