@@ -121,6 +121,35 @@ class TotpVerificationService:
         return True
 
 
+class TotpProvisioningService:
+    """Build the shared authenticator-app enrollment payload."""
+
+    ISSUER_NAME = "NPA ECM"
+
+    @classmethod
+    def build_payload(cls, secret: str, user, *, issuer_name: str = ISSUER_NAME) -> dict:
+        import base64
+        import io
+
+        import pyotp
+        import qrcode
+
+        totp = pyotp.TOTP(secret)
+        provisioning_uri = totp.provisioning_uri(
+            name=user.email or user.username,
+            issuer_name=issuer_name,
+        )
+        image = qrcode.make(provisioning_uri)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        qr_code = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return {
+            "secret": secret,
+            "provisioning_uri": provisioning_uri,
+            "qr_code": f"data:image/png;base64,{qr_code}",
+        }
+
+
 class StepUpService:
     """Require a password, current TOTP code, or unused backup code."""
 

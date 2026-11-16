@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 import logging
-from io import BytesIO
 
 from django.conf import settings
 from django.http import HttpResponseRedirect
 import pyotp
-import qrcode
-from qrcode.image.pil import PilImage
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -32,7 +28,12 @@ from accounts.login_mfa import (
     user_requires_login_mfa,
     verify_login_mfa_code,
 )
-from accounts.services import BackupCodeService, StepUpService, TotpVerificationService
+from accounts.services import (
+    BackupCodeService,
+    StepUpService,
+    TotpProvisioningService,
+    TotpVerificationService,
+)
 from accounts.models import LoginSecuritySettings, User
 from accounts.oidc import (
     build_authorization_url,
@@ -228,22 +229,8 @@ class LoginTOTPSetupView(APIView):
                 ]
             )
 
-        totp = pyotp.TOTP(security.totp_secret)
-        uri = totp.provisioning_uri(
-            name=request.user.email or request.user.username,
-            issuer_name="NPA ECM",
-        )
-        qr = qrcode.make(uri, image_factory=PilImage)
-        buffer = BytesIO()
-        qr.save(buffer, format="PNG")
-        qr_b64 = base64.b64encode(buffer.getvalue()).decode("ascii")
-
         return Response(
-            {
-                "secret": security.totp_secret,
-                "provisioning_uri": uri,
-                "qr_code": f"data:image/png;base64,{qr_b64}",
-            }
+            TotpProvisioningService.build_payload(security.totp_secret, request.user)
         )
 
 

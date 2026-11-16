@@ -65,13 +65,6 @@ from .auth_cookies import (
 
 # For TOTP
 import pyotp
-import base64
-
-try:
-    import qrcode
-    QRCODE_AVAILABLE = True
-except ImportError:
-    QRCODE_AVAILABLE = False
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -1671,32 +1664,17 @@ class SetupTOTPView(APIView):
                 'totp_secret', 'totp_enabled', 'totp_confirmed', 'totp_last_used_step', 'updated_at'
             ])
         
-        # Generate provisioning URI for QR code
-        totp = pyotp.TOTP(signature.totp_secret)
-        provisioning_uri = totp.provisioning_uri(
-            name=request.user.email or request.user.username,
-            issuer_name="NPA ECM"
+        # Generate the shared enrollment payload for the authenticator app.
+        from .services import TotpProvisioningService
+
+        payload = TotpProvisioningService.build_payload(
+            signature.totp_secret, request.user
         )
-        
-        # Generate QR code as base64
-        qr_code_base64 = None
-        if QRCODE_AVAILABLE:
-            qr = qrcode.QRCode(version=1, box_size=10, border=5)
-            qr.add_data(provisioning_uri)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            
-            buffer = io.BytesIO()
-            img.save(buffer, format='PNG')
-            buffer.seek(0)
-            qr_code_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        
-        return Response({
-            "secret": signature.totp_secret,
-            "provisioning_uri": provisioning_uri,
-            "qr_code": f"data:image/png;base64,{qr_code_base64}" if qr_code_base64 else None,
-            "instructions": "Scan this QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, etc.)",
-        })
+        payload["instructions"] = (
+            "Scan this QR code with your authenticator app "
+            "(Google Authenticator, Microsoft Authenticator, etc.)"
+        )
+        return Response(payload)
 
 
 class VerifyTOTPView(APIView):
