@@ -1,4 +1,5 @@
 import type { Department, Directorate, Division, Office, OfficeMembership, User } from './npa-structure';
+import { registerIdentityCacheClearer } from './identity-cache';
 
 export type OrganizationSnapshot = {
   directorates: Directorate[];
@@ -86,3 +87,5 @@ export const getOfficeMembershipsByUser = (userId?: string | null) => {
   if (!userId) return [];
   return snapshot.officeMemberships.filter((membership) => membership.userId === userId);
 };
+
+registerIdentityCacheClearer(resetOrgCache);

@@ -1,61 +1,96 @@
-import { useState, useEffect, useRef } from 'react';
-import { hasTokens, apiFetch } from '@/lib/api-client';
-import { mapApiUserToUser } from '@/lib/organization-data';
+import { useState, useEffect, useSyncExternalStore } from 'react';
+import { hasTokens } from '@/lib/api-client';
 import type { User } from '@/lib/npa-structure';
-import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
+import { fetchActiveUsers } from '@/lib/users-api';
+import { registerIdentityCacheClearer } from '@/lib/identity-cache';
+import { getCurrentUserSnapshot, subscribeToStore } from '@/hooks/use-current-user';
 
-let cachedUsers: User[] | null = null;
-let fetchPromise: Promise<User[]> | null = null;
+type UserCacheEntry = { userId: string; users: User[] };
+type UserFetch = { userId: string; promise: Promise<User[]> };
 
-async function fetchAllUsers(): Promise<User[]> {
-  if (cachedUsers) return cachedUsers;
-  if (fetchPromise) return fetchPromise;
+let cachedUsers: UserCacheEntry | null = null;
+let fetchPromise: UserFetch | null = null;
 
-  fetchPromise = (async () => {
+async function fetchAllUsers(userId: string): Promise<User[]> {
+  if (!userId) return [];
+  if (cachedUsers?.userId === userId) return cachedUsers.users;
+  if (fetchPromise?.userId === userId) return fetchPromise.promise;
+
+  let entry: UserFetch | null = null;
+  const promise = (async () => {
     try {
-      const rows = await fetchAllCatalogPaginated<Record<string, unknown>>(
-        '/accounts/users/?is_active=true&ordering=username',
-        500,
-      );
-      const users = rows
-        .map(mapApiUserToUser)
-        .filter((u): u is User => u != null);
-      cachedUsers = users;
+      const users = await fetchActiveUsers(500);
+      // A clear or identity switch may have happened while this request was in
+      // flight; never let the old directory repopulate the shared cache.
+      if (fetchPromise === entry) {
+        cachedUsers = { userId, users };
+      }
       return users;
     } finally {
-      fetchPromise = null;
+      if (fetchPromise === entry) fetchPromise = null;
     }
   })();
 
-  return fetchPromise;
+  entry = { userId, promise };
+  fetchPromise = entry;
+  return promise;
 }
+
+/** Drop the shared user directory so it cannot survive an identity switch. */
+export function clearOrgUsersCache(): void {
+  cachedUsers = null;
+  fetchPromise = null;
+}
+
+registerIdentityCacheClearer(clearOrgUsersCache);
 
 /**
  * Hook that fetches all active users on-demand with shared caching.
  * Returns the user array (empty until loaded) and a loading flag.
  */
 export function useOrgUsers(): { users: User[]; loading: boolean } {
-  const [users, setUsers] = useState<User[]>(cachedUsers ?? []);
-  const [loading, setLoading] = useState(cachedUsers === null);
+  const currentUser = useSyncExternalStore(
+    subscribeToStore,
+    getCurrentUserSnapshot,
+    getCurrentUserSnapshot,
+  );
+  const userId = currentUser?.id ?? null;
+  const [users, setUsers] = useState<User[]>(
+    cachedUsers?.userId === userId ? cachedUsers.users : [],
+  );
+  const [loading, setLoading] = useState(Boolean(userId && cachedUsers?.userId !== userId));
 
   useEffect(() => {
-    if (!hasTokens()) return;
-    if (cachedUsers) {
-      setUsers(cachedUsers);
+    if (!userId || !hasTokens()) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+    if (cachedUsers?.userId === userId) {
+      setUsers(cachedUsers.users);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
-    fetchAllUsers().then((result) => {
-      if (!cancelled) {
-        setUsers(result);
-        setLoading(false);
-      }
-    });
+    setUsers([]);
+    setLoading(true);
+    fetchAllUsers(userId)
+      .then((result) => {
+        if (!cancelled) {
+          setUsers(result);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUsers([]);
+          setLoading(false);
+        }
+      });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [userId]);
 
   return { users, loading };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { logWarn } from './client-logger';
+import { clearIdentityCaches } from './identity-cache';
 
 const isBrowser = () => typeof window !== "undefined";
 const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
@@ -36,8 +37,9 @@ const clearCookieValue = (name: string) => {
   document.cookie = `${name}=; path=/; max-age=0; samesite=lax${secure}`;
 };
 
-const notifyAuthChanged = () => {
+const notifyAuthChanged = (invalidateIdentityCaches = true) => {
   if (!isBrowser()) return;
+  if (invalidateIdentityCaches) clearIdentityCaches();
   window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 };
 
@@ -69,7 +71,14 @@ export const getStoredRefreshToken = () => {
   );
 };
 
-export const storeTokens = (accessToken: string, refreshToken: string, expiresInSeconds?: number) => {
+type StoreTokensOptions = { invalidateIdentityCaches?: boolean };
+
+export const storeTokens = (
+  accessToken: string,
+  refreshToken: string,
+  expiresInSeconds?: number,
+  options: StoreTokensOptions = {},
+) => {
   if (!isBrowser()) return;
   const storage = getStorage();
   const accessTtlSeconds = expiresInSeconds ?? DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
@@ -81,7 +90,7 @@ export const storeTokens = (accessToken: string, refreshToken: string, expiresIn
   setCookieValue(REFRESH_COOKIE_NAME, refreshToken, DEFAULT_REFRESH_TOKEN_TTL_SECONDS);
   clearCookieValue(LEGACY_ACCESS_COOKIE_NAME);
   clearCookieValue(LEGACY_REFRESH_COOKIE_NAME);
-  notifyAuthChanged();
+  notifyAuthChanged(options.invalidateIdentityCaches !== false);
 };
 
 export const clearTokens = () => {
@@ -172,6 +181,7 @@ async function attemptTokenRefresh(): Promise<boolean> {
         data.access,
         typeof data.refresh === "string" ? data.refresh : refreshToken,
         data.expires_in ?? 3600,
+        { invalidateIdentityCaches: false },
       );
       return true;
     } catch {
