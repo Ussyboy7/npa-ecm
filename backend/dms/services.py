@@ -10,6 +10,7 @@ from typing import Optional
 
 from django.conf import settings
 
+from common.media_urls import build_media_url
 from common.storage_utils import resolve_media_path
 
 logger = logging.getLogger(__name__)
@@ -515,10 +516,7 @@ class FileUploadService:
         file_path = os.path.join('dms_versions', doc_id, safe_filename)
         saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
 
-        media_url = settings.MEDIA_URL or '/media/'
-        if not media_url.startswith('/'):
-            media_url = f'/{media_url}'
-        data['file_url'] = f"{media_url.rstrip('/')}/{saved_path}"
+        data['file_url'] = build_media_url(saved_path)
 
         return data
 

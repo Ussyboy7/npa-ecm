@@ -6,7 +6,7 @@ from django.db import transaction
 from django.db.models import Max, Q
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.conf import settings
+from common.media_urls import build_media_url
 from common.pagination import StandardPageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
@@ -245,10 +245,7 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
             saved_path = default_storage.save(file_path, ContentFile(pdf_bytes))
             
             # Build relative URL (browser will resolve to current domain)
-            media_url = settings.MEDIA_URL or '/media/'
-            if not media_url.startswith('/'):
-                media_url = f'/{media_url}'
-            version.file_url = f"{media_url.rstrip('/')}/{saved_path}"
+            version.file_url = build_media_url(saved_path)
             version.save()
 
             # Mark prior tiny auto-generated stubs so the UI ignores them

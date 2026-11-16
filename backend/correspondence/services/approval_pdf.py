@@ -18,6 +18,8 @@ from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 
 from django.conf import settings
+
+from common.media_urls import build_media_url
 from django.core.files.storage import default_storage
 from django.utils.dateformat import format as date_format
 from PIL import Image, ImageOps
@@ -478,12 +480,7 @@ def _render_scan_pdf(version) -> bytes | None:
 
 def _media_url(path: str) -> str:
     """Build a relative media URL for a stored approved-copy PDF."""
-    media_url = (settings.MEDIA_URL or "/media/").strip()
-    if not media_url.startswith("/"):
-        media_url = f"/{media_url}"
-    if not media_url.endswith("/"):
-        media_url = f"{media_url}/"
-    return f"{media_url}{path.lstrip('/')}"
+    return build_media_url(path)
 
 
 def _dms_paper_html(content_html: str) -> str:
