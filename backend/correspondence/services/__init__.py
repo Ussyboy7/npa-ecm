@@ -49,6 +49,7 @@ from organization.models import Office, OfficeMembership
 from rest_framework.exceptions import ValidationError
 
 from common.grade_utils import get_grade_level
+from common.media_urls import build_media_url
 
 
 def validate_workflow_vs_requirement(correspondence, template=None) -> None:
@@ -1884,14 +1885,8 @@ class CompletionPackageService:
 
     @staticmethod
     def _build_media_url(path: str, request=None) -> str:
-        """Build media URL. Always returns relative path (browser resolves to current domain)."""
-        media_url = settings.MEDIA_URL or "/media/"
-        if not media_url.startswith("/"):
-            media_url = f"/{media_url}"
-        if not media_url.endswith("/"):
-            media_url = f"{media_url}/"
-        # Always return relative path - avoids hardcoded IPs in Docker environments
-        return f"{media_url}{path}".replace("//", "/")
+        """Build a relative media URL (the browser resolves the current domain)."""
+        return build_media_url(path)
 
     @classmethod
     def _resolve_stakeholders(cls, correspondence: Correspondence) -> List[User]:
