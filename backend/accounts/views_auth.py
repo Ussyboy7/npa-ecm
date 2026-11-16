@@ -279,6 +279,8 @@ class LoginMFAVerifyView(APIView):
     """Complete login after password step when MFA is required."""
 
     permission_classes = [AllowAny]
+    # A stale session cookie must not block completion of a new login.
+    authentication_classes = []
     throttle_classes = [OTPRateThrottle]
 
     def post(self, request):
@@ -333,6 +335,7 @@ class LoginMFARequestEmailView(APIView):
     """Send login email OTP during MFA challenge (unauthenticated)."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []
     throttle_classes = [OTPRateThrottle]
 
     def post(self, request):
