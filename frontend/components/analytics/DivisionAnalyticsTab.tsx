@@ -194,6 +194,7 @@ export function DivisionAnalyticsTab() {
 
   const headerStats = data ? (
     <StatStrip
+      wrap
       items={[
         {
           key: "divisions",
@@ -239,10 +240,13 @@ export function DivisionAnalyticsTab() {
       <AnalyticsHeaderSlots stats={headerStats} actions={headerActions} />
 
       <AnalyticsFilterBar>
-        <div className="flex items-center gap-2">
-          <span className={appType.caption}>Period</span>
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <span className={cn(appType.caption, "shrink-0")}>Period</span>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="h-8 w-40 text-xs" aria-label="Division period">
+            <SelectTrigger
+              className="h-8 min-w-0 flex-1 text-xs sm:w-40 sm:flex-none"
+              aria-label="Division period"
+            >
               <SelectValue placeholder="Period" />
             </SelectTrigger>
             <SelectContent>
@@ -252,10 +256,13 @@ export function DivisionAnalyticsTab() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={appType.caption}>Directorate</span>
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+          <span className={cn(appType.caption, "shrink-0")}>Directorate</span>
           <Select value={directorateId} onValueChange={setDirectorateId}>
-            <SelectTrigger className="h-8 w-56 text-xs" aria-label="Filter by directorate">
+            <SelectTrigger
+              className="h-8 min-w-0 flex-1 text-xs sm:w-56 sm:flex-none"
+              aria-label="Filter by directorate"
+            >
               <SelectValue placeholder="Directorate" />
             </SelectTrigger>
             <SelectContent>

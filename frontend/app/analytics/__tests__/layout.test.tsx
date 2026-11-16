@@ -39,7 +39,24 @@ vi.mock("@/components/help/ContextualHelp", () => ({
   ContextualHelp: () => null,
 }));
 
+vi.mock("@/contexts/OrganizationContext", () => ({
+  useOrganization: () => ({
+    directorates: [],
+    divisions: [],
+    departments: [],
+    isSyncing: false,
+  }),
+}));
+
 vi.mock("@/lib/analytics-client", () => ({
+  fetchPerformanceAnalytics: vi.fn(async () => ({
+    metadata: { rangeDays: 30, generatedAt: "2026-11-16T00:00:00Z" },
+    sla: { total: 1, compliant: 1, breached: 0, complianceRate: 100 },
+    turnaround: { average: 1, fastest: 1, slowest: 1 },
+    divisionPerformance: [],
+    responseDistribution: [],
+    rolePerformance: [],
+  })),
   fetchExecutiveAnalytics: vi.fn(async () => ({
     metadata: { rangeDays: 30, generatedAt: "2026-11-16T00:00:00Z" },
     divisionMetrics: [],
@@ -52,6 +69,42 @@ vi.mock("@/lib/analytics-client", () => ({
 }));
 
 vi.mock("@/lib/sla-client", () => ({
+  fetchEnhancedDivisionPerformance: vi.fn(async () => ({
+    metadata: { rangeDays: 30, generatedAt: "2026-11-16T00:00:00Z" },
+    summary: {
+      totalDivisions: 1,
+      totalWorkload: 1,
+      totalCompleted: 1,
+      avgCompletionRate: 100,
+      avgSlaCompliance: 100,
+    },
+    divisions: [
+      {
+        id: "division-1",
+        name: "Operations",
+        fullName: "Operations Division",
+        directorateId: null,
+        directorateName: null,
+        workload: 1,
+        completed: 1,
+        pending: 0,
+        completionRate: 100,
+        avgTurnaround: 1,
+        p50Turnaround: 1,
+        p90Turnaround: 1,
+        slaCompliant: 1,
+        slaBreached: 0,
+        slaAtRisk: 0,
+        slaComplianceRate: 100,
+        efficiency: 100,
+        throughput: 1,
+        backlog: 0,
+        priorityBreakdown: { urgent: 0, high: 0, medium: 1, low: 0 },
+      },
+    ],
+    topPerformers: [],
+    needsAttention: [],
+  })),
   fetchEnhancedSLAAnalytics: vi.fn(async () => ({
     metadata: { rangeDays: 30, generatedAt: "2026-11-16T00:00:00Z" },
     summary: {
@@ -137,6 +190,8 @@ vi.mock("recharts", () => ({
 }));
 
 import ExecutiveDashboardPage from "../executive/page";
+import PerformanceAnalyticsPage from "../performance/page";
+import DivisionAnalyticsPage from "../divisions/page";
 import CaseAnalyticsPage from "../cases/page";
 
 const precedes = (earlier: Element, later: Element) =>
@@ -154,6 +209,34 @@ describe("Analytics layout", () => {
     expect(precedes(refresh, stats)).toBe(true);
     expect(precedes(stats, tabs)).toBe(true);
     expect(precedes(tabs, range)).toBe(true);
+  });
+
+  it("keeps Performance header actions and statistics above the tab strip", async () => {
+    render(<PerformanceAnalyticsPage />);
+
+    const refresh = await screen.findByRole("button", { name: "Refresh" });
+    const stats = await screen.findByRole("group", { name: "Summary statistics" });
+    const tabs = screen.getByRole("tablist");
+    const period = screen.getByRole("combobox", { name: "Performance period" });
+
+    expect(precedes(refresh, stats)).toBe(true);
+    expect(precedes(stats, tabs)).toBe(true);
+    expect(precedes(tabs, period)).toBe(true);
+  });
+
+  it("keeps Divisions header actions and statistics above the tab strip", async () => {
+    render(<DivisionAnalyticsPage />);
+
+    const refresh = await screen.findByRole("button", { name: "Refresh" });
+    const stats = await screen.findByRole("group", { name: "Summary statistics" });
+    const tabs = screen.getByRole("tablist");
+    const period = screen.getByRole("combobox", { name: "Division period" });
+    const directorate = screen.getByRole("combobox", { name: "Filter by directorate" });
+
+    expect(precedes(refresh, stats)).toBe(true);
+    expect(precedes(stats, tabs)).toBe(true);
+    expect(precedes(tabs, period)).toBe(true);
+    expect(precedes(tabs, directorate)).toBe(true);
   });
 
   it("keeps Cases header actions and statistics above the tab strip", async () => {

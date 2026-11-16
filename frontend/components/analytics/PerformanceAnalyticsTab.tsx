@@ -111,6 +111,7 @@ export const PerformanceAnalyticsTab = () => {
 
   const headerStats = data ? (
     <StatStrip
+      wrap
       items={[
         {
           key: 'compliance',

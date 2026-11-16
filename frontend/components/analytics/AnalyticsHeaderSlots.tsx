@@ -59,11 +59,18 @@ export function AnalyticsRefreshAction({
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {status ? (
-        <span className={appType.caption} role="status">
+        <span className={cn(appType.caption, "sr-only sm:not-sr-only")} role="status">
           {status}
         </span>
       ) : null}
-      <Button type="button" variant="outline" size="compact" onClick={onRefresh} disabled={loading}>
+      <Button
+        type="button"
+        variant="outline"
+        size="compact"
+        className="shrink-0 whitespace-nowrap"
+        onClick={onRefresh}
+        disabled={loading}
+      >
         <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
         Refresh
       </Button>

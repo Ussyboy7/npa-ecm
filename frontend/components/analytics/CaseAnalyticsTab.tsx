@@ -138,6 +138,7 @@ export const CaseAnalyticsTab = () => {
 
   const headerStats = stats ? (
     <StatStrip
+      wrap
       items={[
         {
           key: 'total',

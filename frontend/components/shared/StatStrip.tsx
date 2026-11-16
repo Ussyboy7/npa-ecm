@@ -17,12 +17,14 @@ interface StatStripProps {
   className?: string;
   /** denser padding for nested panels */
   compact?: boolean;
+  /** use a two-column grid below sm so labels do not truncate */
+  wrap?: boolean;
 }
 
 /**
  * Quiet metric row — replaces four heavy icon Card grids on queue pages.
  */
-export function StatStrip({ items, className, compact = false }: StatStripProps) {
+export function StatStrip({ items, className, compact = false, wrap = false }: StatStripProps) {
   if (items.length === 0) return null;
 
   return (
@@ -30,6 +32,7 @@ export function StatStrip({ items, className, compact = false }: StatStripProps)
       className={cn(
         "flex items-stretch gap-0 min-w-0 overflow-x-auto scrollbar-none rounded-xl bg-muted/30 border border-border/40",
         compact ? "px-2 py-1.5" : "px-3 py-2.5",
+        wrap && "grid grid-cols-2 overflow-visible sm:flex sm:overflow-x-auto",
         className,
       )}
       role="group"
@@ -38,7 +41,14 @@ export function StatStrip({ items, className, compact = false }: StatStripProps)
       {items.map((item, index) => {
         const cellClassName = cn(
           "flex-1 min-w-[4.5rem] px-2 text-left",
-          index > 0 && "border-l border-border/50",
+          wrap && "min-w-0 sm:min-w-[4.5rem]",
+          wrap
+            ? cn(
+                index % 2 === 1 && "border-l border-border/50",
+                index >= 2 && "border-t border-border/50 sm:border-t-0",
+                index > 0 && index % 2 === 0 && "sm:border-l sm:border-border/50",
+              )
+            : index > 0 && "border-l border-border/50",
           item.onClick
             ? "cursor-pointer hover:bg-muted/50 rounded-lg transition-colors"
             : "cursor-default",

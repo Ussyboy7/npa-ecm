@@ -38,7 +38,7 @@ function AnalyticsTabListInner() {
   }
 
   if (tabs.length <= 1) return null;
-  return <HubTabList tabs={tabs} />;
+  return <HubTabList tabs={tabs} className="h-auto min-h-9" />;
 }
 
 export function AnalyticsTabList() {

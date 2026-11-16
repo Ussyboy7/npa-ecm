@@ -327,6 +327,7 @@ export const ExecutiveDashboardTab = () => {
       <Skeleton className="h-[68px] rounded-xl" />
     ) : slaData ? (
       <StatStrip
+        wrap
         items={[
           {
             key: 'total',
