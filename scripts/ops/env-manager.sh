@@ -206,6 +206,7 @@ cmd_deploy() {
     _deploy_ensure_repo
     $DO_BACKUP && _deploy_backup_database "$PG_CONTAINER" "$DB_USER" "$DB_NAME" || true
     $DO_PULL && _deploy_pull_latest || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
+    _deploy_preflight_build_network || { ui_error "Deployment aborted before stopping the running ${STACK_ENVIRONMENT_TITLE} stack."; return 1; }
     _deploy_prepare_media
     _deploy_stop_stack
     _deploy_build_up || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
@@ -273,8 +274,52 @@ _deploy_pull_latest() {
     [[ -d .git ]] || { ui_warning "Not a git checkout"; return 0; }
     git fetch --all --prune
     git reset --hard "origin/$(git rev-parse --abbrev-ref HEAD)"
-    git clean -fd
+    # Runtime data must survive a reset/clean. These paths are not source.
+    git clean -fd -e backups -e nginx/ssl
     ui_success "At $(git rev-parse --short HEAD)"
+}
+
+_deploy_preflight_build_network() {
+    ui_step "Checking npm registry access from Docker"
+    local image="${ECM_BUILD_PREFLIGHT_IMAGE:-node:20-alpine}"
+    local output
+
+    if ! command -v docker >/dev/null 2>&1; then
+        ui_error "Docker is unavailable; cannot verify npm registry access."
+        return 1
+    fi
+
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
+        ui_info "Pulling ${image} for the build preflight"
+        if ! output=$(docker pull "$image" 2>&1); then
+            ui_error "Build preflight failed: could not pull ${image} from Docker Hub."
+            printf '%s\n' "$output" | tail -n 8 | sed 's/^/    /' >&2
+            ui_warning "${STACK_ENVIRONMENT_TITLE} stack was left running. Check outbound access to Docker Hub and retry."
+            return 1
+        fi
+    fi
+
+    if ! output=$(docker run --rm "$image" node -e \
+        'require("dns").promises.lookup("registry.npmjs.org").catch((error) => { console.error("DNS lookup failed: " + (error.code || error.message)); process.exit(1); })' \
+        2>&1); then
+        ui_error "Build preflight failed: Docker cannot resolve registry.npmjs.org."
+        printf '%s\n' "$output" | tail -n 8 | sed 's/^/    /' >&2
+        ui_warning "${STACK_ENVIRONMENT_TITLE} stack was left running. Check Docker DNS and retry."
+        return 1
+    fi
+
+    if ! output=$(docker run --rm -e NPM_CONFIG_UPDATE_NOTIFIER=false "$image" \
+        npm ping --registry=https://registry.npmjs.org \
+        --fetch-retries=1 --fetch-retry-mintimeout=1000 \
+        --fetch-retry-maxtimeout=3000 --fetch-timeout=10000 \
+        2>&1); then
+        ui_error "Build preflight failed: the npm registry is unreachable from Docker."
+        printf '%s\n' "$output" | tail -n 8 | sed 's/^/    /' >&2
+        ui_warning "${STACK_ENVIRONMENT_TITLE} stack was left running. Check outbound HTTPS to registry.npmjs.org and retry."
+        return 1
+    fi
+
+    ui_success "npm registry reachable from Docker"
 }
 
 _deploy_prepare_media() {
@@ -399,12 +444,21 @@ _deploy_rollback() {
     local latest
     latest=$(cat "${BACKUP_DIR}/.latest_predeploy_${STACK_ENVIRONMENT}" 2>/dev/null || true)
     if [[ -n "$latest" && -f "$latest" ]]; then
+        ui_step "Restoring pre-deploy database snapshot"
         stack_compose up -d "$STACK_POSTGRES_SERVICE"
         sleep 10
         if docker ps --format '{{.Names}}' | grep -q "^${pg_container}$"; then
             docker exec -i "$pg_container" psql -U "$db_user" -d "$db_name" < "$latest" >/dev/null 2>&1 || ui_warning "Restore reported errors"
         fi
-        stack_compose up -d
+    else
+        ui_warning "Pre-deploy snapshot unavailable — restarting the previous stack without a database restore"
+    fi
+
+    ui_step "Restarting previous stack"
+    if stack_compose up -d --no-build; then
+        ui_success "Previous stack restarted"
+    else
+        ui_error "Previous stack could not be restarted automatically. Check container images and logs."
     fi
     return 1
 }

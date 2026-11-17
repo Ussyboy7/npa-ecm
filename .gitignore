@@ -42,6 +42,10 @@ pnpm-debug.log*
 
 # Backups
 *.backup
+/backups/
+
+# Runtime TLS material
+/nginx/ssl/
 
 # IDE
 .vscode/
