@@ -11,6 +11,8 @@ ORIGINAL_ARGS=("$@")
 source "${SCRIPT_DIR}/../lib/stack-utils.sh"
 # shellcheck source=../lib/ui.sh
 source "${SCRIPT_DIR}/../lib/ui.sh"
+# shellcheck source=../lib/deploy-reexec.sh
+source "${SCRIPT_DIR}/../lib/deploy-reexec.sh"
 
 usage() {
     cat <<'USAGE'
@@ -206,9 +208,10 @@ cmd_deploy() {
     ui_header "ECM ${STACK_ENVIRONMENT_TITLE} Deployment"
     _deploy_check_server
     _deploy_ensure_repo
-    $DO_BACKUP && _deploy_backup_database "$PG_CONTAINER" "$DB_USER" "$DB_NAME" || true
     $DO_PULL && _deploy_pull_latest || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     _deploy_preflight_build_network || { ui_error "Deployment aborted before stopping the running ${STACK_ENVIRONMENT_TITLE} stack."; return 1; }
+    # Snapshot after pull/re-exec/preflight so a script update cannot create two backups.
+    $DO_BACKUP && _deploy_backup_database "$PG_CONTAINER" "$DB_USER" "$DB_NAME" || true
     _deploy_prepare_media
     _deploy_stop_stack
     _deploy_build_up || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
@@ -275,27 +278,14 @@ _deploy_pull_latest() {
     ui_step "git pull"
     [[ -d .git ]] || { ui_warning "Not a git checkout"; return 0; }
     local script_before
-    script_before="$(git hash-object "$SELF_PATH" 2>/dev/null || true)"
+    script_before="$(deploy_script_hash "$SELF_PATH")"
     git fetch --all --prune
     git reset --hard "origin/$(git rev-parse --abbrev-ref HEAD)"
     # The pull may have replaced this script; switch to the new code before cleanup.
-    _reexec_if_deploy_script_changed "$script_before"
+    deploy_maybe_reexec_after_pull "$script_before" "$SELF_PATH" "${ECM_DEPLOY_REEXECUTED:-0}" "${ORIGINAL_ARGS[@]}"
     # Runtime data must survive a reset/clean. These paths are not source.
     git clean -fd -e backups -e nginx/ssl
     ui_success "At $(git rev-parse --short HEAD)"
-}
-
-_reexec_if_deploy_script_changed() {
-    local before_hash="$1"
-    [[ "${ECM_DEPLOY_REEXECUTED:-0}" != "1" ]] || return 0
-    [[ -n "$before_hash" ]] || return 0
-
-    local after_hash
-    after_hash="$(git hash-object "$SELF_PATH" 2>/dev/null || true)"
-    [[ -n "$after_hash" && "$before_hash" != "$after_hash" ]] || return 0
-
-    ui_warning "Deploy script changed during pull; re-executing the new version."
-    exec env ECM_DEPLOY_REEXECUTED=1 "$SELF_PATH" "${ORIGINAL_ARGS[@]}"
 }
 
 _deploy_preflight_build_network() {
