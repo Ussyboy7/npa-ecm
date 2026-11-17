@@ -12,7 +12,7 @@ ENV NEXT_PUBLIC_ENVIRONMENT=$NEXT_PUBLIC_ENVIRONMENT
 # Install workspace dependencies (root package.json defines the "frontend" workspace)
 COPY package.json package-lock.json ./
 COPY frontend/package.json ./frontend/package.json
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci
 
 # Copy frontend source and build
 COPY frontend/ ./frontend

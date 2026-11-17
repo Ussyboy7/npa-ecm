@@ -1,4 +1,4 @@
-FROM python:3.13-slim as base
+FROM python:3.13-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,7 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
@@ -18,12 +20,12 @@ RUN apt-get update \
         libgdk-pixbuf-2.0-0 \
         fonts-dejavu-core \
         tesseract-ocr \
-        tesseract-ocr-eng \
-    && rm -rf /var/lib/apt/lists/*
+        tesseract-ocr-eng
 
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install --upgrade pip \
+    && pip install -r /tmp/requirements.txt
 
 COPY . .
 
