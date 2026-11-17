@@ -2,7 +2,7 @@ import { logError } from '@/lib/client-logger';
 // Document generation utilities for PDF and Word export
 
 import { Correspondence, Minute } from './npa-structure';
-import { getUserById, getDivisionById } from './npa-structure';
+import { getDivisionById } from './npa-structure';
 import { buildExportDocumentCss, DOC_PAPER, SEAL_PANEL_BG } from './theme-colors';
 
 export interface DocumentContent {
@@ -69,7 +69,6 @@ export function generateDocumentHTML(content: DocumentContent): string {
   const division = getDivisionById(correspondence.divisionId);
   
   const minutesHTML = minutes.map((minute, _idx) => {
-    const user = getUserById(minute.userId);
     const isDownward = minute.direction === 'downward';
     const borderColor = isDownward ? 'hsl(210 85% 55%)' : 'hsl(145 65% 45%)';
     const badgeBg = isDownward ? 'hsl(210 85% 55% / 0.2)' : 'hsl(145 65% 45% / 0.2)';
@@ -78,9 +77,9 @@ export function generateDocumentHTML(content: DocumentContent): string {
       <div class="minute-item" style="border-left: 4px solid ${borderColor};">
         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
           <div>
-            <strong>${user?.name || 'Unknown'}</strong>
+            <strong>${minute.userName || 'Unknown'}</strong>
             <div class="minute-meta">
-              ${user?.systemRole || ''} • ${minute.gradeLevel}
+              ${minute.userSystemRole || ''} • ${minute.gradeLevel}
             </div>
           </div>
           <div class="minute-meta">

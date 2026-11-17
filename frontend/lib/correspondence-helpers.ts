@@ -98,7 +98,6 @@ export {
   formatDateLong as formatDate,
   formatDateTime,
   formatDateShort,
-  formatDateForAPI,
 } from "@/lib/datetime";
 
 // Check if correspondence is overdue

@@ -6,9 +6,11 @@ from django.core.management import call_command
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
+import jwt
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from organization.models import Directorate, Division, Office, OfficeMembership, Role
 from accounts.nominal_roll_mapping import resolve_office_code, resolve_role
 from .models import User, SealOTP
@@ -16,6 +18,12 @@ from unittest.mock import patch
 from pathlib import Path
 import csv
 import tempfile
+
+
+def set_existing_auth_cookies(client, user):
+    """Simulate a browser session cookie arriving without a CSRF header."""
+    client.cookies["npa_ecm_access_token"] = str(RefreshToken.for_user(user).access_token)
+    client.cookies["npa_ecm_session"] = "1"
 
 
 class UserModelTests(TestCase):
@@ -59,6 +67,125 @@ class AuthAPITests(TestCase):
         self.assertTrue(response.cookies["npa_ecm_access_token"]["httponly"])
         self.assertTrue(response.cookies["npa_ecm_refresh_token"]["httponly"])
         self.assertFalse(response.cookies["npa_ecm_csrf_token"]["httponly"])
+        body = response.content.decode()
+        self.assertNotIn(response.cookies["npa_ecm_access_token"].value, body)
+        self.assertNotIn(response.cookies["npa_ecm_refresh_token"].value, body)
+
+    def test_cookie_refresh_rotates_http_only_tokens_without_exposing_them(self):
+        login = self.client.post(self.login_url, {
+            "username": "testuser",
+            "password": "testpass123",
+        })
+        old_refresh = login.cookies["npa_ecm_refresh_token"].value
+        csrf = login.cookies["npa_ecm_csrf_token"].value
+
+        response = self.client.post(
+            reverse("api_v1:token_refresh"),
+            {},
+            format="json",
+            HTTP_X_CSRF_TOKEN=csrf,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {"detail": "Session refreshed."})
+        self.assertTrue(response.cookies["npa_ecm_access_token"]["httponly"])
+        self.assertTrue(response.cookies["npa_ecm_refresh_token"]["httponly"])
+        self.assertNotEqual(response.cookies["npa_ecm_refresh_token"].value, old_refresh)
+        old_jti = jwt.decode(old_refresh, options={"verify_signature": False})["jti"]
+        self.assertTrue(BlacklistedToken.objects.filter(token__jti=old_jti).exists())
+        body = response.content.decode()
+        self.assertNotIn(response.cookies["npa_ecm_access_token"].value, body)
+        self.assertNotIn(response.cookies["npa_ecm_refresh_token"].value, body)
+
+    def test_logout_blacklists_refresh_and_expires_session_cookies(self):
+        login = self.client.post(self.login_url, {
+            "username": "testuser",
+            "password": "testpass123",
+        })
+        refresh = login.cookies["npa_ecm_refresh_token"].value
+        csrf = login.cookies["npa_ecm_csrf_token"].value
+
+        response = self.client.post(
+            reverse("api_v1:logout"),
+            {},
+            format="json",
+            HTTP_X_CSRF_TOKEN=csrf,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.content, b"")
+        refresh_jti = jwt.decode(refresh, options={"verify_signature": False})["jti"]
+        self.assertTrue(BlacklistedToken.objects.filter(token__jti=refresh_jti).exists())
+        for cookie_name in (
+            "npa_ecm_access_token",
+            "npa_ecm_refresh_token",
+            "npa_ecm_session",
+        ):
+            self.assertEqual(response.cookies[cookie_name]["max-age"], 0)
+
+    def test_impersonation_and_return_keep_jwts_in_cookies(self):
+        admin = User.objects.create_superuser(
+            username="cookie-impersonation-admin",
+            email="cookie-admin@example.com",
+            password="testpass123",
+        )
+        target = User.objects.create_user(
+            username="cookie-impersonation-target",
+            email="cookie-target@example.com",
+            password="testpass123",
+            is_active=True,
+        )
+        self.client.post(self.login_url, {
+            "username": admin.username,
+            "password": "testpass123",
+        })
+        original_refresh = self.client.cookies["npa_ecm_refresh_token"].value
+        csrf = self.client.cookies["npa_ecm_csrf_token"].value
+
+        impersonated = self.client.post(
+            reverse("api_v1:token_impersonate"),
+            {"username": target.username},
+            format="json",
+            HTTP_X_CSRF_TOKEN=csrf,
+        )
+
+        self.assertEqual(impersonated.status_code, status.HTTP_200_OK)
+        self.assertEqual(str(impersonated.data["user"]["id"]), str(target.id))
+        self.assertTrue(impersonated.cookies["npa_ecm_original_refresh_token"]["httponly"])
+        self.assertEqual(
+            impersonated.cookies["npa_ecm_original_refresh_token"].value,
+            original_refresh,
+        )
+        self.assertTrue(impersonated.cookies["npa_ecm_access_token"]["httponly"])
+        self.assertTrue(impersonated.cookies["npa_ecm_refresh_token"]["httponly"])
+        impersonation_body = impersonated.content.decode()
+        self.assertNotIn('"access"', impersonation_body)
+        self.assertNotIn('"refresh"', impersonation_body)
+        self.assertNotIn(impersonated.cookies["npa_ecm_access_token"].value, impersonation_body)
+        self.assertNotIn(impersonated.cookies["npa_ecm_refresh_token"].value, impersonation_body)
+
+        returned = self.client.post(
+            reverse("api_v1:token_impersonate_return"),
+            {},
+            format="json",
+            HTTP_X_CSRF_TOKEN=self.client.cookies["npa_ecm_csrf_token"].value,
+        )
+
+        self.assertEqual(returned.status_code, status.HTTP_200_OK)
+        self.assertEqual(returned.data, {"detail": "Returned to your primary account."})
+        self.assertEqual(returned.cookies["npa_ecm_impersonating"]["max-age"], 0)
+        self.assertEqual(returned.cookies["npa_ecm_original_user_id"]["max-age"], 0)
+        self.assertEqual(returned.cookies["npa_ecm_original_refresh_token"]["max-age"], 0)
+        self.assertTrue(returned.cookies["npa_ecm_access_token"]["httponly"])
+        self.assertTrue(returned.cookies["npa_ecm_refresh_token"]["httponly"])
+        return_body = returned.content.decode()
+        self.assertNotIn('"access"', return_body)
+        self.assertNotIn('"refresh"', return_body)
+        self.assertNotIn(returned.cookies["npa_ecm_access_token"].value, return_body)
+        self.assertNotIn(returned.cookies["npa_ecm_refresh_token"].value, return_body)
+        current_user = self.client.get(reverse("api_v1:current_user"))
+        self.assertEqual(current_user.status_code, status.HTTP_200_OK)
+        self.assertEqual(str(current_user.data["id"]), str(admin.id))
 
     def test_cookie_session_requires_csrf_for_unsafe_requests(self):
         login = self.client.post(self.login_url, {
@@ -91,9 +218,7 @@ class AuthAPITests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_login_ignores_stale_auth_cookies_without_csrf(self):
-        stale_access = RefreshToken.for_user(self.user).access_token
-        self.client.cookies["npa_ecm_access_token"] = str(stale_access)
-        self.client.cookies["npa_ecm_session"] = "1"
+        set_existing_auth_cookies(self.client, self.user)
 
         response = self.client.post(self.login_url, {
             "username": "testuser",
@@ -102,6 +227,14 @@ class AuthAPITests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("npa_ecm_access_token", response.cookies)
+        self.assertIn("npa_ecm_refresh_token", response.cookies)
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+        body = response.content.decode()
+        self.assertNotIn('"access"', body)
+        self.assertNotIn('"refresh"', body)
+        self.assertNotIn(response.cookies["npa_ecm_access_token"].value, body)
+        self.assertNotIn(response.cookies["npa_ecm_refresh_token"].value, body)
 
     def test_legacy_refresh_token_can_bootstrap_without_csrf(self):
         refresh = RefreshToken.for_user(self.user)
@@ -171,6 +304,26 @@ class LoginMFAStaleCookieTests(TestCase):
             is_active=True,
         )
 
+    def test_mfa_login_challenge_response_contains_no_jwts(self):
+        from .login_mfa import get_or_create_login_security
+
+        security = get_or_create_login_security(self.user)
+        security.mfa_enabled = True
+        security.save(update_fields=["mfa_enabled", "updated_at"])
+
+        response = self.client.post(
+            reverse("api_v1:token_obtain_pair"),
+            {"username": self.user.username, "password": "testpass123"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["mfa_required"])
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+        self.assertNotIn('"access"', response.content.decode())
+        self.assertNotIn('"refresh"', response.content.decode())
+
     def test_mfa_verification_ignores_stale_auth_cookies_without_csrf(self):
         from .login_mfa import create_mfa_challenge
 
@@ -180,9 +333,7 @@ class LoginMFAStaleCookieTests(TestCase):
             validity_minutes=10,
         )
         challenge = create_mfa_challenge(self.user)
-        stale_access = RefreshToken.for_user(self.user).access_token
-        self.client.cookies["npa_ecm_access_token"] = str(stale_access)
-        self.client.cookies["npa_ecm_session"] = "1"
+        set_existing_auth_cookies(self.client, self.user)
 
         response = self.client.post(
             reverse("api_v1:token_mfa_verify"),
@@ -196,14 +347,18 @@ class LoginMFAStaleCookieTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("npa_ecm_access_token", response.cookies)
+        self.assertIn("npa_ecm_refresh_token", response.cookies)
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+        body = response.content.decode()
+        self.assertNotIn(response.cookies["npa_ecm_access_token"].value, body)
+        self.assertNotIn(response.cookies["npa_ecm_refresh_token"].value, body)
 
     def test_mfa_email_request_ignores_stale_auth_cookies_without_csrf(self):
         from .login_mfa import create_mfa_challenge
 
         challenge = create_mfa_challenge(self.user)
-        stale_access = RefreshToken.for_user(self.user).access_token
-        self.client.cookies["npa_ecm_access_token"] = str(stale_access)
-        self.client.cookies["npa_ecm_session"] = "1"
+        set_existing_auth_cookies(self.client, self.user)
 
         response = self.client.post(
             reverse("api_v1:login_mfa_email_request"),

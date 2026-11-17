@@ -75,6 +75,7 @@ const mapApiDirectorate = (item: Record<string, unknown>): Directorate => ({
   shortName: asStringOptional(item.short_name ?? item.shortName),
   description: asString(item.description),
   executiveDirectorId: normalizeId(item.executive_director ?? item.executive_director_id),
+  executiveDirectorName: asStringOptional(item.executive_director_name) ?? null,
   isActive: asBoolean(item.is_active, true),
 });
 
@@ -88,6 +89,7 @@ const mapApiDivision = (item: Record<string, unknown>): Division => ({
     item.general_manager === null || item.general_manager === undefined
       ? item.general_manager
       : asString(item.general_manager ?? item.general_manager_id ?? ''),
+  generalManagerName: asStringOptional(item.general_manager_name) ?? null,
   isActive: asBoolean(item.is_active, true),
 });
 
@@ -101,6 +103,7 @@ const mapApiDepartment = (item: Record<string, unknown>): Department => ({
     item.head_of_department === null || item.head_of_department === undefined
       ? item.head_of_department
       : asString(item.head_of_department ?? item.head_of_department_id ?? ''),
+  assistantGeneralManagerName: asStringOptional(item.head_of_department_name) ?? null,
   isActive: asBoolean(item.is_active, true),
 });
 
@@ -149,9 +152,11 @@ const mapApiOffice = (item: Record<string, unknown>): Office => ({
   allowLateralRouting: asBoolean(item.allow_lateral_routing, true),
   locationId: normalizeId(item.location ?? item.location_id),
   locationName: asString(item.location_name),
+  activeMemberCount: typeof item.active_member_count === 'number' ? item.active_member_count : 0,
+  activePrincipalName: asStringOptional(item.active_principal_name) ?? null,
 });
 
-const mapApiOfficeMembership = (item: Record<string, unknown>): OfficeMembership => ({
+export const mapApiOfficeMembership = (item: Record<string, unknown>): OfficeMembership => ({
   id: asString(item.id),
   officeId: normalizeId(item.office ?? item.office_id) ?? '',
   officeName: asStringOptional(item.office_name) ?? (isRecord(item.office) ? asStringOptional(item.office.name) : undefined),
@@ -257,7 +262,6 @@ export {
   mapApiDelegation,
   mapApiRole,
   mapApiOffice,
-  mapApiOfficeMembership,
   cleanPayload,
   sortByName,
   upsertById,

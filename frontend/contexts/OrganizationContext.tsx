@@ -10,8 +10,6 @@ import { listOfficeMemberships, listOfficeMembershipsForUser } from '@/lib/offic
 import { updateOrganizationCache, resetOrgCache } from '@/lib/npa-structure';
 import { invalidatePagePermissionsCache } from '@/lib/page-permissions-cache';
 import { clearIdentityCaches } from '@/lib/identity-cache';
-import { fetchActiveUsers } from '@/lib/users-api';
-import type { User } from '@/lib/npa-structure';
 import type {
   Directorate, Division, Department, Office, OfficeMembership,
   AssistantAssignment, Role, OrganizationContextType,
@@ -25,7 +23,7 @@ import {
   mapApiUserToUser, mapApiDirectorate, mapApiDivision,
   mapApiDepartment, mapApiOffice, mapApiOfficeMembership,
   mapApiRole, mapApiDelegation,
-  cleanPayload, dedupeUsers, sortByName, upsertById,
+  cleanPayload, sortByName, upsertById,
 } from '@/lib/organization-data';
 
 // Backward-compatible re-exports for files importing types from OrganizationContext
@@ -45,9 +43,7 @@ export const OrganizationProvider: React.FC<{
   const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>([]);
   const [offices, setOffices] = useState<Office[]>([]);
   const [officeMemberships, setOfficeMemberships] = useState<OfficeMembership[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
-  const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [officeMembershipsLoadedFor, setOfficeMembershipsLoadedFor] = useState<string | null>(null);
   const [organizationReadyFor, setOrganizationReadyFor] = useState<string | null>(null);
@@ -64,7 +60,6 @@ export const OrganizationProvider: React.FC<{
     setAssistantAssignments([]);
     setOffices([]);
     setOfficeMemberships([]);
-    setUsers([]);
     setRoles([]);
     setOfficeMembershipsLoadedFor(null);
     setOrganizationReadyFor(null);
@@ -97,17 +92,6 @@ export const OrganizationProvider: React.FC<{
       setDepartments((prev) => {
         const next = upsertById(prev, department, sortByName);
         updateOrganizationCache({ departments: next });
-        return next;
-      });
-    },
-    []
-  );
-
-  const applyUserUpdate = useCallback(
-    (userRecord: User) => {
-      setUsers((prev) => {
-        const next = upsertById(prev, userRecord, sortByName);
-        updateOrganizationCache({ users: next });
         return next;
       });
     },
@@ -181,7 +165,6 @@ export const OrganizationProvider: React.FC<{
         departmentsRows,
         rolesRows,
         officesRows,
-        activeUsers,
         officeMembershipsRows,
       ] = await Promise.all([
         fetchFirstPage('/organization/directorates/?ordering=name'),
@@ -189,7 +172,6 @@ export const OrganizationProvider: React.FC<{
         fetchFirstPage('/organization/departments/?ordering=name'),
         rolesRequest,
         fetchFirstPage('/organization/offices/?ordering=name'),
-        fetchActiveUsers(100),
         officeMembershipsRequest,
       ]);
 
@@ -199,7 +181,6 @@ export const OrganizationProvider: React.FC<{
       const apiRoles = rolesRows.map(mapApiRole);
       const apiOffices = officesRows.map(mapApiOffice);
       const apiOfficeMemberships = officeMembershipsRows;
-      const apiUsers = dedupeUsers(activeUsers);
 
       // The user may have switched while these requests were in flight. Drop
       // the entire result instead of showing one identity's organization under
@@ -218,7 +199,6 @@ export const OrganizationProvider: React.FC<{
       setOffices(sortedOffices);
       setOfficeMemberships(apiOfficeMemberships);
       setRoles(sortedRoles);
-      setUsers(apiUsers);
 
       updateOrganizationCache({
         directorates: sortedDirectorates,
@@ -226,14 +206,12 @@ export const OrganizationProvider: React.FC<{
         departments: sortedDepartments,
         offices: sortedOffices,
         officeMemberships: apiOfficeMemberships,
-        users: apiUsers,
       });
 
       logInfo('Organization data loaded successfully:', {
         directorates: sortedDirectorates.length,
         divisions: sortedDivisions.length,
         departments: sortedDepartments.length,
-        users: apiUsers.length,
       });
 
       // Defer delegations fetch — only 6 pages need this
@@ -488,33 +466,20 @@ export const OrganizationProvider: React.FC<{
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    const created = mapApiUserToUser(response);
-    applyUserUpdate(created);
-    return created;
-  }, [applyUserUpdate]);
+    return mapApiUserToUser(response);
+  }, []);
 
   const updateUser = useCallback(async (id: string, updates: UpdateUserInput) => {
-    const payload = buildUserPayload(updates);
-    if (Object.keys(payload).length === 0) {
-      const existing = users.find((user) => user.id === id);
-      if (!existing) {
-        throw new Error('User not found in context.');
-      }
-      return existing;
-    }
-
     const response = await apiFetch<Record<string, unknown>>(`/accounts/users/${id}/`, {
       method: 'PATCH',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(buildUserPayload(updates)),
     });
 
-    const updatedUser = mapApiUserToUser(response);
-    applyUserUpdate(updatedUser);
     if (updates.systemRole !== undefined && id === currentUser?.id) {
       invalidatePagePermissionsCache();
     }
-    return updatedUser;
-  }, [users, applyUserUpdate, currentUser?.id]);
+    return mapApiUserToUser(response);
+  }, [currentUser?.id]);
 
   const applyAssignmentUpdate = useCallback(
     (assignment: AssistantAssignment) => {
@@ -689,7 +654,6 @@ export const OrganizationProvider: React.FC<{
     setOfficeMembershipsLoadedFor(null);
     setOrganizationReadyFor(null);
     currentUserIdRef.current = null;
-    setUsers([]);
     setRoles([]);
     resetOrgCache();
   }, []);
@@ -718,7 +682,6 @@ export const OrganizationProvider: React.FC<{
     myOfficeMembershipsLoaded,
     isOrganizationReady,
     fetchOfficeMemberships,
-    users,
     roles,
     addRole,
     updateRole,
@@ -754,7 +717,6 @@ export const OrganizationProvider: React.FC<{
     myOfficeMembershipsLoaded,
     isOrganizationReady,
     fetchOfficeMemberships,
-    users,
     roles,
     addRole,
     updateRole,

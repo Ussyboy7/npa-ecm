@@ -1,4 +1,4 @@
-import type { Department, Directorate, Division, Office, OfficeMembership, User } from './npa-structure';
+import type { Department, Directorate, Division, Office, OfficeMembership } from './npa-structure';
 import { registerIdentityCacheClearer } from './identity-cache';
 
 export type OrganizationSnapshot = {
@@ -7,7 +7,6 @@ export type OrganizationSnapshot = {
   departments: Department[];
   offices: Office[];
   officeMemberships: OfficeMembership[];
-  users: User[];
 };
 
 let snapshot: OrganizationSnapshot = {
@@ -16,7 +15,6 @@ let snapshot: OrganizationSnapshot = {
   departments: [],
   offices: [],
   officeMemberships: [],
-  users: [],
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -34,7 +32,6 @@ export const resetOrgCache = (): void => {
     departments: [],
     offices: [],
     officeMemberships: [],
-    users: [],
   };
   cachedAt = 0;
 };
@@ -46,7 +43,6 @@ export const updateOrganizationCache = (data: Partial<OrganizationSnapshot>) => 
     departments: data.departments ?? snapshot.departments,
     offices: data.offices ?? snapshot.offices,
     officeMemberships: data.officeMemberships ?? snapshot.officeMemberships,
-    users: data.users ?? snapshot.users,
   };
   cachedAt = Date.now();
 };
@@ -66,11 +62,6 @@ export const getDivisionById = (id?: string | null) => {
 export const getDepartmentById = (id?: string | null) => {
   if (!id) return undefined;
   return snapshot.departments.find((item) => item.id as string === id);
-};
-
-export const getUserById = (id?: string | null) => {
-  if (!id) return undefined;
-  return snapshot.users.find((item) => item.id as string === id);
 };
 
 export const getOfficeById = (id?: string | null) => {

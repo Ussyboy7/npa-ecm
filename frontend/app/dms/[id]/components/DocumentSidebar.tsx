@@ -51,7 +51,6 @@ export interface DocumentSidebarProps {
     minutes: Minute[];
     linkNotes?: string;
   }>;
-  userLookup: Map<string, User>;
   uploadUser: User | null;
   ocrState: OCRState;
   activeTab?: SidebarTab;
@@ -76,7 +75,6 @@ export interface DocumentSidebarProps {
   onReplaceVersion: (versionId: string) => void;
   onVersionOCR: (versionId: string) => void;
   onCancelOCR: (versionId: string) => void;
-  getUserInitials: (userId: string) => string;
 }
 
 export function DocumentSidebar({
@@ -85,7 +83,6 @@ export function DocumentSidebar({
   comments,
   accessLogs,
   relatedCorrespondence,
-  userLookup,
   uploadUser,
   ocrState,
   activeTab: controlledTab,
@@ -107,7 +104,6 @@ export function DocumentSidebar({
   onReplaceVersion,
   onVersionOCR,
   onCancelOCR,
-  getUserInitials,
 }: DocumentSidebarProps) {
   const [uncontrolledTab, setUncontrolledTab] = useState<SidebarTab>("versions");
   const [caseToUnlink, setCaseToUnlink] = useState<NonNullable<DocumentRecord["case_links"]>[number] | null>(null);
@@ -258,7 +254,6 @@ export function DocumentSidebar({
               compact
               document={document}
               versions={versions}
-              userLookup={userLookup}
               uploadUser={uploadUser}
               ocrState={ocrState}
               onCreateVersion={onCreateVersion}
@@ -275,8 +270,6 @@ export function DocumentSidebar({
             <div className="space-y-3 min-w-0">
               <DocumentCommentsCard
                 comments={comments}
-                userLookup={userLookup}
-                getUserInitials={getUserInitials}
                 onOpenCommentsDialog={onOpenCommentsDialog}
               />
             </div>
@@ -353,7 +346,6 @@ export function DocumentSidebar({
               {relatedCorrespondence.length > 0 ? (
                 <RelatedCorrespondenceCard
                   relatedCorrespondence={relatedCorrespondence}
-                  userLookup={userLookup}
                 />
               ) : null}
 
@@ -416,8 +408,6 @@ export function DocumentSidebar({
               )}
               <DocumentAccessCard
                 document={document}
-                userLookup={userLookup}
-                getUserInitials={getUserInitials}
                 canManage={canManageAccess}
                 onAddPeople={onShare}
                 onChanged={onPermissionsChanged}
@@ -437,8 +427,6 @@ export function DocumentSidebar({
               <AccessActivityCard
                 documentId={document.id}
                 accessLogs={accessLogs}
-                userLookup={userLookup}
-                getUserInitials={getUserInitials}
                 onViewActivityDetails={onViewActivityDetails}
                 onRefresh={onRefreshAccessLogs}
                 compact

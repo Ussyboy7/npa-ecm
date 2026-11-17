@@ -1,0 +1,118 @@
+username,full_name,email,role,grade_level,office,active,seed_password_valid,last_login,last_activity,classification,roll_match_candidate,notes
+agmabuja,Mr.  Musa,agm.abuja@npa.gov.ng,Assistant General Manager,MSS2,Abuja Liaison Office Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmaccounts,Mr.  Okafor,agm.accounts@npa.gov.ng,Assistant General Manager,MSS2,Accounts Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmadminarchives,Mrs.  Obi,agm.admin.archives@npa.gov.ng,Assistant General Manager,MSS2,Archives & Records Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmadminfacility,Mr.  Adewale,agm.admin.facility@npa.gov.ng,Assistant General Manager,MSS2,Facility Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmadmingeneral,Mrs.  Lawal,agm.admin@npa.gov.ng,Assistant General Manager,MSS2,Administration Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmatonsvts,Engr.  Okafor,agm.atons.vts@npa.gov.ng,Assistant General Manager,MSS2,Aids to Navigation & Vessel Traffic System Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmauditfinance,Mrs.  Mohammed,agm.audit.finance@npa.gov.ng,Assistant General Manager,MSS2,Finance & Investment Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmauditpolicy,Mrs.  Adekunle,agm.audit.policy@npa.gov.ng,Assistant General Manager,MSS2,Policy Compliance Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmauditsystems,Mr.  Yusuf,agm.audit.systems@npa.gov.ng,Assistant General Manager,MSS2,System & ICT Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmbms,Mrs.  Nwosu,agm.bms@npa.gov.ng,Assistant General Manager,MSS2,Bids MGT & Selection Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmboardregistry,Barr.  Okoro,agm.board.registry@npa.gov.ng,Assistant General Manager,MSS2,Board Secretary Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmbudget,Mr.  Uche,agm.budget@npa.gov.ng,Assistant General Manager,MSS2,Budget Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmcivil,Engr.  Ibrahim,agm.civil@npa.gov.ng,Assistant General Manager,MSS2,Civil Engineering Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmcr,Mrs.  Adeyemi,agm.cr@npa.gov.ng,Assistant General Manager,MSS2,Compliance & Records Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmcsccsr,Mr.  Fashola,agm.csc.csr@npa.gov.ng,Assistant General Manager,MSS2,Corporate Social Responsibility Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmcscpem,Mrs.  Adebayo,agm.csc.pem@npa.gov.ng,Assistant General Manager,MSS2,Protocol & Events Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmcspplanning,Kemi  Funmi,agm.csp.planning@npa.gov.ng,Assistant General Manager,MSS2,Planning & Monitoring Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmcspresearch,Dr.  Ogunleye,agm.csp.research@npa.gov.ng,Assistant General Manager,MSS2,Research & Statistics Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmelectrical,Engr.  Bello,agm.electrical@npa.gov.ng,Assistant General Manager,MSS2,Electrical & Corrosion Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmenvironment,Mrs.  Alade,agm.environment@npa.gov.ng,Assistant General Manager,MSS2,Environment Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmerm,Mustapha  Adeyemi,agm.erm@npa.gov.ng,Assistant General Manager,MSS2,Enterprise Risk Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmfinance,Ngozi  Okoro,agm.finance@npa.gov.ng,Assistant General Manager,MSS2,Finance Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmfirerescue,Bukola  Ihuoma,agm.fire.rescue@npa.gov.ng,Assistant General Manager,MSS2,Fire & Rescue Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmharbours,Capt.  Nwankwo,agm.harbours@npa.gov.ng,Assistant General Manager,MSS2,Harbours Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmhrlabour,Mr.  Udo,agm.hr.labour@npa.gov.ng,Assistant General Manager,MSS2,Employee & Labour Relations Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmhrld,Mrs.  Okonkwo,agm.hr.ld@npa.gov.ng,Assistant General Manager,MSS2,Learning & Development Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmhrmgt,Oluwafunmi  Adekunle,agm.hr.mgt@npa.gov.ng,Assistant General Manager,MSS2,HR Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmhydrographic,Kunle  Oluwatosin,agm.hydrographic@npa.gov.ng,Assistant General Manager,MSS2,Hydrographic Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmict,Kayode  Ejiro,agmict@npa.gov.ng,Assistant General Manager,MSS2,,yes,yes,,,demo_seed,no,Seed password still valid.
+agminfra,Chiamaka  Eze,agm.infra@npa.gov.ng,Assistant General Manager,MSS2,"Hardware, Infrastructure & Support Department Office",yes,yes,,,demo_seed,no,Seed password still valid.
+agminvestment,Mr.  Balogun,agm.investment@npa.gov.ng,Assistant General Manager,MSS2,Investment Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmlandsassets,Engr.  Okoro,agm.lands.assets@npa.gov.ng,Assistant General Manager,MSS2,Lands And Estate Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmlegal,Barr.  Okeke,agm.legal@npa.gov.ng,Assistant General Manager,MSS2,Legal Services Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmmedical,Dr.  Yusuf,agm.medical@npa.gov.ng,Assistant General Manager,MSS2,Medical Services Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmmonitoring,Mr.  Adeyeye,agm.monitoring@npa.gov.ng,Assistant General Manager,MSS2,Monitoring Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmnbv,Tunde  Ojo,agm.nbv@npa.gov.ng,Assistant General Manager,MSS2,New-Business-Venture Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmnetworks,Engr.  Ogunleye,agm.networks@npa.gov.ng,Assistant General Manager,MSS2,Networks & Communication Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmnursing,Funmi  Ifunanya,agm.nursing@npa.gov.ng,Assistant General Manager,MSS2,Nursing Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmoccupational,Dr.  Okeke,agm.occupational@npa.gov.ng,Assistant General Manager,MSS2,Occupational Health Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmoperations,Mr.  Okonkwo,agm.operations@npa.gov.ng,Assistant General Manager,MSS2,Operations Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmperformance,Mrs.  Okoro,agm.performance@npa.gov.ng,Assistant General Manager,MSS2,Performance Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmpharmacy,Pharm.  Nnamdi,agm.pharmacy@npa.gov.ng,Assistant General Manager,MSS2,Pharmacy Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmportseng,Engr.  Adeyemi,agm.ports.eng@npa.gov.ng,Assistant General Manager,MSS2,Ports Engineering Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmppd,Engr.  Eze,agm.ppd@npa.gov.ng,Assistant General Manager,MSS2,Physical Planning & Development Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmppp,Maryam  Obi,agm.ppp@npa.gov.ng,Assistant General Manager,MSS2,Public-Private Partnership Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmprojects,Musa  Emeka,agm.projects@npa.gov.ng,Assistant General Manager,MSS2,Projects Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmradiology,Dr.  Okonkwo,agm.radiology@npa.gov.ng,Assistant General Manager,MSS2,Radiology Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmregulatory,Musa  Mariam,agm.regulatory@npa.gov.ng,Assistant General Manager,MSS2,Regulatory Services Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmresearch,Ms.  Nnaji,agm.research@npa.gov.ng,Assistant General Manager,MSS2,Research & Special Projects Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmsafety,Ikechukwu  Adewale,agm.safety@npa.gov.ng,Assistant General Manager,MSS2,Safety Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmseaviewproperties,Esther  Kolawole,agm.seaview.properties@npa.gov.ng,Assistant General Manager,MSS2,Seaview Properties Limited Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmsecurity,Mr.  Obasi,agm.security@npa.gov.ng,Assistant General Manager,MSS2,Security Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmservicom,Ms.  Enem,agm.servicom@npa.gov.ng,Assistant General Manager,MSS2,SERVICOM Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmsoftware,Fola  Adeyinka,agm.software@npa.gov.ng,Assistant General Manager,MSS2,Software Applications & Database Management Department Office,yes,yes,,2026-11-13T20:50:45.110243+00:00,demo_seed,no,Seeded account has audit activity; no employee/personnel record. Seed password still valid.
+agmsuperannuation,Chukwudi  Oluwatobi,agm.superannuation@npa.gov.ng,Assistant General Manager,MSS2,Superannuation Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmtariff,Mrs.  Adesina,agm.tariff@npa.gov.ng,Assistant General Manager,MSS2,Tariff & Billing Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmtax,Kunle  Emeka,agm.tax@npa.gov.ng,Assistant General Manager,MSS2,Tax Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+agmvessel,Capt.  Fashola,agm.vessel@npa.gov.ng,Assistant General Manager,MSS2,Vessel Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+assistantgm,Mrs.  Usman,assistant.gm@npa.gov.ng,Assistant,SSS1,Software Applications & Database Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+assistantmanager,Mrs.  Ibrahim,assistant.manager@npa.gov.ng,Assistant Manager,SSS1,Accounts Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+assistantmd,Oluwatobi  Mariam,assistant.md@npa.gov.ng,Assistant,SSS1,Abuja Liaison Office Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+asst3,Ibrahim  Lawal,asst3@npa.gov.ng,Assistant,JSS3,,yes,yes,,,demo_seed_name_collision,review name collision only,"Name collision only: roll 5352 IBRAHIM LAWAL DABO, ASST. MANAGER (CIVIL), grade/role differ. Seed password still valid."
+asst_mgr,Femi  Adesina,asstmgr@npa.gov.ng,Assistant Manager,SSS1,,yes,yes,,,demo_seed,no,Seed password still valid.
+edets,Engr.  Umar,ed.ets@npa.gov.ng,Executive Director,EDCS,"Executive Director, Engineering & Technical Services Office",yes,yes,,,demo_seed,no,Seed password still valid.
+edfa,Mrs.  Richard-Edet,ed.fa@npa.gov.ng,Executive Director,EDCS,"Executive Director, Finance & Administration Office",yes,yes,,,demo_seed,no,Seed password still valid.
+edmo,Engr.  Badmus,ed.mo@npa.gov.ng,Executive Director,EDCS,"Executive Director, Marine & Operations Office",yes,yes,,,demo_seed,no,Seed password still valid.
+gmadmin,Mrs.  Obi-Okafor,gm.admin@npa.gov.ng,General Manager,MSS1,Administration Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmaudit,Gofwan  Paul,gm.audit@npa.gov.ng,General Manager,MSS1,Audit Division Office,yes,yes,,2026-11-10T22:26:08.103790+00:00,demo_seed,no,Seeded account has audit activity; no employee/personnel record. Seed password still valid.
+gmcsc,Onyemekara  C.,gm.csc@npa.gov.ng,General Manager,MSS1,Corporate & Strategic Communications Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmfinance,Danbatta  M.,gm.finance@npa.gov.ng,General Manager,MSS1,Finance Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmhr,Dantiye  Magaji,gm.hr@npa.gov.ng,General Manager,MSS1,Human Resources Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmhse,Engr.  Sani,gm.hse@npa.gov.ng,General Manager,MSS1,"Health, Safety & Environment Division Office",yes,yes,,,demo_seed,no,Seed password still valid.
+gmict,Gbotolorun  Ayodele,gm.ict@npa.gov.ng,General Manager,MSS1,Information & Communication Technology Division Office,yes,yes,2026-11-12T11:48:14.072166+00:00,2026-11-13T08:59:41.617362+00:00,demo_seed_possible_repurposed,human confirmation required,Seeded account has real login activity; still no employee/personnel record. Seed password still valid. Possible real operator behind a seeded account; confirm with HR before matching.
+gmlandsassets,Chioma  Okoro,gm.lands@npa.gov.ng,General Manager,MSS1,Lands & Assets Administration Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmlegal,Barr.  Okafor,gm.legal.services@npa.gov.ng,General Manager,MSS1,Legal Services Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmliaison,Mrs.  Suleiman,gm.liaison@npa.gov.ng,General Manager,MSS1,Abuja Liaison Office Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmmarinealt,Capt.  Okafor,gm.marine.alt@npa.gov.ng,General Manager,MSS1,Marine Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmmdoffice,Mr.  Manager,gm.md.office@npa.gov.ng,General Manager,MSS1,GM MD's Office Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmmedical,Dr.  Nwosu,gm.medical@npa.gov.ng,General Manager,MSS1,Medical Services Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmoperations,Mr.  Lawal,gm.ops@npa.gov.ng,General Manager,MSS1,Operations Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmoversealiaison,Mrs.  Ogbonna,gm.oversea.liaison@npa.gov.ng,General Manager,MSS1,Oversea Liaison Office Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmppp,Abdulkadir  Nurudeen,gm.ppp@npa.gov.ng,General Manager,MSS1,Public-Private Partnership Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmseaviewproperties,Mr.  Nwankwo,gm.seaview.properties@npa.gov.ng,General Manager,MSS1,Seaview Properties Limited Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmservicom,Mr.  Ibrahim,gm.servicom@npa.gov.ng,General Manager,MSS1,SERVICOM Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmspecialduties,Engr.  T.,gm.specialduties@npa.gov.ng,General Manager,MSS1,Special Duties Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmsuperannuationinvestment,Temi  Hassan,gm.superannuation@npa.gov.ng,General Manager,MSS1,Superannuation & Investment Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+gmtariff,Lukman  Olanrewaju,gm.tariff@npa.gov.ng,General Manager,MSS1,Tariff & Billing Division Office,yes,yes,,,demo_seed,no,Seed password still valid.
+managersupport,Mustapha  Favour,manager.support@npa.gov.ng,Manager,MSS5,"Hardware, Infrastructure & Support Department Office",yes,yes,,,demo_seed,no,Seed password still valid.
+mgr,Seun  Bakare,mgr@npa.gov.ng,Manager,MSS5,,yes,yes,,,demo_seed,no,Seed password still valid.
+officer1,James  Okafor,officer1@npa.gov.ng,Officer I,SSS3,,yes,yes,,,demo_seed,no,Seed password still valid.
+officer2,Aisha  Mohammed,officer2@npa.gov.ng,Officer II,SSS4,,yes,yes,,,demo_seed_name_collision,review name collision only,"Name collision only: roll 5058 MOHAMMED AISHA GAJE, SENIOR MANAGER LEGAL (HOD), grade/role differ. Seed password still valid."
+officer_i,Tunde  Adeyemi,officeri@npa.gov.ng,Officer I,SSS3,,yes,yes,,,demo_seed,no,Seed password still valid.
+officer_ii,Kemi  Ogunleye,officerii@npa.gov.ng,Officer II,SSS4,,yes,yes,,,demo_seed,no,Seed password still valid.
+officeradmin,Tolu  Okafor,officer.admin@npa.gov.ng,Officer,SSS3,Archives & Records Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+officerdev,Mr.  Nwosu,officer.dev@npa.gov.ng,Senior Officer,SSS2,Software Applications & Database Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+officersupport,Miss  Mohammed,officer.support@npa.gov.ng,Officer,SSS4,"Hardware, Infrastructure & Support Department Office",yes,yes,,,demo_seed,no,Seed password still valid.
+pamd,Grace  Nnaji,pamd@npa.gov.ng,Personal Assistant,SSS2,Planning & Monitoring Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+pmgr,Ngozi  Eze,pmgr@npa.gov.ng,Principal Manager,MSS3,,yes,yes,,,demo_seed,no,Seed password still valid.
+pmsadm,Maureen  Ukonu,pmsadm@npa.gov.ng,Principal Manager,MSS3,Networks & Communication Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+pmsoftware,Kayode  Bello,pm.software@npa.gov.ng,Principal Manager,MSS3,Software Applications & Database Management Department Office,yes,yes,,2026-11-12T13:00:17.712779+00:00,demo_seed,no,Seed password still valid.
+sec_md,Tolulope  Okafor,secmd@npa.gov.ng,Secretary,SSS2,,yes,yes,,2026-11-12T17:51:36.143091+00:00,demo_seed,no,Seeded account has audit activity; no employee/personnel record. Seed password still valid.
+secretaryed,Miss  Ibrahim,secretary.ed@npa.gov.ng,Secretary,SSS2,,yes,yes,,,demo_seed,no,Seed password still valid.
+secretarymd,Mrs.  Bello,secretary.md@npa.gov.ng,Secretary,SSS2,,yes,yes,,2026-11-12T13:05:13.943469+00:00,demo_seed,no,Seed password still valid.
+smfinance,Adeyemi  Adeleke,sm.finance@npa.gov.ng,Senior Manager,MSS4,Finance Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+smgr2,Hassan  Yusuf,smgr2@npa.gov.ng,Senior Manager,MSS4,,yes,yes,,,demo_seed,no,Seed password still valid.
+smhr,Adekunle  Femi,sm.hr@npa.gov.ng,Senior Manager,MSS4,HR Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+sofficer,Rashida  Bello,sofficer@npa.gov.ng,Senior Officer,SSS2,,yes,yes,,,demo_seed,no,Seed password still valid.
+staff1,Peter  Nwosu,staff1@npa.gov.ng,Staff I,JSS1,,yes,yes,,,demo_seed,no,Seed password still valid.
+staff2,Fatima  Abubakar,staff2@npa.gov.ng,Staff II,JSS2,,yes,yes,,,demo_seed,no,Seed password still valid.
+staff3,Chidi  Eze,staff3@npa.gov.ng,Staff III,JSS3,,yes,yes,,,demo_seed,no,Seed password still valid.
+staff_i,Bola  Adebayo,staffi@npa.gov.ng,Staff I,JSS1,,yes,yes,,,demo_seed,no,Seed password still valid.
+staff_ii,Emeka  Okafor,staffii@npa.gov.ng,Staff II,JSS2,,yes,yes,,,demo_seed,no,Seed password still valid.
+staff_iii,Zainab  Mohammed,staffiii@npa.gov.ng,Staff III,JSS3,,yes,yes,,,demo_seed,no,Seed password still valid.
+staffjunior,Mr.  Okoro,staff.junior@npa.gov.ng,Staff,JSS3,Facility Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+staffmid,Miss  Adeyemi,staff.mid@npa.gov.ng,Staff,JSS2,HR Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+staffsenior,Mr.  Ojo,staff.senior@npa.gov.ng,Staff,JSS1,Software Applications & Database Management Department Office,yes,yes,,,demo_seed,no,Seed password still valid.
+superadmin,Super  Admin,superadmin@npa.gov.ng,Super Admin,MDCS,,yes,yes,,2026-11-13T19:14:18.175744+00:00,demo_seed_admin,no - administrative account,Seeded superuser account used for administration; not a staff roll record. Seed password still valid.

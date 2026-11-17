@@ -6,12 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import type { DocumentAccessLog } from '@/lib/api/dms';
-import type { User } from '@/lib/npa-structure';
+import { useUserLookup } from '@/hooks/use-user-lookup';
 
 interface AccessActivityDetailsDialogProps {
   log: DocumentAccessLog | null;
   accessLogs: DocumentAccessLog[];
-  userLookup: Map<string, User>;
   onClose: () => void;
 }
 
@@ -33,9 +32,9 @@ function actionPresentation(action: DocumentAccessLog['action']) {
 export function AccessActivityDetailsDialog({
   log,
   accessLogs,
-  userLookup,
   onClose,
 }: AccessActivityDetailsDialogProps) {
+  const userLookup = useUserLookup(log ? [log.userId] : []);
   if (!log) return null;
 
   const user = userLookup.get(log.userId);

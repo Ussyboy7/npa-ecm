@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Building2, Hash, Network, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +111,8 @@ const EMPTY_FORM: FormState = {
   classifications: DEFAULT_CLASSIFICATIONS,
 };
 
+export const REFERENCE_SCHEME_ACTION_SLOT_ID = "templates-hub-reference-scheme-action";
+
 function unitIdOf(scheme: ReferenceScheme): string {
   if (scheme.scope_type === "directorate") return scheme.directorate ?? "";
   if (scheme.scope_type === "division") return scheme.division ?? "";
@@ -131,6 +134,11 @@ export function ReferenceSchemesPanel({
   const [editing, setEditing] = useState<ReferenceScheme | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [actionPortalTarget, setActionPortalTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setActionPortalTarget(document.getElementById(REFERENCE_SCHEME_ACTION_SLOT_ID));
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -363,6 +371,15 @@ export function ReferenceSchemesPanel({
 
   return (
     <div className="space-y-4">
+      {actionPortalTarget
+        ? createPortal(
+            <Button size="compact" onClick={openCreate}>
+              <Plus className="h-4 w-4" /> New reference scheme
+            </Button>,
+            actionPortalTarget,
+          )
+        : null}
+
       <div className="rounded-xl bg-muted/30 p-2">
         <div className="flex flex-wrap items-center gap-2">
           <Select
@@ -399,9 +416,6 @@ export function ReferenceSchemesPanel({
               </button>
             ) : null}
           </div>
-          <Button size="compact" onClick={openCreate}>
-            <Plus className="h-4 w-4" /> New reference scheme
-          </Button>
           <span className="text-xs text-muted-foreground">
             {filtered.length} of {schemes.length} schemes
           </span>

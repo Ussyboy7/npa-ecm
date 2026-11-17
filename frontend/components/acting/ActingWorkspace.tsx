@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from "react";
-import { Ban, Flag, Plus, UserCheck } from "lucide-react";
+import { Ban, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +21,7 @@ import {
   type ActingAppointment,
   type ActingRequest,
 } from "@/lib/api/acting-appointments";
+import { getActingOfficeScope } from "@/lib/acting-permissions";
 import type { Office, OfficeMembership } from "@/lib/organization-types";
 import type { User } from "@/lib/npa-structure";
 
@@ -31,9 +32,11 @@ interface ActingWorkspaceProps {
   mode: ActingMode;
   currentUser: User;
   offices: Office[];
-  officeMemberships: OfficeMembership[];
-  users?: User[];
+  /** Required for self-service scope; admins resolve memberships per office in the dialog. */
+  officeMemberships?: OfficeMembership[];
 }
+
+const NO_MEMBERSHIPS: OfficeMembership[] = [];
 
 function formatDate(value: string | null): string {
   return value ? formatDateLong(value) : "Open-ended";
@@ -41,22 +44,19 @@ function formatDate(value: string | null): string {
 
 export interface ActingWorkspaceHandle {
   openAppointment: () => void;
+  openRequest: () => void;
 }
 
 function ActingWorkspaceBase(
-  { mode, currentUser, offices, officeMemberships, users = [] }: ActingWorkspaceProps,
+  { mode, currentUser, offices, officeMemberships = NO_MEMBERSHIPS }: ActingWorkspaceProps,
   ref: ForwardedRef<ActingWorkspaceHandle>,
 ) {
   const isAdmin = mode === "admin";
-  const myMemberships = useMemo(
-    () => officeMemberships.filter((membership) =>
-      membership.isActive && String(membership.userId) === String(currentUser.id)),
+  const { memberOffices, principalOffices } = useMemo(
+    () => getActingOfficeScope(currentUser.id, officeMemberships),
     [currentUser.id, officeMemberships],
   );
-  const principalOffices = useMemo(
-    () => myMemberships.filter((membership) => membership.assignmentRole === "principal"),
-    [myMemberships],
-  );
+
   const [appointments, setAppointments] = useState<ActingAppointment[]>([]);
   const [asActing, setAsActing] = useState<ActingAppointment[]>([]);
   const [asPrincipal, setAsPrincipal] = useState<ActingAppointment[]>([]);
@@ -75,6 +75,7 @@ function ActingWorkspaceBase(
       setAppointmentRequest(null);
       setAppointOpen(true);
     },
+    openRequest: () => setRequestOpen(true),
   }), []);
 
   const load = useCallback(async () => {
@@ -88,16 +89,18 @@ function ActingWorkspaceBase(
         setAppointments(allAppointments);
         setRequests(pendingRequests);
       } else {
-        const [acting, principal, allRequests] = await Promise.all([
+        const [acting, principal, requestedByMe, forMe] = await Promise.all([
           getMyActingAppointments(),
           getMyPrincipalActingAppointments(),
-          listActingRequests(),
+          listActingRequests({ requestedBy: currentUser.id }),
+          listActingRequests({ principal: currentUser.id }),
         ]);
         setAsActing(acting.filter((appointment) => appointment.isActive));
         setAsPrincipal(principal.filter((appointment) => appointment.isActive));
-        setRequests(allRequests.filter((request) =>
-          String(request.requestedBy) === String(currentUser.id) ||
-          String(request.principal) === String(currentUser.id)));
+        const ownRequests = new Map(
+          [...requestedByMe, ...forMe].map((request) => [request.id, request]),
+        );
+        setRequests([...ownRequests.values()]);
       }
     } catch (error) {
       logError(`Failed to load ${isAdmin ? "organization" : "self-service"} acting data`, error);
@@ -139,13 +142,6 @@ function ActingWorkspaceBase(
 
   return (
     <div className="space-y-4">
-      {!isAdmin && myMemberships.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {principalOffices.length > 0 ? <Button size="compact" onClick={() => { setAppointmentRequest(null); setAppointOpen(true); }}><Plus className="h-4 w-4" />Appoint acting</Button> : null}
-          {myMemberships.length > 0 ? <Button variant="outline" size="compact" onClick={() => setRequestOpen(true)}><Flag className="h-4 w-4" />Request acting</Button> : null}
-        </div>
-      ) : null}
-
       {isAdmin ? (
         <Tabs value={activeView} onValueChange={(value) => setActiveView(value as "appointments" | "requests")} className="space-y-4">
           <div className="rounded-xl bg-muted/30 p-2">
@@ -183,15 +179,13 @@ function ActingWorkspaceBase(
         currentUser={currentUser}
         offices={offices}
         principalOffices={principalOffices}
-        officeMemberships={officeMemberships}
-        users={users}
         initialRequest={appointmentRequest}
         onCompleted={load}
       />
       {!isAdmin ? <ActingRequestDialog
         open={requestOpen}
         onOpenChange={setRequestOpen}
-        memberOffices={myMemberships}
+        memberOffices={memberOffices}
         offices={offices}
         onCompleted={load}
       /> : null}

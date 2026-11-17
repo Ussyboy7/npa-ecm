@@ -202,7 +202,7 @@ function SetPasswordForm() {
 
 export default function SetPasswordPage() {
   return (
-    <Suspense fallback={<PageSuspenseFallback />}>
+    <Suspense fallback={<PageSuspenseFallback fullScreen />}>
       <SetPasswordForm />
     </Suspense>
   );

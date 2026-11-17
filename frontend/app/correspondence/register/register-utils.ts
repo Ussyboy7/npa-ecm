@@ -3,6 +3,7 @@
  */
 
 import { generateUUID } from '@/lib/utils';
+import { formatDateForAPI } from '@/lib/datetime';
 import { REGISTER_CONSTANTS } from './register-constants';
 import { toast } from "@/components/ui/sonner";
 
@@ -108,7 +109,7 @@ export const generateReferenceNumber = (): string => "";
 export const createInitialFormData = (owningOfficeId?: string): FormData => {
   // Use a stable date to avoid hydration mismatch
   const today = typeof window !== 'undefined' 
-    ? new Date().toISOString().split('T')[0]
+    ? formatDateForAPI(new Date())
     : '2025-01-01'; // Fallback for SSR
   return {
     subject: '',

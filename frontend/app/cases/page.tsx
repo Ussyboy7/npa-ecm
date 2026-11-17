@@ -4,9 +4,9 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { HubTabList, type HubTabLink } from "@/components/admin/HubTabList";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
+import { ListSkeleton } from "@/components/shared/PageSkeleton";
 import { CasesListContent } from "./components/CasesListContent";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
-import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 
 function CasesHub() {
@@ -44,5 +44,15 @@ function CasesHub() {
 }
 
 export default function CasesPage() {
-  return <Suspense fallback={<PageSuspenseFallback message="Loading cases…" />}><CasesHub /></Suspense>;
+  return (
+    <Suspense
+      fallback={
+        <QueuePageShell title="Cases" subtitle="Loading cases…">
+          <ListSkeleton rows={5} />
+        </QueuePageShell>
+      }
+    >
+      <CasesHub />
+    </Suspense>
+  );
 }

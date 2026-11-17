@@ -18,8 +18,6 @@ from urllib.parse import urlparse
 from xml.sax.saxutils import escape
 
 from django.conf import settings
-
-from common.media_urls import build_media_url
 from django.core.files.storage import default_storage
 from django.utils.dateformat import format as date_format
 from PIL import Image, ImageOps
@@ -41,6 +39,8 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+
+from common.media_urls import build_media_url
 
 from correspondence.models import CorrespondenceDocumentLink, Minute
 from dms.models import Document, DocumentVersion

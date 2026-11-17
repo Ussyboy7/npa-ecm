@@ -11,6 +11,8 @@ import { useRouter } from 'next/navigation';
 interface CorrespondenceHeaderProps {
   correspondence: Correspondence;
   isAuditCase?: boolean;
+  backHref?: string;
+  backLabel?: string;
   onCaseUnlinked?: () => void;
   onDistributionShared?: () => void;
 }
@@ -18,6 +20,8 @@ interface CorrespondenceHeaderProps {
 export const CorrespondenceHeader = ({
   correspondence,
   isAuditCase = false,
+  backHref = '/correspondence/inbox',
+  backLabel = 'Back to inbox',
 }: CorrespondenceHeaderProps) => {
   const router = useRouter();
 
@@ -29,8 +33,8 @@ export const CorrespondenceHeader = ({
             variant="ghost"
             size="icon"
             className="flex-shrink-0 mt-0.5"
-            onClick={() => router.push('/correspondence/inbox')}
-            aria-label="Back to inbox"
+            onClick={() => router.push(backHref)}
+            aria-label={backLabel}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>

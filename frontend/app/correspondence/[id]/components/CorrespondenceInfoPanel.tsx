@@ -8,7 +8,7 @@ import { AccessActivityCard } from "@/components/dms/AccessActivityCard";
 import { corrType } from "../correspondence-type";
 import { cn } from "@/lib/utils";
 import { formatDate, formatRoutingDateTime } from "@/lib/datetime";
-import type { Correspondence, Minute, User } from "@/lib/npa-structure";
+import type { Correspondence, Minute } from "@/lib/npa-structure";
 import type { DocumentAccessLog, DocumentRecord } from "@/lib/api/dms";
 import {
   ArrowDown,
@@ -31,12 +31,12 @@ interface CorrespondenceInfoPanelProps {
   primaryLinkedDocId: string | null;
   accessLogs: DocumentAccessLog[];
   logsLoading: boolean;
-  userLookup: Map<string, User>;
-  getUserInitials: (userId: string) => string;
   onRefreshAccessLogs: () => Promise<void>;
   onOpenLinkDocument: () => void;
   onViewThread?: () => void;
   isCompleted?: boolean;
+  /** Archive record pages render retained files in their own rail card. */
+  showFiles?: boolean;
 }
 
 const DIRECTION_LABEL: Record<string, string> = {
@@ -102,12 +102,11 @@ export function CorrespondenceInfoPanel({
   primaryLinkedDocId,
   accessLogs,
   logsLoading,
-  userLookup,
-  getUserInitials,
   onRefreshAccessLogs,
   onOpenLinkDocument,
   onViewThread,
   isCompleted = false,
+  showFiles = true,
 }: CorrespondenceInfoPanelProps) {
   const attachments = correspondence.attachments ?? [];
   const distribution = (correspondence.distribution ?? []).filter(
@@ -381,56 +380,58 @@ export function CorrespondenceInfoPanel({
         </div>
       </Section>
 
-      <Section
-        icon={FileText}
-        title="Files"
-        action={
-          !isCompleted && linkedDocuments.length + attachments.length > 0 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-              onClick={onOpenLinkDocument}
-            >
-              Link
-            </Button>
-          ) : null
-        }
-      >
-        {linkedDocuments.length === 0 && attachments.length === 0 ? (
-          <div className="space-y-2">
-            <p className={corrType.caption}>No documents linked yet.</p>
-            {!isCompleted ? (
+      {showFiles ? (
+        <Section
+          icon={FileText}
+          title="Files"
+          action={
+            !isCompleted && linkedDocuments.length + attachments.length > 0 ? (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="h-8 w-full justify-start text-xs"
+                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
                 onClick={onOpenLinkDocument}
               >
-                <FolderTree className="mr-2 h-3.5 w-3.5 opacity-70" />
-                Link a DMS document
+                Link
               </Button>
-            ) : null}
-          </div>
-        ) : (
-          <p className="text-[11px] leading-snug text-muted-foreground">
-            {linkedDocuments.length > 0 ? (
-              <>
-                {linkedDocuments.length} linked document
-                {linkedDocuments.length === 1 ? "" : "s"}
-              </>
-            ) : null}
-            {linkedDocuments.length > 0 && attachments.length > 0 ? " · " : null}
-            {attachments.length > 0 ? (
-              <>
-                {attachments.length} attachment
-                {attachments.length === 1 ? "" : "s"}
-              </>
-            ) : null}
-            {" — manage in Document."}
-          </p>
-        )}
-      </Section>
+            ) : null
+          }
+        >
+          {linkedDocuments.length === 0 && attachments.length === 0 ? (
+            <div className="space-y-2">
+              <p className={corrType.caption}>No documents linked yet.</p>
+              {!isCompleted ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-full justify-start text-xs"
+                  onClick={onOpenLinkDocument}
+                >
+                  <FolderTree className="mr-2 h-3.5 w-3.5 opacity-70" />
+                  Link a DMS document
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              {linkedDocuments.length > 0 ? (
+                <>
+                  {linkedDocuments.length} linked document
+                  {linkedDocuments.length === 1 ? "" : "s"}
+                </>
+              ) : null}
+              {linkedDocuments.length > 0 && attachments.length > 0 ? " · " : null}
+              {attachments.length > 0 ? (
+                <>
+                  {attachments.length} attachment
+                  {attachments.length === 1 ? "" : "s"}
+                </>
+              ) : null}
+              {" — manage in Document."}
+            </p>
+          )}
+        </Section>
+      ) : null}
 
       <Section icon={History} title="What happened">
         {sortedEvents.length === 0 && minuteCount === 0 && !primaryLinkedDocId ? (
@@ -505,8 +506,6 @@ export function CorrespondenceInfoPanel({
                 <AccessActivityCard
                   documentId={primaryLinkedDocId}
                   accessLogs={accessLogs}
-                  userLookup={userLookup}
-                  getUserInitials={getUserInitials}
                   onRefresh={onRefreshAccessLogs}
                   isLoading={logsLoading}
                   compact

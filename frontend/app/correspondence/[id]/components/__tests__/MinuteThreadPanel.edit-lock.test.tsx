@@ -33,7 +33,6 @@ const renderThread = (minutes: Minute[]) =>
       activeUserId="user-author"
       isCompleted={false}
       isCurrentUserTurn={false}
-      lookupUser={() => undefined}
       getActionIcon={() => null}
       onMinuteClick={vi.fn()}
       onEditMinute={vi.fn()}
@@ -68,5 +67,18 @@ describe('MinuteThreadPanel edit lock', () => {
     ]);
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
+  });
+
+  it('renders the archived minute author name and role from payload without a directory lookup', () => {
+    renderThread([
+      minute({
+        userName: 'Payload Author',
+        userSystemRole: 'Director of Records',
+        canBeEdited: false,
+      }),
+    ]);
+
+    expect(screen.getByText('Payload Author')).toBeTruthy();
+    expect(screen.getByText('Director of Records')).toBeTruthy();
   });
 });

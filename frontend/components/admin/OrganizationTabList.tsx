@@ -36,12 +36,14 @@ function OrganizationTabListInner() {
         label: "Locations",
         isActive: orgTabActive("locations"),
       },
-      {
-        href: "/admin/organization/acting",
-        label: "Acting",
-        isActive: orgTabActive("acting"),
-      },
     );
+  }
+  if (visibility.showOrganizationActing) {
+    tabs.push({
+      href: "/admin/organization/acting",
+      label: "Acting",
+      isActive: orgTabActive("acting"),
+    });
   }
   if (visibility.showUsersRoles) {
     tabs.push({

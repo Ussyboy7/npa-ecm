@@ -7,6 +7,7 @@ export interface Directorate {
   shortName?: string;
   description?: string;
   executiveDirectorId?: string;
+  executiveDirectorName?: string | null;
   isActive: boolean;
 }
 
@@ -17,6 +18,7 @@ export interface Division {
   shortName?: string;
   directorateId: string;
   generalManagerId?: string | null;
+  generalManagerName?: string | null;
   isActive: boolean;
 }
 
@@ -27,6 +29,7 @@ export interface Department {
   shortName?: string;
   divisionId: string;
   assistantGeneralManagerId?: string | null;
+  assistantGeneralManagerName?: string | null;
   isActive: boolean;
 }
 
@@ -45,6 +48,8 @@ export interface Office {
   allowLateralRouting: boolean;
   locationId?: string | null;
   locationName?: string | null;
+  activeMemberCount?: number;
+  activePrincipalName?: string | null;
 }
 
 export interface Location {
@@ -110,7 +115,18 @@ export interface OrganizationContextType {
   assistantAssignments: AssistantAssignment[];
   offices: Office[];
   officeMemberships: OfficeMembership[];
-  users: User[];
+  myOfficeMemberships: OfficeMembership[];
+  myOfficeMembershipsLoaded: boolean;
+  isOrganizationReady: boolean;
+  fetchOfficeMemberships: (filters: {
+    user?: string;
+    office?: string;
+    isActive?: boolean;
+    search?: string;
+    ordering?: string;
+    page?: number;
+    pageSize?: number;
+  }) => Promise<{ count: number; results: OfficeMembership[] }>;
   roles: Role[];
   addRole: (role: CreateRoleInput) => Promise<Role>;
   updateRole: (id: string, updates: UpdateRoleInput) => Promise<Role>;

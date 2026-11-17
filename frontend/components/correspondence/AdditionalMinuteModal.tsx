@@ -35,7 +35,7 @@ export const AdditionalMinuteModal = ({
 }: AdditionalMinuteModalProps) => {
   const { getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { currentUser } = useCurrentUser();
-  const { officeMemberships } = useOrganization();
+  const { myOfficeMemberships } = useOrganization();
   const minutes = getMinutesByCorrespondenceId(correspondence.id);
   
   const [selectedMinuteId, setSelectedMinuteId] = useState<string>('');
@@ -126,7 +126,7 @@ export const AdditionalMinuteModal = ({
     setIsSubmitting(true);
     try {
       // Get current user's primary office
-      const currentUserOfficeMembership = officeMemberships.find(
+      const currentUserOfficeMembership = myOfficeMemberships.find(
         (membership) => membership.userId === currentUser.id && membership.isActive && membership.isPrimary
       );
       const currentUserOfficeId = currentUserOfficeMembership?.officeId || correspondence.currentOfficeId || undefined;

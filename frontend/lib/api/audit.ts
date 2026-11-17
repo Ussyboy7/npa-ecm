@@ -3,7 +3,6 @@
  */
 
 import { apiFetch, hasTokens } from '@/lib/api-client';
-import { logWarn } from '@/lib/client-logger';
 import { isRecord, asString, unwrapResults } from '@/lib/type-utils';
 
 export interface ActivityLog {
@@ -181,28 +180,10 @@ export const downloadComplianceExport = async (
   if (params?.ordering) queryParams.append('ordering', params.ordering);
 
   const query = queryParams.toString();
-  const { getBaseUrl, getStoredAccessToken } = await import('@/lib/api-client');
-  const response = await fetch(
-    `${getBaseUrl()}/audit/logs/compliance-export${query ? `?${query}` : ''}`,
-    {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        Authorization: `Bearer ${getStoredAccessToken()}`,
-      },
-    },
+  const response = await apiFetch<Response>(
+    `/audit/logs/compliance-export${query ? `?${query}` : ''}`,
+    { responseType: 'raw' },
   );
-
-  if (!response.ok) {
-    let message = 'Compliance export failed';
-    try {
-      const body = await response.json();
-      if (body?.detail) message = String(body.detail);
-    } catch {
-      // ignore
-    }
-    throw new Error(message);
-  }
 
   const blob = await response.blob();
   return {

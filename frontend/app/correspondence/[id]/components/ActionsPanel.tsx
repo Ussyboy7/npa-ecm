@@ -37,13 +37,13 @@ import {
   FolderTree,
   ArrowRightLeft,
 } from "lucide-react";
-import { formatDateShort, canDispatchCorrespondence, canArchiveCorrespondence, isCorrespondenceOutward } from "@/lib/correspondence-helpers";
+import { formatDateShort, canArchiveCorrespondence, isCorrespondenceOutward } from "@/lib/correspondence-helpers";
 import { cn } from "@/lib/utils";
-import { DispatchModal, AcknowledgeButton } from "@/components/correspondence/DispatchModal";
+import { AcknowledgeButton } from "@/components/correspondence/DispatchModal";
 import { apiFetch } from "@/lib/api-client";
 import { toast } from "@/components/ui/sonner";
 import { returnCorrespondenceToPrincipal } from "@/lib/api/acting-appointments";
-import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
+import type { Correspondence, Minute, User, OfficeMembership } from "@/lib/npa-structure";
 import { corrType } from "../correspondence-type";
 
 interface ActionsPanelProps {
@@ -62,10 +62,7 @@ interface ActionsPanelProps {
   hasCompletionPackage?: boolean;
   completionGeneratedAt?: string | null;
   activeDelegation?: Record<string, unknown> | null;
-  organizationUsers?: User[];
-  offices?: Office[];
   officeMemberships?: OfficeMembership[];
-  lookupUser?: (id: string) => User | undefined;
   onOpenMinuteModal?: () => void;
   onOpenTreatmentModal?: () => void;
   onOpenCompletionModal?: () => void;
@@ -94,10 +91,7 @@ export function ActionsPanel({
   hasCompletionPackage,
   completionGeneratedAt,
   activeDelegation,
-  organizationUsers = [],
-  offices: _offices = [],
   officeMemberships: _officeMemberships = [],
-  lookupUser: _lookupUser = () => undefined,
   onOpenMinuteModal,
   onOpenTreatmentModal,
   onOpenCompletionModal,
@@ -600,8 +594,7 @@ export function ActionsPanel({
         {String(activeUser?.id) === String(activeDelegation.principalId) ? (
           <>
             Delegated to{" "}
-            {organizationUsers.find((u) => String(u.id) === String(activeDelegation.assistantId))?.name ||
-              "Assistant"}
+            {String(activeDelegation.assistantName ?? "") || "Assistant"}
             {activeDelegation.delegatedAt && (
               <> on {formatDateShort(activeDelegation.delegatedAt as string)}</>
             )}
@@ -609,8 +602,7 @@ export function ActionsPanel({
         ) : (
           <>
             Acting on behalf of{" "}
-            {organizationUsers.find((u) => String(u.id) === String(activeDelegation.principalId))?.name ||
-              "Principal"}
+            {String(activeDelegation.principalName ?? "") || "Principal"}
           </>
         )}
       </p>

@@ -48,7 +48,8 @@ registerIdentityCacheClearer(clearOrgUsersCache);
  * Hook that fetches all active users on-demand with shared caching.
  * Returns the user array (empty until loaded) and a loading flag.
  */
-export function useOrgUsers(): { users: User[]; loading: boolean } {
+export function useOrgUsers(options: { enabled?: boolean } = {}): { users: User[]; loading: boolean } {
+  const enabled = options.enabled ?? true;
   const currentUser = useSyncExternalStore(
     subscribeToStore,
     getCurrentUserSnapshot,
@@ -58,10 +59,12 @@ export function useOrgUsers(): { users: User[]; loading: boolean } {
   const [users, setUsers] = useState<User[]>(
     cachedUsers?.userId === userId ? cachedUsers.users : [],
   );
-  const [loading, setLoading] = useState(Boolean(userId && cachedUsers?.userId !== userId));
+  const [loading, setLoading] = useState(
+    Boolean(enabled && userId && cachedUsers?.userId !== userId),
+  );
 
   useEffect(() => {
-    if (!userId || !hasTokens()) {
+    if (!enabled || !userId || !hasTokens()) {
       setUsers([]);
       setLoading(false);
       return;
@@ -90,7 +93,7 @@ export function useOrgUsers(): { users: User[]; loading: boolean } {
       });
 
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, enabled]);
 
   return { users, loading };
 }

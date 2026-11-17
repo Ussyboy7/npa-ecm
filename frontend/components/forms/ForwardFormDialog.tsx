@@ -18,7 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Send, User, Building2, Briefcase, Search, X } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useOrgUsers } from "@/hooks/use-org-users";
+import { usePaginatedUserSearch } from '@/hooks/use-paginated-user-search';
 import { toast } from '@/components/ui/sonner';
 import { logError } from '@/lib/client-logger';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -48,7 +48,17 @@ export function ForwardFormDialog({
   onForwarded,
 }: ForwardFormDialogProps) {
   const { divisions, departments, offices } = useOrganization();
-  const { users } = useOrgUsers();
+  const {
+    query: userSearch,
+    setQuery: setUserSearch,
+    users: searchedUsers,
+    userById,
+    loading: loadingUsers,
+    loadingMore,
+    error: userSearchError,
+    hasMore,
+    loadMore,
+  } = usePaginatedUserSearch({ enabled: open, pageSize: 50 });
   const [forwarding, setForwarding] = useState(false);
   const [targetType, setTargetType] = useState<'user' | 'division' | 'department'>('user');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -56,7 +66,6 @@ export function ForwardFormDialog({
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [message, setMessage] = useState('');
   const [actionType, setActionType] = useState<'review' | 'input' | 'signature'>('review');
-  const [userSearch, setUserSearch] = useState('');
 
   useEffect(() => {
     if (!open) {
@@ -66,17 +75,8 @@ export function ForwardFormDialog({
       setMessage('');
       setTargetType('user');
       setActionType('review');
-      setUserSearch('');
     }
   }, [open]);
-
-  const availableUsers = useMemo(
-    () =>
-      users
-        .filter((u) => u.active !== false && !isSeedOrDebugUser(u))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [users],
-  );
 
   const availableDivisions = useMemo(
     () => divisions.filter((d) => d.isActive !== false).sort((a, b) => a.name.localeCompare(b.name)),
@@ -91,15 +91,10 @@ export function ForwardFormDialog({
     [departments],
   );
 
-  const filteredUsers = useMemo(() => {
-    const q = userSearch.trim().toLowerCase();
-    if (!q) return availableUsers;
-    return availableUsers.filter((user) =>
-      [user.name, user.email, user.systemRole, user.username]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(q)),
-    );
-  }, [availableUsers, userSearch]);
+  const filteredUsers = useMemo(
+    () => searchedUsers.filter((user) => user.active !== false && !isSeedOrDebugUser(user)),
+    [searchedUsers],
+  );
 
   const divisionOffice = useMemo(() => {
     if (!selectedDivision) return null;
@@ -266,9 +261,14 @@ export function ForwardFormDialog({
                 </div>
 
                 <div className="max-h-64 overflow-y-auto rounded-md border p-2">
-                  {filteredUsers.length === 0 ? (
+                  {loadingUsers && filteredUsers.length === 0 ? (
+                    <p className="flex items-center justify-center gap-2 px-2 py-6 text-center text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading users…
+                    </p>
+                  ) : filteredUsers.length === 0 ? (
                     <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                      No users match your search.
+                      {userSearchError ?? 'No users match your search.'}
                     </p>
                   ) : (
                     <div className="space-y-1">
@@ -302,12 +302,27 @@ export function ForwardFormDialog({
                       })}
                     </div>
                   )}
+                  {hasMore ? (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                      >
+                        {loadingMore ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                        Load more users
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
 
                 {selectedUsers.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {selectedUsers.map((userId) => {
-                      const user = availableUsers.find((u) => u.id === userId);
+                      const user = userById.get(userId);
                       if (!user) return null;
                       return (
                         <Badge key={userId} variant="secondary" className="gap-1 pr-1 text-xs">

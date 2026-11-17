@@ -132,12 +132,12 @@ export default function FOIADetailPage() {
     setError(null);
     try {
       const [reqData, notesData, docsData] = await Promise.all([
-        apiFetch<FOIARequest>(`/api/correspondence/foia-requests/${params.id}/`),
+        apiFetch<FOIARequest>(`/correspondence/foia-requests/${params.id}/`),
         apiFetch<FOIANote[] | { results: FOIANote[] }>(
-          `/api/correspondence/foia-notes/?foia_request=${params.id}`
+          `/correspondence/foia-notes/?foia_request=${params.id}`
         ),
         apiFetch<FOIADocument[] | { results: FOIADocument[] }>(
-          `/api/correspondence/foia-documents/?foia_request=${params.id}`
+          `/correspondence/foia-documents/?foia_request=${params.id}`
         ),
       ]);
       setRequest(reqData);
@@ -156,7 +156,7 @@ export default function FOIADetailPage() {
 
   const handleAcknowledge = async () => {
     try {
-      await apiFetch(`/api/correspondence/foia-requests/${params.id}/acknowledge/`, {
+      await apiFetch(`/correspondence/foia-requests/${params.id}/acknowledge/`, {
         method: "POST",
       });
       toast.success("Request acknowledged");
@@ -173,7 +173,7 @@ export default function FOIADetailPage() {
     }
     setResponding(true);
     try {
-      await apiFetch(`/api/correspondence/foia-requests/${params.id}/respond/`, {
+      await apiFetch(`/correspondence/foia-requests/${params.id}/respond/`, {
         method: "POST",
         body: JSON.stringify({
           outcome,
@@ -193,7 +193,7 @@ export default function FOIADetailPage() {
 
   const handleClose = async () => {
     try {
-      await apiFetch(`/api/correspondence/foia-requests/${params.id}/close/`, {
+      await apiFetch(`/correspondence/foia-requests/${params.id}/close/`, {
         method: "POST",
       });
       toast.success("Request closed");
@@ -207,7 +207,7 @@ export default function FOIADetailPage() {
     if (!noteContent.trim()) return;
     setAddingNote(true);
     try {
-      const note = await apiFetch<FOIANote>(`/api/correspondence/foia-notes/`, {
+      const note = await apiFetch<FOIANote>(`/correspondence/foia-notes/`, {
         method: "POST",
         body: JSON.stringify({
           foia_request: params.id,

@@ -110,8 +110,9 @@ export async function fetchUsers(params: UserQueryParams = {}): Promise<Paginate
     throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   }
 
+  const { signal, ...queryParams } = params;
   const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
+  Object.entries(queryParams).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       searchParams.set(key, String(value));
     }
@@ -122,7 +123,7 @@ export async function fetchUsers(params: UserQueryParams = {}): Promise<Paginate
     : '/accounts/users/';
 
   return apiFetch<PaginatedUsers>(url, {
-    signal: params.signal,
+    signal,
   });
 }
 
@@ -178,8 +179,6 @@ export async function bulkDeactivateUsers(userIds: string[]): Promise<BulkOperat
  * Export users to CSV
  */
 export async function exportUsers(params: UserQueryParams = {}): Promise<Blob> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -191,18 +190,7 @@ export async function exportUsers(params: UserQueryParams = {}): Promise<Blob> {
     ? `/accounts/users/export/?${searchParams.toString()}`
     : '/accounts/users/export/';
 
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api/v1'}${url}`, {
-    method: 'GET',
-    credentials: 'include',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error('Export failed');
-  }
-
+  const response = await apiFetch<Response>(url, { responseType: 'raw' });
   return response.blob();
 }
 
@@ -210,52 +198,22 @@ export async function exportUsers(params: UserQueryParams = {}): Promise<Blob> {
  * Import users from CSV
  */
 export async function importUsers(file: File): Promise<UserImportResult> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api/v1'}/accounts/users/import/`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-      },
-      body: formData,
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Import failed');
-  }
-
-  return response.json();
+  return apiFetch<UserImportResult>('/accounts/users/import/', {
+    method: 'POST',
+    body: formData,
+  });
 }
 
 /**
  * Download user import template
  */
 export async function downloadUserTemplate(): Promise<Blob> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api/v1'}/accounts/users/export-template/`,
-    {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error('Template download failed');
-  }
-
+  const response = await apiFetch<Response>('/accounts/users/export-template/', {
+    responseType: 'raw',
+  });
   return response.blob();
 }
 
@@ -325,18 +283,6 @@ export async function createRoleFromTemplate(templateName: string, customName?: 
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Format date for API (YYYY-MM-DD)
- */
-export function formatDateForAPI(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (isNaN(d.getTime())) {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  }
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 /**
  * Download blob as file

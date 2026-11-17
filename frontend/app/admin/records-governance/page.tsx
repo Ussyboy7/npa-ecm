@@ -5,7 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { RecordsSecurityTabList } from "@/components/admin/RecordsSecurityTabList";
-import { AuditTrailPanel, getAuditScopeSubtitle } from "@/components/admin/AuditTrailPanel";
+import {
+  AUDIT_HEADER_SLOT_IDS,
+  AuditTrailPanel,
+  getAuditScopeSubtitle,
+} from "@/components/admin/AuditTrailPanel";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +34,6 @@ import {
 } from "@/components/ui/select";
 import {
   Archive,
-  Trash2,
   Plus,
   Download,
 } from "lucide-react";
@@ -111,7 +114,6 @@ function RecordsGovernanceContent() {
   const [schedules, setSchedules] = useState<RetentionSchedule[]>([]);
   const [holds, setHolds] = useState<LegalHold[]>([]);
   const [disposals, setDisposals] = useState<DisposalRequest[]>([]);
-  const [loading, setLoading] = useState(true);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [holdDialogOpen, setHoldDialogOpen] = useState(false);
   const [exportingHoldId, setExportingHoldId] = useState<string | null>(null);
@@ -136,7 +138,6 @@ function RecordsGovernanceContent() {
   });
 
   const loadAll = useCallback(async () => {
-    setLoading(true);
     try {
       const [summaryData, scheduleData, holdData, disposalData] = await Promise.all([
         fetchRecordsSummary(),
@@ -151,8 +152,6 @@ function RecordsGovernanceContent() {
     } catch (_error) {
       logError("Failed to load records governance data", _error);
       toast.error("Could not load records governance data");
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -254,7 +253,11 @@ function RecordsGovernanceContent() {
             : "Retention, legal holds, disposal, and document rights (DRM)."
         }
         icon={Archive}
-        stats={effectiveTab === "audit" ? undefined : <StatStrip items={statItems} />}
+        stats={
+          effectiveTab === "audit"
+            ? <div id={AUDIT_HEADER_SLOT_IDS.stats} />
+            : <StatStrip items={statItems} />
+        }
         actions={
           effectiveTab === "retention" ? (
             <Button size="compact" onClick={() => setScheduleDialogOpen(true)}>
@@ -266,6 +269,8 @@ function RecordsGovernanceContent() {
               <Plus className="h-4 w-4" />
               New hold
             </Button>
+          ) : effectiveTab === "audit" ? (
+            <div id={AUDIT_HEADER_SLOT_IDS.actions} />
           ) : null
         }
       >

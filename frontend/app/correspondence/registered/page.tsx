@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,6 @@ import { useRouter } from "next/navigation";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { mapApiCorrespondence } from "@/lib/api/correspondence-mappers";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
@@ -23,7 +22,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { ListSkeleton } from "@/components/shared/PageSkeleton";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { RegistryTabList } from "@/components/registry/RegistryTabList";
 import { StatStrip } from "@/components/shared/StatStrip";
@@ -55,12 +54,12 @@ const RegisteredCorrespondencePage = () => {
   const permissions = useUserPermissions(currentUser ?? undefined);
   const visibility = useSidebarVisibility();
   const { divisions } = useOrganization();
-  const { users } = useOrgUsers();
   const [items, setItems] = useState<Correspondence[]>([]);
   const [loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const itemsRequestRef = useRef(0);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -95,6 +94,7 @@ const RegisteredCorrespondencePage = () => {
   }, [searchQuery]);
 
   const loadItems = useCallback(async () => {
+    const requestId = ++itemsRequestRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -115,15 +115,19 @@ const RegisteredCorrespondencePage = () => {
       const response = await apiFetch<Record<string, unknown>>(
         `/correspondence/items/registered/?${params.toString()}`,
       );
+      if (requestId !== itemsRequestRef.current) return;
       const results = Array.isArray(response.results) ? response.results : [];
       setItems(results.map(mapApiCorrespondence));
       setCount(typeof response.count === "number" ? response.count : results.length);
     } catch {
+      if (requestId !== itemsRequestRef.current) return;
       setError("Failed to load registered correspondence. Please try again.");
       setItems([]);
       setCount(0);
     } finally {
-      setLoading(false);
+      if (requestId === itemsRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [
     pagination.page,
@@ -137,9 +141,19 @@ const RegisteredCorrespondencePage = () => {
     sortOrder,
   ]);
 
+  const filterKey = [debouncedSearch, statusFilter, priorityFilter, dateFrom, dateTo, sortBy, sortOrder].join('\u0000');
+  const previousFilterKeyRef = useRef(filterKey);
+
   useEffect(() => {
+    const filtersChanged = previousFilterKeyRef.current !== filterKey;
+    previousFilterKeyRef.current = filterKey;
+    if (filtersChanged && pagination.page !== 1) {
+      pagination.goToFirstPage();
+      return;
+    }
     void loadItems();
-  }, [loadItems]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, pagination.page, pagination.pageSize, loadItems]);
 
   const handleDispatch = useCallback(async (id: string) => {
     try {
@@ -150,11 +164,6 @@ const RegisteredCorrespondencePage = () => {
       toast.error(e instanceof Error ? e.message : 'Dispatch failed');
     }
   }, [loadItems]);
-
-  useEffect(() => {
-    pagination.goToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, statusFilter, priorityFilter, dateFrom, dateTo, sortBy, sortOrder]);
 
   const canViewRegistry = visibility.showRegisteredCorrespondence && permissions.canViewCorrespondenceRegistry;
   const canRegister = Boolean(permissions.canRegisterCorrespondence);
@@ -296,9 +305,10 @@ const RegisteredCorrespondencePage = () => {
       </div>
 
       <div aria-live="polite">
-        {error ? <ErrorState message={error} variant="inline" /> : null}
-        {loading ? (
-          <LoadingState message="Loading registered correspondence…" />
+        {error ? (
+          <ErrorState message={error} variant="inline" />
+        ) : loading ? (
+          <ListSkeleton rows={5} />
         ) : items.length === 0 ? (
           <EmptyState
             icon={<Mail className={registryQueueEmptyIconClass} />}
@@ -317,10 +327,7 @@ const RegisteredCorrespondencePage = () => {
               const division = item.divisionId
                 ? divisions.find((d) => d.id === item.divisionId)
                 : undefined;
-              const registeredBy = item.createdById
-                ? users.find((user) => user.id === item.createdById)
-                : undefined;
-              const registeredByName = registeredBy?.name ?? item.createdByName ?? "—";
+              const registeredByName = item.createdByName ?? "—";
               const statusBadge = getCorrespondenceStatusBadge(item.status);
 
               return (

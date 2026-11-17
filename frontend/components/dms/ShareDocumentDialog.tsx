@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { logError, logWarn } from '@/lib/client-logger';
-import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
+import { logError } from '@/lib/client-logger';
 import {
   Dialog,
   DialogContent,
@@ -26,9 +25,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
+import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/api/dms";
-import type { User } from "@/lib/npa-structure";
 import { shareDocument, apiFetch, hasTokens, canShareDocument } from "@/lib/api/dms";
 import { toast } from "@/components/ui/sonner";
 import { Input } from "@/components/ui/input";
@@ -36,7 +34,6 @@ import { Search, Users, AlertTriangle, Loader2, FileText, CheckCircle2, Shield, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
-import { filterUsersBySearch } from "@/lib/routing-utils";
 import {
   CorrespondenceRoutingView,
   type CorrespondenceRoutingHandle,
@@ -67,7 +64,6 @@ const ShareDocumentDialogContent = ({
   onShared,
 }: ShareDocumentDialogProps) => {
   const { divisions, officeMemberships: _officeMemberships } = useOrganization();
-  const { users } = useOrgUsers();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("share");
   const [accessLevel, setAccessLevel] = useState<PermissionAccess>("read");
@@ -90,12 +86,23 @@ const ShareDocumentDialogContent = ({
     [],
   );
   const correspondenceRef = useRef<CorrespondenceRoutingHandle>(null);
-  const [directSharePersonSearch, setDirectSharePersonSearch] = useState('');
-  const [debouncedPersonSearch, setDebouncedPersonSearch] = useState('');
-  const [fallbackRecipientUsers, setFallbackRecipientUsers] = useState<User[]>([]);
-  const [loadingFallbackRecipients, setLoadingFallbackRecipients] = useState(false);
-  const [hasLoadedDirectShareUsers, setHasLoadedDirectShareUsers] = useState(false);
   const wasOpenRef = useRef(false);
+  const {
+    query: directSharePersonSearch,
+    setQuery: setDirectSharePersonSearch,
+    users: correspondenceFilteredUsers,
+    userById: personSelectionLookup,
+    totalCount: directShareUserCount,
+    loading: loadingDirectShareUsers,
+    loadingMore: loadingMoreDirectShareUsers,
+    error: directShareUserError,
+    hasMore: hasMoreDirectShareUsers,
+    loadMore: loadMoreDirectShareUsers,
+  } = usePaginatedUserSearch({
+    enabled: open,
+    pageSize: 50,
+    excludeUserIds: currentUserId ? [currentUserId] : [],
+  });
   
   // Selection state
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
@@ -149,90 +156,9 @@ const ShareDocumentDialogContent = ({
       setShowDuplicateWarning(false);
       setShowSensitivityWarning(false);
       setPendingShareAction(null);
-      setDirectSharePersonSearch('');
-      setDebouncedPersonSearch('');
-      setHasLoadedDirectShareUsers(false);
     }
     wasOpenRef.current = open;
   }, [open]);
-
-  const shareableUsers = useMemo(
-    () =>
-      users
-        .filter((user) => user.active && (!currentUserId || user.id !== currentUserId))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [users, currentUserId],
-  );
-
-  const personSelectionPool = useMemo(() => {
-    if (fallbackRecipientUsers.length > 0) return fallbackRecipientUsers;
-    return shareableUsers;
-  }, [shareableUsers, fallbackRecipientUsers]);
-  const personSelectionLookup = useMemo(
-    () => new Map(personSelectionPool.map((user) => [user.id, user])),
-    [personSelectionPool]
-  );
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedPersonSearch(directSharePersonSearch);
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [directSharePersonSearch]);
-
-  const correspondenceFilteredUsers = useMemo(() => {
-    return filterUsersBySearch(
-      personSelectionPool,
-      debouncedPersonSearch,
-      { includeDivision: true, includeDepartment: true, includeEmail: true }
-    );
-  }, [personSelectionPool, debouncedPersonSearch]);
-
-
-  useEffect(() => {
-    if (!open || loadingFallbackRecipients || hasLoadedDirectShareUsers) {
-      return;
-    }
-
-    if (shareableUsers.length > 0) {
-      setHasLoadedDirectShareUsers(true);
-      return;
-    }
-
-    setLoadingFallbackRecipients(true);
-    void (async () => {
-      try {
-        const rows = await fetchAllCatalogPaginated<Record<string, unknown>>(
-          '/accounts/users/?is_active=true&ordering=username',
-        );
-
-        const mapped = rows
-          .filter(isRecord)
-          .map((item) => {
-            const firstName = typeof item.first_name === 'string' ? item.first_name : '';
-            const lastName = typeof item.last_name === 'string' ? item.last_name : '';
-            const fullName = `${firstName} ${lastName}`.trim();
-            return {
-              id: String(item.id ?? ''),
-              name: fullName || String(item.username ?? item.email ?? 'Unknown User'),
-              email: String(item.email ?? ''),
-              employeeId: String(item.employee_id ?? item.employeeId ?? ''),
-              gradeLevel: String(item.grade_level ?? item.gradeLevel ?? ''),
-              systemRole: String(item.system_role ?? item.systemRole ?? ''),
-              active: true,
-            };
-          })
-          .filter((user) => Boolean(user.id) && (!currentUserId || user.id !== currentUserId));
-
-        setFallbackRecipientUsers(mapped);
-      } catch (error: unknown) {
-        logWarn('Failed to fetch fallback recipients for direct share', error);
-      } finally {
-        setLoadingFallbackRecipients(false);
-        setHasLoadedDirectShareUsers(true);
-      }
-    })();
-  }, [open, loadingFallbackRecipients, hasLoadedDirectShareUsers, currentUserId, shareableUsers.length]);
 
   const handleToggleDirectSharePerson = useCallback((userId: string) => {
     setSelectedUserIds((prev) => {
@@ -619,10 +545,10 @@ const ShareDocumentDialogContent = ({
                                     {correspondenceFilteredUsers.length > 0 &&
                                     correspondenceFilteredUsers.every((user) => selectedUserIds.has(user.id))
                                       ? 'Clear'
-                                      : 'Select all'}
+                                      : hasMoreDirectShareUsers ? 'Select shown' : 'Select all'}
                                   </Button>
                                 </div>
-                                {personSelectionPool.length > 8 && (
+                                {(directShareUserCount > 8 || directSharePersonSearch.trim().length > 0) && (
                                   <div className="relative">
                                     <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                     <Input
@@ -635,14 +561,14 @@ const ShareDocumentDialogContent = ({
                                 )}
                                 <ScrollArea className="h-[min(272px,32vh)] border rounded-md p-2">
                                   <div className="space-y-1.5 min-w-0 pr-2">
-                                    {loadingFallbackRecipients && correspondenceFilteredUsers.length === 0 ? (
+                                    {loadingDirectShareUsers && correspondenceFilteredUsers.length === 0 ? (
                                       <div className="p-3 text-xs text-muted-foreground flex items-center gap-2">
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                         Loading users...
                                       </div>
                                     ) : correspondenceFilteredUsers.length === 0 ? (
                                       <div className="p-3 text-xs text-muted-foreground">
-                                        No matching users found.
+                                        {directShareUserError ?? 'No matching users found.'}
                                       </div>
                                     ) : (
                                       correspondenceFilteredUsers.map((user) => {
@@ -679,6 +605,23 @@ const ShareDocumentDialogContent = ({
                                         );
                                       })
                                     )}
+                                    {hasMoreDirectShareUsers ? (
+                                      <div className="pt-2">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="w-full"
+                                          onClick={loadMoreDirectShareUsers}
+                                          disabled={loadingMoreDirectShareUsers}
+                                        >
+                                          {loadingMoreDirectShareUsers ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                                          ) : null}
+                                          Load more users
+                                        </Button>
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </ScrollArea>
                               </div>

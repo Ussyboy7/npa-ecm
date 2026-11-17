@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,10 @@ import { fetchSLATargets, DEFAULT_SLA_TARGETS } from "@/lib/sla-client";
 import { calculateSLAStatus } from "@/lib/inbox-sla";
 import SecretaryDashboardContent from "./components/SecretaryDashboardContent";
 import { ExecutiveDashboardTab } from "@/components/analytics/ExecutiveDashboardTab";
+import { PerformanceAnalyticsTab } from "@/components/analytics/PerformanceAnalyticsTab";
+import { DivisionAnalyticsTab } from "@/components/analytics/DivisionAnalyticsTab";
+import { CaseAnalyticsTab } from "@/components/analytics/CaseAnalyticsTab";
+import { ANALYTICS_HEADER_SLOT_IDS } from "@/components/analytics/AnalyticsHeaderSlots";
 import {
   CheckCircle2,
   Inbox,
@@ -53,13 +57,82 @@ interface InboxSummary {
   dueSoon: number;
 }
 
+type DashboardTab = "work" | "executive" | "performance" | "divisions" | "cases";
+
+const DASHBOARD_TABS = new Set<DashboardTab>([
+  "work",
+  "executive",
+  "performance",
+  "divisions",
+  "cases",
+]);
+
+const parseDashboardTab = (value: string | null): DashboardTab =>
+  value && DASHBOARD_TABS.has(value as DashboardTab) ? (value as DashboardTab) : "work";
+
 const Dashboard = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser } = useCurrentUser();
   const { divisions } = useOrganization();
   const { isSecretary } = useRoleChecks();
-  const { showExecutiveDashboard } = useSidebarVisibility();
-  const [dashboardView, setDashboardView] = useState<'work' | 'executive'>('work');
+  const {
+    isVisibilityReady,
+    showExecutiveDashboard,
+    showPerformanceAnalytics,
+    showDivisionAnalytics,
+    showCaseAnalytics,
+  } = useSidebarVisibility();
+  const requestedTab = parseDashboardTab(searchParams.get("tab"));
+  const [dashboardView, setDashboardView] = useState<DashboardTab>(requestedTab);
+
+  const dashboardTabs = useMemo(() => {
+    const tabs: Array<{ value: DashboardTab; label: string }> = [
+      { value: "work", label: "My work" },
+    ];
+    if (showExecutiveDashboard) tabs.push({ value: "executive", label: "Executive overview" });
+    if (showPerformanceAnalytics) tabs.push({ value: "performance", label: "Performance" });
+    if (showDivisionAnalytics) tabs.push({ value: "divisions", label: "Divisions" });
+    if (showCaseAnalytics) tabs.push({ value: "cases", label: "Cases" });
+    return tabs;
+  }, [
+    showExecutiveDashboard,
+    showPerformanceAnalytics,
+    showDivisionAnalytics,
+    showCaseAnalytics,
+  ]);
+  const allowedTabs = useMemo(
+    () => new Set(dashboardTabs.map((tab) => tab.value)),
+    [dashboardTabs],
+  );
+  const activeTab = isVisibilityReady && allowedTabs.has(dashboardView) ? dashboardView : "work";
+
+  useEffect(() => {
+    if (!isVisibilityReady) return;
+
+    if (allowedTabs.has(requestedTab)) {
+      setDashboardView(requestedTab);
+      return;
+    }
+
+    setDashboardView("work");
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("tab");
+    const query = params.toString();
+    router.replace(`/dashboard${query ? `?${query}` : ""}`, { scroll: false });
+  }, [allowedTabs, isVisibilityReady, requestedTab, router, searchParams]);
+
+  const handleTabChange = (value: string) => {
+    const nextTab = parseDashboardTab(value);
+    if (!allowedTabs.has(nextTab)) return;
+
+    setDashboardView(nextTab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextTab === "work") params.delete("tab");
+    else params.set("tab", nextTab);
+    const query = params.toString();
+    router.replace(`/dashboard${query ? `?${query}` : ""}`, { scroll: false });
+  };
 
   const [inboxLoading, setInboxLoading] = useState(true);
   const [inboxError, setInboxError] = useState<string | null>(null);
@@ -203,17 +276,16 @@ const Dashboard = () => {
       {isSecretary ? <SecretaryDashboardContent /> : null}
 
       <Tabs
-        value={dashboardView}
-        onValueChange={(value) => setDashboardView(value as 'work' | 'executive')}
+        value={activeTab}
+        onValueChange={handleTabChange}
       >
-        {showExecutiveDashboard ? (
+        {dashboardTabs.length > 1 ? (
           <TabsList className="h-9 rounded-lg bg-muted/60 p-1">
-            <TabsTrigger value="work" className="h-7 px-3 text-xs">
-              My work
-            </TabsTrigger>
-            <TabsTrigger value="executive" className="h-7 px-3 text-xs">
-              Executive overview
-            </TabsTrigger>
+            {dashboardTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="h-7 px-3 text-xs">
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
         ) : null}
 
@@ -381,13 +453,50 @@ const Dashboard = () => {
 
         {showExecutiveDashboard ? (
           <TabsContent value="executive" className="mt-4">
-            <ExecutiveDashboardTab />
+            <AnalyticsTabContent>
+              <ExecutiveDashboardTab />
+            </AnalyticsTabContent>
+          </TabsContent>
+        ) : null}
+
+        {showPerformanceAnalytics ? (
+          <TabsContent value="performance" className="mt-4">
+            <AnalyticsTabContent>
+              <PerformanceAnalyticsTab />
+            </AnalyticsTabContent>
+          </TabsContent>
+        ) : null}
+
+        {showDivisionAnalytics ? (
+          <TabsContent value="divisions" className="mt-4">
+            <AnalyticsTabContent>
+              <DivisionAnalyticsTab />
+            </AnalyticsTabContent>
+          </TabsContent>
+        ) : null}
+
+        {showCaseAnalytics ? (
+          <TabsContent value="cases" className="mt-4">
+            <AnalyticsTabContent>
+              <CaseAnalyticsTab />
+            </AnalyticsTabContent>
           </TabsContent>
         ) : null}
       </Tabs>
     </QueuePageShell>
   );
 };
+
+/** Shared header target for analytics tabs, which portal their stats and actions. */
+const AnalyticsTabContent = ({ children }: { children: ReactNode }) => (
+  <div className="space-y-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div id={ANALYTICS_HEADER_SLOT_IDS.stats} className="min-w-0 flex-1" />
+      <div id={ANALYTICS_HEADER_SLOT_IDS.actions} className="shrink-0" />
+    </div>
+    {children}
+  </div>
+);
 
 const StatValueSkeleton = () => (
   <span
@@ -429,4 +538,10 @@ const calculateTaskStatus = (dueDate: string): { status: "overdue" | "due-soon" 
   return { status: "pending", daysUntilDue: diffDays };
 };
 
-export default Dashboard;
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <Dashboard />
+    </Suspense>
+  );
+}

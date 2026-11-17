@@ -6,6 +6,19 @@ export type DocumentStatus = 'draft' | 'published' | 'archived';
 export type DocumentSensitivity = 'public' | 'internal' | 'confidential' | 'restricted';
 export type PermissionAccess = 'read' | 'write' | 'admin';
 
+/** Display name from a nested API user payload. */
+export const getApiUserName = (user: Record<string, unknown> | undefined): string | undefined => {
+  if (!user) return undefined;
+  const fullName = [user.first_name, user.middle_name, user.last_name]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .map((part) => part.trim())
+    .join(' ');
+  if (fullName) return fullName;
+  return typeof user.username === 'string' && user.username.trim()
+    ? user.username.trim()
+    : undefined;
+};
+
 export interface EffectiveDocumentRights {
   access_level: PermissionAccess | null;
   can_view: boolean;
@@ -58,6 +71,7 @@ export interface DocumentVersion {
   ocrText?: string;
   summary?: string;
   uploadedBy: string;
+  uploadedByName?: string;
   uploadedAt: string;
   notes?: string;
 }
@@ -74,6 +88,7 @@ export interface DocumentPublicationEvent {
 
 export interface DocumentCollaborator {
   userId: string;
+  userName?: string;
   startedAt?: string;
 }
 
@@ -81,6 +96,7 @@ export interface DocumentComment {
   id: string;
   documentId: string;
   authorId: string;
+  authorName?: string;
   content: string;
   createdAt: string;
   resolved: boolean;
@@ -108,6 +124,7 @@ export interface DocumentRecord {
   status: DocumentStatus;
   sensitivity: DocumentSensitivity;
   authorId: string;
+  authorName?: string;
   divisionId?: string;
   departmentId?: string;
   tags: string[];
@@ -452,6 +469,7 @@ export const mapDocumentVersion = (data: Record<string, unknown>): DocumentVersi
     ocrText: typeof data.ocr_text === 'string' ? data.ocr_text : undefined,
     summary: typeof data.summary === 'string' ? data.summary : undefined,
     uploadedBy: uploadedBy && 'id' in uploadedBy ? String(uploadedBy.id) : String(data.uploaded_by ?? ''),
+    uploadedByName: getApiUserName(uploadedBy),
     uploadedAt: typeof data.uploaded_at === 'string' ? data.uploaded_at : new Date().toISOString(),
     notes: typeof data.notes === 'string' ? data.notes : undefined,
   };
@@ -466,6 +484,12 @@ export const mapActiveEditors = (editors: unknown[]): DocumentCollaborator[] =>
           ? (editorObj.user as { id: unknown }).id
           : editorObj.user ?? editorObj.user_id ?? ''
       ),
+      userName:
+        getApiUserName(
+          editorObj.user && typeof editorObj.user === 'object'
+            ? (editorObj.user as Record<string, unknown>)
+            : undefined,
+        ) ?? (typeof editorObj.user_name === 'string' ? editorObj.user_name : undefined),
       startedAt: typeof editorObj.started_at === 'string'
         ? editorObj.started_at
         : typeof editorObj.startedAt === 'string'
@@ -490,6 +514,7 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
     status: (item.status as DocumentStatus) ?? 'draft',
     sensitivity: (item.sensitivity as DocumentSensitivity) ?? 'internal',
     authorId: author && 'id' in author ? String(author.id) : String(item.author ?? ''),
+    authorName: getApiUserName(author),
     divisionId: typeof item.division === 'string' ? item.division : (typeof item.division_id === 'string' ? item.division_id : undefined),
     departmentId: typeof item.department === 'string' ? item.department : (typeof item.department_id === 'string' ? item.department_id : undefined),
     tags: Array.isArray(item.tags) ? item.tags.map(String) : [],

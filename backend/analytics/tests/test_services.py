@@ -48,6 +48,111 @@ def _create_correspondence(division, department, days_ago: int, status: str, pri
 
 
 @pytest.mark.django_db
+def test_performance_analytics_reports_observed_timestamp_gaps_and_omits_invalid_milestones(org_hierarchy, user):
+    _, division, department = org_hierarchy
+    now = timezone.now()
+    completed = _create_correspondence(
+        division=division,
+        department=department,
+        days_ago=10,
+        status=Correspondence.Status.COMPLETED,
+        priority=Correspondence.Priority.MEDIUM,
+        completed_offset=2,
+    )
+    Correspondence.objects.filter(pk=completed.pk).update(
+        created_at=now - timedelta(days=10),
+        completed_at=now - timedelta(days=2),
+    )
+    completed.refresh_from_db()
+    route = Minute.objects.create(
+        correspondence=completed,
+        user=user,
+        minute_text="Routed",
+        action_type=Minute.ActionType.FORWARD,
+        to_user=user,
+    )
+    Minute.objects.filter(pk=route.pk).update(timestamp=now - timedelta(days=8))
+    approval = Minute.objects.create(
+        correspondence=completed,
+        user=user,
+        minute_text="Approved",
+        action_type=Minute.ActionType.APPROVE,
+    )
+    Minute.objects.filter(pk=approval.pk).update(timestamp=now - timedelta(days=5))
+    recalled_route = Minute.objects.create(
+        correspondence=completed,
+        user=user,
+        minute_text="Recalled route",
+        action_type=Minute.ActionType.FORWARD,
+        to_user=user,
+        is_recalled=True,
+    )
+    Minute.objects.filter(pk=recalled_route.pk).update(timestamp=now - timedelta(days=9))
+    no_approval = _create_correspondence(
+        division=division,
+        department=department,
+        days_ago=9,
+        status=Correspondence.Status.COMPLETED,
+        priority=Correspondence.Priority.LOW,
+        completed_offset=1,
+    )
+    Correspondence.objects.filter(pk=no_approval.pk).update(
+        created_at=now - timedelta(days=9),
+        completed_at=now - timedelta(days=1),
+    )
+    recalled_only = Minute.objects.create(
+        correspondence=no_approval,
+        user=user,
+        minute_text="Only recalled route",
+        action_type=Minute.ActionType.FORWARD,
+        to_user=user,
+        is_recalled=True,
+    )
+    Minute.objects.filter(pk=recalled_only.pk).update(timestamp=now - timedelta(days=8))
+    out_of_order = _create_correspondence(
+        division=division,
+        department=department,
+        days_ago=7,
+        status=Correspondence.Status.COMPLETED,
+        priority=Correspondence.Priority.HIGH,
+        completed_offset=1,
+    )
+    Correspondence.objects.filter(pk=out_of_order.pk).update(
+        created_at=now - timedelta(days=7),
+        completed_at=now - timedelta(days=1),
+    )
+    later_route = Minute.objects.create(
+        correspondence=out_of_order,
+        user=user,
+        minute_text="Later route",
+        action_type=Minute.ActionType.FORWARD,
+        to_user=user,
+    )
+    Minute.objects.filter(pk=later_route.pk).update(timestamp=now - timedelta(days=2))
+    earlier_approval = Minute.objects.create(
+        correspondence=out_of_order,
+        user=user,
+        minute_text="Earlier approval",
+        action_type=Minute.ActionType.APPROVE,
+    )
+    Minute.objects.filter(pk=earlier_approval.pk).update(timestamp=now - timedelta(days=4))
+
+    payload = compute_performance_metrics(range_days=30)
+
+    gaps = payload["stageDurations"]
+    assert gaps["definition"] == "Observed timestamp gaps"
+    assert gaps["registrationToRouting"]["count"] == 2
+    assert gaps["registrationToRouting"]["averageHours"] == pytest.approx(84, abs=0.1)
+    assert gaps["routingToApproval"]["count"] == 1
+    assert gaps["routingToApproval"]["averageHours"] == pytest.approx(72, abs=0.1)
+    assert gaps["approvalToCompletion"]["count"] == 2
+    assert gaps["approvalToCompletion"]["averageHours"] == pytest.approx(72, abs=0.1)
+    assert gaps["endToEnd"]["count"] == 3
+    assert gaps["endToEnd"]["averageHours"] == pytest.approx(176, abs=0.1)
+    assert route.is_recalled is False and approval.is_recalled is False and recalled_route.is_recalled is True
+
+
+@pytest.mark.django_db
 def test_compute_performance_metrics_counts(org_hierarchy, user):
     _, division, department = org_hierarchy
     completed = _create_correspondence(

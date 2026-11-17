@@ -30,14 +30,14 @@ import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, isAbortError } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { usePagination } from '@/hooks/use-pagination';
 import { useCorrespondenceQueueFilters } from '@/hooks/use-correspondence-queue-filters';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { getMyActingAppointments, type ActingAppointment } from '@/lib/api/acting-appointments';
@@ -63,8 +63,9 @@ const DEFAULT_SUMMARY: InboxSummary = {
 const CorrespondenceInboxContent = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const { offices, officeMemberships } = useOrganization();
+  const { offices, officeMemberships, myOfficeMembershipsLoaded } = useOrganization();
   const { dataVersion } = useCorrespondence();
+  const currentUserId = currentUser?.id;
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
@@ -99,11 +100,11 @@ const CorrespondenceInboxContent = () => {
   const [error, setError] = useState<string | null>(null);
 
   const userOfficeMemberships = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUserId) return [];
     return officeMemberships.filter(
-      (membership) => membership.userId === currentUser.id && membership.isActive,
+      (membership) => membership.userId === currentUserId && membership.isActive,
     );
-  }, [currentUser, officeMemberships]);
+  }, [currentUserId, officeMemberships]);
 
   const userOfficeIds = useMemo(
     () => userOfficeMemberships.map((membership) => membership.officeId),
@@ -111,7 +112,8 @@ const CorrespondenceInboxContent = () => {
   );
 
   const isSuperuser = Boolean(currentUser?.isSuperuser);
-  const hasCorrespondenceAccess = userOfficeIds.length > 0 || isSuperuser;
+  const accessResolved = Boolean(currentUserId && myOfficeMembershipsLoaded);
+  const hasCorrespondenceAccess = accessResolved && (userOfficeIds.length > 0 || isSuperuser);
 
   const [actingAppointments, setActingAppointments] = useState<ActingAppointment[]>([]);
   useEffect(() => {
@@ -220,15 +222,16 @@ const CorrespondenceInboxContent = () => {
   }, [selectedOfficeId, debouncedSearch, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {
-    // Redirect if access is denied (don't wait for hydration)
+    if (!accessResolved) return;
     if (!hasCorrespondenceAccess) {
       router.replace('/inbox');
     }
-  }, [hasCorrespondenceAccess, router]);
+  }, [accessResolved, hasCorrespondenceAccess, router]);
 
   useEffect(() => {
     if (!hasCorrespondenceAccess || selectedOfficeId === null) return;
 
+    const controller = new AbortController();
     const fetchInbox = async () => {
       setLoading(true);
       setError(null);
@@ -249,7 +252,10 @@ const CorrespondenceInboxContent = () => {
         params.append('page', String(pagination.page));
         params.append('page_size', String(pagination.pageSize));
 
-        const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/office-inbox/?${params.toString()}`);
+        const response = await apiFetch<Record<string, unknown>>(
+          `/correspondence/items/office-inbox/?${params.toString()}`,
+          { signal: controller.signal },
+        );
         const results = Array.isArray(response.results) ? response.results : [];
         setInboxItems(results.map(mapApiCorrespondence));
         const responseObj = response as Record<string, unknown>;
@@ -261,22 +267,35 @@ const CorrespondenceInboxContent = () => {
           assigned_to_user: (summaryObj && typeof summaryObj.assigned_to_user === 'number') ? summaryObj.assigned_to_user : 0,
         });
         setCount((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length);
-      } catch (_err) {
+      } catch (err: unknown) {
+        if (isAbortError(err) || controller.signal.aborted) return;
         setError('Failed to load office inbox. Please try again.');
         setInboxItems([]);
         setSummary(DEFAULT_SUMMARY);
         setCount(0);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
     void fetchInbox();
+    return () => {
+      controller.abort();
+    };
   }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, dataVersion]);
 
   return (
     <>
-      {!currentUser ? null : !hasCorrespondenceAccess ? (
+      {!accessResolved ? (
+        <QueuePageShell
+          title="Office Inbox"
+          subtitle="Monitor work queued in your offices and prioritize urgent escalations"
+        >
+          <ListSkeleton rows={5} />
+        </QueuePageShell>
+      ) : !hasCorrespondenceAccess ? (
         <QueuePageShell
           title="Office Inbox"
           subtitle="Monitor work queued in your offices and prioritize urgent escalations"
@@ -396,8 +415,8 @@ const CorrespondenceInboxContent = () => {
         {error && <ErrorState message={error} variant="inline" />}
 
         {loading ? (
-          <LoadingState message="Loading office queue…" />
-        ) : inboxItems.length === 0 ? (
+          <ListSkeleton rows={5} />
+        ) : error ? null : inboxItems.length === 0 ? (
           <EmptyState
             icon={<Inbox className={registryQueueEmptyIconClass} />}
             title={debouncedSearch || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence routed to your office yet'}

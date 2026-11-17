@@ -42,7 +42,6 @@ type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob |
 interface DocumentVersionsPanelProps {
   document: DocumentRecord;
   versions: DocumentVersion[];
-  userLookup: Map<string, User>;
   uploadUser: User | null;
   ocrState: OCRState;
   onCreateVersion?: () => void;
@@ -59,7 +58,6 @@ interface DocumentVersionsPanelProps {
 export function DocumentVersionsPanel({
   document,
   versions,
-  userLookup,
   uploadUser,
   ocrState,
   onCreateVersion,
@@ -155,7 +153,7 @@ export function DocumentVersionsPanel({
         </div>
       ) : (
         versions.map((version, index) => {
-          const uploader = userLookup.get(version.uploadedBy);
+          const uploaderName = version.uploadedByName;
           const isLatest = index === 0;
           const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
           const versionOCR = ocrState?.[version.id];
@@ -216,7 +214,7 @@ export function DocumentVersionsPanel({
                   </p>
                   <p className="text-[10px] text-muted-foreground truncate">
                     {formatDateTime(version.uploadedAt)}
-                    {uploader ? ` · ${uploader.name}` : ""}
+                    {uploaderName ? ` · ${uploaderName}` : ""}
                   </p>
                   {publication ? (
                     <p className="text-[10px] text-emerald-700 dark:text-emerald-400 leading-snug">

@@ -202,9 +202,13 @@ export async function endActingAppointment(
 
 export async function listActingRequests(params?: {
   status?: string;
+  requestedBy?: string;
+  principal?: string;
 }): Promise<ActingRequest[]> {
   const query = new URLSearchParams();
   if (params?.status) query.set('status', params.status);
+  if (params?.requestedBy) query.set('requested_by', params.requestedBy);
+  if (params?.principal) query.set('principal', params.principal);
   const suffix = query.toString() ? `?${query.toString()}` : '';
   const response = await apiFetch<unknown>(`/organization/acting-requests/${suffix}`);
   return unwrapResults(response).filter(isRecord).map(mapRequest);

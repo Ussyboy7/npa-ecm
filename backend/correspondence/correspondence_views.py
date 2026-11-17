@@ -40,7 +40,7 @@ from common.pagination import StandardPageNumberPagination
 from notifications.models import Notification
 from notifications.services import NotificationService
 from organization.models import Office, OfficeMembership
-from organization.office_access import get_office_queue_office_ids
+from organization.office_access import OFFICE_QUEUE_ROLES, get_office_queue_office_ids
 from organization.org_scope import user_can_view_all_correspondence
 from dms.models import DocumentVersion, Document
 
@@ -48,9 +48,12 @@ from .archive_policy import (
     ARCHIVE_LEVEL_ORDER,
     ARCHIVE_LEVEL_PERMISSION_BY_LEVEL,
     archive_org_units,
-    archived_correspondence_visibility_q,
+    archive_record_visible_to,
+    assert_correspondence_writable,
+    filter_archived_records,
     readable_archive_levels,
 )
+from .sidebar_counts_cache import get_sidebar_counts_cache_key
 from .models import (
     Case,
     CaseComment,
@@ -781,8 +784,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
-        if instance.status == Correspondence.Status.COMPLETED:
-            raise ValidationError({"detail": "Completed correspondence is read-only."})
+        assert_correspondence_writable(instance)
 
         attachments = request.FILES.getlist('attachments', [])
 
@@ -876,8 +878,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = self.get_object()
         previous_status = instance.status
-        if previous_status == Correspondence.Status.COMPLETED:
-            raise ValidationError({"detail": "Completed correspondence is read-only."})
+        assert_correspondence_writable(instance)
         correspondence = serializer.save()
         self._sync_completed_timestamp(correspondence, previous_status)
         if (
@@ -892,6 +893,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     correspondence.id,
                 )
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        assert_correspondence_writable(instance)
+        return super().destroy(request, *args, **kwargs)
 
     def _sync_completed_timestamp(self, correspondence, previous_status):
         if correspondence.status == Correspondence.Status.COMPLETED:
@@ -1035,6 +1040,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="reassign")
     def reassign(self, request, pk=None):
         correspondence = self.get_object()
+        assert_correspondence_writable(correspondence)
         target_office_id = request.data.get("target_office_id")
         owning_office_id = request.data.get("owning_office_id")
         target_user_id = request.data.get("target_user_id")
@@ -1137,6 +1143,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         from organization.acting_services import return_item_to_principal
 
         correspondence = self.get_object()
+        assert_correspondence_writable(correspondence)
         reason = (request.data.get("reason") or "").strip()
         result = return_item_to_principal(
             correspondence,
@@ -1439,6 +1446,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="remind-branch", url_name="remind_branch")
     def remind_branch(self, request, pk=None):
         correspondence = self.get_object()
+        assert_correspondence_writable(correspondence)
         user = request.user
 
         group_id = request.data.get("parallel_group_id")
@@ -1530,6 +1538,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="force-complete-branch", url_name="force_complete_branch")
     def force_complete_branch(self, request, pk=None):
         correspondence = self.get_object()
+        assert_correspondence_writable(correspondence)
         user = request.user
 
         group_id = request.data.get("parallel_group_id")
@@ -2026,6 +2035,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if not accessible_items:
             raise PermissionDenied({"detail": "You don't have permission to delete any of the selected items", "code": "delete_permission_denied"})
 
+        for correspondence in accessible_items:
+            assert_correspondence_writable(correspondence)
+
         deleted_count = 0
 
         for corr in accessible_items:
@@ -2068,8 +2080,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
         original = self.get_object()
 
-        if original.status == Correspondence.Status.COMPLETED:
-            raise ValidationError({"detail": "Correspondence is already completed."})
+        assert_correspondence_writable(original)
         if original.is_deleted:
             raise ValidationError({"detail": "Deleted correspondence cannot be treated."})
 
@@ -2244,42 +2255,58 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         from correspondence.models import (
             Minute,
             CorrespondenceDistribution,
-            Case,
-            CorrespondenceDraft,
-            CaseCorrespondenceLink,
         )
-        from dms.models import Document, FormDocument
+        from dms.models import FormDocument
         from forms.signature_models import FormSignature
-        from organization.models import OfficeMembership, Office
-
         user = request.user
 
-        cache_key = f"sidebar_counts_{user.id}"
+        cache_key = get_sidebar_counts_cache_key(user.id)
         cached_result = None
+        refresh_cache = request.query_params.get("refresh") in {"1", "true"}
         try:
-            cached_result = cache.get(cache_key)
+            if refresh_cache:
+                cache.delete(cache_key)
+            else:
+                cached_result = cache.get(cache_key)
         except (ConnectionError, InvalidCacheBackendError, Exception) as e:
             logger.warning(f"Cache unavailable for sidebar_counts: {str(e)}")
 
         if cached_result is not None:
             return Response(cached_result)
 
-        office_ids = get_office_queue_office_ids(user)
+        office_memberships = list(
+            OfficeMembership.objects.filter(user=user, is_active=True)
+            .order_by()
+            .values_list(
+                "office_id",
+                "assignment_role",
+                "office__division_id",
+                "office__department_id",
+                "office__directorate_id",
+            )
+        )
+        office_ids = {
+            office_id
+            for office_id, assignment_role, *_ in office_memberships
+            if assignment_role in OFFICE_QUEUE_ROLES
+        }
+        my_user_office_id_list = {membership[0] for membership in office_memberships}
+        my_user_division_ids = {
+            membership[2] for membership in office_memberships if membership[2]
+        }
+        my_user_department_ids = {
+            membership[3] for membership in office_memberships if membership[3]
+        }
+        my_user_directorate_ids = {
+            membership[4] for membership in office_memberships if membership[4]
+        }
 
         base_filter = Q(is_deleted=False) & ~Q(status__in=OFFICE_TRAY_EXCLUDED_STATUSES)
 
-        unread_inbox_subquery = ReadReceipt.objects.filter(
-            user=user, correspondence=OuterRef('pk')
-        )
-
         if user.is_superuser and not office_ids:
             office_inbox_count = Correspondence.objects.filter(base_filter).count()
-            unread_inbox_count = Correspondence.objects.filter(
-                base_filter
-            ).annotate(is_read=Exists(unread_inbox_subquery)).filter(is_read=False).count()
         elif not office_ids:
             office_inbox_count = 0
-            unread_inbox_count = 0
         else:
             # Office Inbox = items at queue-role offices only (not personal parallel/CC)
             office_filter = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
@@ -2294,9 +2321,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             office_inbox_count = Correspondence.objects.filter(
                 base_filter & office_filter
             ).exclude(inbox_exclude_sent).count()
-            unread_inbox_count = Correspondence.objects.filter(
-                base_filter & office_filter
-            ).exclude(inbox_exclude_sent).annotate(is_read=Exists(unread_inbox_subquery)).filter(is_read=False).count()
 
         my_parallel_subquery = Minute.objects.filter(
             to_user=user,
@@ -2307,25 +2331,12 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             is_recalled=False
         )
 
-        my_user_offices = OfficeMembership.objects.filter(
-            user=user, is_active=True
-        ).select_related('office').values_list('office', flat=True)
-
-        my_user_office_objs = Office.objects.filter(id__in=my_user_offices)
-        my_user_division_ids = list(my_user_office_objs.values_list('division_id', flat=True).distinct())
-        my_user_department_ids = list(my_user_office_objs.values_list('department_id', flat=True).distinct())
-        my_user_directorate_ids = list(my_user_office_objs.values_list('directorate_id', flat=True).distinct())
-
         if hasattr(user, 'division_id') and user.division_id:
-            my_user_division_ids.append(user.division_id)
+            my_user_division_ids.add(user.division_id)
         if hasattr(user, 'department_id') and user.department_id:
-            my_user_department_ids.append(user.department_id)
+            my_user_department_ids.add(user.department_id)
         if hasattr(user, 'directorate_id') and user.directorate_id:
-            my_user_directorate_ids.append(user.directorate_id)
-
-        my_user_division_ids = [x for x in my_user_division_ids if x]
-        my_user_department_ids = [x for x in my_user_department_ids if x]
-        my_user_directorate_ids = [x for x in my_user_directorate_ids if x]
+            my_user_directorate_ids.add(user.directorate_id)
 
         my_distribution_filter = Q()
         if my_user_division_ids:
@@ -2334,7 +2345,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             my_distribution_filter |= Q(department_id__in=my_user_department_ids)
         if my_user_directorate_ids:
             my_distribution_filter |= Q(directorate_id__in=my_user_directorate_ids)
-        my_user_office_id_list = list(my_user_offices)
         if my_user_office_id_list:
             my_distribution_filter |= Q(office_id__in=my_user_office_id_list)
         my_distribution_filter |= Q(user=user, recipient_type='user')
@@ -2350,128 +2360,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             (Q(current_approver=user) | Exists(my_parallel_subquery) | Exists(my_distribution_subquery))
         ).exclude(status=Correspondence.Status.COMPLETED).count()
 
-        my_inbox_queryset = Correspondence.objects.filter(
-            Q(is_deleted=False) &
-            (Q(current_approver=user) | Exists(my_parallel_subquery) | Exists(my_distribution_subquery))
-        ).exclude(status=Correspondence.Status.COMPLETED)
-
-        my_work_attention_count = my_inbox_queryset.filter(
-            Q(priority=Correspondence.Priority.URGENT)
-            | _sla_overdue_filter()
-            | _sla_due_soon_filter()
-        ).count()
-
-        # Canonical with my-sent endpoint: dispatched/sent + pending/in-progress that has left owning office (e.g. upward pending at MD).
-        routed_ids = Minute.objects.filter(
-            user=user,
-            is_recalled=False,
-            action_type__in=['minute', 'forward', 'approve', 'treat'],
-            dispatched_at__isnull=False,
-        ).values_list('correspondence_id', flat=True).distinct()
-        my_sent_dispatch_ids = DispatchRecord.objects.filter(
-            dispatched_by=user,
-        ).values_list('correspondence_id', flat=True).distinct()
-        acted_ids = Minute.objects.filter(
-            user=user,
-            is_recalled=False,
-            action_type__in=['minute', 'forward', 'approve', 'treat'],
-        ).values_list('correspondence_id', flat=True).distinct()
-        ownership = Q(created_by=user) | Q(id__in=acted_ids) | Q(id__in=my_sent_dispatch_ids)
-        pending_routed = Q(created_by=user, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office=F('owning_office'))
-        sent_filter = Q(id__in=acted_ids) | Q(id__in=routed_ids) | Q(status__in=[
-            Correspondence.Status.COMPLETED,
-            Correspondence.Status.DISPATCHED,
-            Correspondence.Status.ACKNOWLEDGED,
-            Correspondence.Status.ARCHIVED,
-        ]) | pending_routed
-        my_sent_count = Correspondence.objects.filter(
-            Q(is_deleted=False)
-        ).filter(ownership & sent_filter).distinct().count()
-
         delegated_count = CorrespondenceDelegation.objects.filter(
             assistant=user,
             status=CorrespondenceDelegation.Status.ACTIVE
-        ).count()
-
-        secretary_inbox_count = 0
-        role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
-        is_secretary = role_name.lower() == "secretary"
-        if is_secretary:
-            secretary_correspondence_ids = Minute.objects.filter(
-                acted_by_secretary=True,
-                performed_by=user,
-                is_recalled=False
-            ).values_list('correspondence_id', flat=True).distinct()
-            secretary_inbox_count = Correspondence.objects.filter(
-                is_deleted=False,
-                id__in=secretary_correspondence_ids
-            ).exclude(status=Correspondence.Status.COMPLETED).count()
-
-        office_sent_count = 0
-        if office_ids or user.is_superuser:
-            office_sent_minute_ids = Minute.objects.filter(
-                action_type__in=['minute', 'forward', 'approve', 'treat'],
-            ).values_list('correspondence_id', flat=True).distinct()
-            if user.is_superuser and not office_ids:
-                office_sent_count = Correspondence.objects.filter(
-                    is_deleted=False,
-                ).filter(
-                    Q(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED],
-                      dispatch_records__isnull=False) |
-                    Q(id__in=office_sent_minute_ids) |
-                    Q(status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office=F('owning_office'))
-                ).distinct().count()
-            else:
-                office_sent_minute_ids = Minute.objects.filter(
-                    from_office_id__in=office_ids,
-                    action_type__in=['minute', 'forward', 'approve', 'treat'],
-                ).values_list('correspondence_id', flat=True).distinct()
-                office_user_ids = OfficeMembership.objects.filter(
-                    office_id__in=office_ids,
-                    is_active=True,
-                ).values_list("user_id", flat=True)
-                office_sent_count = Correspondence.objects.filter(
-                    is_deleted=False,
-                ).filter(
-                    Q(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED],
-                      dispatch_records__isnull=False) &
-                    (Q(owning_office_id__in=office_ids) | Q(dispatch_records__dispatched_by_id__in=office_user_ids))
-                    |
-                    Q(id__in=office_sent_minute_ids) |
-                    Q(owning_office_id__in=office_ids, status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS], current_office__isnull=False) & ~Q(current_office_id__in=office_ids)
-                ).distinct().count()
-
-        case_base = Case.objects.filter(is_deleted=False)
-        # Match /cases/my (scope=my → assigned_to only)
-        my_cases_count = case_base.filter(assigned_to=user).count()
-        office_cases_count = 0
-        if office_ids:
-            office_cases_count = case_base.filter(
-                Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
-            ).count()
-
-        # All Cases nav: only superuser / can_view_all_correspondence
-        if user_can_view_all_correspondence(user):
-            all_cases_count = case_base.count()
-        else:
-            all_cases_count = 0
-
-        # Match /approvals page (sealed approve minutes with valid seal)
-        executive_approvals_count = Minute.objects.filter(
-            action_type=Minute.ActionType.APPROVE,
-            seal_applied__isnull=False,
-            seal_applied__is_valid=True,
-            correspondence__is_deleted=False,
-        ).count()
-
-        my_documents_count = Document.objects.filter(
-            is_deleted=False,
-            author=user,
-        ).count()
-
-        drafts_count = CorrespondenceDraft.objects.filter(
-            user=user,
-            draft_type=CorrespondenceDraft.DraftType.REGISTRATION,
         ).count()
 
         pending_signatures_count = FormDocument.objects.filter(
@@ -2491,19 +2382,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
         result = {
             "officeInbox": office_inbox_count,
-            "unreadInboxCount": unread_inbox_count,
             "myInbox": my_inbox_count,
-            "myWork": my_work_attention_count + pending_approval_minutes_count,
-            "mySent": my_sent_count,
-            "officeSent": office_sent_count,
             "delegated": delegated_count,
-            "secretaryInbox": secretary_inbox_count,
-            "myCases": my_cases_count,
-            "officeCases": office_cases_count,
-            "allCases": all_cases_count,
-            "executiveApprovals": executive_approvals_count,
-            "myDocuments": my_documents_count,
-            "drafts": drafts_count,
+            "pendingApprovals": pending_approval_minutes_count,
             "pendingSignatures": pending_signatures_count,
         }
 
@@ -3302,6 +3183,12 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         }
         return response
 
+    @action(detail=True, methods=["get"], url_path="archive-record")
+    def archive_record(self, request, pk=None):
+        """Return one completed/archived record using archive visibility, not the active inbox scope."""
+        correspondence = get_object_or_404(self._get_archived_queryset(request.user), pk=pk)
+        return Response(self.get_serializer(correspondence).data)
+
     @action(detail=False, methods=["get"], url_path="records-archive")
     def records_archive(self, request):
         user = request.user
@@ -3495,21 +3382,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         return _archive_levels_user_may_file(user)
 
     def _get_archived_queryset(self, user):
-        queryset = self.base_queryset.filter(is_deleted=False)
-        if not user or not getattr(user, "is_authenticated", False):
-            return queryset.none()
-
-        completed = queryset.filter(status=Correspondence.Status.COMPLETED)
-        archived = queryset.filter(status=Correspondence.Status.ARCHIVED).filter(
-            archived_correspondence_visibility_q(user)
-        ).distinct()
-
         # Completed, not-yet-filed records retain the established org/participant
         # boundary. Archived rows use filing-level visibility only.
-        from organization.org_scope import apply_correspondence_org_scope
-
-        completed = apply_correspondence_org_scope(completed, user)
-        return (completed | archived).distinct()
+        return filter_archived_records(self.base_queryset, user)
 
     def _parse_date_param(self, value: str | None):
         if not value:
@@ -3544,6 +3419,8 @@ class CorrespondenceAttachmentViewSet(viewsets.ModelViewSet):
         except Correspondence.DoesNotExist:
             raise ValidationError({'correspondence': 'Correspondence not found'})
 
+        assert_correspondence_writable(correspondence)
+
         if hasattr(file, 'seek'):
             file.seek(0)
         file_bytes = file.read()
@@ -3575,6 +3452,14 @@ class CorrespondenceAttachmentViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(attachment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def perform_update(self, serializer):
+        assert_correspondence_writable(serializer.instance.correspondence)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        assert_correspondence_writable(instance.correspondence)
+        instance.delete()
 
     def _load_attachment_bytes(self, attachment: CorrespondenceAttachment) -> tuple[bytes, str, str]:
         file_name = attachment.file_name or "attachment"
@@ -3637,7 +3522,18 @@ class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
         from organization.permission_utils import require_permission
 
         require_permission(self.request.user, "can_distribute")
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
         serializer.save(added_by=self.request.user)
+
+    def perform_update(self, serializer):
+        assert_correspondence_writable(serializer.instance.correspondence)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        assert_correspondence_writable(instance.correspondence)
+        instance.delete()
 
     @action(detail=False, methods=["post"])
     def share_with_department(self, request):
@@ -3665,6 +3561,7 @@ class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        assert_correspondence_writable(correspondence)
         user = request.user
         is_office_holder = OfficeMembership.objects.filter(
             user=user,
@@ -3779,6 +3676,20 @@ class CorrespondenceDocumentLinkViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["correspondence", "document"]
 
+    def perform_create(self, serializer):
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        assert_correspondence_writable(serializer.instance.correspondence)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        assert_correspondence_writable(instance.correspondence)
+        instance.delete()
+
 
 class DelegationViewSet(viewsets.ModelViewSet):
     queryset = Delegation.objects.select_related("principal", "assistant")
@@ -3803,13 +3714,23 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = super().get_queryset()
-        return qs.filter(Q(principal=user) | Q(assistant=user))
+        access_q = Q(principal=user) | Q(assistant=user)
+
+        # Archive readers can inspect the delegation history of a record they
+        # are allowed to read even when they were neither principal nor assistant.
+        correspondence_id = self.request.query_params.get("correspondence")
+        if correspondence_id and archive_record_visible_to(user, correspondence_id):
+            access_q |= Q(correspondence_id=correspondence_id)
+
+        return qs.filter(access_q)
 
     def perform_create(self, serializer):
         principal = self.request.user
         assistant = serializer.validated_data.get("assistant")
         correspondence = serializer.validated_data.get("correspondence")
         notes = serializer.validated_data.get("notes", "")
+
+        assert_correspondence_writable(correspondence)
 
         existing_delegations = CorrespondenceDelegation.objects.filter(
             correspondence=correspondence,
@@ -3843,6 +3764,14 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
             f"Correspondence {correspondence.reference_number} delegated "
             f"from {principal.get_full_name()} to {assistant.get_full_name()}"
         )
+
+    def perform_update(self, serializer):
+        assert_correspondence_writable(serializer.instance.correspondence)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        assert_correspondence_writable(instance.correspondence)
+        instance.delete()
 
     def _send_delegation_notification(self, delegation, notes):
         try:
@@ -3888,6 +3817,7 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def revoke(self, request, pk=None):
         delegation = self.get_object()
+        assert_correspondence_writable(delegation.correspondence)
 
         if delegation.principal != request.user:
             return Response(
@@ -4041,8 +3971,23 @@ class CorrespondenceDraftViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         return qs.filter(user=user)
 
+    def _assert_draft_writable(self, correspondence):
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
+
     def perform_create(self, serializer):
+        self._assert_draft_writable(serializer.validated_data.get("correspondence"))
         serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        self._assert_draft_writable(serializer.instance.correspondence)
+        self._assert_draft_writable(serializer.validated_data.get("correspondence"))
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        # Draft deletion only removes the user's own abandoned work and is used
+        # to clean up after a minute is submitted; it does not touch the record.
+        instance.delete()
 
 
 class CorrespondenceTemplateViewSet(viewsets.ModelViewSet):
@@ -4103,11 +4048,26 @@ class DispatchRecordViewSet(viewsets.ModelViewSet):
     filterset_fields = ["correspondence", "dispatch_mode"]
 
     def perform_create(self, serializer):
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
         serializer.save(dispatched_by=self.request.user)
+
+    def perform_update(self, serializer):
+        assert_correspondence_writable(serializer.instance.correspondence)
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        assert_correspondence_writable(instance.correspondence)
+        instance.delete()
 
     @action(detail=True, methods=["post"], url_path="mark-acknowledged")
     def mark_acknowledged(self, request, pk=None):
         record = self.get_object()
+        assert_correspondence_writable(record.correspondence)
         record.acknowledged_date = request.data.get("acknowledged_date", timezone.now().date())
         record.acknowledged_by = request.user
         record.save(update_fields=["acknowledged_date", "acknowledged_by"])

@@ -57,6 +57,20 @@ const SidebarProvider = React.forwardRef<
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen);
   const open = openProp ?? _open;
+
+  // Restore the last desktop state. The initial render stays deterministic for
+  // hydration; the cookie is applied immediately after mount.
+  React.useEffect(() => {
+    if (openProp !== undefined) return;
+    const cookie = document.cookie
+      .split('; ')
+      .find((entry) => entry.startsWith(`${SIDEBAR_COOKIE_NAME}=`));
+    const value = cookie?.slice(SIDEBAR_COOKIE_NAME.length + 1);
+    if (value === 'true' || value === 'false') {
+      _setOpen(value === 'true');
+    }
+  }, [openProp]);
+
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
       const openState = typeof value === "function" ? value(open) : value;

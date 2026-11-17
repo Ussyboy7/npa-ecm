@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -30,6 +29,7 @@ import { formatDateShort } from '@/lib/correspondence-helpers';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ListRowCard } from '@/components/shared/ListRowCard';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
@@ -515,7 +515,7 @@ function MyDocumentsForm() {
 
 export function DocumentsListPage() {
   return (
-    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+    <Suspense fallback={null}>
       <MyDocumentsForm />
     </Suspense>
   );
@@ -591,7 +591,7 @@ function DocumentList({
   }, [documents]);
 
   if (loading) {
-    return <LoadingState message="Loading documents…" />;
+    return <ListSkeleton rows={5} />;
   }
 
   if (error) {

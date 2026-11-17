@@ -5,6 +5,8 @@ export interface UsePaginationOptions {
   initialPage?: number;
   initialPageSize?: number;
   totalCount?: number;
+  controlledPage?: number;
+  onControlledPageChange?: (page: number) => void;
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
 }
@@ -38,6 +40,8 @@ export function usePagination(options: UsePaginationOptions = {}): UsePagination
     initialPage = 1,
     initialPageSize = DEFAULT_LIST_PAGE_SIZE,
     totalCount = 0,
+    controlledPage,
+    onControlledPageChange,
     onPageChange,
     onPageSizeChange,
   } = options;
@@ -48,14 +52,16 @@ export function usePagination(options: UsePaginationOptions = {}): UsePagination
   const totalPages = useMemo(() => {
     return Math.max(1, Math.ceil(totalCount / pageSize));
   }, [totalCount, pageSize]);
+  const currentPage = controlledPage ?? page;
 
   const setPage = useCallback(
     (newPage: number) => {
       const clampedPage = Math.max(1, Math.min(newPage, totalPages));
-      setPageState(clampedPage);
+      if (controlledPage === undefined) setPageState(clampedPage);
+      onControlledPageChange?.(clampedPage);
       onPageChange?.(clampedPage);
     },
-    [totalPages, onPageChange]
+    [totalPages, controlledPage, onControlledPageChange, onPageChange]
   );
 
   const setPageSize = useCallback(
@@ -84,23 +90,23 @@ export function usePagination(options: UsePaginationOptions = {}): UsePagination
   }, [setPage, totalPages]);
 
   const goToNextPage = useCallback(() => {
-    setPage(page + 1);
-  }, [page, setPage]);
+    setPage(currentPage + 1);
+  }, [currentPage, setPage]);
 
   const goToPreviousPage = useCallback(() => {
-    setPage(page - 1);
-  }, [page, setPage]);
+    setPage(currentPage - 1);
+  }, [currentPage, setPage]);
 
-  const canGoNext = page < totalPages;
-  const canGoPrevious = page > 1;
+  const canGoNext = currentPage < totalPages;
+  const canGoPrevious = currentPage > 1;
 
   const startIndex = useMemo(() => {
-    return totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-  }, [page, pageSize, totalCount]);
+    return totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  }, [currentPage, pageSize, totalCount]);
 
   const endIndex = useMemo(() => {
-    return Math.min(page * pageSize, totalCount);
-  }, [page, pageSize, totalCount]);
+    return Math.min(currentPage * pageSize, totalCount);
+  }, [currentPage, pageSize, totalCount]);
 
   const paginationInfo = useMemo(() => {
     if (totalCount === 0) {
@@ -113,7 +119,7 @@ export function usePagination(options: UsePaginationOptions = {}): UsePagination
   }, [startIndex, endIndex, totalCount]);
 
   return {
-    page,
+    page: currentPage,
     pageSize,
     totalPages,
     setPage,

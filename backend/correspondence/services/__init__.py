@@ -672,7 +672,7 @@ class CompletionPackageService:
         pdf_bytes = cls._build_summary_pdf(context)
 
         storage_path = cls._store_pdf(correspondence, pdf_bytes)
-        file_url = cls._build_media_url(storage_path)
+        file_url = build_media_url(storage_path)
         version_number = 1
         latest_version = document.versions.order_by("-version_number").first()
         if latest_version:
@@ -1882,11 +1882,6 @@ class CompletionPackageService:
         storage_path = f"{directory}/{filename}-{uuid.uuid4().hex}.pdf"
         default_storage.save(storage_path, ContentFile(pdf_bytes))
         return storage_path
-
-    @staticmethod
-    def _build_media_url(path: str, request=None) -> str:
-        """Build a relative media URL (the browser resolves the current domain)."""
-        return build_media_url(path)
 
     @classmethod
     def _resolve_stakeholders(cls, correspondence: Correspondence) -> List[User]:

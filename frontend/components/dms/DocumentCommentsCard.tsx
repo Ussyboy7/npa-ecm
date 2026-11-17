@@ -6,16 +6,22 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, MessageSquare } from "lucide-react";
 import type { DocumentComment } from "@/lib/api/dms";
-import type { User } from "@/lib/npa-structure";
 
 /** How many comments the rail previews before deferring to the dialog. */
 const PREVIEW_COUNT = 3;
 
 interface DocumentCommentsCardProps {
   comments: DocumentComment[];
-  userLookup: Map<string, User>;
-  getUserInitials: (userId: string) => string;
   onOpenCommentsDialog: () => void;
+}
+
+function initialsForName(name?: string): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  return name.trim().slice(0, 2).toUpperCase() || "?";
 }
 
 function relativeTime(iso: string): string {
@@ -28,8 +34,6 @@ function relativeTime(iso: string): string {
 
 export const DocumentCommentsCard = ({
   comments,
-  userLookup,
-  getUserInitials,
   onOpenCommentsDialog,
 }: DocumentCommentsCardProps) => {
   const unresolved = comments.filter((comment) => !comment.resolved).length;
@@ -59,7 +63,7 @@ export const DocumentCommentsCard = ({
       ) : (
         <ul className="space-y-0.5">
           {recent.map((comment) => {
-            const author = userLookup.get(comment.authorId);
+            const authorName = comment.authorName;
             return (
               <li key={comment.id}>
                 <button
@@ -69,13 +73,13 @@ export const DocumentCommentsCard = ({
                 >
                   <Avatar className="h-5 w-5 shrink-0 mt-0.5">
                     <AvatarFallback className="text-[9px]">
-                      {getUserInitials(comment.authorId)}
+                      {initialsForName(authorName)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1 overflow-hidden">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <p className="text-[11px] font-medium truncate">
-                        {author?.name ?? "Unknown"}
+                        {authorName ?? "Unknown"}
                       </p>
                       {comment.resolved ? (
                         <CheckCircle2

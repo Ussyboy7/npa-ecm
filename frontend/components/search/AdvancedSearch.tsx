@@ -29,7 +29,8 @@ import { logError } from '@/lib/client-logger';
 import { SENSITIVITY_OPTIONS } from '@/lib/constants';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useOrgUsers } from "@/hooks/use-org-users";
+import { usePaginatedUserSearch } from '@/hooks/use-paginated-user-search';
+import { useUserLookup } from '@/hooks/use-user-lookup';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { highlightText } from '@/lib/search-highlight';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
@@ -46,9 +47,24 @@ const isUnifiedSearchResult = (value: unknown): value is UnifiedSearchResult =>
 
 export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps) => {
   const { divisions, departments } = useOrganization();
-  const { users } = useOrgUsers();
+  const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<NonNullable<SearchRequest['filters']>>({});
+  const {
+    query: authorSearchQuery,
+    setQuery: setAuthorSearchQuery,
+    users: authorUsers,
+    loading: authorsLoading,
+    loadingMore: authorsLoadingMore,
+    error: authorsError,
+    hasMore: hasMoreAuthors,
+    loadMore: loadMoreAuthors,
+  } = usePaginatedUserSearch({ enabled: authorFilterOpen, pageSize: 50 });
+  const selectedAuthorId = filters?.author_id;
+  const selectedAuthorLookup = useUserLookup(selectedAuthorId ? [selectedAuthorId] : []);
+  const selectedAuthorName = selectedAuthorId
+    ? selectedAuthorLookup.get(selectedAuthorId)?.name ?? 'Selected author'
+    : 'All authors';
   const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'cases' | 'all'>(
     context === 'all' || !context ? 'all' : context
   );
@@ -399,21 +415,79 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
               </Select>
 
               <Select
-                value={filters?.author_id || 'all'}
+                value={selectedAuthorId || 'all'}
+                onOpenChange={(open) => {
+                  setAuthorFilterOpen(open);
+                }}
                 onValueChange={(value) =>
                   setFilters({ ...filters, author_id: value === 'all' ? undefined : value })
                 }
               >
-                <SelectTrigger className="h-8 w-[130px] text-xs">
+                <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filter by author">
                   <SelectValue placeholder="Author" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[360px]">
+                  <div className="sticky top-0 z-10 border-b border-border bg-popover p-2">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search authors..."
+                        aria-label="Search authors"
+                        value={authorSearchQuery}
+                        onChange={(event) => setAuthorSearchQuery(event.target.value)}
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        className="h-7 pl-7 text-xs"
+                      />
+                    </div>
+                  </div>
                   <SelectItem value="all">All authors</SelectItem>
-                  {users.filter(u => u.active).map((user) => (
+                  {selectedAuthorId && !authorUsers.some((user) => user.id === selectedAuthorId) ? (
+                    <SelectItem value={selectedAuthorId}>
+                      {selectedAuthorName} (selected)
+                    </SelectItem>
+                  ) : null}
+                  {authorsLoading && authorUsers.length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 px-3 py-4 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Searching authors...
+                    </div>
+                  ) : authorUsers.length === 0 ? (
+                    <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                      {authorsError ?? 'No authors found'}
+                    </div>
+                  ) : authorUsers.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {user.name}
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate">{user.name}</span>
+                        {user.systemRole ? (
+                          <span className="truncate text-[10px] text-muted-foreground">
+                            {user.systemRole}
+                          </span>
+                        ) : null}
+                      </div>
                     </SelectItem>
                   ))}
+                  {hasMoreAuthors ? (
+                    <div className="border-t border-border p-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-7 text-xs"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          loadMoreAuthors();
+                        }}
+                        disabled={authorsLoadingMore}
+                      >
+                        {authorsLoadingMore ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : null}
+                        Load more authors
+                      </Button>
+                    </div>
+                  ) : null}
                 </SelectContent>
               </Select>
 

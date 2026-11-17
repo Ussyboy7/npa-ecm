@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
-import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
@@ -182,7 +181,7 @@ function WorkflowSLAForm() {
 
 export default function WorkflowSLAPage() {
   return (
-    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+    <Suspense fallback={null}>
       <WorkflowSLAForm />
     </Suspense>
   );

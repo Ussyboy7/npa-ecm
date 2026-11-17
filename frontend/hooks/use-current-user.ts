@@ -1,10 +1,9 @@
 "use client";
 
 import { logWarn } from '@/lib/client-logger';
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { isRecord } from "@/lib/type-utils";
 import type { User } from "@/lib/npa-structure";
-import { OrganizationContext } from "@/contexts/OrganizationContext";
 import { isPublicAppPath } from "@/lib/app-shell-paths";
 import {
   AUTH_BROADCAST_CHANNEL,
@@ -53,6 +52,7 @@ const mapApiUserToUser = (data: Record<string, unknown>): User => {
     middleName: middleName || undefined,
     lastName: lastName || undefined,
     personnelNumber: toOptionalString(data.personnel_number),
+    honorific: toOptionalString(data.honorific),
     employeeId: typeof data.employee_id === "string" ? data.employee_id : String(data.employee_id ?? ""),
     gradeLevel: typeof data.grade_level === "string" ? data.grade_level : String(data.grade_level ?? ""),
     directorate: toOptionalString(data.directorate ?? data.directorate_id),
@@ -112,8 +112,6 @@ export function getLoadingSnapshot(): boolean {
 }
 
 export const useCurrentUser = () => {
-  const organization = useContext(OrganizationContext);
-  const users = useMemo(() => organization?.users ?? [], [organization?.users]);
   const [remoteUser, setRemoteUser] = useState<User | null>(globalUserState.user);
   const [hydrated, setHydrated] = useState(globalUserState.hydrated);
 
@@ -238,42 +236,15 @@ export const useCurrentUser = () => {
     await performGlobalFetch();
   }, [performGlobalFetch]);
 
-  const resolvedUser = useMemo(() => {
-    if (!remoteUser) return null;
-    const orgMatch = users.find(
-      (candidate) =>
-        candidate.id === remoteUser.id ||
-        (remoteUser.username && candidate.username === remoteUser.username),
-    );
-
-    if (!orgMatch) {
-      return remoteUser;
-    }
-
-    return {
-      ...orgMatch,
-      ...remoteUser,
-      directorate: orgMatch.directorate ?? remoteUser.directorate,
-      division: orgMatch.division ?? remoteUser.division,
-      department: orgMatch.department ?? remoteUser.department,
-      systemRole: remoteUser.systemRole || orgMatch.systemRole,
-      gradeLevel: remoteUser.gradeLevel || orgMatch.gradeLevel,
-      active: orgMatch.active,
-      // Preserve isSuperuser from remoteUser (API) as it's the source of truth
-      isSuperuser: remoteUser.isSuperuser ?? orgMatch.isSuperuser ?? false,
-      rolePermissions: remoteUser.rolePermissions ?? orgMatch.rolePermissions,
-    } satisfies User;
-  }, [remoteUser, users]);
-
   const refresh = useCallback(async () => {
     setHydrated(false);
     await loadCurrentUser();
   }, [loadCurrentUser]);
 
   return useMemo(() => ({
-    currentUser: resolvedUser,
+    currentUser: remoteUser,
     hydrated,
     refresh,
-    isImpersonating: isImpersonatingUser(resolvedUser?.id ?? null),
-  }), [resolvedUser, hydrated, refresh]);
+    isImpersonating: isImpersonatingUser(),
+  }), [remoteUser, hydrated, refresh]);
 };

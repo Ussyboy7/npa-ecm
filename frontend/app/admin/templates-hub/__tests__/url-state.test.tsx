@@ -80,6 +80,10 @@ vi.mock("@/lib/api/cases", () => ({
   getCaseTemplates: vi.fn(async () => []),
 }));
 
+vi.mock("@/lib/api/reference-schemes", () => ({
+  listReferenceSchemes: vi.fn(async () => ({ count: 0, results: [] })),
+}));
+
 vi.mock("@/components/ui/sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -89,17 +93,23 @@ vi.mock("@/components/shared/AdminPageShell", () => ({
     title,
     subtitle,
     actions,
+    stats,
+    tabs,
     children,
   }: {
     title: string;
     subtitle: string;
     actions?: React.ReactNode;
+    stats?: React.ReactNode;
+    tabs?: React.ReactNode;
     children: React.ReactNode;
   }) => (
     <div>
       <h1>{title}</h1>
       <p>{subtitle}</p>
       {actions}
+      {stats}
+      {tabs}
       {children}
     </div>
   ),
@@ -134,6 +144,9 @@ import TemplatesHubPage from "../page";
 
 const replaceTarget = () => routeState.replace.mock.calls.at(-1)?.[0] as string | undefined;
 
+const precedes = (earlier: Element, later: Element) =>
+  Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+
 async function renderAt(search: string) {
   routeState.search = search;
   render(<TemplatesHubPage />);
@@ -150,6 +163,17 @@ describe("Template Hub URL state", () => {
     window.HTMLElement.prototype.hasPointerCapture = vi.fn();
     window.HTMLElement.prototype.setPointerCapture = vi.fn();
     window.HTMLElement.prototype.releasePointerCapture = vi.fn();
+  });
+
+  it("keeps summary statistics and page actions above the tab strip", async () => {
+    await renderAt("tab=documents");
+
+    const stats = screen.getByRole("group", { name: "Summary statistics" });
+    const [headerAction] = screen.getAllByRole("button", { name: "New document template" });
+    const tabList = screen.getByRole("tablist");
+
+    expect(precedes(stats, tabList)).toBe(true);
+    expect(precedes(headerAction, tabList)).toBe(true);
   });
 
   it("restores the Forms tab, category, and search from the URL", async () => {

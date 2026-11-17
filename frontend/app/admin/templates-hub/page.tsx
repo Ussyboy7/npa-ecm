@@ -2,7 +2,6 @@
 import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
-import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Input } from "@/components/ui/input";
@@ -77,6 +76,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { CaseTemplatesPanel, CASE_TEMPLATE_TYPE_FILTERS } from "@/components/cases/CaseTemplatesPanel";
 import { ReferencePanel } from "@/components/templates/ReferencePanel";
+import { REFERENCE_SCHEME_ACTION_SLOT_ID } from "@/components/templates/ReferenceSchemesPanel";
 import { TemplateHubRowActions } from "@/components/templates/TemplateHubRowActions";
 import { getCaseTemplates } from "@/lib/api/cases";
 import { listReferenceSchemes } from "@/lib/api/reference-schemes";
@@ -91,6 +91,9 @@ const scopeOptions: { value: TemplateScope; label: string }[] = [
 ];
 
 type HubTab = "documents" | "minutes" | "workflows" | "forms" | "cases" | "references";
+
+const HUB_TAB_TRIGGER_CLASS =
+  "rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none";
 
 const FORM_CATEGORY_FILTERS = [
   { value: "all", label: "All" },
@@ -143,8 +146,7 @@ function TemplatesHubForm() {
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab");
   const urlQuery = searchParams.get("q") ?? "";
-  const { directorates, divisions, departments, isSyncing } = useOrganization();
-  const { users: organizationUsers } = useOrgUsers();
+  const { directorates, divisions, departments } = useOrganization();
   const { currentUser, hydrated: userHydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const canAccessAdvancedTemplates = useMemo(() => {
@@ -207,6 +209,7 @@ function TemplatesHubForm() {
       ? (requested as TemplateScope)
       : "organization";
   });
+  const { users: organizationUsers } = useOrgUsers({ enabled: activeScope === "user" });
   const [selectedScopeId, setSelectedScopeId] = useState<string | null>(
     searchParams.get("scope_id"),
   );
@@ -843,16 +846,19 @@ function TemplatesHubForm() {
   const headerActions = useMemo(() => {
     if (activeTab === "references") {
       return (
-        <ContextualHelp
-          title="Reference numbers"
-          description="Each unit issues numbers like HQ/GM/ICT/AD/001."
-          steps={[
-            "Pick a unit, then set its location, authority and unit code.",
-            "Classifications (AD, OP, CON…) each keep their own counter.",
-            "Set the next serial to align with the unit's existing register.",
-            "Open Issued numbers to audit every number against its correspondence.",
-          ]}
-        />
+        <>
+          <div id={REFERENCE_SCHEME_ACTION_SLOT_ID} />
+          <ContextualHelp
+            title="Reference numbers"
+            description="Each unit issues numbers like HQ/GM/ICT/AD/001."
+            steps={[
+              "Pick a unit, then set its location, authority and unit code.",
+              "Classifications (AD, OP, CON…) each keep their own counter.",
+              "Set the next serial to align with the unit's existing register.",
+              "Open Issued numbers to audit every number against its correspondence.",
+            ]}
+          />
+        </>
       );
     }
     if (activeTab === "workflows") {
@@ -868,7 +874,7 @@ function TemplatesHubForm() {
             steps={[
               "Create a workflow or open an existing row to edit steps.",
               "Use row actions to clone, activate, or delete.",
-              "Search by name, slug, or description above the tabs.",
+              "Search by name, slug, or description below the tabs.",
             ]}
           />
         </>
@@ -918,7 +924,7 @@ function TemplatesHubForm() {
           steps={[
             "Set scope level, then pick a template from the list to edit.",
             `Use ${docMinuteCtaLabel} to create one for the current scope.`,
-            "Search by title or description in the bar above the tabs.",
+            "Search by title or description in the bar below the tabs.",
           ]}
         />
       </>
@@ -1280,14 +1286,7 @@ function TemplatesHubForm() {
   // ============ LOADING STATE ============
   return (
     <>
-      {!userHydrated || isSyncing ? (
-        <div className="container mx-auto p-6">
-          <LoadingState message="Loading templates hub…" />
-        </div>
-      ) : !currentUser ? (
-        <div className="container mx-auto p-6 space-y-6">
-        </div>
-      ) : (
+      {!userHydrated || !currentUser ? null : (
         <ClientErrorBoundary>
           <Tabs value={activeTab} onValueChange={handleHubTabChange}>
           <AdminPageShell
@@ -1295,43 +1294,44 @@ function TemplatesHubForm() {
             subtitle={tabSubtitle}
             icon={LayoutTemplate}
             actions={headerActions}
+            stats={
+              <StatStrip
+                items={[
+                  { key: "documents", label: "Documents", hint: "All scopes", value: templatesLoading ? "—" : documentCount },
+                  { key: "minutes", label: "Minutes", hint: "All scopes", value: templatesLoading ? "—" : minuteCount },
+                  { key: "cases", label: "Cases", value: caseLoading ? "—" : caseTemplateCount },
+                  ...(canAccessAdvancedTemplates
+                    ? [
+                        { key: "workflows", label: "Workflows", value: workflowLoading ? "—" : workflowStats.total },
+                        { key: "forms", label: "Forms", value: formLoading ? "—" : formTemplates.length },
+                        {
+                          key: "references",
+                          label: "References",
+                          hint: "Reference schemes",
+                          value: referenceStats ? referenceStats.total : "—",
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            }
+            tabs={
+              <TabsList className="h-auto w-fit flex-wrap justify-start gap-1 rounded-xl border border-border/60 bg-card/60 p-1">
+                <TabsTrigger value="documents" className={HUB_TAB_TRIGGER_CLASS}>Documents</TabsTrigger>
+                <TabsTrigger value="minutes" className={HUB_TAB_TRIGGER_CLASS}>Minutes</TabsTrigger>
+                <TabsTrigger value="cases" className={HUB_TAB_TRIGGER_CLASS}>Cases</TabsTrigger>
+                {canAccessAdvancedTemplates ? (
+                  <>
+                    <TabsTrigger value="workflows" className={HUB_TAB_TRIGGER_CLASS}>Workflows</TabsTrigger>
+                    <TabsTrigger value="forms" className={HUB_TAB_TRIGGER_CLASS}>Forms</TabsTrigger>
+                    <TabsTrigger value="references" className={HUB_TAB_TRIGGER_CLASS}>References</TabsTrigger>
+                  </>
+                ) : null}
+              </TabsList>
+            }
           >
-          <StatStrip
-            items={[                    { key: "documents", label: "Documents", hint: "All scopes", value: templatesLoading ? "—" : documentCount },
-                    { key: "minutes", label: "Minutes", hint: "All scopes", value: templatesLoading ? "—" : minuteCount },
-              { key: "cases", label: "Cases", value: caseLoading ? "—" : caseTemplateCount },
-              ...(canAccessAdvancedTemplates
-                ? [
-                    { key: "workflows", label: "Workflows", value: workflowLoading ? "—" : workflowStats.total },
-                    { key: "forms", label: "Forms", value: formLoading ? "—" : formTemplates.length },
-                    {
-                      key: "references",
-                      label: "References",
-                      hint: "Reference schemes",
-                      value: referenceStats ? referenceStats.total : "—",
-                    },
-                  ]
-                : []),
-            ]}
-          />
-
-          <div className="mt-4 overflow-x-auto">
-            <TabsList className="h-auto w-fit flex-wrap justify-start gap-1 rounded-xl border border-border/60 bg-card/60 p-1">
-              <TabsTrigger value="documents" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Documents</TabsTrigger>
-              <TabsTrigger value="minutes" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Minutes</TabsTrigger>
-              <TabsTrigger value="cases" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Cases</TabsTrigger>
-              {canAccessAdvancedTemplates ? (
-                <>
-                  <TabsTrigger value="workflows" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Workflows</TabsTrigger>
-                  <TabsTrigger value="forms" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">Forms</TabsTrigger>
-                  <TabsTrigger value="references" className="rounded-lg px-3 py-1.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">References</TabsTrigger>
-                </>
-              ) : null}
-            </TabsList>
-          </div>
-
           {activeTab !== "references" ? (
-          <div className="mt-4 rounded-xl bg-muted/30 p-2">
+          <div className="rounded-xl bg-muted/30 p-2">
             <div className="flex flex-wrap items-center gap-2">
               {activeTab === "documents" || activeTab === "minutes" ? (
                 <>
@@ -1416,21 +1416,21 @@ function TemplatesHubForm() {
               {renderDocumentMinutePanel("document")}
             </TabsContent>
 
-            <TabsContent value="minutes" className="mt-6 focus-visible:outline-none">
+            <TabsContent value="minutes" className="mt-2 focus-visible:outline-none">
               {renderDocumentMinutePanel("minute")}
             </TabsContent>
 
-            <TabsContent value="cases" className="mt-6 focus-visible:outline-none">
+            <TabsContent value="cases" className="mt-2 focus-visible:outline-none">
               <CaseTemplatesPanel searchQuery={caseSearch} typeFilter={caseTypeFilter} />
             </TabsContent>
 
-            <TabsContent value="references" className="mt-6 focus-visible:outline-none">
+            <TabsContent value="references" className="mt-2 focus-visible:outline-none">
               <div className="rounded-xl border border-border/60 p-4">
                 <ReferencePanel onStatsChange={setReferenceStats} />
               </div>
             </TabsContent>
 
-                        <TabsContent value="workflows" className="mt-6 focus-visible:outline-none">
+                        <TabsContent value="workflows" className="mt-2 focus-visible:outline-none">
             <div className="rounded-xl border border-border/60 p-4 space-y-4">
                   {workflowLoading ? (
                     <LoadingState message="Loading workflow templates…" />
@@ -1783,7 +1783,7 @@ function TemplatesHubForm() {
 
 export default function TemplatesHubPage() {
   return (
-    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+    <Suspense fallback={null}>
       <TemplatesHubForm />
     </Suspense>
   );

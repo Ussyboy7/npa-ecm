@@ -21,8 +21,7 @@ test.describe('Backend health API', () => {
   });
 
   test('prometheus metrics endpoint responds', async ({ request }) => {
-    const base = apiURL.replace(/\/api\/v1\/?$/, '');
-    const response = await request.get(`${base}/api/metrics/`);
+    const response = await request.get(`${apiURL.replace(/\/$/, '')}/metrics/`);
     expect(response.ok()).toBeTruthy();
     const text = await response.text();
     expect(text).toContain('ecm_database_up');

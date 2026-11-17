@@ -13,7 +13,6 @@ import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useOrgUsers } from '@/hooks/use-org-users';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
@@ -46,7 +45,7 @@ import { useDocumentOcr } from '@/app/dms/[id]/hooks/use-document-ocr';
 import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { DetailSkeleton } from '@/components/shared/PageSkeleton';
 
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
@@ -99,17 +98,12 @@ const DocumentDetailContent = () => {
     accessDenied,
   );
   const { divisions, departments } = useOrganization();
-  const { users: organizationUsers } = useOrgUsers();
-  const userLookup = useMemo(() => new Map(organizationUsers.map((user) => [user.id, user])), [organizationUsers]);
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
   const departmentLookup = useMemo(
     () => new Map(departments.map((department) => [department.id, department.name])),
     [departments],
   );
-  const uploadUser = useMemo(
-    () => currentUser ?? organizationUsers.find((user) => user.active) ?? null,
-    [currentUser, organizationUsers],
-  );
+  const uploadUser = currentUser ?? null;
 
   useEffect(() => {
     setSelectedVersionId(null);
@@ -148,18 +142,6 @@ const DocumentDetailContent = () => {
     setCommentsDialogOpen(true);
   }, [markCommentsSeen]);
 
-  // Get user initials for avatar
-  const getUserInitials = (userId: string) => {
-    const user = userLookup.get(userId);
-    if (!user) return '?';
-    const parts = user.name.split(' ');
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-    }
-    return user.name.substring(0, 2).toUpperCase();
-  };
-
-  const author = document ? userLookup.get(document.authorId) : undefined;
   const versions = useMemo(
     () => (Array.isArray(document?.versions) ? document.versions : []),
     [document?.versions],
@@ -241,8 +223,8 @@ const DocumentDetailContent = () => {
   return (
     <>
       {loading ? (
-        <div className="flex items-center justify-center h-full min-h-[50vh] p-6">
-          <LoadingState message="Loading document…" />
+        <div className="p-6">
+          <DetailSkeleton />
         </div>
       ) : accessDenied ? (
         <ResourceAccessDenied
@@ -289,7 +271,7 @@ const DocumentDetailContent = () => {
 
               <DocumentStatusStrip
                 document={document}
-                authorName={author?.name}
+                authorName={document.authorName}
                 versionCount={versions.length}
                 linkedCorrespondenceCount={relatedCorrespondence.length}
                 divisionName={
@@ -339,7 +321,6 @@ const DocumentDetailContent = () => {
                   highlightQuery,
                   matchField,
                   versionsManage: {
-                    userLookup,
                     uploadUser,
                     ocrState,
                     onCreateVersion: openVersionUpload,
@@ -357,7 +338,6 @@ const DocumentDetailContent = () => {
                   comments,
                   accessLogs,
                   relatedCorrespondence,
-                  userLookup,
                   uploadUser,
                   ocrState,
                   onQuickVersionUpload: openVersionUpload,
@@ -374,7 +354,6 @@ const DocumentDetailContent = () => {
                   onReplaceVersion: setReplaceVersionId,
                   onVersionOCR: handleVersionOCR,
                   onCancelOCR: handleCancelOCR,
-                  getUserInitials,
                   unreadComments,
                   onActiveTabChange: (tab) => {
                     if (tab === "comments") markCommentsSeen();
@@ -497,7 +476,6 @@ const DocumentDetailContent = () => {
       <AccessActivityDetailsDialog
         log={selectedAccessLog}
         accessLogs={accessLogs}
-        userLookup={userLookup}
         onClose={() => setSelectedAccessLog(null)}
       />
 

@@ -11,6 +11,7 @@ import { buildParallelRecipients } from "@/lib/parallel-routing";
 import { getDivisionById } from "@/lib/npa-structure";
 import type { User } from "@/lib/npa-structure";
 import type { Office, OfficeMembership } from "@/contexts/OrganizationContext";
+import { useScopedOfficeMemberships } from "@/hooks/use-scoped-office-memberships";
 
 export type AuditRouteSubmitPayload = {
   subject: string;
@@ -56,7 +57,7 @@ export function AuditRouteDialog({
   directorates,
   divisions,
   offices,
-  officeMemberships,
+  officeMemberships: signedInOfficeMemberships,
   users,
   currentUserId,
 }: AuditRouteDialogProps) {
@@ -80,6 +81,12 @@ export function AuditRouteDialog({
   const [forwardActionRequired, setForwardActionRequired] = useState(true);
   const [forwardRequiredApprovalLevel, setForwardRequiredApprovalLevel] = useState("departmental");
   const [forwardAttentionUser, setForwardAttentionUser] = useState("");
+  const officeMemberships = useScopedOfficeMemberships({
+    enabled: open,
+    baseMemberships: signedInOfficeMemberships,
+    userId: forwardTo || undefined,
+    officeId: targetOfficeId || undefined,
+  });
 
   const activeUsers = useMemo(
     () => users.filter((u) => u.active !== false && u.id !== currentUserId),

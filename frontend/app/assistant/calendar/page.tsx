@@ -25,7 +25,7 @@ import { CalendarDays, MapPin, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
+import { useUserLookup } from "@/hooks/use-user-lookup";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import {
   createCalendarEvent,
@@ -44,7 +44,6 @@ function toLocalInputValue(date: Date): string {
 export default function AssistantCalendarPage() {
   const { currentUser } = useCurrentUser();
   const { assistantAssignments } = useOrganization();
-  const { users } = useOrgUsers();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -58,14 +57,27 @@ export default function AssistantCalendarPage() {
     ends_at: "",
   });
 
-  const executiveOptions = useMemo(() => {
+  const executiveIds = useMemo(() => {
     if (!currentUser) return [];
-    const ids = new Set<string>([currentUser.id]);
+    const ids = new Set<string>();
     assistantAssignments
       .filter((a) => a.assistantId === currentUser.id && a.permissions.includes("schedule"))
-      .forEach((a) => ids.add(a.executiveId));
-    return users.filter((u) => ids.has(u.id));
-  }, [assistantAssignments, currentUser, users]);
+      .forEach((a) => {
+        if (a.executiveId !== currentUser.id) ids.add(a.executiveId);
+      });
+    return Array.from(ids);
+  }, [assistantAssignments, currentUser]);
+  const usersById = useUserLookup(executiveIds);
+  const executiveOptions = useMemo(
+    () => [
+      ...(currentUser ? [currentUser] : []),
+      ...executiveIds.flatMap((id) => {
+        const user = usersById.get(id);
+        return user ? [user] : [];
+      }),
+    ],
+    [currentUser, executiveIds, usersById],
+  );
 
   const loadEvents = useCallback(async () => {
     if (!currentUser) return;

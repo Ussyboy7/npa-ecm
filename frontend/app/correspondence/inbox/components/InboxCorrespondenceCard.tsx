@@ -18,7 +18,6 @@ import {
   correspondenceQueueSubjectClass,
 } from "@/components/shared/registry-queue-styles";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import type { Correspondence } from "@/lib/npa-structure";
 
 export type UserOrgIds = {
@@ -98,15 +97,10 @@ type InboxCorrespondenceCardProps = {
 
 function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenceCardProps) {
   const { divisions } = useOrganization();
-  const { users: organizationUsers } = useOrgUsers();
 
   const division = useMemo(
     () => corr.divisionId ? divisions.find((div) => div.id === corr.divisionId) : undefined,
     [corr.divisionId, divisions],
-  );
-  const currentApprover = useMemo(
-    () => corr.currentApproverId ? organizationUsers.find((user) => user.id === corr.currentApproverId) : undefined,
-    [corr.currentApproverId, organizationUsers],
   );
   const overdue = useMemo(() => isOverdue(corr), [corr]);
   const daysPending = useMemo(() => calculateDaysPending(corr), [corr]);
@@ -207,10 +201,10 @@ function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenc
             <span className="truncate">Division: {division.name}</span>
           </span>
         )}
-        {currentApprover && (
+        {corr.currentApproverName && (
           <span className={correspondenceQueueMetaItemClass}>
             <Clock className={correspondenceQueueMetaIconClass} />
-            <span className="truncate">Current: {currentApprover.name}</span>
+            <span className="truncate">Current: {corr.currentApproverName}</span>
           </span>
         )}
         {corr.currentOfficeName && (

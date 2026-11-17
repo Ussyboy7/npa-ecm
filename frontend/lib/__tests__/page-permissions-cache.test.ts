@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearTokens, storeTokens } from '../api-client';
+import { clearTokens, login } from '../api-client';
 import {
   getOrganizationSnapshot,
   updateOrganizationCache,
@@ -13,17 +13,18 @@ const initialPages = { dashboard: { allowed: true } };
 const changedPages = { dashboard: { allowed: false } };
 
 beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_API_URL', 'http://api.test');
   clearTokens();
-  invalidatePagePermissionsCache();
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   clearTokens();
-  invalidatePagePermissionsCache();
 });
 
 describe('page permissions cache', () => {
-  it('refetches cached permissions after auth tokens change', async () => {
+  it('invalidates cached permissions after login', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(initialPages)
       .mockResolvedValueOnce(changedPages);
@@ -32,7 +33,12 @@ describe('page permissions cache', () => {
     await expect(loadPagePermissions('user-1', fetcher)).resolves.toEqual(initialPages);
     expect(fetcher).toHaveBeenCalledTimes(1);
 
-    storeTokens('new-access-token', 'new-refresh-token');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ detail: 'Signed in.' }),
+    }));
+    await login('user', 'password');
 
     await expect(loadPagePermissions('user-1', fetcher)).resolves.toEqual(changedPages);
     expect(fetcher).toHaveBeenCalledTimes(2);

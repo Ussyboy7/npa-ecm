@@ -30,7 +30,6 @@ interface MinuteThreadPanelProps {
   activeUserId: string;
   isCompleted: boolean;
   isCurrentUserTurn: boolean;
-  lookupUser: (userId?: string) => { name: string; systemRole?: string } | undefined;
   getActionIcon: (actionType: string) => React.ComponentType<{ className?: string }> | null;
   onMinuteClick: (minute: Minute) => void;
   onEditMinute: (minute: Minute) => void;
@@ -40,6 +39,8 @@ interface MinuteThreadPanelProps {
   /** Right-column layout: fills parent, no fixed widths */
   embedded?: boolean;
   scrollable?: boolean;
+  /** Archived/completed record: never expose minute edit or recall actions. */
+  readOnly?: boolean;
 }
 
 function isTopLevelParallelBranch(
@@ -76,7 +77,6 @@ export const MinuteThreadPanel = ({
   activeUserId,
   isCompleted,
   isCurrentUserTurn,
-  lookupUser,
   getActionIcon,
   onMinuteClick,
   onEditMinute,
@@ -85,6 +85,7 @@ export const MinuteThreadPanel = ({
   fullWidth,
   embedded,
   scrollable = true,
+  readOnly = false,
 }: MinuteThreadPanelProps) => {
   const isMinuteRecalled = (minute: Minute): boolean => {
     return Boolean(minute.isRecalled || minute.recalledAt);
@@ -132,7 +133,9 @@ export const MinuteThreadPanel = ({
               </div>
               <p className={corrType.itemTitle}>No minutes yet</p>
               <p className="mt-1 text-xs text-muted-foreground max-w-[220px] mx-auto leading-relaxed">
-                Review the document, then use the routing actions to send it on.
+                {readOnly
+                  ? 'No minutes were recorded for this archived record.'
+                  : 'Review the document, then use the routing actions to send it on.'}
               </p>
             </div>
           ) : (
@@ -143,7 +146,6 @@ export const MinuteThreadPanel = ({
                   minutesById,
                   hasExplicitAssignments,
                 );
-                const user = lookupUser(minuteItem.userId);
                 const ActionIcon = getActionIcon(minuteItem.actionType);
                 const isDownward = minuteItem.direction === 'downward';
                 const hasDownstreamMinute = minutes.some(
@@ -155,10 +157,10 @@ export const MinuteThreadPanel = ({
                 );
                 const canEditMinute = Boolean(minuteItem.canBeEdited && !hasDownstreamMinute);
                 const isOwn = String(minuteItem.userId) === String(activeUserId);
-                const displayName = user?.name ?? minuteItem.userName ?? 'Unknown user';
-                let systemRole = user?.systemRole ?? minuteItem.userSystemRole ?? 'Team Member';
+                const displayName = minuteItem.userName ?? 'Unknown user';
+                let systemRole = minuteItem.userSystemRole ?? 'Team Member';
                 if (systemRole && systemRole.includes('-') && systemRole.length > 30) {
-                  systemRole = user?.systemRole ?? 'Team Member';
+                  systemRole = 'Team Member';
                 }
                 const shouldShowRole = systemRole && systemRole !== displayName;
                 const routeLabel = minuteItem.fromOfficeName && minuteItem.toOfficeName
@@ -167,12 +169,13 @@ export const MinuteThreadPanel = ({
                     ? `${minuteItem.fromOfficeName} → ${minuteItem.toUserName}`
                     : minuteItem.toOfficeName || (shouldShowRole ? systemRole : '');
                 const hasActions =
-                  (canEditMinute && isOwn) ||
-                  (minuteItem.canBeRecalled && !isMinuteRecalled(minuteItem) && isOwn) ||
-                  (!minuteItem.isAdditional &&
-                    !isCompleted &&
-                    !isMinuteRecalled(minuteItem) &&
-                    (isOwn || isCurrentUserTurn));
+                  !readOnly &&
+                  ((canEditMinute && isOwn) ||
+                    (minuteItem.canBeRecalled && !isMinuteRecalled(minuteItem) && isOwn) ||
+                    (!minuteItem.isAdditional &&
+                      !isCompleted &&
+                      !isMinuteRecalled(minuteItem) &&
+                      (isOwn || isCurrentUserTurn)));
 
                 return (
                   <li key={minuteItem.id} className="relative flex flex-col gap-0">

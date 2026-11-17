@@ -28,7 +28,6 @@ import { ActingAppointmentDialog } from "../ActingAppointmentDialog";
 
 const admin = { id: "admin-9", name: "Admin Nine" } as User;
 const principalUser = { id: "user-1", name: "User One" } as User;
-
 const offices = [
   { id: "office-1", name: "ICT Office", isActive: true },
   { id: "office-2", name: "Finance Office", isActive: true },
@@ -39,6 +38,8 @@ const principalMembership = {
   officeId: "office-1",
   officeName: "ICT Office",
   userId: "user-1",
+  userName: "User One",
+  userUsername: "user.one",
   assignmentRole: "principal",
   isActive: true,
 } as OfficeMembership;
@@ -67,8 +68,6 @@ const baseProps = {
   onOpenChange: vi.fn(),
   offices,
   principalOffices: [principalMembership],
-  officeMemberships: [principalMembership],
-  users: [principalUser, { id: "user-2", name: "User Two" } as User],
   onCompleted: vi.fn(),
 };
 
@@ -126,6 +125,8 @@ describe("ActingAppointmentDialog admin mode", () => {
               officeId: "office-2",
               officeName: "Finance Office",
               userId: "user-2",
+              userName: "User Two",
+              userUsername: "user.two",
             },
           ],
     );
@@ -159,6 +160,8 @@ describe("ActingAppointmentDialog admin mode", () => {
         officeId: "office-1",
         officeName: "ICT Office",
         userId: "staff-2",
+        userName: "Staff Two",
+        userUsername: "staff.two",
         assignmentRole: "staff",
         isActive: true,
       } as OfficeMembership,

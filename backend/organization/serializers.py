@@ -111,6 +111,8 @@ class OfficeSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True)
     parent_name = serializers.CharField(source="parent.name", read_only=True)
     location_name = serializers.CharField(source="location.display_name", read_only=True)
+    active_member_count = serializers.IntegerField(read_only=True)
+    active_principal_name = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
         model = Office
@@ -129,6 +131,8 @@ class OfficeSerializer(serializers.ModelSerializer):
             "parent_name",
             "location",
             "location_name",
+            "active_member_count",
+            "active_principal_name",
             "description",
             "is_active",
             "allow_external_intake",

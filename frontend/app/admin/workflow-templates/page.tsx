@@ -16,10 +16,8 @@ export default function Page() {
   }, [router]);
 
   return (
-    <>
-      <div className="container mx-auto p-6">
-        <LoadingState message="Opening workflow templates…" />
-      </div>
-    </>
+    <div className="container mx-auto p-6">
+      <LoadingState message="Opening workflow templates…" />
+    </div>
   );
 }

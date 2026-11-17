@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ImageIcon, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateForAPI, formatDateTime } from "@/lib/datetime";
 import { signForm } from "@/lib/api/forms";
 import { fetchUserSignature, type StoredSignature } from "@/lib/api/signatures";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -34,7 +34,7 @@ export function FormSignatureDialog({
   const { currentUser } = useCurrentUser();
   const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
   const [signing, setSigning] = useState(false);
-  const [signedDate, setSignedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [signedDate, setSignedDate] = useState(formatDateForAPI(new Date()));
 
   useEffect(() => {
     if (!open || !currentUser?.id) return;

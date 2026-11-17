@@ -98,8 +98,8 @@ export function PaginationControls({
   }
 
   return (
-    <div className={cn('flex flex-col sm:flex-row items-center justify-between gap-4', className)}>
-      <div className="flex items-center gap-4">
+    <div className={cn('flex flex-col items-center justify-between gap-4 lg:flex-row lg:flex-wrap', className)}>
+      <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
         <div className="text-sm text-muted-foreground">
           Showing <span className="font-medium">{pagination.paginationInfo.showing}</span> of{' '}
           <span className="font-medium">{pagination.paginationInfo.total}</span>
@@ -129,7 +129,7 @@ export function PaginationControls({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2 lg:ml-auto lg:justify-end">
         <Button
           variant="outline"
           size="sm"
@@ -146,12 +146,16 @@ export function PaginationControls({
           disabled={!pagination.canGoPrevious}
           aria-label="Previous page"
         >
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Previous
+          <ChevronLeft className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">Previous</span>
         </Button>
 
+        <span className="px-1 text-sm font-medium tabular-nums sm:hidden">
+          {pagination.page} / {pagination.totalPages}
+        </span>
+
         {showGoToPage && (
-          <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 sm:flex">
             <Label htmlFor="go-to-page" className="text-sm whitespace-nowrap">
               Page:
             </Label>
@@ -189,8 +193,8 @@ export function PaginationControls({
           disabled={!pagination.canGoNext}
           aria-label="Next page"
         >
-          Next
-          <ChevronRight className="h-4 w-4 ml-1" />
+          <span className="hidden sm:inline">Next</span>
+          <ChevronRight className="h-4 w-4 sm:ml-1" />
         </Button>
         <Button
           variant="outline"

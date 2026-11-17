@@ -30,9 +30,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import { useAbortController } from "@/hooks/use-abort-controller";
+import { fetchUserByUsername } from "@/lib/users-api";
 
 interface CaseCommentsProps {
   caseId: string;
@@ -40,8 +39,6 @@ interface CaseCommentsProps {
 
 export function CaseComments({ caseId }: CaseCommentsProps) {
   const { currentUser } = useCurrentUser();
-  const {} = useOrganization();
-  const { users } = useOrgUsers();
   const { getSignal } = useAbortController();
   const [comments, setComments] = useState<CaseComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +51,16 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+
+  const resolveMentionIds = async (content: string) => {
+    const usernames = Array.from(
+      new Set((content.match(/@(\w+)/g) || []).map((match) => match.substring(1))),
+    );
+    const mentionedUsers = await Promise.all(
+      usernames.map((username) => fetchUserByUsername(username).catch(() => null)),
+    );
+    return mentionedUsers.flatMap((user) => (user ? [user.id] : []));
+  };
 
   useEffect(() => {
     if (!caseId) {
@@ -83,7 +90,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
     };
     
     void loadComments();
-  }, [caseId]);
+  }, [caseId, getSignal]);
 
   const handleSubmitComment = async () => {
     if (!newComment.trim() || !currentUser) return;
@@ -96,14 +103,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
     setSubmitting(true);
     try {
       // Extract mentions from comment text (@username)
-      const mentionMatches = newComment.match(/@(\w+)/g) || [];
-      const mentionIds: string[] = [];
-      
-      for (const match of mentionMatches) {
-        const username = match.substring(1);
-        const user = users.find((u) => u.username && u.username.toLowerCase() === username.toLowerCase());
-        if (user) mentionIds.push(user.id);
-      }
+      const mentionIds = await resolveMentionIds(newComment);
 
       const comment = await createCaseComment(caseId, newComment, null, mentionIds);
       setComments((prev) => [comment, ...prev]);
@@ -128,14 +128,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
 
     setSubmitting(true);
     try {
-      const mentionMatches = replyContent.match(/@(\w+)/g) || [];
-      const mentionIds: string[] = [];
-      
-      for (const match of mentionMatches) {
-        const username = match.substring(1);
-        const user = users.find((u) => u.username && u.username.toLowerCase() === username.toLowerCase());
-        if (user) mentionIds.push(user.id);
-      }
+      const mentionIds = await resolveMentionIds(replyContent);
 
       const reply = await createCaseComment(caseId, replyContent, parentId, mentionIds);
       setComments((prev) => {

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { DetailSkeleton } from "@/components/shared/PageSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
   ArrowLeft,
@@ -316,7 +316,7 @@ export default function AuditFormFillPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   // Office-centric routing state per spec
   const { directorates, divisions, offices, officeMemberships } = useOrganization();
-  const { users: orgUsers } = useOrgUsers();
+  const { users: orgUsers } = useOrgUsers({ enabled: forwardDialogOpen });
   const { currentUser } = useCurrentUser();
 
   const fetchSubmission = useCallback(async () => {
@@ -660,7 +660,7 @@ export default function AuditFormFillPage() {
   if (loading) {
     return (
       <div className="container mx-auto p-6">
-        <LoadingState message="Loading submission..." />
+        <DetailSkeleton />
       </div>
     );
   }

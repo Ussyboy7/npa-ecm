@@ -4,7 +4,6 @@ import { AdvancedSearch } from "@/components/search/AdvancedSearch";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "@/components/ui/sonner";
 import { useEffect, useState, Suspense } from "react";
-import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Mail, Briefcase, Layers } from "lucide-react";
@@ -101,7 +100,7 @@ function SearchForm() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+    <Suspense fallback={null}>
       <SearchForm />
     </Suspense>
   );

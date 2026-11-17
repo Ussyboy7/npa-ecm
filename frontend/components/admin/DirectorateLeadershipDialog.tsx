@@ -35,7 +35,7 @@ export const DirectorateLeadershipDialog = ({
   directorate,
 }: DirectorateLeadershipDialogProps) => {
   const { updateDirectorate } = useOrganization();
-  const { users } = useOrgUsers();
+  const { users } = useOrgUsers({ enabled: open });
   const [selectedLeader, setSelectedLeader] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 

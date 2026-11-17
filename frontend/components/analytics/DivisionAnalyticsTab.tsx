@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Bar,
   BarChart,
@@ -426,7 +427,11 @@ export function DivisionAnalyticsTab() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/40 px-3 py-2.5"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-[13px] font-medium">{division.name}</p>
+                        {division.id ? (
+                          <Link href={`/admin/organization?tab=offices&division=${encodeURIComponent(division.id)}`} className="truncate text-[13px] font-medium text-primary hover:underline">
+                            {division.name}
+                          </Link>
+                        ) : <p className="truncate text-[13px] font-medium">{division.name}</p>}
                         <p className={cn(appType.caption, "truncate")}>
                           {division.fullName}
                         </p>
@@ -465,7 +470,11 @@ export function DivisionAnalyticsTab() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium">{division.name}</p>
+                        {division.id ? (
+                          <Link href={`/admin/organization?tab=offices&division=${encodeURIComponent(division.id)}`} className="text-[13px] font-medium text-primary hover:underline">
+                            {division.name}
+                          </Link>
+                        ) : <p className="text-[13px] font-medium">{division.name}</p>}
                         <p className={cn(appType.caption, "truncate")}>
                           {division.fullName}
                         </p>

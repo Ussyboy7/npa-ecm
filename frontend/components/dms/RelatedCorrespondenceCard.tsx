@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { formatDateShort } from "@/lib/correspondence-helpers";
-import type { Correspondence, Minute, User } from "@/lib/npa-structure";
+import type { Correspondence, Minute } from "@/lib/npa-structure";
 
 interface RelatedCorrespondenceCardProps {
   relatedCorrespondence: Array<{
@@ -12,12 +12,10 @@ interface RelatedCorrespondenceCardProps {
     minutes: Minute[];
     linkNotes?: string;
   }>;
-  userLookup: Map<string, User>;
 }
 
 export const RelatedCorrespondenceCard = ({
   relatedCorrespondence,
-  userLookup,
 }: RelatedCorrespondenceCardProps) => {
   return (
     <div className="space-y-2 min-w-0 overflow-hidden">
@@ -29,7 +27,7 @@ export const RelatedCorrespondenceCard = ({
       </p>
       <ul className="space-y-1">
         {relatedCorrespondence.map(({ correspondence, minutes, linkNotes }) => {
-          const createdBy = userLookup.get(correspondence.createdById ?? "");
+          const createdByName = correspondence.createdByName;
           return (
             <li key={correspondence.id}>
               <Link
@@ -52,8 +50,8 @@ export const RelatedCorrespondenceCard = ({
                     {correspondence.subject}
                   </p>
                   <p className="text-[11px] text-muted-foreground truncate">
-                    {createdBy ? `by ${createdBy.name}` : ""}
-                    {createdBy && correspondence.receivedDate ? " · " : ""}
+                    {createdByName ? `by ${createdByName}` : ""}
+                    {createdByName && correspondence.receivedDate ? " · " : ""}
                     {correspondence.receivedDate
                       ? formatDateShort(correspondence.receivedDate)
                       : ""}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { forwardRef, useRef } from "react";
+import type { ComponentProps } from "react";
 import { Plus, UserCheck } from "lucide-react";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { ActingWorkspace, type ActingWorkspaceHandle } from "@/components/acting/ActingWorkspace";
@@ -9,18 +10,20 @@ import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { Button } from "@/components/ui/button";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useOrgUsers } from "@/hooks/use-org-users";
-import { getOrganizationActingCapabilities } from "@/lib/acting-permissions";
+import { getActingOfficeScope, getOrganizationActingCapabilities } from "@/lib/acting-permissions";
+import type { Office, OfficeMembership } from "@/lib/organization-types";
 import type { User } from "@/lib/npa-structure";
 
 const SUBTITLE =
-  "Appoint an officer to temporarily hold an office seat. Open My Inbox items for that seat move to the acting officer and return automatically when the appointment ends.";
+  "Manage acting appointments and requests for your office, or across the organization when you have admin access.";
 
 export default function ActingAppointmentsPage() {
   const { currentUser } = useCurrentUser();
   const capabilities = getOrganizationActingCapabilities(currentUser);
+  const { myOfficeMemberships, offices } = useOrganization();
+  const { memberOffices, principalOffices } = getActingOfficeScope(currentUser?.id, myOfficeMemberships);
 
-  if (!currentUser || !capabilities.canAccess) {
+  if (!currentUser || (!capabilities.canAccess && memberOffices.length === 0)) {
     return (
       <AdminPageShell
         title="Organization"
@@ -31,7 +34,7 @@ export default function ActingAppointmentsPage() {
         <PermissionDeniedCard
           title="Organization Acting access required"
           check={null}
-          fallbackMessage="Only organization administrators can manage acting appointments here. Use Tools → Acting for your own appointments and requests."
+          fallbackMessage="Organization Acting is available to administrators and active office members."
         />
       </AdminPageShell>
     );
@@ -40,6 +43,11 @@ export default function ActingAppointmentsPage() {
   return (
     <OrganizationActingContent
       currentUser={currentUser}
+      offices={offices}
+      officeMemberships={myOfficeMemberships}
+      memberOffices={memberOffices}
+      principalOffices={principalOffices}
+      mode={capabilities.canAccess ? "admin" : "self-service"}
       canManageAppointments={capabilities.canManageAppointments}
     />
   );
@@ -47,14 +55,22 @@ export default function ActingAppointmentsPage() {
 
 function OrganizationActingContent({
   currentUser,
+  offices,
+  officeMemberships,
+  memberOffices,
+  principalOffices,
+  mode,
   canManageAppointments,
 }: {
   currentUser: User;
+  offices: Office[];
+  officeMemberships: OfficeMembership[];
+  memberOffices: OfficeMembership[];
+  principalOffices: OfficeMembership[];
+  mode: "admin" | "self-service";
   canManageAppointments: boolean;
 }) {
   const workspaceRef = useRef<ActingWorkspaceHandle>(null);
-  const { offices, officeMemberships } = useOrganization();
-  const { users } = useOrgUsers();
 
   return (
     <AdminPageShell
@@ -63,22 +79,50 @@ function OrganizationActingContent({
       icon={UserCheck}
       tabs={<OrganizationTabList />}
       actions={
-        canManageAppointments ? (
-          <Button size="compact" onClick={() => workspaceRef.current?.openAppointment()}>
-            <Plus className="h-4 w-4" />
-            Appoint acting
-          </Button>
-        ) : null
+        <>
+          {mode === "self-service" && principalOffices.length > 0 ? (
+            <Button size="compact" onClick={() => workspaceRef.current?.openAppointment()}>
+              <Plus className="h-4 w-4" />
+              Appoint acting
+            </Button>
+          ) : null}
+          {mode === "self-service" && memberOffices.length > 0 ? (
+            <Button variant="outline" size="compact" onClick={() => workspaceRef.current?.openRequest()}>
+              <Plus className="h-4 w-4" />
+              Request acting
+            </Button>
+          ) : null}
+          {mode === "admin" && canManageAppointments ? (
+            <Button size="compact" onClick={() => workspaceRef.current?.openAppointment()}>
+              <Plus className="h-4 w-4" />
+              Appoint acting
+            </Button>
+          ) : null}
+        </>
       }
     >
-      <ActingWorkspace
-        ref={workspaceRef}
-        mode="admin"
-        currentUser={currentUser}
-        offices={offices}
-        officeMemberships={officeMemberships}
-        users={users}
-      />
+      {mode === "admin" ? (
+        <AdminActingWorkspace
+          ref={workspaceRef}
+          currentUser={currentUser}
+          offices={offices}
+        />
+      ) : (
+        <ActingWorkspace
+          ref={workspaceRef}
+          mode="self-service"
+          currentUser={currentUser}
+          offices={offices}
+          officeMemberships={officeMemberships}
+        />
+      )}
     </AdminPageShell>
   );
 }
+
+const AdminActingWorkspace = forwardRef<
+  ActingWorkspaceHandle,
+  Omit<ComponentProps<typeof ActingWorkspace>, "mode" | "officeMemberships">
+>(function AdminActingWorkspace(props, ref) {
+  return <ActingWorkspace {...props} ref={ref} mode="admin" />;
+});

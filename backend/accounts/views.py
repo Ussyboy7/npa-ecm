@@ -132,6 +132,10 @@ class UserViewSet(viewsets.ModelViewSet):
         "employee_id",
         "personnel_number",
         "designation",
+        "system_role__name",
+        "directorate__name",
+        "division__name",
+        "department__name",
     ]
     ordering_fields = ["username", "first_name", "last_name", "date_joined", "last_login"]
     ordering = ["username"]

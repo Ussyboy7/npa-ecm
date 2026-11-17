@@ -8,7 +8,7 @@ import { PlatformTabList } from "@/components/admin/PlatformTabList";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { Badge as UiBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { DetailSkeleton } from "@/components/shared/PageSkeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -344,7 +344,7 @@ export default function SystemHealthPage() {
       </div>
       <ClientErrorBoundary>
         {loading && !metrics ? (
-          <LoadingState message="Loading system health…" />
+          <DetailSkeleton />
         ) : error ? (
           <ErrorState message={error} onRetry={() => void loadData()} />
         ) : (

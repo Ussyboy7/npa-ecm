@@ -19,8 +19,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { GRADE_LEVELS, type User } from "@/lib/npa-structure";
+import type { OfficeMembership } from "@/lib/organization-types";
+import { listOfficeMembershipsForUser } from "@/lib/office-memberships-client";
 import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { Plus, Trash2 } from "lucide-react";
 
 interface UserEditDialogProps {
@@ -70,21 +73,21 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
     directorates,
     divisions,
     departments,
-    users,
     updateUser,
     addUser,
     roles,
     offices,
-    officeMemberships,
     addOfficeMembership,
     updateOfficeMembership,
     deleteOfficeMembership,
   } = useOrganization();
+  const { users } = useOrgUsers({ enabled: open });
   const { currentUser } = useCurrentUser();
   const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string }>(defaultState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isManagingOffices, setIsManagingOffices] = useState(false);
+  const [selectedUserMemberships, setSelectedUserMemberships] = useState<OfficeMembership[]>([]);
   const [newMembership, setNewMembership] = useState<{
     officeId: string;
     assignmentRole: string;
@@ -180,10 +183,26 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
 
   const isSuperAdmin = Boolean(currentUser?.isSuperuser || currentUser?.systemRole === SYSTEM_ROLE_SUPER_ADMIN);
 
-  const userMemberships = useMemo(() => {
-    if (!user) return [];
-    return officeMemberships.filter((m) => String(m.userId) === String(user.id));
-  }, [officeMemberships, user]);
+  const selectedUserId = user?.id;
+  useEffect(() => {
+    if (!open || !selectedUserId) {
+      setSelectedUserMemberships([]);
+      return;
+    }
+    let ignore = false;
+    void listOfficeMembershipsForUser(String(selectedUserId)).then((memberships) => {
+      if (!ignore) setSelectedUserMemberships(memberships);
+    }).catch(() => {
+      if (!ignore) setSelectedUserMemberships([]);
+    });
+    return () => { ignore = true; };
+  }, [open, selectedUserId]);
+
+  const applySelectedUserMembershipUpdate = (updated: OfficeMembership) => {
+    setSelectedUserMemberships((current) =>
+      current.map((membership) => membership.id === updated.id ? updated : membership),
+    );
+  };
 
   const officeOptions = useMemo(() => {
     return offices
@@ -946,13 +965,13 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   </p>
                 )}
 
-                {userMemberships.length === 0 ? (
+                {selectedUserMemberships.length === 0 ? (
                   <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
                     No office memberships assigned.
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {userMemberships.map((m) => (
+                    {selectedUserMemberships.map((m) => (
                       <div key={m.id} className="rounded-md border p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -984,6 +1003,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                               onClick={async () => {
                                 try {
                                   await deleteOfficeMembership(m.id);
+                                  setSelectedUserMemberships((current) => current.filter((membership) => membership.id !== m.id));
                                   toast({ title: "Office membership removed" });
                                 } catch (error: unknown) {
                                   toast({
@@ -1006,7 +1026,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                               <Select
                                 value={m.assignmentRole}
                                 onValueChange={(value) =>
-                                  void updateOfficeMembership(m.id, { assignmentRole: value }).catch((error: unknown) => {
+                                  void updateOfficeMembership(m.id, { assignmentRole: value })
+                                    .then(applySelectedUserMembershipUpdate)
+                                    .catch((error: unknown) => {
                                     toast({
                                       title: "Update failed",
                                       description: error instanceof Error ? error.message : "Unable to update membership",
@@ -1035,7 +1057,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                                 <Switch
                                   checked={m.isPrimary}
                                   onCheckedChange={(checked) =>
-                                    void updateOfficeMembership(m.id, { isPrimary: checked }).catch((error: unknown) => {
+                                    void updateOfficeMembership(m.id, { isPrimary: checked })
+                                      .then(applySelectedUserMembershipUpdate)
+                                      .catch((error: unknown) => {
                                       toast({
                                         title: "Update failed",
                                         description: error instanceof Error ? error.message : "Unable to update membership",
@@ -1050,7 +1074,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                                 <Switch
                                   checked={m.isActive}
                                   onCheckedChange={(checked) =>
-                                    void updateOfficeMembership(m.id, { isActive: checked }).catch((error: unknown) => {
+                                    void updateOfficeMembership(m.id, { isActive: checked })
+                                      .then(applySelectedUserMembershipUpdate)
+                                      .catch((error: unknown) => {
                                       toast({
                                         title: "Update failed",
                                         description: error instanceof Error ? error.message : "Unable to update membership",
@@ -1068,7 +1094,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                                 <Switch
                                   checked={m.canRegister}
                                   onCheckedChange={(checked) =>
-                                    void updateOfficeMembership(m.id, { canRegister: checked }).catch((error: unknown) => {
+                                    void updateOfficeMembership(m.id, { canRegister: checked })
+                                      .then(applySelectedUserMembershipUpdate)
+                                      .catch((error: unknown) => {
                                       toast({
                                         title: "Update failed",
                                         description: error instanceof Error ? error.message : "Unable to update membership",
@@ -1083,7 +1111,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                                 <Switch
                                   checked={m.canRoute}
                                   onCheckedChange={(checked) =>
-                                    void updateOfficeMembership(m.id, { canRoute: checked }).catch((error: unknown) => {
+                                    void updateOfficeMembership(m.id, { canRoute: checked })
+                                      .then(applySelectedUserMembershipUpdate)
+                                      .catch((error: unknown) => {
                                       toast({
                                         title: "Update failed",
                                         description: error instanceof Error ? error.message : "Unable to update membership",
@@ -1098,7 +1128,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                                 <Switch
                                   checked={m.canApprove}
                                   onCheckedChange={(checked) =>
-                                    void updateOfficeMembership(m.id, { canApprove: checked }).catch((error: unknown) => {
+                                    void updateOfficeMembership(m.id, { canApprove: checked })
+                                      .then(applySelectedUserMembershipUpdate)
+                                      .catch((error: unknown) => {
                                       toast({
                                         title: "Update failed",
                                         description: error instanceof Error ? error.message : "Unable to update membership",
@@ -1130,7 +1162,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                           }
                           setIsSubmitting(true);
                           try {
-                            await addOfficeMembership({
+                            const created = await addOfficeMembership({
                               officeId: newMembership.officeId,
                               userId: user.id,
                               assignmentRole: newMembership.assignmentRole,
@@ -1140,6 +1172,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                               canRoute: newMembership.canRoute,
                               canApprove: newMembership.canApprove,
                             });
+                            setSelectedUserMemberships((current) => [...current, created]);
                             toast({ title: "Office membership added" });
                             setNewMembership((prev) => ({ ...prev, officeId: "" }));
                           } catch (error: unknown) {

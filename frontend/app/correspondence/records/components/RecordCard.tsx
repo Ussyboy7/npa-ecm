@@ -81,6 +81,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
   );
 
   const archiveLevel = corr.archiveLevel || "department";
+  const detailHref = `/archives/${corr.id}`;
   const levelLabel = archiveLevel === "directorate" ? "Directorate" : archiveLevel === "division" ? "Division" : "Department";
   const orgParts: string[] = [];
   if (directorate?.name) orgParts.push(directorate.name);
@@ -91,7 +92,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
   return (
     <ListRowCard
       density="compact"
-      href={`/correspondence/${corr.id}`}
+      href={detailHref}
       leading={(
         <div className={cn(correspondenceQueueLeadingBoxClass, "bg-muted")}>
           <FileArchive className={cn(correspondenceQueueLeadingIconClass, "text-muted-foreground")} />
@@ -110,7 +111,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  router.push(`/correspondence/${corr.id}`);
+                  router.push(detailHref);
                 }}
               >
                 <ChevronRight className="h-4 w-4" />
@@ -132,7 +133,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
-                <Link href={`/correspondence/${corr.id}`} className="flex items-center">
+                <Link href={detailHref} className="flex items-center">
                   <Eye className="mr-2 h-4 w-4" />
                   View Details
                 </Link>
@@ -140,7 +141,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
               <DropdownMenuItem
                 onClick={(e) => {
                   e.preventDefault();
-                  window.open(`/correspondence/${corr.id}`, "_blank");
+                  window.open(detailHref, "_blank");
                 }}
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
@@ -160,7 +161,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
               <DropdownMenuItem
                 onClick={(e) => {
                   e.preventDefault();
-                  void navigator.clipboard.writeText(`${window.location.origin}/correspondence/${corr.id}`);
+                  void navigator.clipboard.writeText(`${window.location.origin}${detailHref}`);
                   toast.success("Link copied to clipboard");
                 }}
               >
@@ -220,6 +221,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
             variant="outline"
             className={cn(
               correspondenceQueueBadgeClass,
+              "whitespace-nowrap",
               archiveLevel === "directorate"
                 ? "bg-primary/10 text-primary"
                 : archiveLevel === "division"
@@ -230,7 +232,7 @@ function RecordCardContent({ corr }: RecordCardProps) {
             {levelLabel} Record
           </Badge>
         </div>
-        <span className={correspondenceQueueDateClass}>
+        <span className={cn(correspondenceQueueDateClass, "max-[380px]:w-full max-[380px]:text-right")}>
           {formatDateShort(corr.completedAt || corr.receivedDate)}
         </span>
       </div>

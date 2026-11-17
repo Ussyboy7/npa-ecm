@@ -4,15 +4,14 @@ import * as React from "react";
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast as sonnerToast, type ExternalToast } from "sonner";
 
-import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
-
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
-type ToasterToast = ToastProps & {
+type ToasterToast = {
   id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
-  action?: ToastActionElement;
+  action?: React.ReactNode;
+  variant?: "default" | "destructive";
 };
 
 type LegacyToastInput = Omit<ToasterToast, "id">;

@@ -19,7 +19,7 @@ const EMPTY_VALUE = "__none";
 
 export const DirectorateFormModal = ({ open, onOpenChange, directorate }: DirectorateFormModalProps) => {
   const { addDirectorate, updateDirectorate } = useOrganization();
-  const { users } = useOrgUsers();
+  const { users } = useOrgUsers({ enabled: open });
   const [formData, setFormData] = useState({
     name: '',
     code: '',

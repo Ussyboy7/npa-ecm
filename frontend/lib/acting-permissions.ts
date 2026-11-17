@@ -1,3 +1,4 @@
+import type { OfficeMembership } from "@/lib/organization-types";
 import type { User } from "@/lib/npa-structure";
 import { hasAnyRolePermission } from "@/lib/permissions";
 
@@ -22,5 +23,26 @@ export function getOrganizationActingCapabilities(
     canAccess: canAdminister,
     canManageAppointments: canAdminister,
     canResolveRequests: canAdminister,
+  };
+}
+
+export interface ActingOfficeScope {
+  /** Active offices the user belongs to in any assignment role. */
+  memberOffices: OfficeMembership[];
+  /** Active offices where the user holds the principal seat. */
+  principalOffices: OfficeMembership[];
+}
+
+/** Offices a user may act for or request help with, derived from active memberships. */
+export function getActingOfficeScope(
+  userId: string | null | undefined,
+  officeMemberships: OfficeMembership[],
+): ActingOfficeScope {
+  const memberOffices = officeMemberships.filter(
+    (membership) => membership.isActive && String(membership.userId) === String(userId),
+  );
+  return {
+    memberOffices,
+    principalOffices: memberOffices.filter((membership) => membership.assignmentRole === "principal"),
   };
 }

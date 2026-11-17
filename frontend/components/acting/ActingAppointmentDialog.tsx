@@ -23,8 +23,6 @@ interface ActingAppointmentDialogProps {
   currentUser: User;
   offices: Office[];
   principalOffices: OfficeMembership[];
-  officeMemberships: OfficeMembership[];
-  users: User[];
   initialRequest?: ActingRequest | null;
   onCompleted: () => void | Promise<void>;
 }
@@ -40,7 +38,7 @@ function toISODateTime(value: string, endOfDay: boolean): string | undefined {
 
 export function ActingAppointmentDialog({
   mode, open, onOpenChange, currentUser, offices, principalOffices,
-  officeMemberships, users, initialRequest, onCompleted,
+  initialRequest, onCompleted,
 }: ActingAppointmentDialogProps) {
   const isAdmin = mode === "admin";
   const [officeId, setOfficeId] = useState("");
@@ -92,10 +90,12 @@ export function ActingAppointmentDialog({
       String(membership.officeId) === officeId && membership.isActive);
     const principals = active.filter((membership) => membership.assignmentRole === "principal");
     return (principals.length ? principals : active).map((membership) => {
-      const user = users.find((candidate) => String(candidate.id) === String(membership.userId));
-      return { id: String(membership.userId), name: user?.name || user?.username || String(membership.userId) };
+      return {
+        id: String(membership.userId),
+        name: membership.userName || membership.userUsername || String(membership.userId),
+      };
     });
-  }, [officeId, selectedOfficeMemberships, users]);
+  }, [officeId, selectedOfficeMemberships]);
 
   useEffect(() => {
     if (!open || !officeId || (isAdmin && !principalId && principalOptions.length === 0)) {
@@ -119,8 +119,7 @@ export function ActingAppointmentDialog({
   }, [isAdmin, officeId, open, principalId, principalOptions]);
 
   const officeLabel = (value: string) =>
-    offices.find((office) => String(office.id) === value)?.name ||
-    officeMemberships.find((membership) => String(membership.officeId) === value)?.officeName || value;
+    offices.find((office) => String(office.id) === value)?.name || value;
 
   const submit = async () => {
     if (!officeId || !actingUserId || !reason.trim()) {
@@ -155,7 +154,10 @@ export function ActingAppointmentDialog({
   const today = new Date().toISOString().slice(0, 10);
   const availableOffices = isAdmin
     ? offices.filter((office) => office.isActive !== false).map((office) => ({ id: String(office.id), name: office.name }))
-    : principalOffices.map((membership) => ({ id: String(membership.officeId), name: officeLabel(String(membership.officeId)) }));
+    : principalOffices.map((membership) => ({
+      id: String(membership.officeId),
+      name: membership.officeName || officeLabel(String(membership.officeId)),
+    }));
 
   return (
     <Dialog open={open} onOpenChange={(value) => { if (value) onOpenChange(true); else close(); }}>

@@ -54,16 +54,6 @@ const authHeaders = (headers?: HeadersInit): Headers => {
   return requestHeaders;
 };
 
-// JWTs live in httpOnly cookies. These helpers remain for callers that still
-// ask whether a browser session exists, but no token is readable by JavaScript.
-export const getStoredAccessToken = () => null;
-export const getStoredRefreshToken = () => null;
-
-/** @deprecated Tokens are set by the server in httpOnly cookies. */
-export const storeTokens = (..._args: unknown[]) => {
-  notifyAuthChanged();
-};
-
 export const clearTokens = () => {
   if (!isBrowser()) return;
   clearCookieValue(AUTH_SESSION_COOKIE_NAME);
@@ -327,23 +317,15 @@ export const logout = () => {
   void request;
 };
 
-/** @deprecated Impersonation is tracked by server-set cookies now. */
-export const storeOriginalTokens = (_userId?: string) => {};
-
 export const clearOriginalTokens = () => {
   if (!isBrowser()) return;
   clearCookieValue(AUTH_IMPERSONATING_COOKIE_NAME);
   clearCookieValue(AUTH_ORIGINAL_USER_COOKIE_NAME);
 };
 
-/** @deprecated Tokens are no longer readable from JavaScript. */
-export const getOriginalTokens = () => null;
-
 export const getOriginalUserId = (): string | null => getCookieValue(AUTH_ORIGINAL_USER_COOKIE_NAME);
 
-export const hasOriginalTokens = () => Boolean(getCookieValue(AUTH_IMPERSONATING_COOKIE_NAME));
-
-export const isImpersonatingUser = (_currentUserId?: string | null): boolean =>
+export const isImpersonatingUser = (): boolean =>
   Boolean(getCookieValue(AUTH_IMPERSONATING_COOKIE_NAME));
 
 export const impersonateUser = async (userId: string) => {

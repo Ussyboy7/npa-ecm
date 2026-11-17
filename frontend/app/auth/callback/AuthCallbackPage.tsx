@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { hasTokens } from "@/lib/api-client";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { NpaLoading } from "@/components/shared/NpaLoading";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -25,9 +25,5 @@ export default function AuthCallbackPage() {
     router.replace("/login");
   }, [router, searchParams]);
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <LoadingState message="Completing sign-in…" />
-    </div>
-  );
+  return <NpaLoading fullScreen message="Completing sign-in…" />;
 }

@@ -88,7 +88,7 @@ describe('useOrgUsers identity cache', () => {
     expect(fetchActiveUsersMock).toHaveBeenCalledTimes(2);
   });
 
-  it('clears cached offices and users on an identity cache reset', () => {
+  it('clears cached organization data on an identity cache reset', () => {
     updateOrganizationCache({
       offices: [
         {
@@ -104,16 +104,13 @@ describe('useOrgUsers identity cache', () => {
           allowLateralRouting: true,
         },
       ],
-      users: [userA],
     });
 
     expect(getOrganizationSnapshot().offices).toHaveLength(1);
-    expect(getOrganizationSnapshot().users).toHaveLength(1);
 
     clearIdentityCaches();
 
     expect(getOrganizationSnapshot().offices).toEqual([]);
-    expect(getOrganizationSnapshot().users).toEqual([]);
   });
 
   it('does not let an in-flight directory repopulate the cache after a reset', async () => {

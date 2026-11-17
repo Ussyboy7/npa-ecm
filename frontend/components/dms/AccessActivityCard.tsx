@@ -43,8 +43,8 @@ function accessActionMeta(action: DocumentAccessLog['action']): {
 interface AccessActivityCardProps {
   documentId: string;
   accessLogs: DocumentAccessLog[];
-  userLookup: Map<string, User>;
-  getUserInitials: (userId: string) => string;
+  userLookup?: Map<string, User>;
+  getUserInitials?: (userId: string) => string;
   onViewActivityDetails?: (log: DocumentAccessLog) => void;
   onRefresh?: () => Promise<void>;
   isLoading?: boolean;
@@ -72,10 +72,10 @@ export const AccessActivityCard = ({
   const [logsPage, setLogsPage] = useState(1);
 
   const getDisplayUserName = (log: DocumentAccessLog): string =>
-    userLookup.get(log.userId)?.name || log.userName || 'Unknown';
+    userLookup?.get(log.userId)?.name || log.userName || 'Unknown';
 
   const getDisplayUserInitials = (log: DocumentAccessLog): string => {
-    const fallbackFromLookup = getUserInitials(log.userId);
+    const fallbackFromLookup = getUserInitials?.(log.userId);
     if (fallbackFromLookup && fallbackFromLookup !== '?') return fallbackFromLookup;
     const name = getDisplayUserName(log);
     if (!name || name === 'Unknown') return '?';

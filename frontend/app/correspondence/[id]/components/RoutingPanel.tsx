@@ -4,13 +4,14 @@ import { useState, useEffect, useMemo, useRef, useId } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Route } from 'lucide-react';
-import type { Correspondence, Minute, Office, OfficeMembership, User } from '@/lib/npa-structure';
+import type { Correspondence, Minute, OfficeMembership, User } from '@/lib/npa-structure';
 import { ActionsPanel } from './ActionsPanel';
 import { MinuteThreadPanel } from './MinuteThreadPanel';
 import { CorrespondenceInfoPanel } from './CorrespondenceInfoPanel';
 import { ParallelRoutingStatusPanel } from '@/components/correspondence/ParallelRoutingStatusPanel';
 import { RelatedResponsesPanel } from '@/components/correspondence/RelatedResponsesPanel';
 import { getDocumentAccessLogs } from '@/lib/dms-logs';
+import { cn } from '@/lib/utils';
 import type { DocumentAccessLog, DocumentRecord } from '@/lib/api/dms';
 
 function routeActionLabel(actionType: Minute['actionType']): string {
@@ -52,10 +53,7 @@ interface RoutingPanelProps {
   linkedDocuments: DocumentRecord[];
   onOpenLinkDocument: () => void;
   activeDelegation: Record<string, unknown> | null;
-  organizationUsers: User[];
-  offices: Office[];
   officeMemberships: OfficeMembership[];
-  lookupUser: (userId?: string) => User | undefined;
   getActionIcon: (actionType: string) => React.ComponentType<{ className?: string }> | null;
   onOpenLinkCaseModal: () => void;
   canReassign?: boolean;
@@ -71,6 +69,8 @@ interface RoutingPanelProps {
   onEditMinute: (minute: Minute) => void;
   onRecallMinute: (minute: Minute) => void;
   onAddNote: (minute: Minute) => void;
+  /** Archived record mode: no Action tab and no minute or branch mutations. */
+  readOnly?: boolean;
 }
 
 export function RoutingPanel({
@@ -88,10 +88,7 @@ export function RoutingPanel({
   linkedDocuments,
   onOpenLinkDocument,
   activeDelegation,
-  organizationUsers,
-  offices,
   officeMemberships,
-  lookupUser,
   getActionIcon,
   onOpenLinkCaseModal,
   canReassign,
@@ -107,6 +104,7 @@ export function RoutingPanel({
   onEditMinute,
   onRecallMinute,
   onAddNote,
+  readOnly = false,
 }: RoutingPanelProps) {
   const [activeTab, setActiveTab] = useState<'thread' | 'routing' | 'action' | 'info'>('thread');
   // The panel can be mounted twice (desktop + mobile layouts), so ids are
@@ -116,13 +114,20 @@ export function RoutingPanel({
   const tabId = (id: string) => `${tabIdPrefix}-tab-${id}`;
   const panelId = (id: string) => `${tabIdPrefix}-panel-${id}`;
   const routingTabs = useMemo(
-    () => [
-      { id: 'thread' as const, label: 'Thread' },
-      { id: 'routing' as const, label: 'Routing' },
-      { id: 'action' as const, label: 'Action' },
-      { id: 'info' as const, label: 'Info' },
-    ],
-    [],
+    () =>
+      readOnly
+        ? [
+            { id: 'thread' as const, label: 'Thread' },
+            { id: 'routing' as const, label: 'Routing' },
+            { id: 'info' as const, label: 'Info' },
+          ]
+        : [
+            { id: 'thread' as const, label: 'Thread' },
+            { id: 'routing' as const, label: 'Routing' },
+            { id: 'action' as const, label: 'Action' },
+            { id: 'info' as const, label: 'Info' },
+          ],
+    [readOnly],
   );
   const handleTabKeyDown = (event: React.KeyboardEvent, index: number) => {
     const last = routingTabs.length - 1;
@@ -159,19 +164,6 @@ export function RoutingPanel({
   const [logsLoading, setLogsLoading] = useState(false);
   // null until the branch fetch resolves, so the empty state never flashes.
   const [parallelBranchCount, setParallelBranchCount] = useState<number | null>(null);
-  const userLookup = useMemo(() => {
-    const m = new Map<string, User>();
-    for (const u of organizationUsers) m.set(u.id, u);
-    return m;
-  }, [organizationUsers]);
-  const getUserInitials = (userId: string) => {
-    const u = userLookup.get(userId);
-    const name = u?.name ?? '';
-    if (!name) return '?';
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length-1][0]}`.toUpperCase();
-    return name.slice(0,2).toUpperCase();
-  };
   const refreshAccessLogs = async () => {
     if (!primaryLinkedDocId) return;
     setLogsLoading(true);
@@ -193,7 +185,10 @@ export function RoutingPanel({
         <div
           role="tablist"
           aria-label="Routing views"
-          className="grid grid-cols-4 gap-1 rounded-full bg-muted/50 p-1"
+          className={cn(
+            'grid gap-1 rounded-full bg-muted/50 p-1',
+            readOnly ? 'grid-cols-3' : 'grid-cols-4',
+          )}
         >
           {routingTabs.map((tab, index) => (
             <Button
@@ -230,7 +225,6 @@ export function RoutingPanel({
             activeUserId={activeUser.id}
             isCompleted={isCompleted}
             isCurrentUserTurn={isCurrentUserTurn}
-            lookupUser={lookupUser}
             getActionIcon={getActionIcon}
             embedded
             scrollable={false}
@@ -238,6 +232,7 @@ export function RoutingPanel({
             onEditMinute={onEditMinute}
             onRecallMinute={onRecallMinute}
             onAddNote={onAddNote}
+            readOnly={readOnly}
           />
         </div>
       )}
@@ -265,11 +260,9 @@ export function RoutingPanel({
                   {recordedMinutes.map((minute, index) => {
                     const fromLabel = minute.fromOfficeName
                       ?? minute.userName
-                      ?? lookupUser(minute.userId)?.name
                       ?? 'Unknown office';
                     const toLabel = minute.toOfficeName
                       ?? minute.toUserName
-                      ?? lookupUser(minute.toUserId)?.name
                       ?? (minute.actionType === 'approve' || minute.actionType === 'reject' || minute.actionType === 'treat'
                         ? 'Completed'
                         : 'No onward recipient');
@@ -323,6 +316,7 @@ export function RoutingPanel({
               correspondenceId={correspondence.id}
               onRefresh={onSyncFromApi}
               onBranchCountChange={setParallelBranchCount}
+              readOnly={readOnly}
             />
             {correspondence.relatedResponses && correspondence.relatedResponses.length > 0 && (
               <RelatedResponsesPanel responses={correspondence.relatedResponses} />
@@ -344,7 +338,7 @@ export function RoutingPanel({
         </ScrollArea>
       )}
 
-      {activeTab === 'action' && (
+      {!readOnly && activeTab === 'action' && (
         <div
           id={panelId('action')}
           role="tabpanel"
@@ -369,10 +363,7 @@ export function RoutingPanel({
               hasCompletionPackage={hasCompletionPackage}
               completionGeneratedAt={completionGeneratedAt}
               activeDelegation={activeDelegation}
-              organizationUsers={organizationUsers}
-              offices={offices}
               officeMemberships={officeMemberships}
-              lookupUser={lookupUser}
               onOpenMinuteModal={onOpenMinuteModal}
               onOpenTreatmentModal={onOpenTreatmentModal}
               onOpenCompletionModal={onOpenCompletionModal}
@@ -400,8 +391,6 @@ export function RoutingPanel({
               primaryLinkedDocId={primaryLinkedDocId}
               accessLogs={accessLogs}
               logsLoading={logsLoading}
-              userLookup={userLookup}
-              getUserInitials={getUserInitials}
               onRefreshAccessLogs={refreshAccessLogs}
               onOpenLinkDocument={onOpenLinkDocument}
               onViewThread={() => setActiveTab('thread')}

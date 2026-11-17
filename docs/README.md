@@ -21,6 +21,7 @@ docs/
 │   ├── dms.md
 │   ├── forms.md
 │   ├── inbox.md
+│   ├── m-files-archive-pilot.md
 │   ├── rich-text-editor.md
 │   ├── search.md
 │   └── workflow.md
@@ -66,7 +67,7 @@ docs/
 ## Key Documents
 
 ### For Developers
-- **[Feature Docs](./features/)**: Living documentation per feature area (DMS, cases, correspondence, forms, rich text, inbox, search, etc.)
+- **[Feature Docs](./features/)**: Living documentation per feature area (DMS, cases, correspondence, forms, rich text, inbox, search, M-Files archive pilot planning, etc.)
 - **[UI design language](./guides/DESIGN.md)**: Detail shells, modal tokens, density rules
 - **[Architecture Docs](./architecture/)**: System architecture and design documentation
 - **[ADR](./adr/)**: Architecture Decision Records

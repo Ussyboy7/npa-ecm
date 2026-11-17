@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +14,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { ListSkeleton } from "@/components/shared/PageSkeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { StatStrip } from "@/components/shared/StatStrip";
 import { apiFetch } from "@/lib/api-client";
+import { logError } from "@/lib/client-logger";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import { unwrapResults } from "@/lib/type-utils";
@@ -142,24 +143,15 @@ export default function FOIAListPage() {
 
   const [count, setCount] = useState(0);
   const pagination = usePagination({ totalCount: count });
+  const requestsRef = useRef(0);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 350);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  useEffect(() => {
-    setStatusFilter("all");
-    pagination.goToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset page when tab changes
-  }, [activeTab]);
-
-  useEffect(() => {
-    pagination.goToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset page when filters change
-  }, [debouncedSearch, statusFilter]);
-
   const loadData = async () => {
+    const requestId = ++requestsRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -177,29 +169,54 @@ export default function FOIAListPage() {
       if (statusParam) params.set("status", statusParam);
       if (activeTab === "overdue") params.set("overdue", "true");
 
-      const [listResponse, statsResponse] = await Promise.all([
-        apiFetch<{ results?: FOIARequestRow[]; count?: number }>(
-          `/correspondence/foia-requests/?${params.toString()}`,
-        ),
-        apiFetch<Stats>(`/correspondence/foia-requests/stats/`),
-      ]);
+      const listResponse = await apiFetch<{ results?: FOIARequestRow[]; count?: number }>(
+        `/correspondence/foia-requests/?${params.toString()}`,
+      );
+      if (requestId !== requestsRef.current) return;
       const rows = unwrapResults<FOIARequestRow>(listResponse).map(mapFoiaRequest);
       setRequests(rows);
       setCount(
         typeof listResponse.count === "number" ? listResponse.count : rows.length,
       );
-      setStats(statsResponse);
     } catch (_err) {
+      if (requestId !== requestsRef.current) return;
       setError("Failed to load FOIA requests.");
+      setRequests([]);
+      setCount(0);
     } finally {
-      setLoading(false);
+      if (requestId === requestsRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    let cancelled = false;
+    void apiFetch<Stats>("/correspondence/foia-requests/stats/")
+      .then((response) => {
+        if (!cancelled) setStats(response);
+      })
+      .catch((error: unknown) => {
+        logError("Failed to load FOIA stats", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filterKey = [activeTab, debouncedSearch, statusFilter].join('\u0000');
+  const previousFilterKeyRef = useRef(filterKey);
+
+  useEffect(() => {
+    const filtersChanged = previousFilterKeyRef.current !== filterKey;
+    previousFilterKeyRef.current = filterKey;
+    if (filtersChanged && pagination.page !== 1) {
+      pagination.goToFirstPage();
+      return;
+    }
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load when pagination or filters change
-  }, [pagination.page, pagination.pageSize, debouncedSearch, statusFilter, activeTab]);
+  }, [filterKey, pagination.page, pagination.pageSize]);
 
   const filtered = requests;
 
@@ -244,7 +261,10 @@ export default function FOIAListPage() {
                 variant={activeTab === tab.value ? "default" : "outline"}
                 size="sm"
                 className="h-8 text-xs px-2.5"
-                onClick={() => setActiveTab(tab.value)}
+                onClick={() => {
+                  setActiveTab(tab.value);
+                  setStatusFilter("all");
+                }}
               >
                 {tab.label}
               </Button>
@@ -266,10 +286,10 @@ export default function FOIAListPage() {
         </div>
       </div>
 
-      {error && <ErrorState message={error} variant="inline" />}
-
-      {loading ? (
-        <LoadingState message="Loading FOIA requests..." />
+      {error ? (
+        <ErrorState message={error} variant="inline" />
+      ) : loading ? (
+        <ListSkeleton rows={5} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon="search"

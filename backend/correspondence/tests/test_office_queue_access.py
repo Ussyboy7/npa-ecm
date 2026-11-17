@@ -157,4 +157,4 @@ class OfficeQueueAccessTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["officeInbox"], 0)
-        self.assertEqual(response.data["officeSent"], 0)
+        self.assertNotIn("officeSent", response.data)

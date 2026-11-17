@@ -26,7 +26,7 @@ import {
   correspondenceQueueLeadingIconClass,
 } from "@/components/shared/registry-queue-styles";
 import { FlowTypeBadge } from "@/components/correspondence/FlowTypeBadge";
-import type { Correspondence, User } from "@/lib/npa-structure";
+import type { Correspondence } from "@/lib/npa-structure";
 import type { Division } from "@/lib/organization-types";
 
 function getStatusBadgeVariant(status: string): "destructive" | "secondary" | "default" | "outline" {
@@ -55,7 +55,6 @@ function calculateDaysPending(item: Correspondence): number {
 type SentCorrespondenceCardProps = {
   item: Correspondence;
   divisions: Division[];
-  organizationUsers: User[];
   isProcessing: boolean;
   recallLoading: boolean;
   onEdit: (item: Correspondence) => void;
@@ -68,7 +67,6 @@ type SentCorrespondenceCardProps = {
 function SentCorrespondenceCardContent({
   item,
   divisions,
-  organizationUsers,
   isProcessing,
   recallLoading,
   onEdit,
@@ -79,9 +77,6 @@ function SentCorrespondenceCardContent({
 }: SentCorrespondenceCardProps) {
   const division = item.divisionId
     ? divisions.find((div) => div.id === item.divisionId)
-    : undefined;
-  const currentApprover = item.currentApproverId
-    ? organizationUsers.find((user) => user.id === item.currentApproverId)
     : undefined;
   const daysPending = calculateDaysPending(item);
 
@@ -288,10 +283,10 @@ function SentCorrespondenceCardContent({
             <span className="truncate">Division: {division.name}</span>
           </span>
         )}
-        {currentApprover && (
+        {item.currentApproverName && (
           <span className="inline-flex max-w-full items-center gap-1">
             <Clock className="h-3 w-3 shrink-0 opacity-80" />
-            <span className="truncate">Current Approver: {currentApprover.name}</span>
+            <span className="truncate">Current Approver: {item.currentApproverName}</span>
           </span>
         )}
       </div>

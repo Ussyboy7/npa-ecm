@@ -6,5 +6,6 @@ export function isPublicAppPath(pathname: string | null | undefined): boolean {
   if (pathname === '/verify' || pathname.startsWith('/verify/')) return true;
   if (pathname === '/auth/callback' || pathname.startsWith('/auth/callback/')) return true;
   if (pathname.startsWith('/login')) return true;
+  if (pathname === '/set-password' || pathname.startsWith('/set-password/')) return true;
   return false;
 }

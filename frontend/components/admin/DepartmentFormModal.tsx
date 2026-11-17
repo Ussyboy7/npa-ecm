@@ -19,7 +19,7 @@ const EMPTY_VALUE = "__none";
 
 export const DepartmentFormModal = ({ open, onOpenChange, department, defaultDivisionId }: DepartmentFormModalProps) => {
   const { addDepartment, updateDepartment, divisions } = useOrganization();
-  const { users } = useOrgUsers();
+  const { users } = useOrgUsers({ enabled: open });
   const [formData, setFormData] = useState({
     name: '',
     code: '',

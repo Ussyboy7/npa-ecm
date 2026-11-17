@@ -13,6 +13,36 @@ import type { useApiRetry } from '@/hooks/use-api-retry';
 type FetchWithRetry = ReturnType<typeof useApiRetry>['fetchWithRetry'];
 type BackendDelegation = CorrespondenceDetailState['backendDelegation'];
 
+type DelegationUser = {
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  username?: string;
+};
+
+type DelegationItem = {
+  id: string;
+  status: string;
+  assistant?: { id: string } & DelegationUser;
+  assistant_id?: string;
+  principal?: { id: string } & DelegationUser;
+  principal_id?: string;
+  delegated_at?: string;
+  delegatedAt?: string;
+};
+
+type DelegationResponse = Array<DelegationItem> | { results: Array<DelegationItem> };
+
+const delegationUserName = (user?: DelegationUser): string | undefined => {
+  if (!user) return undefined;
+  const fullName = [user.first_name, user.middle_name, user.last_name]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .join(' ')
+    .trim();
+  if (fullName) return fullName;
+  return user.username?.trim() || undefined;
+};
+
 interface UseCorrespondenceDetailDataOptions {
   id: string;
   correspondence: Correspondence | null | undefined;
@@ -20,6 +50,8 @@ interface UseCorrespondenceDetailDataOptions {
   activeUserId: string | undefined;
   isCompleted: boolean;
   detailLoading: boolean;
+  /** Archive view: use the archive-scoped detail endpoint and never write read receipts. */
+  readOnly?: boolean;
   fetchWithRetry: FetchWithRetry;
   mergeMinutes: (minutes: Minute[]) => void;
   closeModal: () => void;
@@ -38,6 +70,7 @@ export function useCorrespondenceDetailData({
   activeUserId,
   isCompleted,
   detailLoading,
+  readOnly = false,
   fetchWithRetry,
   mergeMinutes,
   closeModal,
@@ -100,26 +133,18 @@ export function useCorrespondenceDetailData({
       try {
         type MinutesResponse = Array<ApiMinute> | { results: Array<ApiMinute> };
         const signal = abortController.signal;
+        const detailPath = readOnly
+          ? `/correspondence/items/${id}/archive-record/`
+          : `/correspondence/items/${id}/`;
         const [corrResponse, minutesResponse, delegationResponse] = await Promise.all([
-          fetchWithRetry(() => apiFetch<ApiCorrespondence>(`/correspondence/items/${id}/`, { signal })),
+          fetchWithRetry(() => apiFetch<ApiCorrespondence>(detailPath, { signal })),
           fetchWithRetry(() => apiFetch<MinutesResponse>(`/correspondence/minutes/?correspondence=${id}`, { signal })),
-          fetchWithRetry(() => {
-            type DelegationItem = {
-              id: string;
-              status: string;
-              assistant?: { id: string };
-              assistant_id?: string;
-              principal?: { id: string };
-              principal_id?: string;
-              delegated_at?: string;
-              delegatedAt?: string;
-            };
-            type DelegationResponse = Array<DelegationItem> | { results: Array<DelegationItem> };
-            return apiFetch<DelegationResponse>(
+          fetchWithRetry(() =>
+            apiFetch<DelegationResponse>(
               `/correspondence/correspondence-delegations/?correspondence=${id}&status=active`,
               { signal },
-            );
-          }).catch(() => []),
+            ),
+          ).catch(() => []),
         ]);
         if (!ignore && !abortController.signal.aborted) {
           setRemoteCorrespondence(mapApiCorrespondence(corrResponse));
@@ -135,16 +160,7 @@ export function useCorrespondenceDetailData({
           setMinutes(mappedMinutes);
           mergeMinutes(mappedMinutes);
 
-          const delegations: Array<{
-            id: string;
-            status: string;
-            assistant?: { id: string };
-            assistant_id?: string;
-            principal?: { id: string };
-            principal_id?: string;
-            delegated_at?: string;
-            delegatedAt?: string;
-          }> = Array.isArray(delegationResponse)
+          const delegations: DelegationItem[] = Array.isArray(delegationResponse)
             ? delegationResponse
             : delegationResponse?.results || [];
           const activeDel = delegations.find((d) => d.status === 'active');
@@ -152,7 +168,9 @@ export function useCorrespondenceDetailData({
             setBackendDelegation({
               id: activeDel.id,
               assistantId: activeDel.assistant?.id || activeDel.assistant_id || '',
+              assistantName: delegationUserName(activeDel.assistant),
               principalId: activeDel.principal?.id || activeDel.principal_id || '',
+              principalName: delegationUserName(activeDel.principal),
               status: activeDel.status,
               delegatedAt: activeDel.delegated_at || activeDel.delegatedAt || '',
             });
@@ -195,7 +213,7 @@ export function useCorrespondenceDetailData({
   const currentApproverId = correspondence?.currentApproverId;
 
   useEffect(() => {
-    if (!correspondence?.id || !activeUserId || detailLoading) return;
+    if (readOnly || !correspondence?.id || !activeUserId || detailLoading) return;
 
     const unopenedMinutes = minutes.filter(
       (m) =>
@@ -219,7 +237,7 @@ export function useCorrespondenceDetailData({
         ),
       ),
     );
-  }, [correspondence?.id, currentOfficeId, currentApproverId, activeUserId, detailLoading, minutes]);
+  }, [readOnly, correspondence?.id, currentOfficeId, currentApproverId, activeUserId, detailLoading, minutes]);
 
   const refreshMinutes = useCallback(async () => {
     if (!id) return;
@@ -244,7 +262,10 @@ export function useCorrespondenceDetailData({
     if (!id) return;
     try {
       setDetailLoading(true);
-      const corrResponse = await fetchWithRetry(() => apiFetch<ApiCorrespondence>(`/correspondence/items/${id}/`));
+      const detailPath = readOnly
+        ? `/correspondence/items/${id}/archive-record/`
+        : `/correspondence/items/${id}/`;
+      const corrResponse = await fetchWithRetry(() => apiFetch<ApiCorrespondence>(detailPath));
       const mappedCorrespondence = mapApiCorrespondence(corrResponse);
       setRemoteCorrespondence(mappedCorrespondence);
     } catch (error: unknown) {
@@ -253,7 +274,7 @@ export function useCorrespondenceDetailData({
     } finally {
       setDetailLoading(false);
     }
-  }, [id, fetchWithRetry, setRemoteCorrespondence, setDetailLoading]);
+  }, [id, readOnly, fetchWithRetry, setRemoteCorrespondence, setDetailLoading]);
 
   return { refreshMinutes, refreshDetail };
 }

@@ -85,7 +85,7 @@ class HealthEndpointTests(TestCase):
         self.client = APIClient()
 
     def test_health_live_returns_ok(self):
-        response = self.client.get("/health/live/")
+        response = self.client.get("/api/v1/health/live/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
@@ -102,7 +102,7 @@ class HealthMetricsTests(TestCase):
         self.assertEqual(response.json()["status"], "ok")
 
     def test_prometheus_metrics(self):
-        response = self.client.get("/api/metrics/")
+        response = self.client.get("/api/v1/metrics/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("ecm_database_up", response.content.decode())
 

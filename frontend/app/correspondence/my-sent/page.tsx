@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useOrgUsers } from '@/hooks/use-org-users';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
@@ -47,20 +46,18 @@ import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { ErrorState } from '@/components/shared/ErrorState';
 
 const MySentPageContent = () => {
   const router = useRouter();
   const {currentUser} = useCurrentUser();
   const { divisions } = useOrganization();
-  const { users: organizationUsers } = useOrgUsers();
   const { dataVersion } = useCorrespondence();
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
-  const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFrom, setDateFrom] = useState<string>('');
@@ -77,8 +74,15 @@ const MySentPageContent = () => {
   const [sharedDocuments, setSharedDocuments] = useState<DocumentRecord[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, pending: 0, inProgress: 0 });
   const [documentCount, setDocumentCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const documentPagination = usePagination({
+    initialPage: 1,
+    totalCount: documentCount,
+  });
+  const [sentLoading, setSentLoading] = useState(true);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const loading = sentLoading || documentsLoading;
   const [error, setError] = useState<string | null>(null);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Correspondence | null>(null);
@@ -92,15 +96,13 @@ const MySentPageContent = () => {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedStatus !== '') count++;
-    if (selectedPriority !== '') count++;
     if (dateFrom) count++;
     if (dateTo) count++;
     return count;
-  }, [selectedStatus, selectedPriority, dateFrom, dateTo]);
+  }, [selectedStatus, dateFrom, dateTo]);
 
   const clearFilters = () => {
     setSelectedStatus('');
-    setSelectedPriority('');
     setDateFrom('');
     setDateTo('');
     setQuery('');
@@ -114,25 +116,25 @@ const MySentPageContent = () => {
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo, pagination.pageSize]);
+  }, [debouncedQuery, selectedStatus, sortBy, sortOrder, dateFrom, dateTo, pagination.pageSize]);
 
   useEffect(() => {
-    // Fetch data immediately after login (don't wait for currentUser hydration)
+    documentPagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery]);
+
+  useEffect(() => {
     if (!currentUser?.id) return;
 
     const abortController = new AbortController();
 
     const fetchMySent = async () => {
-      setLoading(true);
+      setSentLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams();
         if (debouncedQuery) params.append('search', debouncedQuery);
         if (selectedStatus) params.append('status', selectedStatus);
-        if (selectedPriority !== '') {
-          params.append('priority', selectedPriority);
-        }
-        // Date range filters - backend should support these params
         if (dateFrom) {
           params.append('date_from', dateFrom);
         }
@@ -144,14 +146,10 @@ const MySentPageContent = () => {
         params.append('page', String(pagination.page));
         params.append('page_size', String(pagination.pageSize));
 
-        const [corrResponse, docsResponse] = await Promise.all([
-          apiFetch<Record<string, unknown>>(`/correspondence/items/my-sent/?${params.toString()}`, { signal: abortController.signal }),
-          getDocumentsSharedByUser(currentUser.id, {
-            search: debouncedQuery || undefined,
-            pageSize: 50, // Get recent shared documents
-            signal: abortController.signal,
-          }),
-        ]);
+        const corrResponse = await apiFetch<Record<string, unknown>>(
+          `/correspondence/items/my-sent/?${params.toString()}`,
+          { signal: abortController.signal },
+        );
 
         const corrResults = Array.isArray(corrResponse.results) ? corrResponse.results : [];
         setSentItems(corrResults.map(mapApiCorrespondence));
@@ -164,10 +162,6 @@ const MySentPageContent = () => {
           inProgress: (summaryObj && typeof summaryObj.in_progress === 'number') ? summaryObj.in_progress : 0,
         });
         setCount((responseObj && typeof responseObj.count === 'number') ? responseObj.count : corrResults.length);
-
-        // Set shared documents
-        setSharedDocuments(docsResponse.results || []);
-        setDocumentCount(docsResponse.count || 0);
       } catch (err: unknown) {
         if (isAbortError(err)) {
           return;
@@ -180,20 +174,52 @@ const MySentPageContent = () => {
           setError(errorMessage);
         }
         setSentItems([]);
-        setSharedDocuments([]);
         setSummary({ total: 0, urgent: 0, pending: 0, inProgress: 0 });
         setCount(0);
-        setDocumentCount(0);
       } finally {
         if (!abortController.signal.aborted) {
-          setLoading(false);
+          setSentLoading(false);
         }
       }
     };
 
     void fetchMySent();
     return () => { abortController.abort(); };
-  }, [currentUser?.id, debouncedQuery, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey, dataVersion]);
+  }, [currentUser?.id, debouncedQuery, selectedStatus, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey, dataVersion]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const abortController = new AbortController();
+
+    const fetchSharedDocuments = async () => {
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      try {
+        const response = await getDocumentsSharedByUser(currentUser.id, {
+          search: debouncedQuery || undefined,
+          page: documentPagination.page,
+          pageSize: documentPagination.pageSize,
+          signal: abortController.signal,
+        });
+        if (abortController.signal.aborted) return;
+        setSharedDocuments(response.results || []);
+        setDocumentCount(response.count || 0);
+      } catch (err: unknown) {
+        if (isAbortError(err) || abortController.signal.aborted) return;
+        setDocumentsError('Failed to load shared documents.');
+        setSharedDocuments([]);
+        setDocumentCount(0);
+      } finally {
+        if (!abortController.signal.aborted) {
+          setDocumentsLoading(false);
+        }
+      }
+    };
+
+    void fetchSharedDocuments();
+    return () => { abortController.abort(); };
+  }, [currentUser?.id, debouncedQuery, documentPagination.page, documentPagination.pageSize, refreshKey, dataVersion]);
 
   const handleWithdrawClick = useCallback((item: Correspondence) => {
     if (item.status !== 'pending' && item.status !== 'in-progress') {
@@ -364,47 +390,75 @@ const MySentPageContent = () => {
       </div>
 
         {error && <ErrorState message={error} variant="inline" />}
+        {documentsError && <ErrorState message={documentsError} variant="inline" />}
 
         {/* Sent Items */}
         {loading ? (
-          <LoadingState message="Loading sent items…" />
-            ) : sentItems.length === 0 && sharedDocuments.length === 0 ? (
-          <EmptyState
-            icon="inbox"
-            title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence or documents'}
-            message={debouncedQuery || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'You have no correspondence or shared documents at the moment.'}
-            actionLabel={debouncedQuery || activeFilterCount > 0 ? 'Clear Filters' : undefined}
-            onAction={debouncedQuery || activeFilterCount > 0 ? clearFilters : undefined}
-          />
-            ) : (
-          <div className={correspondenceQueueListStackClass}>
-            {sentItems.map((item) => (
-              <SentCorrespondenceCard
-                key={item.id}
-                item={item}
-                divisions={divisions}
-                organizationUsers={organizationUsers}
-                isProcessing={isProcessing}
-                recallLoading={recallLoading}
-                onEdit={handleEditCorrespondence}
-                onResend={handleResendDraft}
-                onWithdraw={handleWithdrawClick}
-                onRecall={handleRecallClick}
-                onDelete={handleDeleteClick}
-              />
-            ))}
-            {sharedDocuments.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
-          </div>
-        )}
+          <ListSkeleton rows={5} />
+        ) : sentItems.length === 0 && sharedDocuments.length === 0 ? (
+          error || documentsError ? null : (
+            <EmptyState
+              icon="inbox"
+              title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence or documents'}
+              message={debouncedQuery || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'You have no correspondence or shared documents at the moment.'}
+              actionLabel={debouncedQuery || activeFilterCount > 0 ? 'Clear Filters' : undefined}
+              onAction={debouncedQuery || activeFilterCount > 0 ? clearFilters : undefined}
+            />
+          )
+        ) : (
+          <div className="space-y-6">
+            {sentItems.length > 0 && (
+              <div className="space-y-3">
+                <div className={correspondenceQueueListStackClass}>
+                  {sentItems.map((item) => (
+                    <SentCorrespondenceCard
+                      key={item.id}
+                      item={item}
+                      divisions={divisions}
+                      isProcessing={isProcessing}
+                      recallLoading={recallLoading}
+                      onEdit={handleEditCorrespondence}
+                      onResend={handleResendDraft}
+                      onWithdraw={handleWithdrawClick}
+                      onRecall={handleRecallClick}
+                      onDelete={handleDeleteClick}
+                    />
+                  ))}
+                </div>
+                {count > 0 && (
+                  <PaginationControls
+                    pagination={pagination}
+                    showPageSizeSelector={true}
+                    showGoToPage={true}
+                    className="border-t border-border/60 pt-4"
+                  />
+                )}
+              </div>
+            )}
 
-        {/* Pagination — correspondences only; hide when shared docs are mixed to avoid count mismatch */}
-        {count > 0 && documentCount === 0 && (
-          <PaginationControls
-            pagination={pagination}
-            showPageSizeSelector={true}
-            showGoToPage={true}
-            className="border-t border-border/60 pt-4"
-          />
+            {sharedDocuments.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-4">
+                  <h2 className="text-sm font-semibold text-foreground">Shared documents</h2>
+                  <span className="text-xs text-muted-foreground">
+                    {documentCount} document{documentCount === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className={correspondenceQueueListStackClass}>
+                  {sharedDocuments.map((doc) => (
+                    <DocumentCard key={doc.id} doc={doc} />
+                  ))}
+                </div>
+                {documentCount > 0 && (
+                  <PaginationControls
+                    pagination={documentPagination}
+                    compact
+                    className="border-t border-border/60 pt-4"
+                  />
+                )}
+              </div>
+            )}
+          </div>
         )}
         </QueuePageShell>
       )}

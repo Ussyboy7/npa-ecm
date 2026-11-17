@@ -30,11 +30,17 @@ const api = vi.hoisted(() => ({
 
 const session = vi.hoisted(() => ({
   user: { id: "principal-1", isSuperuser: false, rolePermissions: {} as Record<string, boolean> },
+  officeMemberships: [] as Array<{ id: string; officeId: string; officeName: string; userId: string; assignmentRole: string; isActive: boolean }>,
   users: [] as unknown[],
 }));
 
 vi.mock("@/contexts/OrganizationContext", () => ({
-  useOrganization: () => ({ offices: [], officeMemberships: [], myOfficeMemberships: [] }),
+  useOrganization: () => ({
+    offices: [],
+    officeMemberships: session.officeMemberships,
+    myOfficeMemberships: session.officeMemberships,
+    myOfficeMembershipsLoaded: true,
+  }),
 }));
 vi.mock("@/hooks/use-org-users", () => ({ useOrgUsers: () => ({ users: session.users, loading: false }) }));
 vi.mock("@/hooks/use-current-user", () => ({ useCurrentUser: () => ({ currentUser: session.user }) }));
@@ -43,10 +49,14 @@ vi.mock("@/lib/api/acting-appointments", () => ({
   dismissActingRequest: vi.fn(),
   endActingAppointment: vi.fn(),
   getEligibleActingCandidates: vi.fn(async () => []),
+  getMyActingAppointments: vi.fn(async () => []),
+  getMyPrincipalActingAppointments: vi.fn(async () => []),
   listActingAppointments: api.listActingAppointments,
   listActingRequests: api.listActingRequests,
 }));
-vi.mock("@/lib/office-memberships-client", () => ({ listOfficeMembershipsForOffice: vi.fn(async () => []) }));
+vi.mock("@/lib/office-memberships-client", () => ({
+  listOfficeMembershipsForOffice: vi.fn(async () => []),
+}));
 vi.mock("@/components/admin/OrganizationTabList", () => ({ OrganizationTabList: () => null }));
 vi.mock("@/components/shared/AdminPageShell", () => ({
   AdminPageShell: ({ actions, children }: React.PropsWithChildren<{ actions?: React.ReactNode }>) => (
@@ -69,6 +79,7 @@ import ActingAppointmentsPage from "../page";
 
 beforeEach(() => {
   session.user = { id: "principal-1", isSuperuser: false, rolePermissions: {} };
+  session.officeMemberships = [];
   session.users = [];
   api.listActingAppointments.mockClear();
   api.listActingRequests.mockClear();
@@ -77,12 +88,24 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("Organization Acting access", () => {
-  it("keeps a principal without admin permission on self-service without loading organization-wide data", () => {
+  it("gives an office member only self-service data and actions", async () => {
+    session.officeMemberships = [{ id: "member-1", officeId: "office-1", officeName: "ICT", userId: "principal-1", assignmentRole: "principal", isActive: true }];
+
+    render(<ActingAppointmentsPage />);
+
+    expect(await screen.findByRole("tab", { name: "My appointments" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Appoint acting" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Request acting" })).toBeTruthy();
+    expect(api.listActingAppointments).not.toHaveBeenCalled();
+    expect(api.listActingRequests).toHaveBeenCalledWith({ requestedBy: "principal-1" });
+    expect(api.listActingRequests).toHaveBeenCalledWith({ principal: "principal-1" });
+  });
+
+  it("denies users who are neither admins nor active office members", () => {
     render(<ActingAppointmentsPage />);
 
     expect(screen.getByText("Organization Acting access required")).toBeTruthy();
-    expect(screen.getByText(/Tools → Acting/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Appoint acting" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "My appointments" })).toBeNull();
     expect(api.listActingAppointments).not.toHaveBeenCalled();
     expect(api.listActingRequests).not.toHaveBeenCalled();
   });

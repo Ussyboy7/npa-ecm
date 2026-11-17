@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import { ListRowCard } from '@/components/shared/ListRowCard';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { PaginationControls } from '@/components/shared/PaginationControls';
@@ -379,7 +379,7 @@ const OfficeSentPage = () => {
 
             <div aria-live="polite">
             {loading ? (
-              <LoadingState message="Loading Office Sent…" />
+              <ListSkeleton rows={5} />
             ) : error ? (
               <ErrorState message={error} variant="inline" />
             ) : items.length === 0 ? (

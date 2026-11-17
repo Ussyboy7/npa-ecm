@@ -32,7 +32,6 @@ import {
   type DocumentVersion,
 } from "@/lib/api/dms";
 import { type User } from "@/lib/npa-structure";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "@/components/ui/sonner";
@@ -49,6 +48,15 @@ interface DocumentCommentsDialogProps {
 }
 
 type Scope = "all" | "version";
+
+function initialsForName(name?: string): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  return name.trim().slice(0, 2).toUpperCase() || "?";
+}
 
 function relativeTime(iso: string): string {
   try {
@@ -77,23 +85,6 @@ export const DocumentCommentsDialog = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
-  const { users } = useOrgUsers();
-
-  const userLookup = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
-
-  const initials = useCallback(
-    (userId: string) => {
-      const name = userLookup.get(userId)?.name;
-      if (!name) return "?";
-      return name
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase() ?? "")
-        .join("");
-    },
-    [userLookup],
-  );
 
   // Always load the whole document so the scope filter can't hide a thread.
   useEffect(() => {
@@ -232,7 +223,7 @@ export const DocumentCommentsDialog = ({
   };
 
   const renderComment = (comment: DocumentComment, isReply: boolean) => {
-    const author = userLookup.get(comment.authorId);
+    const authorName = comment.authorName;
     return (
       <div
         className={cn(
@@ -243,11 +234,11 @@ export const DocumentCommentsDialog = ({
       >
         <div className="flex items-start gap-2 min-w-0">
           <Avatar className={cn("shrink-0", isReply ? "h-5 w-5" : "h-6 w-6")}>
-            <AvatarFallback className="text-[9px]">{initials(comment.authorId)}</AvatarFallback>
+            <AvatarFallback className="text-[9px]">{initialsForName(authorName)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 min-w-0">
-              <p className="text-xs font-medium truncate">{author?.name ?? "Unknown"}</p>
+              <p className="text-xs font-medium truncate">{authorName ?? "Unknown"}</p>
               {comment.resolved ? (
                 <Badge variant="secondary" className="h-4 px-1 text-[10px] gap-0.5 shrink-0">
                   <CheckCircle2 className="h-2.5 w-2.5" /> Resolved
@@ -275,7 +266,7 @@ export const DocumentCommentsDialog = ({
               setReplyingTo(replyingTo === comment.id ? null : comment.id);
               setReplyText("");
             }}
-            aria-label={`Reply to ${author?.name ?? "comment"}`}
+            aria-label={`Reply to ${authorName ?? "comment"}`}
           >
             <Reply className="h-3 w-3" />
             Reply
@@ -308,7 +299,7 @@ export const DocumentCommentsDialog = ({
               value={replyText}
               onChange={(event) => setReplyText(event.target.value)}
               onKeyDown={(event) => handleComposerKey(event, comment.id)}
-              placeholder={`Reply to ${author?.name?.split(" ")[0] ?? "this comment"}...`}
+              placeholder={`Reply to ${authorName?.split(" ")[0] ?? "this comment"}...`}
               rows={2}
               className="min-h-[52px] resize-none text-[13px]"
               autoFocus

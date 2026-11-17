@@ -1,0 +1,105 @@
+employee_number,username,full_name,grade_level,designation,mapped_role,existing_role,role_action,mapped_office_code,mapped_office_name,existing_office,office_action,mapped_directorate,mapped_division,mapped_department,org_action,status,note
+1853,ob.okokon,BASSEY OFONMBUK OKOKON,MSS3,PRINCIPAL MANAGER M&RS (HoD),Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2912,f.udoutun,AKANINYENE FRANCESICA UDOUTUN,MSS5,ASST CHIEF GENERAL DUTY OFFICER,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3996,u.aliyu,OTERE USMAN ALIU,SSS1,PRIN. GEN DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5792,m3.ali,MUHAMMED ALI,JSS2,AGDO I,Staff II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1591,m.hassan,UMARU HASSAN MUSA,MSS3,PRINCIPAL MANAGER WATER ANALYST,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2777,d.eserewan,DANIEL EFETURI ESEREWAN,MSS4,ASST CHIEF GENERAL DUTY OFFICER HOD,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5690,a3.chukwujekwu,VITALIS CHUKWUJEKWU AGHARA,SSS4,M&RS OFFICER II,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5859,a3.priscilia,PRISCILLA OJOTULE EMAIKWU,JSS2,AGDO I,Staff II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1012,n.osio,NGOZI GLORIA OSIO,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1063,v.omenedo,NKEM VERA FRANK-OMENEDO,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1064,f.subair,KUDIRAT SUBAIR ADEBOWALE,SSS1,SENIOR PERSONAL SECRETARY I,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1109,f.abeke,ELUEMUNOR FLORENCE ABEKE,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1110,f.atere,ROSEMARY OLUWAFUNMILAYO AWE,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1187,a.falayo,OLABOSAYO ANTHONY FALAYO,SSS3,SENIOR GENERAL DUTY OFFICER,Officer I,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1208,r.afan,RHODA AFAN,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1257,h.dandare,GAJA HALILU DANDARE,SSS3,SENIOR GENERAL DUTY OFFICER,Officer I,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1287,a.ehimuan,ANTHONY EHIMUAN,SSS2,PRIN. GENERAL DUTY OFFICER II,Senior Officer,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1306,aa.mohammed,ADAMU ALAMIN MUHAMMAD,MSS3,PRINCIPAL MANAGER M&RS,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1340,h.adamu,HUSSAINI ADAMU,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1361,e.oloko,ADE ELIZABETH OLOKO,SSS2,PERSONAL SECRETARY I,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1533,sr.musa,MUSA SYLVANUS RIN,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1595,o.oloyede,OLAJUMOKE BOSEDE OLOYEDE,MSS3,PRINCIPAL MANAGER WATER ANALYST,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1634,op.eke,OKEREKE PHILIP EKE,MSS5,PRIN GENERAL DUTY OFFICER I,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1640,f.shadrack,FOSTER SHADRACK,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1670,a.emela,EMELA HAWA,MSS4,PRIN PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1699,s.ishaku,ERIC ISHAKU SOLOMON,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1727,o.ogunsakin,ROMOKE OLUWATOSIN OGUNSAKIN,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1739,nb.victor,BITRUS VICTOR,MSS5,ASST CHIEF GENERAL DUTY OFFICER,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+18,g.garga,GROVICE MAXWELL GARGA,MSS4,PRINCIPAL PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1802,j.lawal,ADESINA JELILI LAWAL,MSS3,PRINCIPAL MANAGER WATER ANALYST,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1843,s.raji,OLAYINKA SINAT RAJI,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2348,p.emebo,PATRICIA EMEBO CHINWE,MSS4,PRIN PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2502,jn.buba,NANKAP JULIANA BUBA,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2532,s.lazarus,LAZARUS OSHELEV SHIMAVE,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2596,g.ikechukwu,ONORIODE GRACE IKECHUKWU,MSS5,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2836,s.ahmad,GEZAWA AHMED SAGIR,MSS5,ASST CHIEF GENERAL DUTY OFFICER,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2883,o.onwordi,RICHARD OJONUGWA ONWORDI,MSS5,ASST CHIEF GENERAL DUTY OFFICER,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2974,j.eke,UCHA JANE EKE,MSS4,PRIN PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2989,r.ojarikre,MAMUYOVWI RITA OJARIKRE,MSS4,PRINCIPAL PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3020,s.lanka,EMMANUEL SYLVANUS LANKA,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3058,s.ebuehi,SAMUEL EROMOSELE EBUEHI,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3092,f.akinnurun,FOLAKE FATIMO AKINNURUN,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3105,m.clement,MOSES THERESA CLEMENT,MSS4,PRIN PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3137,b.dasong,MAMMAN BAGUDU DASONG,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3140,e.fidelis,FIDELIS ECKSON,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3193,m.ekpu,STEED MACLEAN EKPU,JSS1,AGDO I,Staff I,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+328,c.kantiok,CLEMENT KANTIOK,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+353,l.daku,LARABA JOSEPHINE DAKU,MSS4,PRIN PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3551,j.adu,JOSHUA OLAWOYIN ADU,MSS3,PRINCIPAL MANAGER M&RS (HoD),Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3727,f.adojo,ODILE FELICIA ADOJO,SSS3,PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+381,y.nyat,THEEKYU YAKUBU NYAT,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3839,l.lewis,LAWRENCE OLADIPO LEWIS,MSS4,CHIEF GENERAL DUTY OFFICER,Senior Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3897,g.kpamiose,NGOZI GODSGLORY KPAMIOSE,SSS1,PRIN. GENERAL DUTY OFFICER II,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3958,bg.okoh,GALE BEULAH OKOH,MSS4,PRINCIPAL PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3998,oa.shola-ojaoba,ODUJOKE ABIMBOLA SHOLA-OJAOBA,MSS5,ASST CHIEF GENERAL DUTY OFFICER HOD,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+4908,k.ezennaya,KINGSLEY CHIBUIKE EZENNAYA,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+4916,om.sanusi,OMOLADE SANUSI,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+492,ok.oladele,OLUFUMILAYO KEHINDE OLADELE,JSS1,AGDO I,Staff I,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+502,f.arisa,FRIDAY EZE ARISA,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+518,ba.teleola,TELEOLA AZIZAT BABAWALE,MSS5,ASST CHIEF GENERAL DUTY OFFICER,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+531,il.nwosu,LETICIA IJEOMA NWOSU,SSS1,PRIN. GEN DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+538,t.ehimare,OMOYE THERESA PAUL,SSS1,PRINCIPAL GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5552,a3.adamu,ABDULLAHI ADAMU,JSS2,AGDO I,Staff II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+556,g.atima,KEMOPIYA GODWILL ATIMA,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5628,o3.agnes,OLABISI AGNES KADIRI,JSS2,AGDO I,Staff II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5639,m3.muhammed,MUBARAK MUHAMMED,JSS2,ASST GENERAL DUTY OFFICER II (MRS),Staff II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5822,b3.ibrahim,BAHIJJA IBRAHIM AUWAL,SSS4,M&RS OFFICER II,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5917,s3.hayatu,SANI HAYATU,JSS2,ASST GENERAL DUTY OFFICER II (MRS),Staff II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5929,i3.abdulhamid,ILYASU ABDULHAMID,JSS3,SKD TMAN II,Staff III,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5945,o3.anike,MODUPE ANIKE OJEDIRAN,MSS5,MANAGER M&RS,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+597,s.sulaiman,SILIFAT AFOLAKE SULAIMAN,JSS1,AGDO I,Staff I,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+613,en.bassey,EFFIONG NKOYO BASSEY,SSS1,PRIN. GEN DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+615,l.badmus,ABU LANRE BADMUS,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+640,b.rayyanu,BAKO RAYYANU SANI,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+742,e.tobby,AKPAN EMMANUEL TOBBY,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+745,k.kande,JACOB KANDE KATO,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+749,b.okoko,OSENKE BEAUTY OKOKO,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+879,d.awobite,LOLOYE DIEPIRIYE AWOBITE,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+880,f.kaine,FRANCIS IFEANYI KAINE,SSS1,ASST. MANAGER M&RS,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+894,o.mere,PATRICIA OLUWATOYIN MERE,SSS1,PRIN. GEN DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+959,g.ali,GARBA ALI HASSAN,SSS3,SENIOR GENERAL DUTY OFFICER,Officer I,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+981,n.ekwuribe,GOODNESS NGOZI EKWURIBE,SSS2,PRIN GENERAL DUTY OFFICER I,Senior Officer,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1023,g.raji,OLAWALE GANIYU RAJI,SSS2,PRIN. GENERAL DUTY OFFICER II,Senior Officer,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2598,p.odharo,PAULINE ODINAKACHI ODHARO,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2885,f.osoba,FLORENCE FUNMILAYO OGUNLEYE,SSS1,SENIOR PERSONAL SECRETARY II,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1197,u.bassey,EFFIONG UCHECHI BASSEY,SSS1,PRIN. GEN DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+1895,k.okezie,EDITH KENECHI OKEZIE,MSS3,PRINCIPAL MANAGER M&RS,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+227,i.iwegbue,ONYEKA IDORENYIN IWEGBUE,MSS3,PRINCIPAL MANAGER WATER ANALYST,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+2484,e.antai,OKON ETIM ANTAI,MSS5,SNR. PERSONAL SECRETARY I,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3270,m.omagbemi,EYEWUMI MICHEAL OMAGBEMI,MSS5,ASST CHIEF GENERAL DUTY OFFICER,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3392,u.odoemena,UCHENNA EZEKIEL ODOEMENA,MSS3,PRINCIPAL MANAGER M&RS,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3454,g.osiyemi,KASSIM GBENGA OSIYEMI,MSS3,PRINCIPAL MANAGER M&RS (HoD),Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3518,s.ogbebor,CHARLES STELLA OGBEBOR,MSS3,PRINCIPAL MANAGER WATER ANALYST,Principal Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+3781,c.kienka,CLIFFORD KIENKA,MSS5,ASST CHIEF GENERAL DUTY OFFICER,Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+4049,u.jibrin,JIBRIN USMAN,SSS4,PIPE OPERATOR I,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+4575,j1.ayuba,JONATHAN FIL,SSS2,PRIN. GENERAL DUTY OFFICER II,Senior Officer,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+4769,,SHEHU ABDULHAMID,JSS1,Asst. Fire & Rescue Officer,,,,,,,,,,,,user_missing,No imported user has this employee number.
+5399,i.aliyu,ALIYU IBRAHIM,SSS4,GENERAL DUTY OFFICER,Officer II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+5882,h23.abubakar,HASSAN ABUBAKAR,JSS2,AGDO I,Staff II,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+590,os.osaighale,OMONODION STANLEY OSAIGHALE,SSS2,PERSONAL SECRETARY I,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+592,b.nwanodi,AWELE BRIDGET NWANODI,SSS1,PRIN GENERAL DUTY OFFICER I,Assistant Manager,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+61,c.charles,MERCY CHARLES CHOKO,MSS4,PRIN PERSONAL SECRETARY,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+769,u.onofiok,BASSSEY USENEMEM ONOFIOK,SSS2,PERSONAL SECRETARY I,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.
+775,t.mark,TAMUNOSIMARIOGBO MARK,SSS4,CONFIDENTIAL SECRETARY I,Secretary,,assign,,,,exception,,,,exception,office_exception,No high-confidence office rule for this designation.

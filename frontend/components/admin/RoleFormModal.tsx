@@ -38,7 +38,7 @@ export const RoleFormModal = ({
   onSuccess,
 }: RoleFormModalProps) => {
   const { roles, refreshOrganizationData, addRole, updateRole } = useOrganization();
-  const { users } = useOrgUsers();
+  const { users } = useOrgUsers({ enabled: open });
   const { permissions: rolePermissionsCatalog, presets } = usePermissionCatalog();
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");

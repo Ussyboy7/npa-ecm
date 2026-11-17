@@ -3,7 +3,6 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { logError } from '@/lib/client-logger';
 import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense } from 'react';
-import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -11,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from "@/components/ui/sonner";
 import { apiFetch } from '@/lib/api-client';
+import { toDateInputValue } from '@/lib/datetime';
 import { AlertCircle, ArrowLeft, FileText, Users, FolderOpen, Loader2, RefreshCw, Edit3 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
@@ -64,7 +64,6 @@ const CorrespondenceRegisterForm = () => {
     directorates,
     divisions,
     departments,
-    users: organizationUsers,
     offices,
     officeMemberships,
   } = useOrganization();
@@ -127,18 +126,6 @@ const CorrespondenceRegisterForm = () => {
       // Map API response using the same mapping function used elsewhere
       const corr = mapApiCorrespondence(response);
       
-      // Format dates for form inputs (YYYY-MM-DD format)
-      const formatDateForInput = (dateStr: string | undefined): string => {
-        if (!dateStr) return '';
-        try {
-          const date = new Date(dateStr);
-          if (isNaN(date.getTime())) return '';
-          return date.toISOString().split('T')[0];
-        } catch {
-          return '';
-        }
-      };
-      
       dispatch({
         type: 'UPDATE_FORM_DATA',
         payload: {
@@ -147,9 +134,9 @@ const CorrespondenceRegisterForm = () => {
           senderOrganization: corr.senderOrganization || '',
           senderEmail: corr.senderEmail || '',
           senderPhone: corr.senderPhone || '',
-          receivedDate: formatDateForInput(corr.receivedDate),
-          letterDate: formatDateForInput(corr.letterDate),
-          dispatchDate: formatDateForInput(corr.dispatchDate),
+          receivedDate: toDateInputValue(corr.receivedDate),
+          letterDate: toDateInputValue(corr.letterDate),
+          dispatchDate: toDateInputValue(corr.dispatchDate),
           priority: corr.priority || 'medium',
           referenceNumber: corr.referenceNumber || '',
           divisionId: corr.divisionId || '',
@@ -321,14 +308,6 @@ const CorrespondenceRegisterForm = () => {
   );
 
   // Memoized computations
-  const _executives = useMemo(() => {
-    if (!Array.isArray(organizationUsers)) return [];
-    const eligibleGrades = new Set(REGISTER_CONSTANTS.ELIGIBLE_GRADES);
-    return organizationUsers.filter(
-      (user) => user && user.gradeLevel && eligibleGrades.has(user.gradeLevel as 'MSS4' | 'MSS3' | 'MSS2' | 'MSS1' | 'EDCS' | 'MDCS')
-    );
-  }, [organizationUsers]);
-
   const directorateMap = useMemo(
     () => new Map(directorates.map((item) => [item.id as string, item.name])),
     [directorates]
@@ -898,7 +877,7 @@ const CorrespondenceRegisterForm = () => {
               onClearDraft={handleClearDraft}
               onNavigateToInbox={() => router.push('/correspondence/inbox')}
               onNavigateToRegistered={() => router.push('/correspondence/registered')}
-              onNavigateToDMS={() => router.push('/documents')}
+              onNavigateToDMS={() => router.push('/dms')}
             />
           </div>
           </div>
@@ -926,7 +905,7 @@ const CorrespondenceRegisterForm = () => {
 };
 
 const CorrespondenceRegister = () => (
-  <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+  <Suspense fallback={null}>
     <CorrespondenceProvider>
       <CorrespondenceRegisterForm />
     </CorrespondenceProvider>

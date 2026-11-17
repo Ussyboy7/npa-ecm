@@ -103,7 +103,7 @@ export const DelegateModal = ({
   onDelegate,
 }: DelegateModalProps) => {
   const { assistantAssignments, addAssignment, divisions, departments, refreshOrganizationData, isSyncing } = useOrganization();
-  const { users } = useOrgUsers();
+  const { users } = useOrgUsers({ enabled: open });
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');

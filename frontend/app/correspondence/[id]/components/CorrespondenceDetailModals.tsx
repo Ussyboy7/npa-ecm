@@ -47,7 +47,6 @@ interface CorrespondenceDetailModalsProps {
   refreshData: () => void;
   refreshMinutes: () => Promise<void>;
   syncFromApi: () => Promise<unknown>;
-  lookupUser: (userId?: string) => User | undefined;
   defaultPreviewAttachmentFileName: string | undefined;
   defaultPreviewAttachmentSource: 'attachment' | 'completion-package';
   previewDocumentVersionId?: string;
@@ -76,7 +75,6 @@ export function CorrespondenceDetailModals({
   refreshData,
   refreshMinutes,
   syncFromApi,
-  lookupUser,
   defaultPreviewAttachmentFileName,
   defaultPreviewAttachmentSource,
   previewDocumentVersionId,
@@ -109,7 +107,7 @@ export function CorrespondenceDetailModals({
             minute={selectedMinute}
             open={isOpen('minute-detail')}
             onOpenChange={(open) => (open ? openModal('minute-detail') : closeModal())}
-            authorName={lookupUser(selectedMinute.userId)?.name ?? selectedMinute.userName}
+            authorName={selectedMinute.userName}
             showDelegationInfo={String(selectedMinute.userId) === String(activeUser.id)}
           />
           <EditMinuteModal

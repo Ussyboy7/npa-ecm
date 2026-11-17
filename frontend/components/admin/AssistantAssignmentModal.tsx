@@ -49,7 +49,7 @@ const PERMISSION_PRESETS = [
 
 export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assignment }: AssistantAssignmentModalProps) => {
   const { addAssignment, updateAssignment, assistantAssignments } = useOrganization();
-  const { users } = useOrgUsers();
+  const { users } = useOrgUsers({ enabled: open });
   const [formData, setFormData] = useState({
     assistantId: '',
     type: 'TA' as 'TA' | 'PA',

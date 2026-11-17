@@ -3,6 +3,7 @@
 import uuid
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from django.urls import reverse
@@ -10,7 +11,12 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from audit.models import ActivityLog
-from correspondence.models import Correspondence
+from correspondence.models import (
+    Correspondence,
+    CorrespondenceAccessLog,
+    CorrespondenceDelegation,
+    Minute,
+)
 from dms.models import Document, DocumentPermission
 from organization.models import Department, Directorate, Division, Office, Role
 
@@ -114,6 +120,20 @@ class ArchiveLevelTests(TestCase):
             directorate=self.directorate,
             division=self.division,
             department=self.department,
+        )
+        self.outsider = User.objects.create_user(
+            username=f"archive-outsider-{uuid.uuid4().hex[:8]}",
+            password="x",
+            grade_level="AGMCS",
+            system_role=self.department_role,
+            directorate=self.other_directorate,
+            division=self.other_division,
+            department=self.other_department,
+        )
+        self.superuser = User.objects.create_superuser(
+            username=f"archive-super-{uuid.uuid4().hex[:8]}",
+            password="x",
+            email="archive-super@example.com",
         )
 
     def _make_correspondence(self, *, created_by, department=None, division=None, status=None):
@@ -783,3 +803,194 @@ class ArchiveLevelTests(TestCase):
         self.assertEqual(inside.archive_level, Correspondence.ArchiveLevel.DIVISION)
         self.assertEqual(outside.status, Correspondence.Status.COMPLETED)
         self.assertEqual(outside.archive_level, "")
+
+    def test_archive_record_detail_is_available_within_filing_scope(self):
+        correspondence = self._make_correspondence(
+            created_by=self.department_user,
+            department=self.department,
+            division=self.division,
+            status=Correspondence.Status.ARCHIVED,
+        )
+        correspondence.archive_level = Correspondence.ArchiveLevel.DEPARTMENT
+        correspondence.save(update_fields=["archive_level"])
+
+        self.client.force_authenticate(user=self.department_user)
+        response = self.client.get(
+            reverse("api_v1:correspondence-archive-record", args=[correspondence.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        self.assertEqual(response.data["id"], str(correspondence.id))
+        self.assertEqual(response.data["status"], Correspondence.Status.ARCHIVED)
+
+    def test_archive_filing_scope_viewer_loads_record_minutes_delegations_and_audit_history(self):
+        correspondence = self._make_correspondence(
+            created_by=self.superuser,
+            department=self.department,
+            division=self.division,
+            status=Correspondence.Status.ARCHIVED,
+        )
+        correspondence.archive_level = Correspondence.ArchiveLevel.DEPARTMENT
+        correspondence.save(update_fields=["archive_level"])
+        minute = Minute.objects.create(
+            correspondence=correspondence,
+            user=self.superuser,
+            minute_text="Decision recorded before filing",
+            from_office=self.office,
+            to_office=self.office,
+        )
+        delegation = CorrespondenceDelegation.objects.create(
+            correspondence=correspondence,
+            principal=self.directorate_user,
+            assistant=self.clerk,
+            notes="Handled while the principal was away.",
+        )
+        access_log = CorrespondenceAccessLog.objects.create(
+            correspondence=correspondence,
+            user=self.department_user,
+            action=CorrespondenceAccessLog.AccessAction.VIEW,
+        )
+
+        self.assertFalse(self.department_user.is_superuser)
+        self.client.force_authenticate(user=self.department_user)
+
+        detail_response = self.client.get(
+            reverse("api_v1:correspondence-archive-record", args=[correspondence.id])
+        )
+        minutes_response = self.client.get(
+            reverse("api_v1:minute-list"), {"correspondence": str(correspondence.id)}
+        )
+        delegations_response = self.client.get(
+            reverse("api_v1:correspondence-delegation-list"),
+            {"correspondence": str(correspondence.id), "status": "active"},
+        )
+        access_logs_response = self.client.get(
+            reverse("api_v1:correspondence-access-log-list"),
+            {"correspondence": str(correspondence.id)},
+        )
+
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK, detail_response.content)
+        self.assertEqual(detail_response.data["status"], Correspondence.Status.ARCHIVED)
+        self.assertEqual(minutes_response.status_code, status.HTTP_200_OK, minutes_response.content)
+        self.assertEqual(
+            delegations_response.status_code,
+            status.HTTP_200_OK,
+            delegations_response.content,
+        )
+        self.assertEqual(
+            access_logs_response.status_code,
+            status.HTTP_200_OK,
+            access_logs_response.content,
+        )
+
+        def result_ids(response):
+            rows = response.data if isinstance(response.data, list) else response.data.get("results", [])
+            return {str(row["id"]) for row in rows}
+
+        self.assertIn(str(minute.id), result_ids(minutes_response))
+        self.assertIn(str(delegation.id), result_ids(delegations_response))
+        self.assertIn(str(access_log.id), result_ids(access_logs_response))
+
+    def test_archive_record_detail_rejects_out_of_scope_reader(self):
+        correspondence = self._make_correspondence(
+            created_by=self.department_user,
+            department=self.department,
+            division=self.division,
+            status=Correspondence.Status.ARCHIVED,
+        )
+        correspondence.archive_level = Correspondence.ArchiveLevel.DEPARTMENT
+        correspondence.save(update_fields=["archive_level"])
+
+        self.client.force_authenticate(user=self.outsider)
+        response = self.client.get(
+            reverse("api_v1:correspondence-archive-record", args=[correspondence.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, response.content)
+
+    def test_archived_record_rejects_generic_update_delete_and_reassign(self):
+        correspondence = self._make_correspondence(
+            created_by=self.department_user,
+            department=self.department,
+            division=self.division,
+            status=Correspondence.Status.ARCHIVED,
+        )
+        correspondence.archive_level = Correspondence.ArchiveLevel.DEPARTMENT
+        correspondence.save(update_fields=["archive_level"])
+        detail_url = reverse("api_v1:correspondence-detail", args=[correspondence.id])
+        self.client.force_authenticate(user=self.superuser)
+
+        patch_response = self.client.patch(
+            detail_url,
+            {"subject": "Changed after archive"},
+            format="json",
+        )
+        self.assertEqual(patch_response.status_code, status.HTTP_400_BAD_REQUEST, patch_response.content)
+
+        reassign_response = self.client.post(
+            f"{detail_url}reassign/",
+            {"target_office_id": str(self.office.id)},
+            format="json",
+        )
+        self.assertEqual(reassign_response.status_code, status.HTTP_400_BAD_REQUEST, reassign_response.content)
+
+        delete_response = self.client.delete(detail_url)
+        self.assertEqual(delete_response.status_code, status.HTTP_400_BAD_REQUEST, delete_response.content)
+
+        bulk_delete_response = self.client.post(
+            reverse("api_v1:correspondence-bulk-delete"),
+            {"correspondence_ids": [str(correspondence.id)]},
+            format="json",
+        )
+        self.assertEqual(
+            bulk_delete_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+            bulk_delete_response.content,
+        )
+
+        correspondence.refresh_from_db()
+        self.assertEqual(correspondence.subject, "Archive level test")
+        self.assertEqual(correspondence.status, Correspondence.Status.ARCHIVED)
+        self.assertFalse(correspondence.is_deleted)
+
+    def test_archived_record_rejects_attachment_and_minute_mutations(self):
+        correspondence = self._make_correspondence(
+            created_by=self.department_user,
+            department=self.department,
+            division=self.division,
+            status=Correspondence.Status.ARCHIVED,
+        )
+        correspondence.archive_level = Correspondence.ArchiveLevel.DEPARTMENT
+        correspondence.save(update_fields=["archive_level"])
+        minute = Minute.objects.create(
+            correspondence=correspondence,
+            user=self.department_user,
+            minute_text="Archived minute",
+            action_type=Minute.ActionType.MINUTE,
+            step_number=1,
+        )
+        self.client.force_authenticate(user=self.superuser)
+
+        attachment_response = self.client.post(
+            reverse("api_v1:correspondence-attachment-list"),
+            {
+                "correspondence": str(correspondence.id),
+                "file": SimpleUploadedFile("archive.txt", b"archive", content_type="text/plain"),
+            },
+            format="multipart",
+        )
+        self.assertEqual(attachment_response.status_code, status.HTTP_400_BAD_REQUEST, attachment_response.content)
+
+        minute_url = reverse("api_v1:minute-detail", args=[minute.id])
+        minute_patch = self.client.patch(
+            minute_url,
+            {"minute_text": "Changed after archive"},
+            format="json",
+        )
+        self.assertEqual(minute_patch.status_code, status.HTTP_400_BAD_REQUEST, minute_patch.content)
+
+        minute_delete = self.client.delete(minute_url)
+        self.assertEqual(minute_delete.status_code, status.HTTP_400_BAD_REQUEST, minute_delete.content)
+
+        minute.refresh_from_db()
+        self.assertEqual(minute.minute_text, "Archived minute")

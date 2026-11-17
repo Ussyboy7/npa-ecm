@@ -68,6 +68,8 @@ interface DocumentPreviewPanelProps {
   attachmentSearchQuery: string;
   isPreviewFullscreen: boolean;
   isCompleted: boolean;
+  /** Archived record mode: no upload, link, or workflow mutations. */
+  readOnly?: boolean;
   documentFocus?: boolean;
   onToggleDocumentFocus?: () => void;
   onSetAttachmentSearchQuery: (query: string) => void;
@@ -76,7 +78,7 @@ interface DocumentPreviewPanelProps {
   onSetSelectedLinkedDocumentId: (id: string | null) => void;
   onOpenLinkDocument: () => void;
   onOpenDocumentPreview: () => void;
-  onOpenPrintPreview: () => void;
+  onOpenPrintPreview?: () => void;
   onSyncFromApi: () => Promise<void>;
 }
 
@@ -188,6 +190,7 @@ export const DocumentPreviewPanel = ({
   attachmentSearchQuery,
   isPreviewFullscreen,
   isCompleted,
+  readOnly = false,
   documentFocus = false,
   onToggleDocumentFocus,
   onSetAttachmentSearchQuery,
@@ -204,6 +207,7 @@ export const DocumentPreviewPanel = ({
   const [documentSurface, setDocumentSurface] = useState<'preview' | 'manage'>('preview');
 
   const attachments = correspondence?.attachments ?? [];
+  const isReadOnly = readOnly || isCompleted;
   const displayLinkedDocuments = useMemo(
     () => visibleLinkedDocuments(linkedDocuments, attachments),
     [linkedDocuments, attachments],
@@ -453,7 +457,7 @@ export const DocumentPreviewPanel = ({
   );
 
   const handleAttachmentUpload = useCallback(async (files: File[]) => {
-    if (!correspondence || files.length === 0) return;
+    if (!correspondence || files.length === 0 || isReadOnly) return;
 
     try {
       await Promise.all(
@@ -480,7 +484,7 @@ export const DocumentPreviewPanel = ({
         description: errorMessage,
       });
     }
-  }, [correspondence, onSyncFromApi]);
+  }, [correspondence, isReadOnly, onSyncFromApi]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -505,7 +509,7 @@ export const DocumentPreviewPanel = ({
 
   const fileCount =
     (correspondence.attachments?.length ?? 0) + displayLinkedDocuments.length;
-  const hasFiles = fileCount > 0 || !isCompleted;
+  const hasFiles = fileCount > 0 || !isReadOnly;
   const isManageMode = documentSurface === 'manage' && !isPreviewFullscreen;
 
   const openFilePicker = () => {
@@ -526,13 +530,15 @@ export const DocumentPreviewPanel = ({
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden animate-in fade-in duration-200">
       <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-2 flex-shrink-0">
         <div>
-          <h4 className={corrType.panelTitle}>Manage files</h4>
+          <h4 className={corrType.panelTitle}>{isReadOnly ? 'Files' : 'Manage files'}</h4>
           <p className={cn(corrType.caption, 'mt-0.5')}>
-            Upload, link, or switch the document shown in preview.
+            {isReadOnly
+              ? 'View the documents and attachments retained with this record.'
+              : 'Upload, link, or switch the document shown in preview.'}
           </p>
         </div>
         <div className="flex items-center flex-shrink-0">
-          {!isCompleted && (
+          {!isReadOnly && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 rounded-full">
@@ -727,7 +733,11 @@ export const DocumentPreviewPanel = ({
           <div className="text-center py-12 text-muted-foreground">
             <FolderOpen className="h-8 w-8 mx-auto mb-3 opacity-40" />
             <p className={corrType.itemTitle}>No files yet</p>
-            <p className={cn(corrType.caption, 'mt-1')}>Add an attachment or link a DMS document.</p>
+            <p className={cn(corrType.caption, 'mt-1')}>
+              {isReadOnly
+                ? 'No files were retained with this record.'
+                : 'Add an attachment or link a DMS document.'}
+            </p>
           </div>
         )}
       </div>
@@ -802,10 +812,10 @@ export const DocumentPreviewPanel = ({
             ? 'fixed inset-3 z-50 border border-border/50 rounded-2xl shadow-2xl'
             : 'flex-1 m-3 border border-border/50 rounded-2xl shadow-sm'
         }`}
-        onDragEnter={handleDrag}
-        onDragOver={handleDrag}
-        onDragLeave={handleDrag}
-        onDrop={handleDrop}
+        onDragEnter={isReadOnly ? undefined : handleDrag}
+        onDragOver={isReadOnly ? undefined : handleDrag}
+        onDragLeave={isReadOnly ? undefined : handleDrag}
+        onDrop={isReadOnly ? undefined : handleDrop}
         aria-label="Document preview area"
         aria-live="polite"
         aria-busy={documentPreviewLoading}
@@ -1289,7 +1299,7 @@ export const DocumentPreviewPanel = ({
                           View Full Document in DMS
                         </Button>
                       )}
-                      {!isCompleted && (
+                      {!isReadOnly && (
                         <>
                           <Button
                             variant={autoCreatedDocumentId ? "outline" : "default"}
@@ -1337,7 +1347,7 @@ export const DocumentPreviewPanel = ({
           className="mx-3 mb-3 flex-shrink-0 inline-flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
         >
           <FolderOpen className="h-3.5 w-3.5" />
-          {fileCount} file{fileCount === 1 ? '' : 's'} · Manage
+          {fileCount} file{fileCount === 1 ? '' : 's'} · {isReadOnly ? 'View' : 'Manage'}
         </button>
       )}
       </>

@@ -5,7 +5,7 @@ import { logError, logWarn } from '@/lib/client-logger';
 import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { toast } from "@/components/ui/sonner";
-import { MessageSquare, CheckCircle, Send } from 'lucide-react';
+import { MessageSquare, CheckCircle, Send, Search, Loader2 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Minute, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useOrgUsers } from '@/hooks/use-org-users';
+import { usePaginatedUserSearch } from '@/hooks/use-paginated-user-search';
 import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
 import { apiFetch } from '@/lib/api-client';
 import { hasRolePermission } from '@/lib/permissions';
@@ -43,7 +43,7 @@ import { PhysicalCopySection } from './components/PhysicalCopySection';
 import { useCorrespondenceDetailData } from './hooks/use-correspondence-detail-data';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { DetailSkeleton } from '@/components/shared/PageSkeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
 import { isCorrespondenceClosed } from '@/lib/correspondence-helpers';
@@ -69,7 +69,6 @@ const CorrespondenceDetailContent = () => {
     officeMemberships,
     refreshOrganizationData,
   } = useOrganization();
-  const { users: organizationUsers } = useOrgUsers();
 
   // Current user's own office memberships, fetched directly (filtered by user)
   // to avoid depending on the paginated global officeMemberships list, which
@@ -198,6 +197,17 @@ const CorrespondenceDetailContent = () => {
   const [noResponseNote, setNoResponseNote] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
   const canReassign = Boolean(activeUser?.isSuperuser);
+  const {
+    query: reassignUserQuery,
+    setQuery: setReassignUserQuery,
+    users: reassignUserOptions,
+    userById: reassignUserById,
+    loading: reassignUsersLoading,
+    loadingMore: reassignUsersLoadingMore,
+    error: reassignUsersError,
+    hasMore: reassignUsersHasMore,
+    loadMore: loadMoreReassignUsers,
+  } = usePaginatedUserSearch({ enabled: showReassign, pageSize: 50 });
 
   const handleCompleteCorrespondence = async () => {
     if (!correspondence) return;
@@ -331,6 +341,12 @@ const CorrespondenceDetailContent = () => {
         id: string;
         status: string;
         delegated_at: string;
+        assistant?: {
+          first_name?: string;
+          middle_name?: string;
+          last_name?: string;
+          username?: string;
+        };
       }>('/correspondence/correspondence-delegations/', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -341,7 +357,14 @@ const CorrespondenceDetailContent = () => {
       await syncFromApi();
       bumpSidebarCounts();
       
-      const assistantName = organizationUsers.find(u => String(u.id) === String(assistantId))?.name || assistantType;
+      const assistant = response.assistant;
+      const assistantName =
+        [assistant?.first_name, assistant?.middle_name, assistant?.last_name]
+          .filter((part): part is string => Boolean(part?.trim()))
+          .join(' ')
+          .trim() ||
+        assistant?.username ||
+        assistantType;
       toast.success(`Successfully delegated to ${assistantName}`, {
         description: notes 
           ? `Instructions sent: "${notes.substring(0, 50)}${notes.length > 50 ? '...' : ''}"` 
@@ -579,11 +602,6 @@ const CorrespondenceDetailContent = () => {
     return version?.id ?? previewContext.completionVersionId;
   }, [linkedDocuments, previewContext.selectedAttachment, previewContext.completionVersionId]);
 
-  const lookupUser = (userId?: string) => {
-    if (!userId) return undefined;
-    return organizationUsers.find((user) => user.id === userId);
-  };
-
   // Helper functions moved to DocumentPreviewPanel component
 
   const handleLinkDocumentsSave = async (documentIds: string[]) => {
@@ -681,10 +699,7 @@ const CorrespondenceDetailContent = () => {
     linkedDocuments,
     onOpenLinkDocument: () => openModal('link-document'),
     activeDelegation,
-    organizationUsers,
-    offices,
     officeMemberships,
-    lookupUser,
     getActionIcon,
     isAuditCase,
     caseAuditState,
@@ -714,8 +729,8 @@ const CorrespondenceDetailContent = () => {
     <>
       {!correspondence ? (
         detailLoading ? (
-          <div className="flex items-center justify-center h-full min-h-[50vh] p-6">
-            <LoadingState message="Loading correspondence…" />
+          <div className="p-4 md:p-6">
+            <DetailSkeleton />
           </div>
         ) : accessDenied ? (
           <ResourceAccessDenied
@@ -768,7 +783,7 @@ const CorrespondenceDetailContent = () => {
               {caseAuditState ? `${caseAuditState} · ` : ''}Case {correspondence.caseId.slice(0,8)} — Audit Query
             </span>
             <span className="text-muted-foreground">
-              Owner: {correspondence.currentOfficeName || '—'} {correspondence.currentApproverId ? `· Attention: ${organizationUsers.find(u => u.id === correspondence.currentApproverId)?.name || String(correspondence.currentApproverId).slice(0,8)}` : '· Attention: —'}
+              Owner: {correspondence.currentOfficeName || '—'} {correspondence.currentApproverId ? `· Attention: ${correspondence.currentApproverName || String(correspondence.currentApproverId).slice(0,8)}` : '· Attention: —'}
             </span>
           </div>
         )}
@@ -844,15 +859,70 @@ const CorrespondenceDetailContent = () => {
             </div>
             <div className="space-y-2">
               <Label>Target user (optional)</Label>
-              <Select value={reassignUser || '__none__'} onValueChange={(v) => setReassignUser(v === '__none__' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— None —</SelectItem>
-                  {organizationUsers.slice(0, 100).map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name} — {u.username}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={reassignUserQuery}
+                  onChange={(event) => setReassignUserQuery(event.target.value)}
+                  placeholder="Search users by name, email, or role…"
+                  className="pl-8"
+                  autoComplete="off"
+                />
+              </div>
+              {reassignUser ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+                  <span className="truncate">
+                    {reassignUserById.get(reassignUser)?.name ?? 'Selected user'}
+                  </span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setReassignUser('')}>
+                    Clear
+                  </Button>
+                </div>
+              ) : null}
+              <div className="max-h-52 overflow-y-auto rounded-md border p-1">
+                {reassignUsersLoading && reassignUserOptions.length === 0 ? (
+                  <p className="flex items-center justify-center gap-2 px-2 py-5 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading users…
+                  </p>
+                ) : reassignUserOptions.length === 0 ? (
+                  <p className="px-2 py-5 text-center text-sm text-muted-foreground">
+                    {reassignUsersError ?? 'No users match your search.'}
+                  </p>
+                ) : (
+                  <div className="space-y-0.5">
+                    {reassignUserOptions.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => setReassignUser(user.id)}
+                        className={`flex w-full flex-col rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                          reassignUser === user.id ? 'bg-primary/10' : 'hover:bg-muted/60'
+                        }`}
+                      >
+                        <span className="font-medium">{user.name}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {user.username}
+                          {user.systemRole ? ` · ${user.systemRole}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {reassignUsersHasMore ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-1 w-full"
+                    onClick={loadMoreReassignUsers}
+                    disabled={reassignUsersLoadingMore}
+                  >
+                    {reassignUsersLoadingMore ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                    Load more users
+                  </Button>
+                ) : null}
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Reason *</Label>
@@ -949,7 +1019,6 @@ const CorrespondenceDetailContent = () => {
         refreshData={refreshData}
         refreshMinutes={refreshMinutes}
         syncFromApi={syncFromApi}
-        lookupUser={lookupUser}
         defaultPreviewAttachmentFileName={defaultPreviewAttachmentFileName}
         defaultPreviewAttachmentSource={defaultPreviewAttachmentSource}
         previewDocumentVersionId={previewDocumentVersionId}
@@ -1004,11 +1073,7 @@ const CorrespondenceDetailContent = () => {
 const CorrespondenceDetailPage = () => (
   <ClientErrorBoundary>
     <CorrespondenceProvider>
-      <Suspense fallback={
-        <div className="flex items-center justify-center h-full min-h-[50vh] p-8">
-          <LoadingState message="Loading correspondence…" />
-        </div>
-      }>
+      <Suspense fallback={null}>
         <CorrespondenceDetailContent />
       </Suspense>
     </CorrespondenceProvider>

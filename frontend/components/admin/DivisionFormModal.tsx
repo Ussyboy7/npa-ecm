@@ -17,7 +17,7 @@ interface DivisionFormModalProps {
 
 export const DivisionFormModal = ({ open, onOpenChange, division, defaultDirectorateId }: DivisionFormModalProps) => {
   const { addDivision, updateDivision, directorates } = useOrganization();
-  const { users } = useOrgUsers();
+  const { users } = useOrgUsers({ enabled: open });
   const [formData, setFormData] = useState({
     name: '',
     code: '',

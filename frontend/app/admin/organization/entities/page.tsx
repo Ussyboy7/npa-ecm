@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { ListSkeleton } from "@/components/shared/PageSkeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -215,7 +215,7 @@ export default function ExternalEntitiesPage() {
           </div>
 
           {loading ? (
-            <LoadingState message="Loading external entities…" />
+            <ListSkeleton rows={5} />
           ) : (
             entities.length === 0 ? (
               <div className="rounded-xl border border-border/60 p-4">

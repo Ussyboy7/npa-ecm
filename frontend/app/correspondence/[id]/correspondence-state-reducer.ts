@@ -12,7 +12,9 @@ export interface CorrespondenceDetailState {
   backendDelegation: {
     id: string;
     assistantId: string | number;
+    assistantName?: string;
     principalId: string | number;
+    principalName?: string;
     status: string;
     delegatedAt: string;
   } | null;

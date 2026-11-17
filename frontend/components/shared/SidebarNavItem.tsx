@@ -22,6 +22,8 @@ interface SidebarNavItemProps {
   isActive: boolean;
   badge?: number;
   badgeVariant?: "default" | "secondary" | "destructive";
+  /** Singular noun describing the badge count, e.g. "pending signature". */
+  badgeLabel?: string;
   description?: string;
 }
 
@@ -33,14 +35,26 @@ export function SidebarNavItem({
   isActive,
   badge,
   badgeVariant = "default",
+  badgeLabel,
   description,
 }: SidebarNavItemProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   const showBadge = mounted && badge != null && badge > 0;
+  const badgeText = showBadge
+    ? badgeLabel
+      ? `${badge} ${badgeLabel}${badge === 1 ? "" : "s"}`
+      : `${badge}`
+    : null;
+  const accessibleLabel = `${label}${badgeText ? `, ${badgeText}` : ""}`;
   const badgeContent = showBadge ? (
-    <Badge variant={badgeVariant} className="ml-auto shrink-0">
+    <Badge
+      variant={badgeVariant}
+      className="ml-auto shrink-0"
+      title={badgeText ?? undefined}
+      aria-hidden="true"
+    >
       {badge! > 99 ? "99+" : badge}
     </Badge>
   ) : null;
@@ -48,7 +62,9 @@ export function SidebarNavItem({
   const badgeOverlay = showBadge ? (
     <Badge
       variant={badgeVariant}
-      className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+      className="absolute right-0 top-0 h-4 min-w-4 p-0 flex items-center justify-center text-[9px] leading-none"
+      title={badgeText ?? undefined}
+      aria-hidden="true"
     >
       {badge! > 99 ? "99+" : badge}
     </Badge>
@@ -60,7 +76,12 @@ export function SidebarNavItem({
         <Tooltip>
           <TooltipTrigger asChild>
             <SidebarMenuButton asChild isActive={isActive}>
-              <Link href={href} className="relative" suppressHydrationWarning>
+              <Link
+                href={href}
+                className="relative"
+                aria-label={accessibleLabel}
+                suppressHydrationWarning
+              >
                 <Icon className="h-4 w-4" />
                 {badgeOverlay}
                 <span className="sr-only">{label}</span>
@@ -68,7 +89,7 @@ export function SidebarNavItem({
             </SidebarMenuButton>
           </TooltipTrigger>
           <TooltipContent side="right">
-            <p>{label}{badge != null && badge > 0 ? ` (${badge})` : ""}</p>
+            <p>{label}{badgeText ? ` (${badgeText})` : ""}</p>
             {description && (
               <p className="text-xs text-muted-foreground mt-1">{description}</p>
             )}
@@ -81,7 +102,12 @@ export function SidebarNavItem({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={isActive} suppressHydrationWarning>
-        <Link href={href} className="flex items-center justify-between w-full" suppressHydrationWarning>
+        <Link
+          href={href}
+          className="flex items-center justify-between w-full"
+          aria-label={accessibleLabel}
+          suppressHydrationWarning
+        >
           <div className="flex items-center gap-2">
             <Icon className="h-4 w-4" />
             <span>{label}</span>
@@ -102,6 +128,26 @@ interface AdminNavItemProps {
 }
 
 export function AdminNavItem({ href, icon: Icon, label, isActive, isCollapsed }: AdminNavItemProps) {
+  if (isCollapsed) {
+    return (
+      <SidebarMenuItem>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SidebarMenuButton asChild isActive={isActive}>
+              <Link href={href} aria-label={label}>
+                <Icon className="h-4 w-4" />
+                <span className="sr-only">{label}</span>
+              </Link>
+            </SidebarMenuButton>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{label}</p>
+          </TooltipContent>
+        </Tooltip>
+      </SidebarMenuItem>
+    );
+  }
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={isActive}>

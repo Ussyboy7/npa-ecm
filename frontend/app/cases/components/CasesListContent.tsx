@@ -32,7 +32,7 @@ import { useScopeChecks } from "@/hooks/use-scope-checks";
 import { useRoleChecks } from "@/hooks/use-role-checks";
 import { ListRowCard } from "@/components/shared/ListRowCard";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { ListSkeleton } from "@/components/shared/PageSkeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { StatStrip } from "@/components/shared/StatStrip";
@@ -121,16 +121,17 @@ interface CasesListContentProps {
 export function CasesListContent({ scope, title, description, tabs }: CasesListContentProps) {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
+  const currentUserId = currentUser?.id;
   const {divisions, departments: _departments, offices, officeMemberships } = useOrganization();
   const { getSignal, reset } = useAbortController();
   
   // Get user's office IDs for scope filtering
   const userOfficeIds = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUserId) return [];
     return officeMemberships
-      .filter(m => m.userId === currentUser.id && m.isActive)
+      .filter(m => m.userId === currentUserId && m.isActive)
       .map(m => m.officeId);
-  }, [currentUser, officeMemberships]);
+  }, [currentUserId, officeMemberships]);
 
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,7 +173,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
   // Fetch executives for secretaries and super admins
   useEffect(() => {
     // Only fetch if user is a secretary or super admin
-    if (!currentUser?.id || (!isSecretary && !isSuperAdmin)) {
+    if (!currentUserId || (!isSecretary && !isSuperAdmin)) {
       setExecutives([]);
       return;
     }
@@ -202,7 +203,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
     return () => {
       abortController.abort();
     };
-  }, [currentUser?.id, isSecretary, isSuperAdmin]);
+  }, [currentUserId, isSecretary, isSuperAdmin]);
 
   // Default division to holder's office division for office-scoped views (e.g. ICT for gmict)
   useEffect(() => {
@@ -220,7 +221,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
 
   // Fetch cases with request cancellation
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUserId) return;
 
     const signal = getSignal();
 
@@ -244,9 +245,9 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
         };
         
         // Apply scope filtering based on scope prop
-        if (scope === "my" && currentUser) {
+        if (scope === "my") {
           params.scope = "my";
-          params.assignedTo = currentUser.id;
+          params.assignedTo = currentUserId;
         } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
           params.scope = "office";
         } else if (scope === "all") {
@@ -274,7 +275,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
     void fetchCases();
     
   }, [
-    currentUser,
+    currentUserId,
     pagination.page,
     pagination.pageSize,
     debouncedSearch,
@@ -331,11 +332,13 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
         priority: selectedPriority || undefined,
         division: divisionFilter !== "all" ? divisionFilter : undefined,
         executive: (isSecretary || isSuperAdmin) && executiveFilter !== "all" ? executiveFilter : undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
         ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
       };
-      if (scope === "my" && currentUser) {
+      if (scope === "my") {
         baseParams.scope = "my";
-        baseParams.assignedTo = currentUser.id;
+        baseParams.assignedTo = currentUserId;
       } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
         baseParams.scope = "office";
       } else if (scope === "all") {
@@ -375,7 +378,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
     }
   };
 
-  if (!currentUser?.id) return null;
+  if (!currentUserId) return null;
 
   return (
     <QueuePageShell
@@ -497,7 +500,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
       </div>
 
       {loading ? (
-        <LoadingState message="Loading cases…" />
+        <ListSkeleton rows={5} />
       ) : error ? (
         <ErrorState message={error} variant="inline" />
       ) : cases.length === 0 ? (

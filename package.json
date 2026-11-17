@@ -12,6 +12,7 @@
     "start": "npm run start --workspace=frontend",
     "lint": "npm run lint --workspace=frontend",
     "type-check": "npm run type-check --workspace=frontend",
+    "generate:api-types": "npm run generate:api-types --workspace=frontend",
     "test": "npm run test --workspace=frontend",
     "clean": "rm -rf node_modules frontend/node_modules && npm install"
   },

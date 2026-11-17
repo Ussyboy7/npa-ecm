@@ -23,6 +23,7 @@ from common.pagination import StandardPageNumberPagination
 from notifications.models import Notification
 from notifications.services import NotificationService
 
+from .archive_policy import assert_correspondence_writable
 from .models import (
     Case,
     CaseComment,
@@ -428,6 +429,7 @@ class CaseViewSet(viewsets.ModelViewSet):
         except Correspondence.DoesNotExist:
             raise ValidationError({"detail": "Correspondence not found."})
 
+        assert_correspondence_writable(correspondence)
         link = CaseService.link_correspondence_to_case(case, correspondence, is_primary, notes)
         return Response(CaseCorrespondenceLinkSerializer(link).data, status=status.HTTP_201_CREATED)
 
@@ -1444,6 +1446,7 @@ class CaseViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "Correspondence ID is required."})
         try:
             link = CaseCorrespondenceLink.objects.get(case=case, correspondence_id=correspondence_id)
+            assert_correspondence_writable(link.correspondence)
             link.delete()
             AuditService.log_activity(
                 user=request.user,
@@ -1667,3 +1670,20 @@ class CaseCorrespondenceLinkViewSet(viewsets.ModelViewSet):
     pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["case", "correspondence", "is_primary"]
+
+    def perform_create(self, serializer):
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        assert_correspondence_writable(serializer.instance.correspondence)
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        assert_correspondence_writable(instance.correspondence)
+        instance.delete()

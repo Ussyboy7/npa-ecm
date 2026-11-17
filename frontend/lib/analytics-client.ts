@@ -46,6 +46,13 @@ export interface PerformanceAnalytics {
   divisionPerformance: DivisionMetric[];
   responseDistribution: { name: string; label: string; count: number }[];
   rolePerformance: { role: string; actions: number; avgResponseTime: number }[];
+  stageDurations: {
+    definition: "Observed timestamp gaps";
+    registrationToRouting: { count: number; averageHours: number | null };
+    routingToApproval: { count: number; averageHours: number | null };
+    approvalToCompletion: { count: number; averageHours: number | null };
+    endToEnd: { count: number; averageHours: number | null };
+  };
 }
 
 export interface ExecutiveAnalytics {

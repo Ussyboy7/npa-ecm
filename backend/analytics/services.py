@@ -214,6 +214,7 @@ class AnalyticsService:
         division_stats = cls._compute_division_metrics(correspondences, now)
         response_distribution = cls._compute_response_distribution(completed, now)
         role_performance = cls._compute_role_performance(correspondences, now)
+        stage_durations = cls._compute_stage_durations(correspondences)
 
         return {
             "metadata": cls._metadata(range_days),
@@ -226,6 +227,7 @@ class AnalyticsService:
             "divisionPerformance": [cls._format_division_metric(metric) for metric in division_stats],
             "responseDistribution": response_distribution,
             "rolePerformance": role_performance,
+            "stageDurations": stage_durations,
             "radarData": cls._build_radar_data(division_stats),
         }
 
@@ -524,6 +526,10 @@ class AnalyticsService:
                     "id",
                     "correspondence_id",
                     "timestamp",
+                    "action_type",
+                    "to_office_id",
+                    "to_user_id",
+                    "is_recalled",
                     "acted_by_secretary",
                     "acted_by_assistant",
                     "assistant_type",
@@ -875,6 +881,61 @@ class AnalyticsService:
                 bucket["count"] += 1
                 break
         return [{"name": bucket["name"], "label": bucket["name"], "count": bucket["count"]} for bucket in buckets]
+
+    @staticmethod
+    def _compute_stage_durations(correspondences: Iterable[Correspondence]) -> dict[str, Any]:
+        """Aggregate only nonnegative gaps between observed workflow timestamps."""
+        stages = {
+            "registrationToRouting": [],
+            "routingToApproval": [],
+            "approvalToCompletion": [],
+            "endToEnd": [],
+        }
+        for item in correspondences:
+            if item.status == Correspondence.Status.ARCHIVED:
+                continue
+            minutes = list(item.minutes.all())
+            routed_at = next(
+                (
+                    minute.timestamp
+                    for minute in minutes
+                    if not minute.is_recalled
+                    and minute.action_type in {Minute.ActionType.MINUTE, Minute.ActionType.FORWARD}
+                    and (minute.to_office_id or minute.to_user_id)
+                ),
+                None,
+            )
+            approved_at = next(
+                (
+                    minute.timestamp
+                    for minute in minutes
+                    if not minute.is_recalled and minute.action_type == Minute.ActionType.APPROVE
+                ),
+                None,
+            )
+            created_at = item.created_at
+            completed_at = item.completed_at
+            intervals = {
+                "registrationToRouting": (created_at, routed_at),
+                "routingToApproval": (routed_at, approved_at),
+                "approvalToCompletion": (approved_at, completed_at),
+                "endToEnd": (created_at, completed_at),
+            }
+            for name, (start, end) in intervals.items():
+                if start is None or end is None or end < start:
+                    continue
+                stages[name].append((end - start).total_seconds() / 3600.0)
+
+        return {
+            "definition": "Observed timestamp gaps",
+            **{
+                name: {
+                    "count": len(values),
+                    "averageHours": round(sum(values) / len(values), 2) if values else None,
+                }
+                for name, values in stages.items()
+            },
+        }
 
     @classmethod
     def _compute_role_performance(cls, correspondences: Iterable[Correspondence], now: datetime) -> list[dict[str, Any]]:

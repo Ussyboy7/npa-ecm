@@ -67,14 +67,17 @@ export function formatDateShort(dateString: string): string {
   });
 }
 
-/** Format date as YYYY-MM-DD for API requests. */
-export function formatDateForAPI(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  if (Number.isNaN(d.getTime())) {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  }
+/** Format a date as YYYY-MM-DD for inputs; empty string when missing or invalid. */
+export function toDateInputValue(input: string | Date | null | undefined): string {
+  if (!input) return "";
+  const d = typeof input === "string" ? new Date(input) : input;
+  if (Number.isNaN(d.getTime())) return "";
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Format date as YYYY-MM-DD for API requests (invalid input falls back to today). */
+export function formatDateForAPI(date: Date | string): string {
+  return toDateInputValue(date) || toDateInputValue(new Date());
 }
 
 export function formatSealDate(dateString: string): string {

@@ -38,12 +38,15 @@ interface ParallelRoutingStatusPanelProps {
   onRefresh?: () => Promise<unknown> | void;
   /** Reports the branch count so the parent can render an empty state. */
   onBranchCountChange?: (count: number) => void;
+  /** Hide reminder/force-complete controls for archived records. */
+  readOnly?: boolean;
 }
 
 export function ParallelRoutingStatusPanel({
   correspondenceId,
   onRefresh,
   onBranchCountChange,
+  readOnly = false,
 }: ParallelRoutingStatusPanelProps) {
   const [branches, setBranches] = useState<ParallelBranch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,7 +185,7 @@ export function ParallelRoutingStatusPanel({
                     </div>
                   </div>
 
-                  {!isClosed && (
+                  {!isClosed && !readOnly && (
                     <div className="flex flex-shrink-0 items-center gap-1">
                       <Button
                         variant="outline"

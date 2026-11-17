@@ -21,10 +21,11 @@ import {
   Search,
   X,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
 import type { DistributionRecipient, Office, User } from "@/lib/npa-structure";
 
 interface DistributionSelectorProps {
@@ -48,7 +49,6 @@ export const DistributionSelector = ({
 }: DistributionSelectorProps) => {
   const { currentUser } = useCurrentUser();
   const { offices, divisions, departments: _departments, directorates } = useOrganization();
-  const { users } = useOrgUsers();
 
   const canCreateParallelRouting = useMemo(() => {
     if (!currentUser?.gradeLevel) return false;
@@ -57,10 +57,24 @@ export const DistributionSelector = ({
 
   const [routeType, setRouteType] = useState<"person" | "office">("office");
   const [purpose, setPurpose] = useState<"information" | "action">("information");
-  const [personSearchQuery, setPersonSearchQuery] = useState("");
   const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>("all");
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>("all");
   const [lastAdded, setLastAdded] = useState<{ type: "person" | "office"; name: string; meta?: string } | null>(null);
+  const {
+    query: personSearchQuery,
+    setQuery: setPersonSearchQuery,
+    users,
+    userById,
+    loading: loadingUsers,
+    loadingMore,
+    error: userSearchError,
+    hasMore,
+    loadMore,
+  } = usePaginatedUserSearch({
+    enabled: routeType === "person",
+    pageSize: 50,
+    excludeUserIds: currentUser?.id ? [currentUser.id] : [],
+  });
 
   const selectedKeys = useMemo(() => new Set(selectedDistribution.map(recipientKey)), [selectedDistribution]);
 
@@ -96,21 +110,10 @@ export const DistributionSelector = ({
     selectedKeys,
   ]);
 
-  const filteredUsers = useMemo(() => {
-    const base = users
-      .filter((u) => u.active !== false && u.id !== currentUser?.id)
-      .filter((u) => !selectedKeys.has(`user:${u.id}`));
-    if (!personSearchQuery.trim()) return base.sort((a, b) => a.name.localeCompare(b.name));
-    const q = personSearchQuery.toLowerCase();
-    return base
-      .filter(
-        (u) =>
-          u.name.toLowerCase().includes(q) ||
-          (u.systemRole || "").toLowerCase().includes(q) ||
-          (u.email || "").toLowerCase().includes(q),
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, currentUser?.id, selectedKeys, personSearchQuery]);
+  const filteredUsers = useMemo(
+    () => users.filter((user) => !selectedKeys.has(`user:${user.id}`)),
+    [users, selectedKeys],
+  );
 
   const addDistribution = (recipient: DistributionRecipient, meta?: string) => {
     const entry = ccOnly ? { ...recipient, purpose: "information" as const } : recipient;
@@ -124,7 +127,7 @@ export const DistributionSelector = ({
   };
 
   const handleSelectUser = (userId: string) => {
-    const user = users.find((u) => u.id === userId);
+    const user = userById.get(userId);
     if (!user) return;
     addDistribution(
       { id: user.id, type: "user", userId: user.id, name: user.name, purpose },
@@ -255,12 +258,17 @@ export const DistributionSelector = ({
                       />
                     </div>
                   </div>
-                  {filteredUsers.length > 0 ? (
+                  {loadingUsers && filteredUsers.length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading recipients...
+                    </div>
+                  ) : filteredUsers.length > 0 ? (
                     <>
                       <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                         All Recipients ({filteredUsers.length})
                       </div>
-                      {filteredUsers.slice(0, 30).map((user) => (
+                      {filteredUsers.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           <div className="flex flex-col">
                             <span>{user.name}</span>
@@ -273,8 +281,27 @@ export const DistributionSelector = ({
                       ))}
                     </>
                   ) : (
-                    <div className="p-4 text-center text-sm text-muted-foreground">No recipients available</div>
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      {userSearchError ?? "No recipients available"}
+                    </div>
                   )}
+                  {hasMore ? (
+                    <div className="border-t border-border p-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                      >
+                        {loadingMore ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : null}
+                        Load more recipients
+                      </Button>
+                    </div>
+                  ) : null}
                 </SelectContent>
               </Select>
             )}

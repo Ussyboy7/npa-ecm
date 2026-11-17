@@ -2,7 +2,7 @@ import { ERROR_AUTHENTICATION_REQUIRED, ERROR_UNKNOWN } from '@/lib/constants';
 import { apiFetch, hasTokens } from './api-client';
 import { logError, logInfo, logWarn } from '@/lib/client-logger';
 import { unwrapResults } from '@/lib/type-utils';
-import type { DocumentComment, CreateDocumentCommentPayload, DocumentDiscussion, CreateDiscussionPayload, EditorSession, DocumentEditorWebSocket } from './dms-types';
+import { getApiUserName, type DocumentComment, type CreateDocumentCommentPayload, type DocumentDiscussion, type CreateDiscussionPayload, type EditorSession, type DocumentEditorWebSocket } from './dms-types';
 
 // ============ COMMENTS ============
 
@@ -21,6 +21,7 @@ export const getDocumentComments = async (documentId: string, versionId?: string
       id: String(item.id as string),
       documentId: String(item.document ?? item.document_id ?? documentId),
       authorId: String((author && 'id' in author) ? author.id : item.author_id ?? item.author ?? ''),
+      authorName: getApiUserName(author),
       content: typeof item.content === 'string' ? item.content : '',
       createdAt: typeof item.created_at === 'string' ? item.created_at : new Date().toISOString(),
       resolved: typeof item.resolved === 'boolean' ? item.resolved : false,
@@ -52,6 +53,7 @@ export const addDocumentComment = async (payload: CreateDocumentCommentPayload):
     id: String(response.id),
     documentId: String(response.document ?? payload.documentId),
     authorId: String((author && 'id' in author) ? author.id : response.author_id ?? payload.authorId),
+    authorName: getApiUserName(author),
     content: typeof response.content === 'string' ? response.content : payload.content,
     createdAt: typeof response.created_at === 'string' ? response.created_at : new Date().toISOString(),
     resolved: typeof response.resolved === 'boolean' ? response.resolved : false,
@@ -73,6 +75,7 @@ export const resolveDocumentComment = async (commentId: string, resolved: boolea
     id: String(response.id),
     documentId: String(response.document ?? response.document_id ?? ''),
     authorId: String((author && 'id' in author) ? author.id : response.author_id ?? response.author ?? ''),
+    authorName: getApiUserName(author),
     content: typeof response.content === 'string' ? response.content : '',
     createdAt: typeof response.created_at === 'string' ? response.created_at : new Date().toISOString(),
     resolved: typeof response.resolved === 'boolean' ? response.resolved : resolved,

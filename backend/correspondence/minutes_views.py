@@ -38,6 +38,7 @@ from .models import (
     ParallelRoutingGroup,
     minute_satisfies_assignment_outcome,
 )
+from .archive_policy import assert_correspondence_writable
 from .serializers import MinuteSerializer, ParallelRoutingGroupSerializer
 from .services import (
     CaseService,
@@ -244,8 +245,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
         if correspondence is None:
             correspondence = serializer.validated_data["correspondence"]
-        if correspondence.status == Correspondence.Status.COMPLETED:
-            raise ValidationError({"detail": "Completed correspondence cannot be updated."})
+        assert_correspondence_writable(correspondence)
         MinuteRouterService.enforce_initial_office_turn(
             self.request.user, correspondence
         )
@@ -575,6 +575,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         minute = self.get_object()
+        assert_correspondence_writable(minute.correspondence)
 
         if not minute.can_be_edited():
             raise ValidationError({
@@ -622,6 +623,11 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 pass
 
         return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        minute = self.get_object()
+        assert_correspondence_writable(minute.correspondence)
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["get"], url_path="versions")
     def versions(self, request, pk=None):
@@ -687,6 +693,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="recall")
     def recall(self, request, pk=None):
         minute = self.get_object()
+        assert_correspondence_writable(minute.correspondence)
         is_md_or_super = bool(
             getattr(request.user, "is_superuser", False)
             or (getattr(getattr(request.user, "system_role", None), "name", "") or "").lower() == "managing director"
@@ -1021,6 +1028,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
         except Correspondence.DoesNotExist:
             raise ValidationError({"detail": "Correspondence not found."})
 
+        assert_correspondence_writable(correspondence)
         MinuteRouterService.enforce_initial_office_turn(user, correspondence)
 
         parent_minute = None
@@ -1066,4 +1074,18 @@ class ParallelRoutingGroupViewSet(viewsets.ModelViewSet):
         return qs.distinct()
 
     def perform_create(self, serializer):
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
         serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        assert_correspondence_writable(serializer.instance.correspondence)
+        correspondence = serializer.validated_data.get("correspondence")
+        if correspondence is not None:
+            assert_correspondence_writable(correspondence)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        assert_correspondence_writable(instance.correspondence)
+        instance.delete()

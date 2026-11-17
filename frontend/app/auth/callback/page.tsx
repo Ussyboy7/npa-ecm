@@ -6,7 +6,7 @@ import AuthCallbackPage from "./AuthCallbackPage";
 
 export default function Page() {
   return (
-    <Suspense fallback={<PageSuspenseFallback />}>
+    <Suspense fallback={<PageSuspenseFallback fullScreen />}>
       <AuthCallbackPage />
     </Suspense>
   );

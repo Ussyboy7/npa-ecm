@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
+from rest_framework.exceptions import ValidationError
 
-from organization.org_scope import resolve_user_org_scope
+from organization.org_scope import apply_correspondence_org_scope, resolve_user_org_scope
 
 from .models import Correspondence
 
@@ -15,6 +17,19 @@ ARCHIVE_LEVEL_PERMISSION_BY_LEVEL = {
     Correspondence.ArchiveLevel.DIVISION: "can_archive_division",
     Correspondence.ArchiveLevel.DIRECTORATE: "can_archive_directorate",
 }
+
+# Completed and archived records are records, not live work items. Generic
+# mutations must not be able to reopen, edit, or add files to them.
+READ_ONLY_CORRESPONDENCE_STATUSES = (
+    Correspondence.Status.COMPLETED,
+    Correspondence.Status.ARCHIVED,
+)
+
+
+def assert_correspondence_writable(correspondence: Correspondence) -> None:
+    if correspondence.status in READ_ONLY_CORRESPONDENCE_STATUSES:
+        raise ValidationError({"detail": "Completed or archived correspondence is read-only."})
+
 
 # Most specific first: an unfiled memo defaults to its own deepest org unit.
 ARCHIVE_LEVEL_ORDER = (
@@ -176,3 +191,34 @@ def archived_correspondence_visibility_q(user) -> Q:
         visible |= Q(archive_level="") & directorate_record_in_scope
 
     return visible
+
+
+def filter_archived_records(queryset, user):
+    """Limit a correspondence queryset to records the user can read in archives.
+
+    Completed records retain the normal organisational boundary. Once a record
+    is filed, its archive level and filing unit decide who may read it.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return queryset.none()
+
+    queryset = queryset.filter(is_deleted=False)
+    completed = apply_correspondence_org_scope(
+        queryset.filter(status=Correspondence.Status.COMPLETED), user
+    )
+    archived = queryset.filter(status=Correspondence.Status.ARCHIVED).filter(
+        archived_correspondence_visibility_q(user)
+    ).distinct()
+    return (completed | archived).distinct()
+
+
+def archive_record_visible_to(user, correspondence_id) -> bool:
+    """Whether a user may read this record through archive visibility."""
+    if not correspondence_id or not user or not getattr(user, "is_authenticated", False):
+        return False
+    try:
+        return filter_archived_records(
+            Correspondence.all_objects.filter(pk=correspondence_id), user
+        ).exists()
+    except (DjangoValidationError, TypeError, ValueError):
+        return False

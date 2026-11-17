@@ -3,7 +3,6 @@ import {
   formatDate,
   formatDateTime,
   formatDateShort,
-  formatDateForAPI,
   getPriorityVariant,
   getStatusVariant,
   getStatusColor,
@@ -16,6 +15,7 @@ import {
   canDispatchCorrespondence,
   canArchiveCorrespondence,
 } from '../correspondence-helpers';
+import { formatDateForAPI } from '../datetime';
 import type { Correspondence, Minute } from '../npa-structure';
 
 afterEach(() => {

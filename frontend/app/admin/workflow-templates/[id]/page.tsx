@@ -350,15 +350,7 @@ function WorkflowTemplateEditorPageContent() {
 // Wrap in Suspense for useSearchParams
 export default function WorkflowTemplateEditorPage() {
   return (
-    <Suspense fallback={
-      <>
-        <div className="container mx-auto p-6">
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        </div>
-      </>
-    }>
+    <Suspense fallback={null}>
       <WorkflowTemplateEditorPageContent />
     </Suspense>
   );

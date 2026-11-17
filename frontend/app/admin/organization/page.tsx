@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
-import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { ListRowCard } from "@/components/shared/ListRowCard";
@@ -18,6 +17,7 @@ import { PaginationControls } from "@/components/shared/PaginationControls";
 import { OrganizationTabList } from "@/components/admin/OrganizationTabList";
 import { PeopleAccessTab } from "@/components/admin/PeopleAccessTab";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useOrgUsers } from "@/hooks/use-org-users";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { usePagination } from "@/hooks/use-pagination";
 import {
@@ -33,6 +33,7 @@ import {
   Layers,
   FolderTree,
   MapPin,
+  X,
 } from "lucide-react";
 import { useOrganization, type Directorate, type Division, type Department, type Office, type OfficeMembership } from "@/contexts/OrganizationContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
@@ -67,6 +68,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { apiFetch } from "@/lib/api-client";
+import { fetchMembershipQuality, type MembershipQualitySummary } from "@/lib/office-memberships-client";
 import type { Location } from "@/lib/organization-types";
 
 import { cn } from "@/lib/utils";
@@ -147,7 +149,7 @@ function OrganizationSection({
 
 const OrganizationStructurePage = () => {
   return (
-    <Suspense fallback={<div className="container mx-auto p-6"><LoadingState message="Loading organization…" /></div>}>
+    <Suspense fallback={null}>
       <OrganizationStructureContent />
     </Suspense>
   );
@@ -160,9 +162,7 @@ const OrganizationStructureContent = () => {
     divisions,
     departments,
     offices,
-    officeMemberships,
-    users,
-    isSyncing,
+    fetchOfficeMemberships,
     deleteDirectorate,
     deleteDivision,
     deleteDepartment,
@@ -179,32 +179,48 @@ const OrganizationStructureContent = () => {
   const canAccessPeople = canManageUsers || canManageRoles;
   const defaultPeopleSubtab = canManageUsers ? "users" : "roles";
 
-  const [mounted, setMounted] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab") || "structure";
-  const isLegacyMembershipsTab = requestedTab === "memberships";
-  const tabFromUrl: OrganizationTab = isLegacyMembershipsTab
-    ? "offices"
-    : ORGANIZATION_TABS.includes(requestedTab as OrganizationTab)
-      ? (requestedTab as OrganizationTab)
-      : "structure";
+  const tabFromUrl: OrganizationTab = ORGANIZATION_TABS.includes(requestedTab as OrganizationTab)
+    ? (requestedTab as OrganizationTab)
+    : "structure";
   const officesViewFromUrl: OfficesView =
-    tabFromUrl === "offices" && (isLegacyMembershipsTab || searchParams.get("view") === "memberships")
+    tabFromUrl === "offices" && searchParams.get("view") === "memberships"
       ? "memberships"
       : "directory";
+  const divisionFromUrl = searchParams.get("division") || "all";
+  const membershipOfficeFromUrl = searchParams.get("office") || "all";
+  const membershipUserFromUrl = searchParams.get("user") || "";
+  const membershipStatusFromUrl = searchParams.get("status") === "all" ? "all" : "active";
+  const membershipSearchFromUrl = searchParams.get("search") || "";
+  const membershipPageFromUrl = Math.max(1, Number(searchParams.get("page")) || 1);
+  const [searchQuery, setSearchQuery] = useState(
+    officesViewFromUrl === "memberships" ? membershipSearchFromUrl : "",
+  );
   const [activeTab, setActiveTab] = useState<OrganizationTab>(tabFromUrl);
   const [officesView, setOfficesView] = useState<OfficesView>(officesViewFromUrl);
+  const [membershipCount, setMembershipCount] = useState(0);
+  const [membershipRefreshVersion, setMembershipRefreshVersion] = useState(0);
+  const [pagedMemberships, setPagedMemberships] = useState<OfficeMembership[]>([]);
+  const [membershipQuality, setMembershipQuality] = useState<MembershipQualitySummary | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(false);
+  const [membershipOfficeFilter, setMembershipOfficeFilter] = useState(membershipOfficeFromUrl);
+  const [membershipUserFilter, setMembershipUserFilter] = useState(membershipUserFromUrl);
+  const [membershipStatusFilter, setMembershipStatusFilter] = useState<"active" | "all">(membershipStatusFromUrl);
+  const isMembershipsView = activeTab === "offices" && officesView === "memberships";
+  const [divisionFilter, setDivisionFilter] = useState(divisionFromUrl);
   useEffect(() => {
     setActiveTab(tabFromUrl);
     setOfficesView(officesViewFromUrl);
-    setSearchQuery("");
-    if (isLegacyMembershipsTab) {
-      router.replace("/admin/organization?tab=offices&view=memberships", { scroll: false });
-    } else if (requestedTab !== tabFromUrl) {
+    setMembershipOfficeFilter(membershipOfficeFromUrl);
+    setMembershipUserFilter(membershipUserFromUrl);
+    setMembershipStatusFilter(membershipStatusFromUrl);
+    setDivisionFilter(divisionFromUrl);
+    setSearchQuery(officesViewFromUrl === "memberships" ? membershipSearchFromUrl : "");
+    if (requestedTab !== tabFromUrl) {
       router.replace(`/admin/organization?tab=${tabFromUrl}`, { scroll: false });
     }
-  }, [tabFromUrl, officesViewFromUrl, isLegacyMembershipsTab, requestedTab, router]);
+  }, [tabFromUrl, officesViewFromUrl, membershipOfficeFromUrl, membershipUserFromUrl, membershipStatusFromUrl, membershipSearchFromUrl, divisionFromUrl, requestedTab, router]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -262,8 +278,7 @@ const OrganizationStructureContent = () => {
 
   // Office membership management
   const [membershipDialogOpen, setMembershipDialogOpen] = useState(false);
-  const [membershipOfficeFilter, setMembershipOfficeFilter] = useState("all");
-  const [membershipStatusFilter, setMembershipStatusFilter] = useState<"active" | "all">("active");
+  const { users } = useOrgUsers({ enabled: membershipDialogOpen });
   const [editingMembership, setEditingMembership] = useState<OfficeMembership | null>(null);
   const [savingMembership, setSavingMembership] = useState(false);
   const [membershipToRemove, setMembershipToRemove] = useState<OfficeMembership | null>(null);
@@ -355,7 +370,6 @@ const OrganizationStructureContent = () => {
   };
 
   useEffect(() => {
-    setMounted(true);
     // Expand all by default for better UX
     setExpandedDirectorates(new Set(directorates.map(d => d.id)));
     void fetchLocations();
@@ -451,15 +465,17 @@ const OrganizationStructureContent = () => {
   }), [directorates, divisions, departments]);
 
   const filteredOffices = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    const activeOnly = offices.filter((office) => office.isActive);
+    const query = (isMembershipsView ? "" : searchQuery).trim().toLowerCase();
+    const activeOnly = offices.filter((office) =>
+      office.isActive && (divisionFilter === "all" || office.divisionId === divisionFilter),
+    );
     if (!query) return activeOnly;
     return activeOnly.filter((office) =>
       office.name.toLowerCase().includes(query) ||
       office.code.toLowerCase().includes(query) ||
       office.officeType.toLowerCase().includes(query),
     );
-  }, [offices, searchQuery]);
+  }, [offices, searchQuery, divisionFilter, isMembershipsView]);
 
   const filteredLocations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -470,43 +486,71 @@ const OrganizationStructureContent = () => {
     );
   }, [locations, searchQuery]);
 
-  const membershipUserName = useCallback(
-    (membership: OfficeMembership) =>
-      users.find((user) => user.id === membership.userId)?.name ??
-      membership.userName ??
-      membership.userUsername ??
-      "Unknown user",
-    [users],
-  );
+  const membershipUserName = (membership: OfficeMembership) =>
+    membership.userName ?? membership.userUsername ?? "Unknown user";
 
-  const membershipsInScope = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return officeMemberships.filter((membership) => {
-      if (membershipOfficeFilter !== "all" && membership.officeId !== membershipOfficeFilter) {
-        return false;
-      }
-      if (!query) return true;
-      const officeName = offices.find((office) => office.id === membership.officeId)?.name ?? membership.officeName ?? "";
-      const userName = membershipUserName(membership);
-      return (
-        officeName.toLowerCase().includes(query) ||
-        userName.toLowerCase().includes(query) ||
-        membership.userUsername?.toLowerCase().includes(query) ||
-        membership.assignmentRole.toLowerCase().includes(query)
-      );
+  const updateMembershipUrl = useCallback((updates: Record<string, string | null>, mode: "replace" | "push" = "replace") => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "offices");
+    params.set("view", "memberships");
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === "") params.delete(key);
+      else params.set(key, value);
     });
-  }, [officeMemberships, offices, membershipUserName, membershipOfficeFilter, searchQuery]);
-
-  const filteredMemberships = useMemo(
-    () => membershipStatusFilter === "active"
-      ? membershipsInScope.filter((membership) => membership.isActive)
-      : membershipsInScope,
-    [membershipsInScope, membershipStatusFilter],
-  );
+    const href = `/admin/organization?${params.toString()}`;
+    router[mode](href, { scroll: false });
+  }, [router, searchParams]);
 
   const officePagination = usePagination({ totalCount: filteredOffices.length });
-  const membershipPagination = usePagination({ totalCount: filteredMemberships.length });
+  const membershipPagination = usePagination({
+    totalCount: membershipCount,
+    controlledPage: membershipPageFromUrl,
+    onControlledPageChange: (page) => updateMembershipUrl({ page: String(page) }),
+  });
   const locationPagination = usePagination({ totalCount: filteredLocations.length });
+
+  useEffect(() => {
+    if (!isMembershipsView) return;
+    let ignore = false;
+    setMembershipLoading(true);
+    fetchOfficeMemberships({
+      office: membershipOfficeFilter === "all" ? undefined : membershipOfficeFilter,
+      user: membershipUserFilter || undefined,
+      isActive: membershipStatusFilter === "active" ? true : undefined,
+      search: searchQuery,
+      ordering: "office__name,user__last_name,user__first_name",
+      page: membershipPageFromUrl,
+      pageSize: membershipPagination.pageSize,
+    }).then((page) => {
+      if (ignore) return;
+      setPagedMemberships(page.results);
+      setMembershipCount(page.count);
+    }).catch((error: unknown) => {
+      if (!ignore) {
+        setPagedMemberships([]);
+        setMembershipCount(0);
+        toast({
+          title: "Could not load office memberships",
+          description: error instanceof Error ? error.message : "Please try again.",
+          variant: "destructive",
+        });
+      }
+    }).finally(() => {
+      if (!ignore) setMembershipLoading(false);
+    });
+    return () => { ignore = true; };
+  }, [isMembershipsView, fetchOfficeMemberships, membershipOfficeFilter, membershipUserFilter, membershipStatusFilter, searchQuery, membershipPageFromUrl, membershipPagination.pageSize, membershipRefreshVersion]);
+
+  useEffect(() => {
+    if (!isMembershipsView || !canManageUsers && !canManageStructure) return;
+    let ignore = false;
+    fetchMembershipQuality().then((summary) => {
+      if (!ignore) setMembershipQuality(summary);
+    }).catch(() => {
+      if (!ignore) setMembershipQuality(null);
+    });
+    return () => { ignore = true; };
+  }, [isMembershipsView, canManageUsers, canManageStructure, membershipRefreshVersion]);
 
   const pagedOffices = useMemo(
     () => filteredOffices.slice(
@@ -514,13 +558,6 @@ const OrganizationStructureContent = () => {
       officePagination.page * officePagination.pageSize,
     ),
     [filteredOffices, officePagination.page, officePagination.pageSize],
-  );
-  const pagedMemberships = useMemo(
-    () => filteredMemberships.slice(
-      (membershipPagination.page - 1) * membershipPagination.pageSize,
-      membershipPagination.page * membershipPagination.pageSize,
-    ),
-    [filteredMemberships, membershipPagination.page, membershipPagination.pageSize],
   );
   const pagedLocations = useMemo(
     () => filteredLocations.slice(
@@ -533,18 +570,29 @@ const OrganizationStructureContent = () => {
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     officePagination.goToFirstPage();
-    membershipPagination.goToFirstPage();
     locationPagination.goToFirstPage();
+    if (isMembershipsView) updateMembershipUrl({ search: value || null, page: "1" });
+  };
+
+  const updateDirectoryDivision = (divisionId: string) => {
+    setDivisionFilter(divisionId);
+    officePagination.goToFirstPage();
+    const params = new URLSearchParams({ tab: "offices" });
+    if (divisionId !== "all") params.set("division", divisionId);
+    router.push(`/admin/organization?${params.toString()}`, { scroll: false });
   };
 
   const hasMembershipSearch = searchQuery.trim().length > 0;
+  const membershipUserFilterName = pagedMemberships.find(
+    (membership) => membership.userId === membershipUserFilter,
+  )?.userName;
   let membershipEmptyState: {
     title: string;
     message: string;
     actionLabel?: string;
     onAction?: () => void;
   };
-  if (membershipStatusFilter === "active" && membershipsInScope.length > 0) {
+  if (membershipStatusFilter === "active" && membershipCount === 0 && membershipOfficeFilter !== "all") {
     membershipEmptyState = {
       title: "No active memberships",
       message: hasMembershipSearch
@@ -555,7 +603,7 @@ const OrganizationStructureContent = () => {
       actionLabel: "Show all statuses",
       onAction: () => {
         setMembershipStatusFilter("all");
-        membershipPagination.goToFirstPage();
+        updateMembershipUrl({ status: "all", page: "1" });
       },
     };
   } else if (hasMembershipSearch) {
@@ -572,7 +620,7 @@ const OrganizationStructureContent = () => {
       actionLabel: "Show all offices",
       onAction: () => {
         setMembershipOfficeFilter("all");
-        membershipPagination.goToFirstPage();
+        updateMembershipUrl({ office: null, page: "1" });
       },
     };
   } else {
@@ -583,26 +631,8 @@ const OrganizationStructureContent = () => {
   }
 
   // Helper functions
-  const getExecutive = (directorateId: string) => {
-    const dir = directorates.find(d => d.id === directorateId);
-    if (!dir?.executiveDirectorId) return null;
-    return users.find(u => u.id === dir.executiveDirectorId);
-  };
-
   const getExecutiveTitle = (directorate: Directorate) =>
     directorate.code.toUpperCase() === "MD" ? "MD" : "ED";
-
-  const getGM = (divisionId: string) => {
-    const div = divisions.find(d => d.id === divisionId);
-    if (!div?.generalManagerId) return null;
-    return users.find(u => u.id === div.generalManagerId);
-  };
-
-  const getAGM = (departmentId: string) => {
-    const dept = departments.find(d => d.id === departmentId);
-    if (!dept?.assistantGeneralManagerId) return null;
-    return users.find(u => u.id === dept.assistantGeneralManagerId);
-  };
 
   // Toggle expand functions
   const toggleDirectorate = (id: string) => {
@@ -667,7 +697,7 @@ const OrganizationStructureContent = () => {
     setEditingMembership(null);
     setMembershipForm({
       userId: "",
-      officeId: "",
+      officeId: membershipOfficeFilter === "all" ? "" : membershipOfficeFilter,
       assignmentRole: "staff",
       isPrimary: false,
       isActive: true,
@@ -680,18 +710,23 @@ const OrganizationStructureContent = () => {
 
   const openMemberships = (officeId: string) => {
     setMembershipOfficeFilter(officeId);
+    setMembershipUserFilter("");
     setMembershipStatusFilter("active");
     setSearchQuery("");
-    membershipPagination.goToFirstPage();
     setOfficesView("memberships");
     setActiveTab("offices");
-    router.push("/admin/organization?tab=offices&view=memberships", { scroll: false });
+    const params = new URLSearchParams({ tab: "offices", view: "memberships", status: "active", page: "1" });
+    if (officeId !== "all") params.set("office", officeId);
+    router.push(`/admin/organization?${params.toString()}`, { scroll: false });
   };
 
   const showOfficeDirectory = () => {
     setOfficesView("directory");
     setSearchQuery("");
-    router.push("/admin/organization?tab=offices", { scroll: false });
+    setMembershipOfficeFilter("all");
+    const params = new URLSearchParams({ tab: "offices" });
+    if (divisionFilter !== "all") params.set("division", divisionFilter);
+    router.push(`/admin/organization?${params.toString()}`, { scroll: false });
   };
 
   const startEditMembership = (membership: OfficeMembership) => {
@@ -724,6 +759,7 @@ const OrganizationStructureContent = () => {
         toast({ title: "Office membership added" });
       }
       setMembershipDialogOpen(false);
+      setMembershipRefreshVersion((version) => version + 1);
     } catch (error: unknown) {
       toast({
         title: "Membership could not be saved",
@@ -739,8 +775,9 @@ const OrganizationStructureContent = () => {
     if (!membershipToRemove) return;
     try {
       await deleteOfficeMembership(membershipToRemove.id);
+      setMembershipRefreshVersion((version) => version + 1);
       toast({ title: "Office membership removed" });
-      membershipPagination.goToFirstPage();
+      updateMembershipUrl({ page: "1" });
       setMembershipToRemove(null);
     } catch (error: unknown) {
       toast({
@@ -791,15 +828,6 @@ const OrganizationStructureContent = () => {
     setExpandedDivisions(new Set());
   };
 
-  const isBootstrapping =
-    isSyncing &&
-    directorates.length === 0 &&
-    divisions.length === 0 &&
-    departments.length === 0 &&
-    offices.length === 0 &&
-    officeMemberships.length === 0;
-
-  const isMembershipsView = activeTab === "offices" && officesView === "memberships";
   const searchPlaceholder = isMembershipsView ? MEMBERSHIPS_SEARCH_PLACEHOLDER : SEARCH_PLACEHOLDERS[activeTab];
   const tabSubtitle = isMembershipsView ? MEMBERSHIPS_SUBTITLE : TAB_SUBTITLES[activeTab];
 
@@ -817,10 +845,10 @@ const OrganizationStructureContent = () => {
     { key: "departmentOffices", label: "Department offices", value: offices.filter((office) => office.isActive && office.departmentId).length },
   ];
   const membershipStatItems = [
-    { key: "memberships", label: "Active memberships", value: officeMemberships.filter((membership) => membership.isActive).length },
-    { key: "users", label: "Users assigned", value: new Set(officeMemberships.filter((membership) => membership.isActive).map((membership) => membership.userId)).size },
-    { key: "offices", label: "Offices with members", value: new Set(officeMemberships.filter((membership) => membership.isActive).map((membership) => membership.officeId)).size },
-    { key: "primary", label: "Primary assignments", value: officeMemberships.filter((membership) => membership.isActive && membership.isPrimary).length },
+    { key: "memberships", label: "Matching memberships", value: membershipCount },
+    { key: "users", label: "Conflict groups", value: membershipQuality ? membershipQuality.counts.multipleActivePrincipals + membershipQuality.counts.multiplePrimaryAssignments + membershipQuality.counts.duplicateOfficeAssignments : 0 },
+    { key: "offices", label: "Offices with members", value: offices.filter((office) => (office.activeMemberCount ?? 0) > 0).length },
+    { key: "primary", label: "Users with multiple primary offices", value: membershipQuality?.counts.multiplePrimaryAssignments ?? 0 },
   ];
   const locationStatItems = [
     { key: "locations", label: "Physical locations", value: locations.length },
@@ -918,11 +946,6 @@ const OrganizationStructureContent = () => {
   return (
     <ClientErrorBoundary>
       <>
-        {isBootstrapping ? (
-          <div className="container mx-auto p-6">
-            <LoadingState message="Loading organization & offices…" />
-          </div>
-        ) : (
         <AdminPageShell
           title="Organization"
           subtitle={tabSubtitle}
@@ -951,9 +974,7 @@ const OrganizationStructureContent = () => {
                   description="Directorates, divisions, and departments, with leadership at every level."
                 >
                   <div>
-              {!mounted ? (
-                <div className="py-8 text-center text-muted-foreground">Loading...</div>
-              ) : filteredData.directorates.length === 0 ? (
+              {filteredData.directorates.length === 0 ? (
                 <div className="py-12 text-center">
                   <FolderTree className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
                   <p className="text-muted-foreground">
@@ -967,7 +988,7 @@ const OrganizationStructureContent = () => {
                       const dirDivisions = divisions.filter(
                         d => d.directorateId === directorate.id && d.isActive
                       );
-                      const executive = getExecutive(directorate.id);
+                      const executiveName = directorate.executiveDirectorName;
                       const divisionCount = dirDivisions.length;
                       const deptCount = dirDivisions.reduce((acc, div) => {
                         return acc + departments.filter(d => d.divisionId === div.id && d.isActive).length;
@@ -1006,9 +1027,9 @@ const OrganizationStructureContent = () => {
                                 <Badge variant="secondary" className="shrink-0 whitespace-nowrap text-xs">{divisionCount} div</Badge>
                                 <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">{deptCount} dept</Badge>
                               </div>
-                              {executive && (
+                              {executiveName && (
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                  {getExecutiveTitle(directorate)}: {executive.name}
+                                  {getExecutiveTitle(directorate)}: {executiveName}
                                 </p>
                               )}
                             </div>
@@ -1084,7 +1105,7 @@ const OrganizationStructureContent = () => {
                                 const divDepts = departments.filter(
                                   d => d.divisionId === division.id && d.isActive
                                 );
-                                const gm = getGM(division.id);
+                                const gmName = division.generalManagerName;
 
                                 return (
                                   <div key={division.id} className="overflow-hidden rounded-lg border border-border/60 bg-card">
@@ -1122,8 +1143,8 @@ const OrganizationStructureContent = () => {
                                           <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">{division.code}</Badge>
                                           <Badge variant="secondary" className="shrink-0 whitespace-nowrap text-xs">{divDepts.length} dept</Badge>
                                         </div>
-                                        {gm && (
-                                          <p className="text-xs text-muted-foreground">GM: {gm.name}</p>
+                                        {gmName && (
+                                          <p className="text-xs text-muted-foreground">GM: {gmName}</p>
                                         )}
                                       </div>
 
@@ -1179,7 +1200,7 @@ const OrganizationStructureContent = () => {
                                     {isDivExpanded && divDepts.length > 0 && (
                                       <div className="pl-8 py-2 space-y-1 bg-muted/10">
                                         {divDepts.map((department) => {
-                                          const agm = getAGM(department.id);
+                                          const agmName = department.assistantGeneralManagerName;
 
                                           return (
                                             <div
@@ -1195,8 +1216,8 @@ const OrganizationStructureContent = () => {
                                                   <span className="min-w-0 text-sm">{department.name}</span>
                                                   <Badge variant="outline" className="shrink-0 whitespace-nowrap text-xs">{department.code}</Badge>
                                                 </div>
-                                                {agm && (
-                                                  <p className="text-xs text-muted-foreground">AGM: {agm.name}</p>
+                                                {agmName && (
+                                                  <p className="text-xs text-muted-foreground">AGM: {agmName}</p>
                                                 )}
                                               </div>
 
@@ -1292,7 +1313,19 @@ const OrganizationStructureContent = () => {
                   searchQuery={searchQuery}
                   onSearchChange={handleSearchChange}
                   searchPlaceholder={searchPlaceholder}
-                />
+                >
+                  <Select value={divisionFilter} onValueChange={updateDirectoryDivision}>
+                    <SelectTrigger className="h-8 w-56 text-xs" aria-label="Filter offices by division">
+                      <SelectValue placeholder="All divisions" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All divisions</SelectItem>
+                      {divisions.map((division) => (
+                        <SelectItem key={division.id} value={division.id}>{division.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </OrganizationFilters>
                 <OrganizationSection
                   title="Office directory"
                   description="Offices are routing units. A membership assigns a person to one."
@@ -1313,17 +1346,8 @@ const OrganizationStructureContent = () => {
                   ) : (
                     <div className="space-y-2">
                       {pagedOffices.map((office) => {
-                        const officeMembers = officeMemberships.filter(
-                          (membership) => membership.officeId === office.id && membership.isActive,
-                        );
-                        const principalMembership =
-                          officeMembers.find(
-                            (membership) => membership.assignmentRole === "principal" && membership.isPrimary,
-                          ) ??
-                          officeMembers.find((membership) => membership.assignmentRole === "principal");
-                        const principalName = principalMembership
-                          ? membershipUserName(principalMembership)
-                          : null;
+                        const officeMemberCount = office.activeMemberCount ?? 0;
+                        const principalName = office.activePrincipalName;
 
                         return (
                           <ListRowCard
@@ -1340,7 +1364,7 @@ const OrganizationStructureContent = () => {
                                   onClick={() => openMemberships(office.id)}
                                 >
                                   <Users className="h-3.5 w-3.5" />
-                                  {officeMembers.length} {officeMembers.length === 1 ? "member" : "members"}
+                                  {officeMemberCount} {officeMemberCount === 1 ? "member" : "members"}
                                 </Button>
                                 <Dialog open={officeEditOpen && editingOffice?.id === office.id} onOpenChange={(open) => { if (!open) { setOfficeEditOpen(false); setEditingOffice(null); } }}>
                                   <DialogTrigger asChild>
@@ -1410,7 +1434,7 @@ const OrganizationStructureContent = () => {
                     value={membershipOfficeFilter}
                     onValueChange={(value) => {
                       setMembershipOfficeFilter(value);
-                      membershipPagination.goToFirstPage();
+                      updateMembershipUrl({ office: value === "all" ? null : value, page: "1" });
                     }}
                   >
                     <SelectTrigger className="h-8 w-56 text-xs" aria-label="Filter memberships by office">
@@ -1425,11 +1449,27 @@ const OrganizationStructureContent = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                  {membershipUserFilter ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        setMembershipUserFilter("");
+                        updateMembershipUrl({ user: null, page: "1" });
+                      }}
+                    >
+                      User: {membershipUserFilterName ?? membershipUserFilter}
+                      <X className="ml-1 h-3 w-3" />
+                    </Button>
+                  ) : null}
                   <Select
                     value={membershipStatusFilter}
                     onValueChange={(value) => {
-                      setMembershipStatusFilter(value as "active" | "all");
-                      membershipPagination.goToFirstPage();
+                      const status = value as "active" | "all";
+                      setMembershipStatusFilter(status);
+                      updateMembershipUrl({ status: status === "active" ? null : status, page: "1" });
                     }}
                   >
                     <SelectTrigger className="h-8 w-36 text-xs" aria-label="Filter memberships by status">
@@ -1445,7 +1485,39 @@ const OrganizationStructureContent = () => {
                   title="Office memberships"
                   description="A membership connects one user to one office and defines what they can do there."
                 >
-                  {filteredMemberships.length === 0 ? (
+                  {membershipQuality ? (
+                    <div className="mb-4 grid gap-3 rounded-lg border p-3 md:grid-cols-3" aria-label="Actionable membership conflicts">
+                      {[
+                        { key: "principal", label: "Multiple active principals", findings: membershipQuality.multipleActivePrincipals, count: membershipQuality.counts.multipleActivePrincipals, office: true },
+                        { key: "primary", label: "Multiple primary assignments", findings: membershipQuality.multiplePrimaryAssignments, count: membershipQuality.counts.multiplePrimaryAssignments, office: false },
+                        { key: "duplicate", label: "Duplicate office assignments", findings: membershipQuality.duplicateOfficeAssignments, count: membershipQuality.counts.duplicateOfficeAssignments, office: true },
+                      ].map((category) => (
+                        <div key={category.key} className="space-y-1.5">
+                          <p className="text-xs font-semibold">{category.label} ({category.count})</p>
+                          {category.findings.slice(0, 4).map((finding, index) => (
+                            <button
+                              key={`${category.key}-${finding.officeId ?? finding.userId}-${index}`}
+                              type="button"
+                              className="block w-full truncate text-left text-xs text-primary hover:underline"
+                              onClick={() => {
+                                const officeId = finding.officeId ?? finding.memberships[0]?.officeId;
+                                const userId = finding.userId ?? finding.memberships[0]?.userId;
+                                setMembershipOfficeFilter(category.office ? officeId ?? "all" : "all");
+                                setMembershipUserFilter(category.office ? "" : userId ?? "");
+                                setSearchQuery("");
+                                updateMembershipUrl({ office: category.office ? officeId ?? null : null, user: category.office ? null : userId ?? null, search: null, page: "1" }, "push");
+                              }}
+                            >
+                              {category.office ? finding.officeName ?? finding.memberships[0]?.officeName : finding.userName ?? finding.memberships[0]?.userName}
+                              {finding.count > 1 ? ` · ${finding.count}` : ""}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {membershipLoading ? <p className="py-4 text-center text-sm text-muted-foreground">Loading memberships…</p> : null}
+                  {membershipCount === 0 && !membershipLoading ? (
                     <EmptyState
                       icon={<Users className={registryQueueEmptyIconClass} />}
                       title={membershipEmptyState.title}
@@ -1496,9 +1568,10 @@ const OrganizationStructureContent = () => {
                       })}
                     </div>
                   )}
-                  {filteredMemberships.length > 0 ? (
+                  {membershipCount > 0 ? (
                     <PaginationControls
                       pagination={membershipPagination}
+                      showPageSizeSelector={false}
                       className="mt-4 border-t border-border/50 pt-3"
                     />
                   ) : null}
@@ -1696,7 +1769,6 @@ const OrganizationStructureContent = () => {
 
           </Tabs>
         </AdminPageShell>
-        )}
 
         {/* Modals */}
         <DirectorateFormModal
@@ -1748,7 +1820,7 @@ const OrganizationStructureContent = () => {
             <AlertDialogHeader>
               <AlertDialogTitle>Remove office membership?</AlertDialogTitle>
               <AlertDialogDescription>
-                Remove {users.find((user) => user.id === membershipToRemove?.userId)?.name ?? "this user"} from {offices.find((office) => office.id === membershipToRemove?.officeId)?.name ?? membershipToRemove?.officeName ?? "this office"}? This removes their office access.
+                Remove {membershipToRemove?.userName ?? membershipToRemove?.userUsername ?? "this user"} from {offices.find((office) => office.id === membershipToRemove?.officeId)?.name ?? membershipToRemove?.officeName ?? "this office"}? This removes their office access.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

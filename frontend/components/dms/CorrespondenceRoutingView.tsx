@@ -11,7 +11,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch } from "@/lib/api/dms";
+import { listOfficeMembershipsForOffice } from "@/lib/office-memberships-client";
 import { logError } from "@/lib/client-logger";
+import { formatDateForAPI } from "@/lib/datetime";
 import { toast } from "@/components/ui/sonner";
 import { Search, CheckCircle2, ChevronDown } from "lucide-react";
 import type { DocumentRecord } from "@/lib/api/dms";
@@ -49,7 +51,7 @@ export const CorrespondenceRoutingView = forwardRef<
   CorrespondenceRoutingHandle,
   CorrespondenceRoutingViewProps
 >(function CorrespondenceRoutingView({ document, onComplete, onStateChange }, ref) {
-  const { directorates, divisions, offices, officeMemberships } = useOrganization();
+  const { directorates, divisions, offices } = useOrganization();
   const { currentUser } = useCurrentUser();
 
   const [subject, setSubject] = useState<string>(document.title || '');
@@ -109,7 +111,7 @@ export const CorrespondenceRoutingView = forwardRef<
       formData.append('subject', subject.trim() || document.title || 'Document');
       formData.append('sender_name', currentUser.name || 'System');
       formData.append('sender_organization', 'Internal');
-      formData.append('received_date', new Date().toISOString().split('T')[0]);
+      formData.append('received_date', formatDateForAPI(new Date()));
       formData.append('priority', priority);
       formData.append('source', 'internal');
       formData.append('direction', 'upward');
@@ -117,8 +119,13 @@ export const CorrespondenceRoutingView = forwardRef<
       formData.append('current_office', targetOfficeId);
 
       // The office registry holder is the accountable recipient of the route.
-      const primaryMember = officeMemberships.find(
-        (membership) => membership.officeId === targetOfficeId && membership.isPrimary && membership.isActive,
+      const targetOfficeMemberships = await listOfficeMembershipsForOffice(targetOfficeId)
+        .catch((error: unknown) => {
+          logError('Failed to load target office memberships', error);
+          return [];
+        });
+      const primaryMember = targetOfficeMemberships.find(
+        (membership) => membership.isPrimary && membership.isActive,
       );
       if (primaryMember) {
         formData.append('current_approver_id', primaryMember.userId);
@@ -182,7 +189,6 @@ export const CorrespondenceRoutingView = forwardRef<
     priority,
     notes,
     purpose,
-    officeMemberships,
     targetOffice?.name,
     onComplete,
   ]);

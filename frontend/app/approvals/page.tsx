@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
-import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
+import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +15,7 @@ import {
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ListRowCard } from '@/components/shared/ListRowCard';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from '@/components/shared/ErrorState';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
@@ -125,6 +124,7 @@ function ApprovalsForm() {
   } | null>(null);
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
   const [pdfActionBusy, setPdfActionBusy] = useState(false);
+  const approvalsRequestRef = useRef(0);
 
   // Restore filters from localStorage after mount
   useEffect(() => {
@@ -227,6 +227,7 @@ function ApprovalsForm() {
   }, [level, isDepartmental, debouncedSearch, filterStatus, filterRole, dateFrom, dateTo, sortBy, sortOrder]);
 
   const loadApprovals = useCallback(async (page: number = 1, pageSize: number = 25, soft = false) => {
+    const requestId = ++approvalsRequestRef.current;
     try {
       if (!soft) {
         setLoading(true);
@@ -238,6 +239,7 @@ function ApprovalsForm() {
       params.append('page_size', String(pageSize));
       
       const response = await apiFetch<Record<string, unknown> | Record<string, unknown>[] | { results: Record<string, unknown>[] }>(`/correspondence/minutes/?${params.toString()}`);
+      if (requestId !== approvalsRequestRef.current) return;
       const minutes: Record<string, unknown>[] = Array.isArray(response) ? response : (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) ? response.results : [];
       
       // Map minutes to executive approvals (all should have seal_data since we filtered)
@@ -283,16 +285,19 @@ function ApprovalsForm() {
         : executiveApprovals.length;
       setCount(count);
     } catch (err: unknown) {
+      if (requestId !== approvalsRequestRef.current) return;
       const errorMessage = err instanceof Error ? err.message : 'Failed to load executive approvals';
       setError(errorMessage);
       logError("Failed to load approvals", err);
       setApprovals([]);
       setCount(0);
     } finally {
-      if (!soft) {
-        setLoading(false);
+      if (requestId === approvalsRequestRef.current) {
+        if (!soft) {
+          setLoading(false);
+        }
+        setRefreshing(false);
       }
-      setRefreshing(false);
     }
   }, [getFilterParams]);
 
@@ -385,16 +390,21 @@ function ApprovalsForm() {
     totalCount: count,
   });
 
-  // Load data when pagination or filters change
-  useEffect(() => {
-    void loadApprovals(pagination.page, pagination.pageSize);
-  }, [level, pagination.page, pagination.pageSize, debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder, loadApprovals]);
+  const filterKey = [level, debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder].join('\u0000');
+  const previousFilterKeyRef = useRef(filterKey);
 
-  // Reset page when filters change
+  // Load data when pagination or filters change. Reset to page one before fetching
+  // so a filter change never requests the previous page and then page one.
   useEffect(() => {
-    pagination.goToFirstPage();
+    const filtersChanged = previousFilterKeyRef.current !== filterKey;
+    previousFilterKeyRef.current = filterKey;
+    if (filtersChanged && pagination.page !== 1) {
+      pagination.goToFirstPage();
+      return;
+    }
+    void loadApprovals(pagination.page, pagination.pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [level, debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [filterKey, pagination.page, pagination.pageSize, loadApprovals]);
 
   // Sync pagination with URL
   useEffect(() => {
@@ -686,7 +696,7 @@ function ApprovalsForm() {
       </div>
 
         {loading && !refreshing ? (
-          <LoadingState message={isDepartmental ? "Loading departmental approvals…" : "Loading executive approvals…"} />
+          <ListSkeleton rows={5} />
         ) : error ? (
           <ErrorState
             title={isDepartmental ? "Error loading departmental approvals" : "Error loading executive approvals"}
@@ -786,7 +796,7 @@ function ApprovalsForm() {
 
 export default function ApprovalsPage() {
   return (
-    <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+    <Suspense fallback={null}>
       <ApprovalsForm />
     </Suspense>
   );

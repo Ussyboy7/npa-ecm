@@ -371,7 +371,10 @@ export const mapApiMinute = (item: ApiMinute): Minute => {
     userId: normalizeId(item.user ?? item.user_id) ?? '',
     userName: userObj
       ? (() => {
-          const fullName = `${asString(userObj.first_name, '')} ${asString(userObj.last_name, '')}`.trim();
+          const fullName = [userObj.first_name, userObj.middle_name, userObj.last_name]
+            .map((part) => asString(part, '').trim())
+            .filter(Boolean)
+            .join(' ');
           if (fullName.length > 0) return fullName;
           return asStringOptional(userObj.username) ?? undefined;
         })()

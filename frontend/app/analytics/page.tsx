@@ -10,21 +10,24 @@ export default function AnalyticsPage() {
   const visibility = useSidebarVisibility();
 
   useEffect(() => {
+    if (!visibility.isVisibilityReady) return;
     if (visibility.showExecutiveDashboard) {
-      router.replace("/analytics/executive");
+      router.replace("/dashboard?tab=executive");
       return;
     }
     if (visibility.showPerformanceAnalytics) {
-      router.replace("/analytics/performance");
+      router.replace("/dashboard?tab=performance");
       return;
     }
     if (visibility.showDivisionAnalytics) {
-      router.replace("/analytics/divisions");
+      router.replace("/dashboard?tab=divisions");
       return;
     }
     if (visibility.showCaseAnalytics) {
-      router.replace("/analytics/cases");
+      router.replace("/dashboard?tab=cases");
+      return;
     }
+    router.replace("/dashboard");
   }, [router, visibility]);
 
   return null;

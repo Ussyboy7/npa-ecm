@@ -401,7 +401,9 @@ export type Case = {
   owningOfficeId?: string;
   currentOfficeId?: string;
   createdById?: string;
+  createdByName?: string;
   assignedToId?: string;
+  assignedToName?: string;
   openedAt: string;
   resolvedAt?: string;
   closedAt?: string;
@@ -487,5 +489,4 @@ export {
   getDirectorateById,
   getDivisionById,
   getDepartmentById,
-  getUserById,
 } from './organization-cache';

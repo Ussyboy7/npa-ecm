@@ -23,7 +23,6 @@ import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPre
 import { DocumentPreviewModal } from "@/components/correspondence/DocumentPreviewModal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
 import {
   getCaseById,
   updateCaseStatus,
@@ -53,7 +52,7 @@ import {
 } from "@/lib/correspondence-preview-target";
 import { logError, logWarn } from "@/lib/client-logger";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { DetailSkeleton } from "@/components/shared/PageSkeleton";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { toast } from "@/components/ui/sonner";
 
@@ -77,7 +76,6 @@ const CaseDetailPage = () => {
   const caseId = params.id as string;
   const { currentUser, hydrated } = useCurrentUser();
   const { offices } = useOrganization();
-  const { users } = useOrgUsers();
   const { getSignal } = useAbortController();
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
@@ -366,13 +364,13 @@ const CaseDetailPage = () => {
   const owningOffice = caseData
     ? offices.find((o) => o.id === caseData.owningOfficeId)
     : undefined;
-  const assignedTo = caseData ? users.find((u) => u.id === caseData.assignedToId) : undefined;
-  const createdBy = caseData ? users.find((u) => u.id === caseData.createdById) : undefined;
+  const assignedToName = caseData?.assignedToName;
+  const createdByName = caseData?.createdByName;
 
   if (loading) {
     return (
       <div className="px-4 md:px-6 py-6">
-        <LoadingState message="Loading case…" />
+        <DetailSkeleton />
       </div>
     );
   }
@@ -422,7 +420,7 @@ const CaseDetailPage = () => {
             slaStatus={slaStatus}
             slaError={slaError}
             owningOfficeName={owningOffice?.name}
-            assignedToName={assignedTo?.name}
+            assignedToName={assignedToName}
           />
           {highlightQuery ? (
             <div className="px-4 py-2 border-b border-border/40">
@@ -481,8 +479,8 @@ const CaseDetailPage = () => {
               slaStatus,
               slaError,
               owningOfficeName: owningOffice?.name,
-              assignedToName: assignedTo?.name,
-              createdByName: createdBy?.name ?? caseData.createdByName,
+              assignedToName,
+              createdByName,
             }}
           />
         </div>

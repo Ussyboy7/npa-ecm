@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
-import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,7 +49,7 @@ import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { ListRowCard } from '@/components/shared/ListRowCard';
@@ -534,7 +533,7 @@ function PhysicalDocumentsForm() {
 
         <div aria-live="polite">
           {loading ? (
-            <LoadingState message="Loading documents…" />
+            <ListSkeleton rows={5} />
           ) : error ? (
             <ErrorState message={error} variant="inline" onRetry={fetchDocuments} retryLabel="Retry" />
           ) : documents.length === 0 ? (
@@ -919,7 +918,7 @@ function PhysicalDocumentsForm() {
 }
 
 const PhysicalDocumentsPage = () => (
-  <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+  <Suspense fallback={null}>
     <PhysicalDocumentsForm />
   </Suspense>
 );

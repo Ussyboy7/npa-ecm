@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, Suspense } from 'react';
-import { PageSuspenseFallback } from '@/components/shared/PageSuspenseFallback';
+import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from 'react';
 import { useAbortController } from '@/hooks/use-abort-controller';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -36,7 +34,7 @@ import { exportToCSV } from '@/lib/admin-export';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { RecordCard } from './components/RecordCard';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
@@ -64,12 +62,11 @@ type UserScope = {
 };
 
 const RecordsArchiveForm = () => {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganization();
   const { dataVersion: _dataVersion } = useCorrespondence();
-  const { getSignal, reset } = useAbortController();
+  const { getSignal } = useAbortController();
 
   // Initialize filters from URL params or localStorage
   useEffect(() => {
@@ -262,9 +259,18 @@ const RecordsArchiveForm = () => {
   }, [selectedDivision]);
 
   // Count active filters
-  const hasActiveFilters = useMemo(() => {
-    return !!(searchQuery || selectedDirectorate !== 'all' || selectedDivision !== 'all' || selectedDepartment !== 'all' || selectedPriority || dateFrom || dateTo);
+  const activeFilterCount = useMemo(() => {
+    return [
+      searchQuery,
+      selectedDirectorate !== 'all',
+      selectedDivision !== 'all',
+      selectedDepartment !== 'all',
+      selectedPriority,
+      dateFrom,
+      dateTo,
+    ].filter(Boolean).length;
   }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, selectedPriority, dateFrom, dateTo]);
+  const hasActiveFilters = activeFilterCount > 0;
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -317,12 +323,6 @@ const RecordsArchiveForm = () => {
     return () => clearTimeout(handle);
   }, [searchQuery]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    pagination.setPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, selectedPriority, dateFrom, dateTo, sortBy, sortOrder]);
-  
   // Sync pagination with URL
   useEffect(() => {
     const urlPage = searchParams.get('page');
@@ -408,11 +408,33 @@ const RecordsArchiveForm = () => {
         setRefreshing(false);
       }
     }
-  }, [currentUser?.id, getFilterParams, pagination.page, pagination.pageSize, sortBy, sortOrder]);
+  }, [currentUser?.id, getFilterParams, getSignal, pagination.page, pagination.pageSize, sortBy, sortOrder]);
 
+  const filterKey = [
+    debouncedSearch,
+    selectedDirectorate,
+    selectedDivision,
+    selectedDepartment,
+    selectedPriority,
+    dateFrom,
+    dateTo,
+    sortBy,
+    sortOrder,
+  ].join('\u0000');
+  const previousFilterKeyRef = useRef(filterKey);
+
+  // Reset before fetching so a filter change on a later page never requests
+  // the old page first.
   useEffect(() => {
-    fetchRecords();
-  }, [fetchRecords]);
+    const filtersChanged = previousFilterKeyRef.current !== filterKey;
+    previousFilterKeyRef.current = filterKey;
+    if (filtersChanged && pagination.page !== 1) {
+      pagination.goToFirstPage();
+      return;
+    }
+    void fetchRecords();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filterKey captures filters; page/pageSize trigger fetches
+  }, [filterKey, pagination.page, pagination.pageSize, fetchRecords]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -529,6 +551,7 @@ const RecordsArchiveForm = () => {
             )}
             stats={(
               <StatStrip
+                wrap
                 items={[
                   { key: 'total', label: 'Total records', value: summary.total },
                   { key: 'thisYear', label: 'This year', value: summary.thisYear },
@@ -541,12 +564,19 @@ const RecordsArchiveForm = () => {
         {/* Inline filter bar */}
         <div className="rounded-xl bg-muted/30 p-2">
             <div className="md:hidden mb-2">
-              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="h-8 w-full justify-between text-xs">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFiltersOpen(!filtersOpen)}
+                aria-expanded={filtersOpen}
+                aria-controls="records-filters"
+                className="h-8 w-full justify-between text-xs"
+              >
                 <span className="flex items-center"><Search className="h-3.5 w-3.5 mr-2" /> Filters</span>
-                {hasActiveFilters && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">1</span>}
+                {hasActiveFilters && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">{activeFilterCount}</span>}
               </Button>
             </div>
-            <div className={`flex-wrap items-center gap-2${filtersOpen ? ' flex' : ' hidden'} md:flex`}>
+            <div id="records-filters" className={`flex-wrap items-center gap-2${filtersOpen ? ' flex' : ' hidden'} md:flex`}>
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -584,7 +614,7 @@ const RecordsArchiveForm = () => {
 
             {userScope.level !== 'office' && visibleDepartments.length > 0 && (
               <Select value={selectedDepartment} onValueChange={(v) => { setSelectedDepartment(v); pagination.goToFirstPage(); }}>
-                <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by department"><SelectValue placeholder="Department" /></SelectTrigger>
+                <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filter by department"><SelectValue placeholder="Department" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
                   {visibleDepartments.map((dept) => (
@@ -608,7 +638,7 @@ const RecordsArchiveForm = () => {
             <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
 
             <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-              <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Sort by"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[180px] text-xs" aria-label="Sort by"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="completed-desc">Completed (Newest)</SelectItem>
                 <SelectItem value="completed-asc">Completed (Oldest)</SelectItem>
@@ -628,7 +658,7 @@ const RecordsArchiveForm = () => {
 
         <div aria-live="polite">
         {loading && !refreshing ? (
-          <LoadingState message="Loading records…" />
+          <ListSkeleton rows={5} />
         ) : error ? (
           <ErrorState
             title="Error loading records"
@@ -677,7 +707,7 @@ const RecordsArchiveForm = () => {
 };
 
 const RecordsArchivePage = () => (
-  <Suspense fallback={<PageSuspenseFallback message="Loading..." />}>
+  <Suspense fallback={null}>
     <CorrespondenceProvider>
       <RecordsArchiveForm />
     </CorrespondenceProvider>

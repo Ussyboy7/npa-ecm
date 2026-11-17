@@ -8,12 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, X, Send } from "lucide-react";
+import { Plus, X, Send, Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { createSignatureWorkflow } from "@/lib/api/forms";
-import { useOrganization } from "@/contexts/OrganizationContext";
-import { useOrgUsers } from "@/hooks/use-org-users";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, User } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,9 +26,136 @@ interface SignatureWorkflowDialogProps {
 }
 
 interface SignatureAssignment {
+  id: string;
   field_name: string;
   field_label: string;
   user_id?: string;
+}
+
+let nextAssignmentId = 0;
+
+function createAssignment(fieldName: string, fieldLabel: string): SignatureAssignment {
+  nextAssignmentId += 1;
+  return {
+    id: `signature-assignment-${nextAssignmentId}`,
+    field_name: fieldName,
+    field_label: fieldLabel,
+  };
+}
+
+function SignatureUserPicker({
+  selectedUserId,
+  enabled,
+  onSelect,
+}: {
+  selectedUserId?: string;
+  enabled: boolean;
+  onSelect: (userId: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const {
+    query,
+    setQuery,
+    users,
+    userById,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+  } = usePaginatedUserSearch({
+    enabled: enabled && (isOpen || Boolean(selectedUserId)),
+    pageSize: 50,
+  });
+  const selectedUserName = selectedUserId ? userById.get(selectedUserId)?.name : undefined;
+
+  return (
+    <Popover
+      open={isOpen}
+      onOpenChange={(nextOpen) => {
+        setIsOpen(nextOpen);
+        if (nextOpen) setQuery("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" className="w-full justify-between">
+          {selectedUserName ? (
+            <span className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              {selectedUserName}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Select user...</span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[400px] p-0">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Search users..."
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            {loading && users.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading users...
+              </div>
+            ) : users.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                {error ?? "No users found."}
+              </div>
+            ) : (
+              <CommandGroup>
+                {users.map((user) => (
+                  <CommandItem
+                    key={user.id}
+                    value={user.id}
+                    onSelect={() => {
+                      onSelect(user.id);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        selectedUserId === user.id ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    <div className="flex flex-col">
+                      <span>{user.name}</span>
+                      {user.email && (
+                        <span className="text-xs text-muted-foreground">{user.email}</span>
+                      )}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {hasMore ? (
+              <div className="p-2 pt-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : null}
+                  Load more users
+                </Button>
+              </div>
+            ) : null}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function SignatureWorkflowDialog({
@@ -38,12 +164,9 @@ export function SignatureWorkflowDialog({
   submission,
   onWorkflowCreated,
 }: SignatureWorkflowDialogProps) {
-  const {} = useOrganization();
-  const { users: organizationUsers } = useOrgUsers();
   const [assignments, setAssignments] = useState<SignatureAssignment[]>([]);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [openUserSelectors, setOpenUserSelectors] = useState<Record<number, boolean>>({});
 
   // Get signature fields from template
   const signatureFields = (submission.template.structure?.fields || []).filter(
@@ -54,10 +177,7 @@ export function SignatureWorkflowDialog({
     if (open && signatureFields.length > 0 && assignments.length === 0) {
       // Initialize assignments for all signature fields
       setAssignments(
-        signatureFields.map((field) => ({
-          field_name: field.name,
-          field_label: field.label,
-        }))
+        signatureFields.map((field) => createAssignment(field.name, field.label))
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,10 +187,7 @@ export function SignatureWorkflowDialog({
     if (signatureFields.length > 0) {
       setAssignments([
         ...assignments,
-        {
-          field_name: signatureFields[0].name,
-          field_label: signatureFields[0].label,
-        },
+        createAssignment(signatureFields[0].name, signatureFields[0].label),
       ]);
     }
   };
@@ -158,10 +275,8 @@ export function SignatureWorkflowDialog({
               </div>
 
               {assignments.map((assignment, index) => {
-                const selectedUser = organizationUsers.find(u => u.id === assignment.user_id);
-                
                 return (
-                  <Card key={index} className="border-l-4 border-l-primary">
+                  <Card key={assignment.id} className="border-l-4 border-l-primary">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-3">
@@ -169,65 +284,13 @@ export function SignatureWorkflowDialog({
                             <Label className="text-sm font-semibold mb-2 block">
                               {assignment.field_label}
                             </Label>
-                            <Popover 
-                              open={openUserSelectors[index] || false} 
-                              onOpenChange={(open) => setOpenUserSelectors(prev => ({ ...prev, [index]: open }))}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className="w-full justify-between"
-                                >
-                                  {selectedUser ? (
-                                    <span className="flex items-center gap-2">
-                                      <User className="h-4 w-4" />
-                                      {selectedUser.name}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted-foreground">Select user...</span>
-                                  )}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[400px] p-0">
-                                <Command>
-                                  <CommandInput placeholder="Search users..." />
-                                  <CommandList>
-                                    <CommandEmpty>No users found.</CommandEmpty>
-                                    <CommandGroup>
-                                      {organizationUsers
-                                        .filter((user) => user.active)
-                                        .map((user) => (
-                                          <CommandItem
-                                            key={user.id}
-                                            value={user.id}
-                                            onSelect={() => {
-                                              handleUpdateAssignment(index, {
-                                                user_id: user.id,
-                                              });
-                                              setOpenUserSelectors(prev => ({ ...prev, [index]: false }));
-                                            }}
-                                          >
-                                            <Check
-                                              className={cn(
-                                                "mr-2 h-4 w-4",
-                                                assignment.user_id === user.id ? "opacity-100" : "opacity-0"
-                                              )}
-                                            />
-                                            <div className="flex flex-col">
-                                              <span>{user.name}</span>
-                                              {user.email && (
-                                                <span className="text-xs text-muted-foreground">{user.email}</span>
-                                              )}
-                                            </div>
-                                          </CommandItem>
-                                        ))}
-                                    </CommandGroup>
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
+                            <SignatureUserPicker
+                              enabled={open}
+                              selectedUserId={assignment.user_id}
+                              onSelect={(userId) =>
+                                handleUpdateAssignment(index, { user_id: userId })
+                              }
+                            />
                           </div>
                         </div>
                         {assignments.length > 1 && (

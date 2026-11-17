@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { fetchPerformanceAnalytics, type PerformanceAnalytics } from '@/lib/analytics-client';
 import { useThemeChartColors } from '@/hooks/use-theme-chart-colors';
+import Link from 'next/link';
 import { appType } from '@/lib/app-type';
 import { cn } from '@/lib/utils';
 
@@ -77,6 +78,19 @@ export const PerformanceAnalyticsTab = () => {
   );
   const responseDistribution = useMemo(() => data?.responseDistribution ?? [], [data]);
   const rolePerformance = useMemo(() => data?.rolePerformance ?? [], [data]);
+  const stageDurations = data?.stageDurations;
+  const stageGapMetrics = useMemo(
+    () =>
+      stageDurations
+        ? ([
+            ['registrationToRouting', 'Registration → routing'],
+            ['routingToApproval', 'Routing → approval'],
+            ['approvalToCompletion', 'Approval → completion'],
+            ['endToEnd', 'End to end'],
+          ] as const).map(([key, label]) => ({ key, label, metric: stageDurations[key] }))
+        : [],
+    [stageDurations],
+  );
 
   const topDivisions = useMemo(
     () =>
@@ -412,7 +426,16 @@ export const PerformanceAnalyticsTab = () => {
                               <span className="w-4 shrink-0 text-[11px] text-muted-foreground">
                                 {index + 1}
                               </span>
-                              <span className="truncate font-medium">{division.fullName}</span>
+                              {division.id ? (
+                                <Link
+                                  href={`/admin/organization?tab=offices&division=${encodeURIComponent(division.id)}`}
+                                  className="truncate font-medium text-primary hover:underline"
+                                >
+                                  {division.fullName}
+                                </Link>
+                              ) : (
+                                <span className="truncate font-medium">{division.fullName}</span>
+                              )}
                             </div>
                             <span className="shrink-0 text-muted-foreground">
                               {division.completionRate}% · {division.avgTurnaround}d avg
@@ -423,6 +446,29 @@ export const PerformanceAnalyticsTab = () => {
                       ))}
                     </div>
                   </div>
+                </div>
+              )}
+            </AnalyticsPanel>
+
+            <AnalyticsPanel
+              title="Observed timestamp gaps"
+              description="Average elapsed time between recorded workflow timestamps; samples with missing or out-of-order endpoints are omitted."
+            >
+              {stageGapMetrics.every(({ metric }) => metric.count === 0) ? (
+                <p className={cn(appType.meta, 'py-6 text-center')}>
+                  No complete observed timestamp gaps in this period.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {stageGapMetrics.map(({ key, label, metric }) => (
+                    <div key={key} className="rounded-lg border border-border/50 bg-background/40 p-3">
+                      <p className={appType.caption}>{label}</p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {metric.averageHours === null ? '—' : `${metric.averageHours.toFixed(1)} h`}
+                      </p>
+                      <p className={appType.caption}>{itemCountLabel(metric.count)} observed</p>
+                    </div>
+                  ))}
                 </div>
               )}
             </AnalyticsPanel>

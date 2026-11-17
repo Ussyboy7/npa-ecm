@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useUserLookup } from "@/hooks/use-user-lookup";
 import { apiFetch } from "@/lib/api/dms";
 import { logError } from "@/lib/client-logger";
 import { toast } from "@/components/ui/sonner";
@@ -25,8 +26,6 @@ import type { User } from "@/lib/npa-structure";
 
 interface DocumentAccessCardProps {
   document: DocumentRecord;
-  userLookup: Map<string, User>;
-  getUserInitials: (userId: string) => string;
   /** False hides the level and revoke controls. */
   canManage?: boolean;
   onAddPeople?: () => void;
@@ -39,6 +38,15 @@ const ACCESS_LEVELS: { value: PermissionAccess; label: string }[] = [
   { value: "write", label: "Write" },
   { value: "admin", label: "Admin" },
 ];
+
+function initialsForName(name?: string): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  return name.trim().slice(0, 2).toUpperCase() || "?";
+}
 
 interface GrantLookups {
   users: Map<string, User>;
@@ -95,13 +103,21 @@ function describeGrant(
  */
 export function DocumentAccessCard({
   document,
-  userLookup,
-  getUserInitials,
   canManage = false,
   onAddPeople,
   onChanged,
 }: DocumentAccessCardProps) {
   const { offices, divisions, departments, directorates } = useOrganization();
+  const accessUserIds = useMemo(
+    () => [
+      ...(document.permissions ?? []).flatMap((permission) => permission.userIds),
+      ...(document.activeEditors ?? [])
+        .filter((editor) => !editor.userName)
+        .map((editor) => editor.userId),
+    ],
+    [document.permissions, document.activeEditors],
+  );
+  const userLookup = useUserLookup(accessUserIds);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [permissionToRemove, setPermissionToRemove] = useState<DocumentPermission | null>(null);
 
@@ -148,13 +164,12 @@ export function DocumentAccessCard({
   const editors = useMemo(
     () =>
       (document.activeEditors ?? [])
-        .filter((editor) => userLookup.has(editor.userId))
         .map((editor) => ({
           userId: editor.userId,
-          name: userLookup.get(editor.userId)?.name || "Someone",
-          initials: getUserInitials(editor.userId),
+          name: editor.userName || userLookup.get(editor.userId)?.name || "Someone",
+          initials: initialsForName(editor.userName || userLookup.get(editor.userId)?.name),
         })),
-    [document.activeEditors, userLookup, getUserInitials],
+    [document.activeEditors, userLookup],
   );
 
   const changeLevel = async (permissionId: string, access: PermissionAccess) => {
@@ -258,6 +273,7 @@ export function DocumentAccessCard({
             const permissionId = permission.id as string;
             const busy = pendingId === permissionId;
             const singleUser = permission.userIds[0];
+            const singleUserName = singleUser ? lookups.users.get(singleUser)?.name : undefined;
             return (
               <li key={permissionId} className="flex items-center gap-2 min-w-0 rounded-lg px-1 py-1">
                 {isGroup ? (
@@ -267,7 +283,7 @@ export function DocumentAccessCard({
                 ) : (
                   <Avatar className="h-6 w-6 shrink-0">
                     <AvatarFallback className="text-[10px]">
-                      {singleUser ? getUserInitials(singleUser) : "?"}
+                      {singleUserName ? initialsForName(singleUserName) : "?"}
                     </AvatarFallback>
                   </Avatar>
                 )}

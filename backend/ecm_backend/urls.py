@@ -31,10 +31,6 @@ api_v1_patterns = [
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('health/live/', health_live, name='health_live_short'),
-    path('health/', health_check, name='health_check_short'),
-    path('api/metrics/', prometheus_metrics, name='prometheus_metrics_short'),
-
     # OpenAPI schema & docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
@@ -42,9 +38,6 @@ urlpatterns = [
 
     # Versioned application endpoints
     path('api/v1/', include((api_v1_patterns, 'api'), namespace='api_v1')),
-
-    # Legacy alias to keep existing clients working temporarily
-    path('api/', include((api_v1_patterns, 'api'), namespace='api_legacy')),
 ]
 
 # Public /media/ is intentionally not mounted. Document bytes go through DRM APIs;

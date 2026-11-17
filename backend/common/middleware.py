@@ -29,7 +29,7 @@ class InternalHostMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         # Check if this is an internal metrics request
-        if request.path.startswith('/api/metrics/'):
+        if request.path.startswith('/api/v1/metrics/'):
             # Extract hostname without port for internal Docker requests
             host = request.get_host()
             if ':' in host:

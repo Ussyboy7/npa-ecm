@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ListRowCard } from '@/components/shared/ListRowCard';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatStrip } from '@/components/shared/StatStrip';
 import {
@@ -217,7 +217,7 @@ const SecretaryDashboardContent = () => {
   };
 
   if (loading) {
-    return <LoadingState message="Loading your workload…" />;
+    return <ListSkeleton rows={4} />;
   }
 
   const statsItems = [

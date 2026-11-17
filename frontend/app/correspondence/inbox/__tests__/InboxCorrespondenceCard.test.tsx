@@ -2,14 +2,12 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { InboxCorrespondenceCard } from '../components/InboxCorrespondenceCard';
-import type { Correspondence, User } from '@/lib/npa-structure';
+import type { Correspondence } from '@/lib/npa-structure';
 import type { UserOrgIds } from '../components/InboxCorrespondenceCard';
 
 const mockUseOrg = vi.hoisted(() => vi.fn(() => ({
   divisions: [],
-  users: [] as User[],
 })));
-const mockUseOrgUsers = vi.hoisted(() => vi.fn(() => ({ users: [] as User[], loading: false })));
 
 vi.mock('next/link', () => ({
   default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) =>
@@ -18,9 +16,6 @@ vi.mock('next/link', () => ({
 
 vi.mock('@/contexts/OrganizationContext', () => ({
   useOrganization: mockUseOrg,
-}));
-vi.mock('@/hooks/use-org-users', () => ({
-  useOrgUsers: mockUseOrgUsers,
 }));
 
 const baseCorr: Correspondence = {
@@ -117,17 +112,10 @@ describe('InboxCorrespondenceCard', () => {
   });
 
   it('renders assigned approver when present', () => {
-    mockUseOrgUsers.mockImplementationOnce(() => ({
-      loading: false,
-      users: [
-        { id: 'user-1', name: 'Jane Approver', email: 'jane@npa.gov', employeeId: 'EMP001', gradeLevel: 'GM', systemRole: 'GM', active: true },
-        { id: 'user-2', name: 'Other User', email: 'other@npa.gov', employeeId: 'EMP002', gradeLevel: 'AGM', systemRole: 'AGM', active: true },
-      ] as User[],
-    }));
-
     const corrWithApprover: Correspondence = {
       ...baseCorr,
       currentApproverId: 'user-1',
+      currentApproverName: 'Jane Approver',
     };
     render(<InboxCorrespondenceCard corr={corrWithApprover} userOrgIds={emptyUserOrgIds} />);
     expect(screen.getByText(/Current: Jane Approver/)).toBeDefined();

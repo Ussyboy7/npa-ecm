@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +52,6 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
-import { useOrgUsers } from '@/hooks/use-org-users';
 import { getActivityLogs, downloadComplianceExport, type ActivityLog } from '@/lib/api/audit';
 import { PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
@@ -107,6 +107,11 @@ const DEFAULT_SUMMARY: AuditSummary = {
   actions: 0,
 };
 
+export const AUDIT_HEADER_SLOT_IDS = {
+  stats: 'records-audit-stats-slot',
+  actions: 'records-audit-actions-slot',
+} as const;
+
 export function getAuditScopeSubtitle(role: string): string {
   const normalized = role.trim().toLowerCase();
   if (normalized === 'managing director' || normalized === 'executive director') {
@@ -141,13 +146,7 @@ function getActionIconForLog(action: string) {
   return Activity;
 }
 
-function AuditLogRow({
-  log,
-  getUserName,
-}: {
-  log: ActivityLog;
-  getUserName: (userId?: string) => string;
-}) {
+function AuditLogRow({ log }: { log: ActivityLog }) {
   const ActionIcon = getActionIconForLog(log.action);
   const isError = log.severity === 'error' || log.severity === 'critical' || !log.success;
   const leadingBg = isError
@@ -207,7 +206,7 @@ function AuditLogRow({
       <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
         <span className={correspondenceQueueMetaItemClass}>
           <UserIcon className={correspondenceQueueMetaIconClass} />
-          <span className="truncate">User: {log.userName || getUserName(log.user)}</span>
+          <span className="truncate">User: {log.userName || log.userEmail || log.user?.slice(0, 8) || 'System'}</span>
         </span>
         {log.description ? (
           <span className={correspondenceQueueMetaItemClass}>
@@ -241,8 +240,6 @@ function AuditLogRow({
 }
 
 export function AuditTrailPanel() {
-  const { users: organizationUsers } = useOrgUsers();
-
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [actionFilter, setActionFilter] = useState<string>('all');
@@ -262,6 +259,13 @@ export function AuditTrailPanel() {
   const [exporting, setExporting] = useState(false);
   const [exportingCompliance, setExportingCompliance] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statsPortalTarget, setStatsPortalTarget] = useState<HTMLElement | null>(null);
+  const [actionsPortalTarget, setActionsPortalTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setStatsPortalTarget(document.getElementById(AUDIT_HEADER_SLOT_IDS.stats));
+    setActionsPortalTarget(document.getElementById(AUDIT_HEADER_SLOT_IDS.actions));
+  }, []);
 
   const hasActiveFilters = useMemo(() => !!(
     debouncedSearch ||
@@ -464,12 +468,6 @@ export function AuditTrailPanel() {
   // Use summary stats from API
   const summary = summaryStats;
 
-  const getUserName = (userId?: string) => {
-    if (!userId) return 'System';
-    const user = organizationUsers.find((u) => u.id === userId);
-    return user?.name || userId;
-  };
-
   const clearFilters = () => {
     setSearchQuery('');
     setActionFilter('all');
@@ -480,51 +478,58 @@ export function AuditTrailPanel() {
     setDateTo('');
   };
 
+  const headerActions = (
+    <>
+      <ContextualHelp
+        title="Using the audit trail"
+        description="Review activity events and export evidence for compliance."
+        steps={[
+          'Search by user, action, description, or object text.',
+          'Filter by action type, module, severity, status, or date.',
+          'Export filtered rows as CSV or a tamper-evident compliance ZIP from More.',
+        ]}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="compact">
+            <MoreVertical className="h-4 w-4" />
+            More
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || logs.length === 0}>
+            <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => void handleComplianceExport()}
+            disabled={exportingCompliance || loading}
+          >
+            <ShieldCheck className={`h-4 w-4 mr-2 ${exportingCompliance ? 'animate-spin' : ''}`} />
+            {exportingCompliance ? 'Building bundle...' : 'Export Compliance Bundle'}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+
+  const statsStrip = (
+    <StatStrip
+      items={[
+        { key: 'total', label: 'Total Events', value: summary.total },
+        { key: 'logins', label: 'User Logins', value: summary.logins },
+        { key: 'errors', label: 'Errors & Failures', value: summary.errors },
+        { key: 'actions', label: 'System Actions', value: summary.actions },
+      ]}
+    />
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <ContextualHelp
-          title="Using the audit trail"
-          description="Review activity events and export evidence for compliance."
-          steps={[
-            'Search by user, action, description, or object text.',
-            'Filter by action type, module, severity, status, or date.',
-            'Export filtered rows as CSV or a tamper-evident compliance ZIP from More.',
-          ]}
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="compact">
-              <MoreVertical className="h-4 w-4" />
-              More
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || logs.length === 0}>
-              <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
-              {exporting ? 'Exporting...' : 'Export CSV'}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => void handleComplianceExport()}
-              disabled={exportingCompliance || loading}
-            >
-              <ShieldCheck className={`h-4 w-4 mr-2 ${exportingCompliance ? 'animate-spin' : ''}`} />
-              {exportingCompliance ? 'Building bundle...' : 'Export Compliance Bundle'}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {actionsPortalTarget ? createPortal(headerActions, actionsPortalTarget) : null}
+      {statsPortalTarget ? createPortal(statsStrip, statsPortalTarget) : null}
 
-      <StatStrip
-          items={[
-            { key: 'total', label: 'Total Events', value: summary.total },
-            { key: 'logins', label: 'User Logins', value: summary.logins },
-            { key: 'errors', label: 'Errors & Failures', value: summary.errors },
-            { key: 'actions', label: 'System Actions', value: summary.actions },
-          ]}
-        />
-
-        <div className="rounded-xl bg-muted/30 p-2">
+      <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -602,7 +607,7 @@ export function AuditTrailPanel() {
         ) : (
           <div className={correspondenceQueueListStackClass}>
             {logs.map((log) => (
-              <AuditLogRow key={log.id} log={log} getUserName={getUserName} />
+              <AuditLogRow key={log.id} log={log} />
             ))}
           </div>
         )}

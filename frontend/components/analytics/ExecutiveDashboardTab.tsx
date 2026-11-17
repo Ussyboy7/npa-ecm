@@ -286,7 +286,7 @@ export const ExecutiveDashboardTab = () => {
         key: 'bottleneck',
         title: `Bottleneck: ${top.divisionName}`,
         detail: `${itemCountLabel(top.pendingCount)} pending · avg ${top.avgPendingDays}d`,
-        href: '/analytics/divisions',
+        href: '/dashboard?tab=divisions',
         tone: 'info',
       });
     }

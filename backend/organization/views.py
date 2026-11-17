@@ -1,7 +1,8 @@
 """Viewsets for organizational hierarchy resources."""
 
+from collections import defaultdict
 
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
@@ -438,6 +439,46 @@ class OfficeViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
     search_fields = ["name", "code", "description"]
     ordering_fields = ["name", "code", "created_at"]
 
+    def get_queryset(self):
+        from django.db.models import CharField, IntegerField, Value
+        from django.db.models.functions import Coalesce, Concat, NullIf, Trim
+
+        active_memberships = OfficeMembership.objects.filter(
+            office_id=OuterRef("pk"),
+            is_active=True,
+        )
+        principal_memberships = active_memberships.filter(
+            assignment_role=OfficeMembership.AssignmentRole.PRINCIPAL
+        ).order_by("-is_primary", "user__last_name", "user__first_name", "user__username")
+        principal_name = principal_memberships.annotate(
+            display_name=NullIf(
+                Trim(
+                    Concat(
+                        "user__first_name",
+                        Value(" "),
+                        "user__last_name",
+                        output_field=CharField(),
+                    )
+                ),
+                Value(""),
+            )
+        ).values("display_name")[:1]
+        principal_username = principal_memberships.values("user__username")[:1]
+        return super().get_queryset().annotate(
+            active_member_count=Coalesce(
+                active_memberships.values("office_id")
+                .annotate(total=Count("user_id", distinct=True))
+                .values("total")[:1],
+                Value(0),
+                output_field=IntegerField(),
+            ),
+            active_principal_name=Coalesce(
+                Subquery(principal_name),
+                Subquery(principal_username),
+                output_field=CharField(),
+            ),
+        )
+
 
 class OfficeMembershipViewSet(viewsets.ModelViewSet):
     queryset = OfficeMembership.objects.select_related("office", "user")
@@ -457,6 +498,124 @@ class OfficeMembershipViewSet(viewsets.ModelViewSet):
             "can_manage_org_structure",
             "can_manage_users",
         )
+
+    @action(detail=False, methods=["get"], url_path="quality")
+    def quality(self, request):
+        """Summarize actionable conflicts among active office memberships."""
+        self._ensure_membership_admin()
+        active = OfficeMembership.objects.filter(is_active=True).select_related("office", "user")
+
+        def group_detail_rows(queryset, group_key):
+            """Collect bounded membership details without querying once per group."""
+            grouped = defaultdict(list)
+            for membership in queryset:
+                bucket = grouped[group_key(membership)]
+                if len(bucket) >= 50:
+                    continue
+                bucket.append({
+                    "id": str(membership.id),
+                    "officeId": str(membership.office_id),
+                    "officeName": membership.office.name,
+                    "userId": str(membership.user_id),
+                    "userName": membership.user.get_full_name() or membership.user.username,
+                    "role": membership.assignment_role,
+                    "isPrimary": membership.is_primary,
+                })
+            return grouped
+
+        principal_groups = list(
+            active.filter(assignment_role=OfficeMembership.AssignmentRole.PRINCIPAL)
+            .values("office_id", "office__name")
+            .annotate(total=Count("user_id", distinct=True))
+            .filter(total__gt=1)
+            .order_by("office__name")
+        )
+        principal_page = principal_groups[:100]
+        principal_details = group_detail_rows(
+            active.filter(
+                assignment_role=OfficeMembership.AssignmentRole.PRINCIPAL,
+                office_id__in=[group["office_id"] for group in principal_page],
+            ).order_by("office__name", "user__last_name", "user__first_name", "user__username"),
+            lambda membership: membership.office_id,
+        ) if principal_page else {}
+        principal_conflicts = [
+            {
+                "officeId": str(group["office_id"]),
+                "officeName": group["office__name"],
+                "count": group["total"],
+                "memberships": principal_details.get(group["office_id"], []),
+            }
+            for group in principal_page
+        ]
+
+        primary_groups = list(
+            active.filter(is_primary=True)
+            .values("user_id", "user__first_name", "user__last_name", "user__username")
+            .annotate(total=Count("office_id", distinct=True))
+            .filter(total__gt=1)
+            .order_by("user__last_name", "user__first_name", "user__username")
+        )
+        primary_page = primary_groups[:100]
+        primary_details = group_detail_rows(
+            active.filter(
+                is_primary=True,
+                user_id__in=[group["user_id"] for group in primary_page],
+            ).order_by("user__last_name", "user__first_name", "office__name"),
+            lambda membership: membership.user_id,
+        ) if primary_page else {}
+        primary_conflicts = [
+            {
+                "userId": str(group["user_id"]),
+                "userName": " ".join(
+                    part for part in (group["user__first_name"], group["user__last_name"]) if part
+                ) or group["user__username"],
+                "count": group["total"],
+                "memberships": primary_details.get(group["user_id"], []),
+            }
+            for group in primary_page
+        ]
+
+        duplicate_groups = list(
+            active.values("office_id", "office__name", "user_id", "user__first_name", "user__last_name", "user__username")
+            .annotate(total=Count("id"))
+            .filter(total__gt=1)
+            .order_by("office__name", "user__last_name", "user__first_name", "user__username")
+        )
+        duplicate_page = duplicate_groups[:100]
+        duplicate_details = group_detail_rows(
+            active.filter(
+                user_id__in=[group["user_id"] for group in duplicate_page],
+                office_id__in=[group["office_id"] for group in duplicate_page],
+            ).order_by("user__last_name", "user__first_name", "office__name", "assignment_role"),
+            lambda membership: (membership.office_id, membership.user_id),
+        ) if duplicate_page else {}
+        duplicate_conflicts = [
+            {
+                "officeId": str(group["office_id"]),
+                "officeName": group["office__name"],
+                "userId": str(group["user_id"]),
+                "userName": " ".join(
+                    part for part in (group["user__first_name"], group["user__last_name"]) if part
+                ) or group["user__username"],
+                "count": group["total"],
+                "memberships": duplicate_details.get(
+                    (group["office_id"], group["user_id"]),
+                    [],
+                ),
+            }
+            for group in duplicate_page
+        ]
+
+        return Response({
+            "counts": {
+                "multipleActivePrincipals": len(principal_groups),
+                "multiplePrimaryAssignments": len(primary_groups),
+                "duplicateOfficeAssignments": len(duplicate_groups),
+            },
+            "multipleActivePrincipals": principal_conflicts,
+            "multiplePrimaryAssignments": primary_conflicts,
+            "duplicateOfficeAssignments": duplicate_conflicts,
+        })
 
     def perform_create(self, serializer):
         self._ensure_membership_admin()

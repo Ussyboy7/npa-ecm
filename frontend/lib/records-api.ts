@@ -2,7 +2,7 @@
  * API client for records governance (retention, legal hold, disposal).
  */
 
-import { apiFetch } from './api-client';
+import { apiFetch, hasTokens } from './api-client';
 
 function unwrapList<T>(response: T[] | { results?: T[] } | unknown): T[] {
   if (Array.isArray(response)) return response;
@@ -130,30 +130,12 @@ export async function downloadEdiscoveryExport(holdId: string): Promise<{
   documentCount?: number;
   sha256?: string;
 }> {
-  const { getBaseUrl, getStoredAccessToken, hasTokens } = await import('./api-client');
   if (!hasTokens()) throw new Error('Authentication required');
 
-  const response = await fetch(
-    `${getBaseUrl()}/records/legal-holds/${holdId}/ediscovery-export/`,
-    {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        Authorization: `Bearer ${getStoredAccessToken()}`,
-      },
-    },
+  const response = await apiFetch<Response>(
+    `/records/legal-holds/${holdId}/ediscovery-export/`,
+    { responseType: 'raw' },
   );
-
-  if (!response.ok) {
-    let message = 'eDiscovery export failed';
-    try {
-      const body = await response.json();
-      if (body?.detail) message = String(body.detail);
-    } catch {
-      // ignore
-    }
-    throw new Error(message);
-  }
 
   return {
     blob: await response.blob(),

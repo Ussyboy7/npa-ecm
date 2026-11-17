@@ -12,9 +12,25 @@ export interface ApiCase {
   department?: string;
   owning_office?: string;
   current_office?: string;
-  created_by?: { id: string; name?: string; email?: string } | null;
+  created_by?: {
+    id: string;
+    name?: string;
+    username?: string;
+    first_name?: string;
+    middle_name?: string;
+    last_name?: string;
+    email?: string;
+  } | null;
   created_by_id?: string;
-  assigned_to?: { id: string; name?: string; email?: string } | null;
+  assigned_to?: {
+    id: string;
+    name?: string;
+    username?: string;
+    first_name?: string;
+    middle_name?: string;
+    last_name?: string;
+    email?: string;
+  } | null;
   assigned_to_id?: string;
   opened_at: string;
   resolved_at?: string;
@@ -69,6 +85,17 @@ export interface ApiCaseFormLink {
   updated_at: string;
 }
 
+function getUserDisplayName(
+  user: ApiCase['created_by'] | ApiCase['assigned_to'],
+): string | undefined {
+  if (!user) return undefined;
+  const fullName = [user.first_name, user.middle_name, user.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return fullName || user.name || user.username || undefined;
+}
+
 export function mapApiCase(api: ApiCase): Case {
   return {
     id: api.id,
@@ -83,7 +110,9 @@ export function mapApiCase(api: ApiCase): Case {
     owningOfficeId: api.owning_office,
     currentOfficeId: api.current_office,
     createdById: api.created_by_id || api.created_by?.id,
+    createdByName: getUserDisplayName(api.created_by),
     assignedToId: api.assigned_to_id || api.assigned_to?.id,
+    assignedToName: getUserDisplayName(api.assigned_to),
     openedAt: api.opened_at,
     resolvedAt: api.resolved_at,
     closedAt: api.closed_at,
