@@ -146,8 +146,19 @@ class UserViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only super administrators may perform this action.")
 
     def filter_queryset(self, queryset):
-        """Override to add date range filtering."""
+        """Override to add date range and batched ID filtering."""
         queryset = super().filter_queryset(queryset)
+
+        # Single request lookup for payloads that carry many user IDs.
+        raw_ids = self.request.query_params.get("ids")
+        if raw_ids is not None:
+            user_ids = set()
+            for raw_id in raw_ids.split(","):
+                try:
+                    user_ids.add(int(raw_id.strip()))
+                except (TypeError, ValueError):
+                    continue
+            queryset = queryset.filter(id__in=user_ids) if user_ids else queryset.none()
         
         # Date range filters
         date_joined_from = self.request.query_params.get("date_joined_from")

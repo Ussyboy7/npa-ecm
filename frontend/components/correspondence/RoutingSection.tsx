@@ -50,7 +50,6 @@ interface RoutingSectionProps {
   offices: Array<{ id: string; name: string; officeType?: string; directorateId?: string; divisionId?: string }>;
   directorates: Array<{ id: string; name: string; shortName?: string }>;
   divisions: Array<{ id: string; name: string; shortName?: string; directorateId?: string }>;
-  users: User[];
   assistantList: User[];
   approverList: User[];
   suggestedNext?: User;

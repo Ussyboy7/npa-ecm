@@ -476,6 +476,31 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         require_page_access(request.user, "registered")
         return self.list(request)
 
+    @action(detail=True, methods=["get"], url_path="routing-suggestions")
+    def routing_suggestions(self, request, pk=None):
+        """Hierarchy-based recipient suggestions for this correspondence."""
+        from accounts.serializers import UserListSerializer
+
+        from .routing_suggestions import VALID_DIRECTIONS, get_routing_suggestions
+
+        # Use the view's scoped queryset without applying list filters: a
+        # routing direction is not a filter on the correspondence itself.
+        correspondence = get_object_or_404(self.get_queryset(), pk=pk)
+        direction = (
+            request.query_params.get("routing_direction")
+            or request.query_params.get("direction")
+            or correspondence.direction
+        )
+        if direction not in VALID_DIRECTIONS:
+            direction = correspondence.direction
+        users = get_routing_suggestions(request.user, correspondence, direction)
+        return Response(
+            {
+                "direction": direction,
+                "suggestions": UserListSerializer(users, many=True).data,
+            }
+        )
+
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         user = request.user

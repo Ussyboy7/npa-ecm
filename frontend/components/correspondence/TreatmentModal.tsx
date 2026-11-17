@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ConfirmationDialog } from './ConfirmationDialog';
-import { generateId, getNextStepNumber, formatDateForAPI } from '@/lib/correspondence-helpers';
+import { generateId, getNextStepNumber } from '@/lib/correspondence-helpers';
+import { formatDateForAPI } from '@/lib/datetime';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
 import type { Correspondence, User } from '@/lib/npa-structure';
 import { GRADE_LEVELS } from '@/lib/npa-structure';
@@ -51,10 +52,12 @@ import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useOrgUsers } from "@/hooks/use-org-users";
+import { useScopedOfficeMemberships } from '@/hooks/use-scoped-office-memberships';
+import { useUserLookup } from '@/hooks/use-user-lookup';
+import { useRoutingSuggestions } from '@/hooks/use-routing-suggestions';
+import { fetchActiveUsersForGradeAndDivision } from '@/lib/users-api';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
-import { getSuggestedApprovers } from '@/lib/routing-utils';
 import { PrimaryRoutePanel } from './PrimaryRoutePanel';
 import { submitParallelRoute } from '@/lib/parallel-routing';
 import type { AssignmentMergeStrategy, BranchConfig } from '@/lib/parallel-routing';
@@ -93,9 +96,13 @@ interface TreatmentModalProps {
 const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentModalProps) => {
   const {addCorrespondence: _addCorrespondence, addMinute: _addMinute, updateCorrespondence: _updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { currentUser: activeUser } = useCurrentUser();
-  const { divisions, departments, offices, officeMemberships, directorates } = useOrganization();
-  const { users } = useOrgUsers();
-  
+  const {
+    divisions,
+    departments,
+    offices,
+    officeMemberships: signedInOfficeMemberships,
+    directorates,
+  } = useOrganization();
   // Form state
   const [currentUser, setCurrentUser] = useState(activeUser ?? null);
   const [responseType, setResponseType] = useState<'memo' | 'existing-document' | 'new-document'>('memo');
@@ -120,6 +127,12 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [parallelOfficeIds, setParallelOfficeIds] = useState<string[]>([]);
   const [branchConfigs, setBranchConfigs] = useState<Record<string, BranchConfig>>({});
   const [mergeStrategy, setMergeStrategy] = useState<AssignmentMergeStrategy>('independent');
+  const officeMemberships = useScopedOfficeMemberships({
+    enabled: isOpen,
+    baseMemberships: signedInOfficeMemberships,
+    userId: forwardTo || undefined,
+    officeId: targetOfficeId || undefined,
+  });
   
   // Document selection state (for existing document response type)
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -166,8 +179,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   // Request cancellation
   const { getSignal, reset } = useAbortController();
 
-  const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
-
   const restoreBodyInteractivity = useCallback(() => {
     if (typeof document === 'undefined') return;
 
@@ -182,11 +193,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       // ignore
     }
   }, []);
-
-  const findUserById = useCallback(
-    (id?: string | null) => (id ? users.find((user) => user.id === id) : undefined),
-    [users],
-  );
 
   // Load memo templates when the modal opens
   useEffect(() => {
@@ -342,51 +348,90 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setSelectedSignatureTemplateId(null);
   };
 
-  const getRelationshipLabel = (current: typeof currentUser, superior: typeof currentUser) => {
-    if (!current || !superior) return '';
-    const currentLevel = GRADE_LEVELS.find(g => g.code === current.gradeLevel)?.level || 0;
-    const superiorLevel = GRADE_LEVELS.find(g => g.code === superior.gradeLevel)?.level || 0;
-    const gradeDiff = superiorLevel - currentLevel;
-    if (gradeDiff === 1) return 'Your Direct Supervisor';
-    if (gradeDiff === 2) return 'Your Director';
-    if (gradeDiff >= 3) return 'Executive Level';
-    return 'Supervisor';
-  };
+  const getRelationshipLabel = useCallback(
+    (current: typeof currentUser, superior: typeof currentUser) => {
+      if (!current || !superior) return '';
+      const currentLevel = GRADE_LEVELS.find(g => g.code === current.gradeLevel)?.level || 0;
+      const superiorLevel = GRADE_LEVELS.find(g => g.code === superior.gradeLevel)?.level || 0;
+      const gradeDiff = superiorLevel - currentLevel;
+      if (gradeDiff === 1) return 'Your Direct Supervisor';
+      if (gradeDiff === 2) return 'Your Director';
+      if (gradeDiff >= 3) return 'Executive Level';
+      return 'Supervisor';
+    },
+    [],
+  );
 
-  const getBehalfOfOptions = () => {
-    if (!currentUser) return [];
+  const superiorGrade = useMemo(() => {
+    if (!currentUser?.gradeLevel) return null;
     const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map((g) => g.code);
     const currentGradeIndex = gradeOrder.indexOf(currentUser.gradeLevel);
-    if (currentGradeIndex === 0) return [];
-    const superiorGrade = gradeOrder[currentGradeIndex - 1];
-    return activeUsers
-      .filter(
-        (user) => user.gradeLevel === superiorGrade && user.division === currentUser.division,
-      )
-      .map(user => ({
+    return currentGradeIndex > 0 ? gradeOrder[currentGradeIndex - 1] : null;
+  }, [currentUser?.gradeLevel]);
+
+  const [behalfCandidates, setBehalfCandidates] = useState<User[]>([]);
+  useEffect(() => {
+    if (!isOpen || !currentUser?.division || !superiorGrade) {
+      setBehalfCandidates([]);
+      return;
+    }
+    let cancelled = false;
+    fetchActiveUsersForGradeAndDivision(superiorGrade, currentUser.division)
+      .then((users) => {
+        if (!cancelled) setBehalfCandidates(users);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          logError('Failed to load on-behalf-of choices', error);
+          setBehalfCandidates([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, superiorGrade, currentUser?.division]);
+
+  const behalfOfOptions = useMemo(
+    () =>
+      behalfCandidates.map((user) => ({
         ...user,
         relationship: getRelationshipLabel(currentUser, user),
-      }));
-  };
+      })),
+    [behalfCandidates, currentUser, getRelationshipLabel],
+  );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser?.id, divisions]);
+  const approverList = useRoutingSuggestions({
+    enabled: isOpen && Boolean(currentUser),
+    correspondenceId: correspondence.id,
+    direction: correspondence.direction,
+  });
 
-  // Get suggested approvers for routing (like MinuteModal)
-  const existingMinutes = useMemo(() => getMinutesByCorrespondenceId(correspondence.id), [correspondence.id, getMinutesByCorrespondenceId]);
-  
-  const approverList = useMemo(() => {
-    if (!currentUser) return [];
-    return getSuggestedApprovers({
-      currentUser,
-      direction: correspondence.direction,
-      correspondence,
-      existingMinutes,
-      offices,
-      officeMemberships,
-      activeUsers,
-    });
-  }, [currentUser, correspondence, existingMinutes, offices, officeMemberships, activeUsers]);
+  const selectedUserIds = useMemo(
+    () =>
+      [
+        forwardTo,
+        onBehalfOf,
+        ...parallelUserIds,
+        ...officeMemberships.map((membership) => membership.userId),
+      ].filter((id): id is string => Boolean(id)),
+    [forwardTo, onBehalfOf, parallelUserIds, officeMemberships],
+  );
+  const selectedUsersById = useUserLookup(selectedUserIds);
+
+  const knownUserById = useMemo(() => {
+    const byId = new Map<string, User>();
+    for (const user of approverList) byId.set(user.id, user);
+    for (const user of behalfCandidates) byId.set(user.id, user);
+    selectedUsersById.forEach((user, id) => byId.set(id, user));
+    return byId;
+  }, [approverList, behalfCandidates, selectedUsersById]);
+
+  const knownUsers = useMemo(() => [...knownUserById.values()], [knownUserById]);
+
+  const findUserById = useCallback(
+    (id?: string | null) => (id ? knownUserById.get(id) : undefined),
+    [knownUserById],
+  );
 
   const assistantList: User[] = []; // Not used for treatment responses
   
@@ -394,7 +439,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   
   // Helper functions for RoutingSection
   const getUserOfficeInfo = useCallback((userId: string) => {
-    const user = users.find(u => u.id === userId);
+    const user = knownUserById.get(userId);
     if (!user) return null;
     
     const membership = officeMemberships.find(
@@ -407,7 +452,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       office: office ? { name: office.name } : undefined,
       division: division ? { name: division.name } : undefined,
     };
-  }, [users, officeMemberships, offices, divisions]);
+  }, [knownUserById, officeMemberships, offices, divisions]);
   
   // Office options for RoutingSection
   const officeOptions = useMemo(() => {
@@ -530,7 +575,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       const senderDivision = currentUser?.division ? divisions.find(d => d.id === currentUser.division) : undefined;
       const senderDepartment = currentUser?.department ? departments.find(d => d.id === currentUser.department) : undefined;
       const senderDirectorate = currentUser?.directorate ? directorates.find(d => d.id === currentUser.directorate) : undefined;
-      const recipientUser = forwardTo ? users.find(u => u.id === forwardTo) : undefined;
+      const recipientUser = forwardTo ? findUserById(forwardTo) : undefined;
 
       const tokenValues: Record<string, string> = {
         'division.name': senderDivision?.name || senderDirectorate?.name || '',
@@ -1487,7 +1532,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               offices={officeOptions}
               directorates={directorates}
               divisions={divisions}
-              users={activeUsers.filter((u) => u.id !== currentUser?.id)}
+              users={knownUsers.filter((u) => u.id !== currentUser?.id)}
               assistantList={assistantList}
               approverList={approverList}
               suggestedNext={suggestedNext}

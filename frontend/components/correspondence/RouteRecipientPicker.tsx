@@ -13,12 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Building2, User as UserIcon, Search, X } from "lucide-react";
+import { Building2, Loader2, User as UserIcon, Search, X } from "lucide-react";
 import { OfficeCombobox } from "@/components/correspondence/OfficeCombobox";
 import type { User } from "@/lib/npa-structure";
 import type { AssignmentOutcome, BranchConfig } from "@/lib/parallel-routing";
 import { branchKey } from "@/lib/parallel-routing";
 import type { RoutePurpose } from "@/components/correspondence/PrimaryRoutePanel";
+import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
 
 export interface OfficePickerOption {
   id: string;
@@ -74,7 +75,20 @@ export function RouteRecipientPicker({
 }: RouteRecipientPickerProps) {
   const [routeType, setRouteType] = useState<"person" | "office">("office");
   const [addOutcome, setAddOutcome] = useState<AssignmentOutcome>(defaultOutcome);
-  const [personSearchQuery, setPersonSearchQuery] = useState("");
+  const {
+    query: personSearchQuery,
+    setQuery: setPersonSearchQuery,
+    users: searchedUsers,
+    loading: loadingUsers,
+    loadingMore,
+    error: userSearchError,
+    hasMore,
+    loadMore,
+  } = usePaginatedUserSearch({
+    enabled: routeType === "person",
+    pageSize: 50,
+    excludeUserIds: excludeUserId ? [excludeUserId] : [],
+  });
 
   useEffect(() => {
     if (!informationOnly) {
@@ -90,7 +104,10 @@ export function RouteRecipientPicker({
   }, [userIds, officeIds]);
 
   const filteredUsers = useMemo(() => {
-    const base = users
+    const byId = new Map<string, User>();
+    for (const user of users) byId.set(user.id, user);
+    for (const user of searchedUsers) byId.set(user.id, user);
+    const base = [...byId.values()]
       .filter((u) => u.active !== false && u.id !== excludeUserId)
       .filter((u) => !selectedKeys.has(branchKey("user", u.id)));
     if (!personSearchQuery.trim()) return base.sort((a, b) => a.name.localeCompare(b.name));
@@ -103,7 +120,7 @@ export function RouteRecipientPicker({
           (u.email || "").toLowerCase().includes(q),
       )
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users, excludeUserId, selectedKeys, personSearchQuery]);
+  }, [users, searchedUsers, excludeUserId, selectedKeys, personSearchQuery]);
 
   const syncBranchConfig = (key: string, outcome: AssignmentOutcome) => {
     if (!onBranchConfigsChange) return;
@@ -169,7 +186,9 @@ export function RouteRecipientPicker({
       meta?: string;
     }> = [];
     for (const userId of userIds) {
-      const user = users.find((u) => u.id === userId);
+      const user =
+        users.find((u) => u.id === userId) ??
+        searchedUsers.find((u) => u.id === userId);
       items.push({
         key: branchKey("user", userId),
         type: "user",
@@ -189,7 +208,7 @@ export function RouteRecipientPicker({
       });
     }
     return items;
-  }, [userIds, officeIds, users, offices]);
+  }, [userIds, officeIds, users, searchedUsers, offices]);
 
   return (
     <div className="space-y-3">
@@ -248,8 +267,15 @@ export function RouteRecipientPicker({
                       />
                     </div>
                   </div>
-                  {filteredUsers.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-muted-foreground">No recipients available</div>
+                  {loadingUsers && filteredUsers.length === 0 ? (
+                    <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading recipients...
+                    </div>
+                  ) : filteredUsers.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      {userSearchError ?? "No recipients available"}
+                    </div>
                   ) : (
                     filteredUsers.slice(0, 40).map((user) => (
                       <SelectItem key={user.id} value={user.id}>
@@ -260,6 +286,23 @@ export function RouteRecipientPicker({
                       </SelectItem>
                     ))
                   )}
+                  {hasMore ? (
+                    <div className="border-t border-border p-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                      >
+                        {loadingMore ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : null}
+                        Load more recipients
+                      </Button>
+                    </div>
+                  ) : null}
                 </SelectContent>
               </Select>
             )}

@@ -49,7 +49,7 @@ import {
 } from '@/lib/npa-structure';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
-import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
+import { filterUsersBySearch } from '@/lib/routing-utils';
 import { PrimaryRoutePanel } from './PrimaryRoutePanel';
 import { submitParallelRoute, submitCcDistribution } from '@/lib/parallel-routing';
 import type { AssignmentMergeStrategy, BranchConfig } from '@/lib/parallel-routing';
@@ -64,7 +64,9 @@ import {
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
-import { useOrgUsers } from "@/hooks/use-org-users";
+import { useScopedOfficeMemberships } from '@/hooks/use-scoped-office-memberships';
+import { useUserLookup } from '@/hooks/use-user-lookup';
+import { useRoutingSuggestions } from '@/hooks/use-routing-suggestions';
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
@@ -105,6 +107,7 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward' | 'lateral'>(initialDirection);
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
+
   const [officeSearchQuery, setOfficeSearchQuery] = useState('');
   const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
@@ -130,8 +133,19 @@ const [newTemplateName, setNewTemplateName] = useState('');
 const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
   const { currentUser: activeUser } = useCurrentUser();
-  const { assistantAssignments, offices, officeMemberships, directorates, divisions } = useOrganization();
-  const { users: organizationUsers } = useOrgUsers();
+  const {
+    assistantAssignments,
+    offices,
+    officeMemberships: signedInOfficeMemberships,
+    directorates,
+    divisions,
+  } = useOrganization();
+  const officeMemberships = useScopedOfficeMemberships({
+    enabled: isOpen,
+    baseMemberships: signedInOfficeMemberships,
+    userId: forwardTo || undefined,
+    officeId: targetOfficeId || undefined,
+  });
 
   // Use shared signature hook (after activeUser is available)
   const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences, isLoading: isSignatureLoading } = useSignature({
@@ -139,24 +153,30 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     autoLoad: isOpen,
   });
 
-  const activeDirectoryUsers = useMemo(
-    () => organizationUsers.filter((user) => user.active !== false),
-    [organizationUsers],
+  const assistantUserIds = useMemo(
+    () =>
+      currentUser
+        ? assistantAssignments
+            .filter((assignment) => assignment.executiveId === currentUser.id)
+            .map((assignment) => assignment.assistantId)
+        : [],
+    [assistantAssignments, currentUser],
   );
+  const assistantUsersById = useUserLookup(assistantUserIds);
 
   const assistantTeam = useMemo(() => {
     if (!currentUser) return [];
     return assistantAssignments
       .filter((assignment) => assignment.executiveId === currentUser.id)
       .map((assignment) => {
-        const assistant = activeDirectoryUsers.find((user) => user.id === assignment.assistantId);
-        if (!assistant) {
+        const assistant = assistantUsersById.get(assignment.assistantId);
+        if (!assistant || assistant.active === false) {
           return null;
         }
         return { assignment, assistant } as { assignment: AssistantAssignment; assistant: User };
       })
       .filter((entry): entry is { assignment: AssistantAssignment; assistant: User } => entry !== null);
-  }, [assistantAssignments, activeDirectoryUsers, currentUser]);
+  }, [assistantAssignments, assistantUsersById, currentUser]);
 
   const assistantAssignmentsById = useMemo(() => {
     const map = new Map<string, AssistantAssignment>();
@@ -172,37 +192,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         .filter(({ assignment }) => assignment.permissions.includes('forward') || assignment.permissions.includes('draft') || assignment.permissions.includes('coordinate'))
         .map(({ assistant }) => assistant),
     [assistantTeam],
-  );
-
-  const findUserById = useCallback(
-    (id: string) => activeDirectoryUsers.find((user) => user.id === id),
-    [activeDirectoryUsers],
-  );
-
-  // Get user's primary office and division info
-  const getUserOfficeInfo = useCallback((userId: string) => {
-    const membership = officeMemberships.find(
-      (m) => m.userId === userId && m.isPrimary && m.isActive
-    );
-    if (!membership) return null;
-    const office = offices.find(o => o.id === membership.officeId);
-    const user = findUserById(userId);
-    const division = user?.division ? getDivisionById(user.division) : null;
-    const directorate = division?.directorateId ? getDirectorateById(division.directorateId) : null;
-    return { office, division, directorate };
-  }, [officeMemberships, offices, findUserById]);
-
-  // RoutingSection expects a narrower shape
-  const getUserOfficeInfoForRouting = useCallback(
-    (userId: string): { office?: { name: string }; division?: { name: string } } | null => {
-      const info = getUserOfficeInfo(userId);
-      if (!info) return null;
-      return {
-        office: info.office ? { name: info.office.name } : undefined,
-        division: info.division ? { name: info.division.name } : undefined,
-      };
-    },
-    [getUserOfficeInfo],
   );
 
   const activeOffices = useMemo(() => offices.filter((office) => office.isActive), [offices]);
@@ -343,13 +332,13 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   };
   
   useEffect(() => {
-    const selectedUser = activeUser ?? organizationUsers.find((user) => user.active) ?? null;
+    const selectedUser = activeUser ?? null;
     if (!isOpen || !selectedUser) return;
     setCurrentUser(selectedUser);
     refreshMinuteTemplates(selectedUser).catch((error) => {
       logError('Failed to refresh templates', error);
     });
-  }, [isOpen, activeUser, organizationUsers, refreshMinuteTemplates]);
+  }, [isOpen, activeUser, refreshMinuteTemplates]);
 
   // Check if user is management level (MDCS, EDCS, MSS1, MSS2, MSS3)
   const userPermissions = useUserPermissions(currentUser ?? undefined);
@@ -394,40 +383,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     return false;
   }, [currentUser, correspondence.divisionId, correspondence.departmentId, isMD, divisions]);
   const canApprove = hasCanApprovePerm && scopeOk && (isCurrentTurn || isDelegatee || explicitCC);
-
-  // Auto-compute Direction from sender vs recipient rank (tied to Route To)
-  const GRADE_RANK: Record<string, number> = { 'MDCS': 11, 'EDCS': 10, 'MSS1': 9, 'MSS2': 8, 'MSS3': 7, 'MSS4': 6, 'MSS5': 5, 'SSS1': 4, 'SSS2': 3, 'SSS3': 2, 'SSS4': 1, 'JSS1': 0, 'JSS2': 0, 'JSS3': 0 };
-  const OFFICE_RANK: Record<string, number> = { 'md': 11, 'ed': 10, 'gm': 9, 'agm': 8, 'directorate': 10, 'division': 9, 'department': 8 };
-  const getComputedDirection = (sender: typeof currentUser, targetId: string, type: 'person' | 'office'): 'upward' | 'downward' | 'lateral' | null => {
-    if (!sender) return null;
-    if (type === 'person' && targetId) {
-      const target = activeDirectoryUsers.find((u) => String(u.id) === String(targetId));
-      if (target) {
-        const s = GRADE_RANK[sender.gradeLevel] ?? 5;
-        const t = GRADE_RANK[(target as unknown as { gradeLevel: string }).gradeLevel] ?? 5;
-        if (s < t) return 'upward';
-        if (s > t) return 'downward';
-        return 'lateral';
-      }
-    }
-    if (type === 'office' && targetId) {
-      const office = offices.find((o) => String(o.id) === String(targetId));
-      if (office) {
-        const s = sender.gradeLevel === 'MDCS' ? 11 : sender.gradeLevel === 'EDCS' ? 10 : sender.gradeLevel === 'MSS1' ? 9 : sender.gradeLevel === 'MSS2' ? 8 : 5;
-        const t = OFFICE_RANK[String((office as unknown as { officeType: string }).officeType || '').toLowerCase()] ?? 5;
-        if (s < t) return 'upward';
-        if (s > t) return 'downward';
-        return 'lateral';
-      }
-    }
-    return null;
-  };
-  const autoDirection = getComputedDirection(currentUser, routeType === 'person' ? forwardTo : targetOfficeId, routeType);
-  useEffect(() => {
-    if (autoDirection && autoDirection !== selectedDirection) {
-      setSelectedDirection(autoDirection);
-    }
-  }, [autoDirection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset action type to 'minute' if user cannot approve (but keep approve if they are CC/delegatee)
   useEffect(() => {
@@ -603,45 +558,117 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
   }, [existingMinutes]);
 
-  const previousUser = previousMinute ? findUserById(previousMinute.userId) : null;
-
-  // Get users who have already acted (to exclude from suggestions)
   const usersWhoAlreadyActed = useMemo(() => {
     const acted = new Set(
       existingMinutes
-        .filter(minute => !minute.isRecalled)
-        .map(minute => minute.userId)
-        .filter(Boolean)
+        .filter((minute) => !minute.isRecalled)
+        .map((minute) => minute.userId)
+        .filter(Boolean),
     );
-    
     if (correspondence.currentApproverId) {
-      const currentApproverMinutes = existingMinutes.filter(m => m.userId === correspondence.currentApproverId);
-      const hasNonRecalledMinute = currentApproverMinutes.some(m => !m.isRecalled);
-      if (hasNonRecalledMinute) {
-        acted.add(correspondence.currentApproverId);
-      }
+      const hasNonRecalledMinute = existingMinutes.some(
+        (minute) => minute.userId === correspondence.currentApproverId && !minute.isRecalled,
+      );
+      if (hasNonRecalledMinute) acted.add(correspondence.currentApproverId);
     }
-    
     return acted;
   }, [existingMinutes, correspondence.currentApproverId]);
 
-  // Get suggested next approvers based on hierarchy and organizational structure
-  const suggestedApprovers = useMemo(() => {
-    if (!currentUser) return [];
-    
-    const dir = isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection);
-    
-    return getSuggestedApprovers({
-      currentUser,
-      direction: dir,
-      correspondence,
-      existingMinutes,
-      offices,
-      officeMemberships,
-      activeUsers: activeDirectoryUsers,
-      excludeUsers: usersWhoAlreadyActed,
-    });
-  }, [currentUser, isMD, canChooseDirection, selectedDirection, initialDirection, correspondence, existingMinutes, offices, officeMemberships, activeDirectoryUsers, usersWhoAlreadyActed]);
+  const routingDirection = isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection);
+  const suggestedApprovers = useRoutingSuggestions({
+    enabled: isOpen && Boolean(currentUser),
+    correspondenceId: correspondence.id,
+    direction: routingDirection,
+  });
+
+  const selectedUserIds = useMemo(
+    () =>
+      [
+        forwardTo,
+        ...parallelUserIds,
+        ...distributionUserIds,
+        previousMinute?.userId,
+      ].filter((id): id is string => Boolean(id)),
+    [forwardTo, parallelUserIds, distributionUserIds, previousMinute?.userId],
+  );
+  const selectedUsersById = useUserLookup(selectedUserIds);
+
+  const knownUserById = useMemo(() => {
+    const byId = new Map<string, User>();
+    for (const user of suggestedApprovers) byId.set(user.id, user);
+    assistantUsersById.forEach((user, id) => byId.set(id, user));
+    selectedUsersById.forEach((user, id) => byId.set(id, user));
+    return byId;
+  }, [suggestedApprovers, assistantUsersById, selectedUsersById]);
+
+  const knownUsers = useMemo(() => [...knownUserById.values()], [knownUserById]);
+
+  const findUserById = useCallback(
+    (id: string) => knownUserById.get(id),
+    [knownUserById],
+  );
+
+  // Get user's primary office and division info
+  const getUserOfficeInfo = useCallback((userId: string) => {
+    const membership = officeMemberships.find(
+      (m) => m.userId === userId && m.isPrimary && m.isActive
+    );
+    if (!membership) return null;
+    const office = offices.find(o => o.id === membership.officeId);
+    const user = findUserById(userId);
+    const division = user?.division ? getDivisionById(user.division) : null;
+    const directorate = division?.directorateId ? getDirectorateById(division.directorateId) : null;
+    return { office, division, directorate };
+  }, [officeMemberships, offices, findUserById]);
+
+  // RoutingSection expects a narrower shape
+  const getUserOfficeInfoForRouting = useCallback(
+    (userId: string): { office?: { name: string }; division?: { name: string } } | null => {
+      const info = getUserOfficeInfo(userId);
+      if (!info) return null;
+      return {
+        office: info.office ? { name: info.office.name } : undefined,
+        division: info.division ? { name: info.division.name } : undefined,
+      };
+    },
+    [getUserOfficeInfo],
+  );
+
+  const previousUser = previousMinute ? findUserById(previousMinute.userId) : null;
+
+  // Auto-compute Direction from sender vs recipient rank (tied to Route To)
+  const GRADE_RANK: Record<string, number> = { 'MDCS': 11, 'EDCS': 10, 'MSS1': 9, 'MSS2': 8, 'MSS3': 7, 'MSS4': 6, 'MSS5': 5, 'SSS1': 4, 'SSS2': 3, 'SSS3': 2, 'SSS4': 1, 'JSS1': 0, 'JSS2': 0, 'JSS3': 0 };
+  const OFFICE_RANK: Record<string, number> = { 'md': 11, 'ed': 10, 'gm': 9, 'agm': 8, 'directorate': 10, 'division': 9, 'department': 8 };
+  const getComputedDirection = (sender: typeof currentUser, targetId: string, type: 'person' | 'office'): 'upward' | 'downward' | 'lateral' | null => {
+    if (!sender) return null;
+    if (type === 'person' && targetId) {
+      const target = findUserById(targetId);
+      if (target) {
+        const s = GRADE_RANK[sender.gradeLevel] ?? 5;
+        const t = GRADE_RANK[(target as unknown as { gradeLevel: string }).gradeLevel] ?? 5;
+        if (s < t) return 'upward';
+        if (s > t) return 'downward';
+        return 'lateral';
+      }
+    }
+    if (type === 'office' && targetId) {
+      const office = offices.find((o) => String(o.id) === String(targetId));
+      if (office) {
+        const s = sender.gradeLevel === 'MDCS' ? 11 : sender.gradeLevel === 'EDCS' ? 10 : sender.gradeLevel === 'MSS1' ? 9 : sender.gradeLevel === 'MSS2' ? 8 : 5;
+        const t = OFFICE_RANK[String((office as unknown as { officeType: string }).officeType || '').toLowerCase()] ?? 5;
+        if (s < t) return 'upward';
+        if (s > t) return 'downward';
+        return 'lateral';
+      }
+    }
+    return null;
+  };
+  const autoDirection = getComputedDirection(currentUser, routeType === 'person' ? forwardTo : targetOfficeId, routeType);
+  useEffect(() => {
+    if (autoDirection && autoDirection !== selectedDirection) {
+      setSelectedDirection(autoDirection);
+    }
+  }, [autoDirection]); // eslint-disable-line react-hooks/exhaustive-deps
   
   const suggestedNext = suggestedApprovers[0]; // Immediate next in hierarchy
   
@@ -1729,7 +1756,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               offices={officeOptionsForRouting}
               directorates={directorates}
               divisions={divisions}
-              users={activeDirectoryUsers}
               assistantList={assistantList}
               approverList={approverList}
               suggestedNext={suggestedNext}
@@ -1793,7 +1819,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               offices={officeOptionsForRouting}
               directorates={directorates}
               divisions={divisions}
-              users={activeDirectoryUsers.filter((u) => u.id !== currentUser?.id)}
+              users={knownUsers.filter((u) => u.id !== currentUser?.id)}
               assistantList={assistantList}
               approverList={approverList}
               suggestedNext={suggestedNext}

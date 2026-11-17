@@ -167,7 +167,6 @@ export function PrimaryRoutePanel({
           offices={offices}
           directorates={directorates}
           divisions={divisions}
-          users={users}
           assistantList={assistantList}
           approverList={approverList}
           suggestedNext={suggestedNext}
