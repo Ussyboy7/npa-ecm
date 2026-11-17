@@ -292,6 +292,11 @@ _deploy_preflight_build_network() {
     ui_step "Checking npm registry access from Docker"
     local image="${ECM_BUILD_PREFLIGHT_IMAGE:-node:20-alpine}"
     local output
+    # Staging images are built with build.network: host (see docker-compose.stag.yml).
+    local network_args=()
+    if [[ "$STACK_ENVIRONMENT" == "staging" ]]; then
+        network_args=(--network host)
+    fi
 
     if ! command -v docker >/dev/null 2>&1; then
         ui_error "Docker is unavailable; cannot verify npm registry access."
@@ -308,7 +313,7 @@ _deploy_preflight_build_network() {
         fi
     fi
 
-    if ! output=$(docker run --rm "$image" node -e \
+    if ! output=$(docker run --rm "${network_args[@]}" "$image" node -e \
         'require("dns").promises.lookup("registry.npmjs.org").catch((error) => { console.error("DNS lookup failed: " + (error.code || error.message)); process.exit(1); })' \
         2>&1); then
         ui_error "Build preflight failed: Docker cannot resolve registry.npmjs.org."
@@ -317,7 +322,7 @@ _deploy_preflight_build_network() {
         return 1
     fi
 
-    if ! output=$(docker run --rm -e NPM_CONFIG_UPDATE_NOTIFIER=false "$image" \
+    if ! output=$(docker run --rm "${network_args[@]}" -e NPM_CONFIG_UPDATE_NOTIFIER=false "$image" \
         npm ping --registry=https://registry.npmjs.org \
         --fetch-retries=1 --fetch-retry-mintimeout=1000 \
         --fetch-retry-maxtimeout=3000 --fetch-timeout=10000 \

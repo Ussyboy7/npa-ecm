@@ -13,6 +13,8 @@ x-backend-image: &backend-image
   build:
     context: ./backend
     dockerfile: Dockerfile.prod
+    # Build on the host network; the server's Docker default bridge has no egress.
+    network: host
   env_file:
     - ./backend/env/stag.env
   volumes:
@@ -173,6 +175,8 @@ services:
     build:
       context: .
       dockerfile: ./frontend/Dockerfile.stag
+      # Build on the host network; the server's Docker default bridge has no egress.
+      network: host
       args:
         NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
         NEXT_PUBLIC_ENVIRONMENT: staging
