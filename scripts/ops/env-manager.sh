@@ -87,6 +87,12 @@ cmd_start() {
             --scale "frontend=${frontend_n}"
     fi
     sleep 10
+    # A single-file nginx bind mount keeps the pre-pull inode, so `up -d` alone can
+    # leave a stale config running. Restart it when it differs from the repo.
+    stack_ensure_nginx_config_current || {
+        ui_error "nginx config in ${STACK_NGINX_CONTAINER} does not match ${PROJECT_ROOT}/nginx — refusing to report ${STACK_ENVIRONMENT_TITLE} as started"
+        return 1
+    }
     cmd_status
 }
 
@@ -102,6 +108,10 @@ cmd_restart() {
     ui_header "Restarting ECM ${STACK_ENVIRONMENT_TITLE}"
     stack_compose restart
     sleep 10
+    stack_ensure_nginx_config_current || {
+        ui_error "nginx config in ${STACK_NGINX_CONTAINER} does not match ${PROJECT_ROOT}/nginx after restart"
+        return 1
+    }
     cmd_status
 }
 
@@ -216,6 +226,7 @@ cmd_deploy() {
     _deploy_stop_stack
     _deploy_build_up || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     _deploy_apply_runtime_configuration || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
+    _deploy_verify_nginx_config || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     $DO_HEALTH && _deploy_wait_healthy || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     _deploy_show_summary
     ui_success "ECM ${STACK_ENVIRONMENT} deployment complete"
@@ -382,6 +393,11 @@ _deploy_build_up() {
 _deploy_apply_runtime_configuration() {
     ui_step "Verifying runtime configuration (migrate service already ran)"
     stack_backend_manage check_environment_parity --strict
+}
+
+_deploy_verify_nginx_config() {
+    ui_step "Verifying the running nginx config matches the repo"
+    stack_ensure_nginx_config_current
 }
 
 _deploy_wait_healthy() {

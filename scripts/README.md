@@ -21,6 +21,7 @@ scripts/
 │   └── backend-status.sh
 ├── ops/
 │   ├── env-manager.sh    # Canonical CLI (all subcommands)
+│   ├── verify-nginx-config.sh  # Make a pulled nginx config actually take effect
 │   ├── status.sh
 │   └── logs.sh
 ├── local/env-manager.sh      # exec ops/env-manager.sh local "$@"

@@ -199,3 +199,115 @@ stack_purge_fixed_containers() {
     fi
     return 0
 }
+
+# --- nginx config freshness -------------------------------------------------
+#
+# nginx/stag.conf and nginx/prod.conf are bind-mounted as single files. Docker
+# binds the inode, so when git replaces the host file (git pull / reset) the
+# container keeps serving the pre-pull copy, and `nginx -s reload` reloads that
+# stale copy. Compare what the container is actually serving with the repo and
+# restart it (which re-resolves the mount) when they differ.
+
+STACK_NGINX_CONFIG_MOUNT="/etc/nginx/conf.d/default.conf"
+
+stack_nginx_config_file() {
+    case "${STACK_ENVIRONMENT:-}" in
+        staging)    printf '%s\n' "${PROJECT_ROOT}/nginx/stag.conf" ;;
+        production) printf '%s\n' "${PROJECT_ROOT}/nginx/prod.conf" ;;
+        *)          return 1 ;;
+    esac
+}
+
+# stack_ensure_nginx_config_current [--check]
+#   --check  report and fail on divergence without touching the container
+# Fails (returns 1) when the running config cannot be proven to match the repo.
+stack_ensure_nginx_config_current() {
+    local check_only=false
+    if [[ "${1:-}" == "--check" ]]; then
+        check_only=true
+    fi
+
+    local container="${STACK_NGINX_CONTAINER:-}"
+    local config=""
+    config="$(stack_nginx_config_file 2>/dev/null || true)"
+
+    # The local stack has no nginx container; nothing to guard.
+    if [[ -z "$container" || -z "$config" ]]; then
+        return 0
+    fi
+
+    if [[ ! -f "$config" ]]; then
+        printf '✗ nginx config missing from the repo: %s\n' "$config" >&2
+        return 1
+    fi
+
+    if ! docker container inspect "$container" >/dev/null 2>&1; then
+        printf 'i %s is not present; skipping nginx config check\n' "$container"
+        return 0
+    fi
+
+    if [[ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || echo false)" != "true" ]]; then
+        printf 'i %s is not running; skipping nginx config check\n' "$container"
+        return 0
+    fi
+
+    local repo_body="" container_body=""
+    repo_body="$(cat "$config")"
+    if ! container_body="$(docker exec "$container" cat "$STACK_NGINX_CONFIG_MOUNT" 2>/dev/null)"; then
+        printf '✗ cannot read %s from %s\n' "$STACK_NGINX_CONFIG_MOUNT" "$container" >&2
+        return 1
+    fi
+
+    if [[ "$repo_body" == "$container_body" ]]; then
+        printf '✓ %s is serving the config in %s\n' "$container" "$config"
+        return 0
+    fi
+
+    if [[ "$check_only" == true ]]; then
+        printf '✗ %s is serving a STALE config (differs from %s)\n' "$container" "$config" >&2
+        printf '  fix: docker restart %s   (a reload alone keeps the old file)\n' "$container" >&2
+        return 1
+    fi
+
+    printf '! %s is serving a stale config — the bind mount kept the pre-pull file\n' "$container"
+
+    # Never restart into a config that would not start: validate it first.
+    local image="" validation=""
+    image="$(docker inspect -f '{{.Config.Image}}' "$container" 2>/dev/null || echo nginx:alpine)"
+    if ! validation="$(docker run --rm --network none \
+        -v "${config}:${STACK_NGINX_CONFIG_MOUNT}:ro" "$image" nginx -t 2>&1)"; then
+        printf '✗ %s failed nginx -t; %s was left running untouched\n' "$config" "$container" >&2
+        printf '%s\n' "$validation" | tail -n 5 | sed 's/^/    /' >&2
+        return 1
+    fi
+
+    printf '  restarting %s so the bind mount is re-resolved\n' "$container"
+    if ! docker restart "$container" >/dev/null; then
+        printf '✗ failed to restart %s\n' "$container" >&2
+        return 1
+    fi
+
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        sleep 1
+        if docker exec "$container" nginx -t >/dev/null 2>&1; then
+            break
+        fi
+        if [[ "$attempt" -eq 15 ]]; then
+            printf '✗ %s did not come back with a valid config after restart\n' "$container" >&2
+            return 1
+        fi
+    done
+
+    if ! container_body="$(docker exec "$container" cat "$STACK_NGINX_CONFIG_MOUNT" 2>/dev/null)"; then
+        printf '✗ cannot read %s from %s after restart\n' "$STACK_NGINX_CONFIG_MOUNT" "$container" >&2
+        return 1
+    fi
+    if [[ "$repo_body" != "$container_body" ]]; then
+        printf '✗ %s STILL differs from %s after restart\n' "$container" "$config" >&2
+        return 1
+    fi
+
+    printf '✓ %s now serves the config in %s\n' "$container" "$config"
+    return 0
+}
