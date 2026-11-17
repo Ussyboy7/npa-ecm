@@ -90,5 +90,33 @@ step "Frontend production build"
   NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8002/api/v1}" npm run build
 )
 
+step "Frontend — Playwright SSR smoke"
+(
+  cd frontend
+  npx playwright install chromium
+  CI=true NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8002/api/v1}" \
+    npx playwright test e2e/smoke.spec.ts
+)
+
+step "Security — install scan tools"
+"${PYTHON_BIN}" -m pip install -q -r backend/requirements-dev.txt
+
+step "Security — Bandit"
+"${PYTHON_BIN}" -m bandit -r \
+  backend/accounts backend/analytics backend/audit backend/capture \
+  backend/common backend/correspondence backend/dms backend/ecm_backend \
+  backend/forms backend/integrations backend/notifications \
+  backend/organization backend/search backend/support backend/workflow \
+  -lll -q
+
+step "Security — pip-audit"
+"${PYTHON_BIN}" -m pip_audit -r backend/requirements.txt
+
+step "Security — npm audit (critical)"
+(
+  cd frontend
+  npm audit --audit-level=critical
+)
+
 echo ""
 echo "Local CI finished successfully."
