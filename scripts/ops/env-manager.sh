@@ -5,6 +5,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELF_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
+ORIGINAL_ARGS=("$@")
 # shellcheck source=../lib/stack-utils.sh
 source "${SCRIPT_DIR}/../lib/stack-utils.sh"
 # shellcheck source=../lib/ui.sh
@@ -272,11 +274,28 @@ _deploy_backup_database() {
 _deploy_pull_latest() {
     ui_step "git pull"
     [[ -d .git ]] || { ui_warning "Not a git checkout"; return 0; }
+    local script_before
+    script_before="$(git hash-object "$SELF_PATH" 2>/dev/null || true)"
     git fetch --all --prune
     git reset --hard "origin/$(git rev-parse --abbrev-ref HEAD)"
+    # The pull may have replaced this script; switch to the new code before cleanup.
+    _reexec_if_deploy_script_changed "$script_before"
     # Runtime data must survive a reset/clean. These paths are not source.
     git clean -fd -e backups -e nginx/ssl
     ui_success "At $(git rev-parse --short HEAD)"
+}
+
+_reexec_if_deploy_script_changed() {
+    local before_hash="$1"
+    [[ "${ECM_DEPLOY_REEXECUTED:-0}" != "1" ]] || return 0
+    [[ -n "$before_hash" ]] || return 0
+
+    local after_hash
+    after_hash="$(git hash-object "$SELF_PATH" 2>/dev/null || true)"
+    [[ -n "$after_hash" && "$before_hash" != "$after_hash" ]] || return 0
+
+    ui_warning "Deploy script changed during pull; re-executing the new version."
+    exec env ECM_DEPLOY_REEXECUTED=1 "$SELF_PATH" "${ORIGINAL_ARGS[@]}"
 }
 
 _deploy_preflight_build_network() {
