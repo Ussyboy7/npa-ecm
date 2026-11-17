@@ -112,7 +112,7 @@ Use the unified stack command for health checks:
 
 ## 🔧 Configuration Files
 
-### Nginx Configuration (`nginx/stag.conf`)
+### Nginx Configuration (`nginx/stag/default.conf`)
 - Reverse proxy setup
 - SSL/TLS configuration (commented for staging)
 - Rate limiting and security headers

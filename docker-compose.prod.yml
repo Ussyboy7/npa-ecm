@@ -180,7 +180,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
+      # Mount the directory, not the single file: a bind-mounted file keeps its
+      # old inode after `git pull` replaces it, so reloads would run stale config.
+      - ./nginx/prod:/etc/nginx/conf.d:ro
       - static-data:/var/www/static
       - media-data:/var/www/media
     depends_on:

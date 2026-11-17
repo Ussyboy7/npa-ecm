@@ -128,4 +128,4 @@ See also `backend/env/prod.env.example` / `stag.env.example` (`DB_HOST=pgbouncer
 | Prod/stag compose | `docker-compose.prod.yml`, `docker-compose.stag.yml` |
 | Deploy / scale | `scripts/ops/env-manager.sh`, `scripts/lib/stack-utils.sh` |
 | Env templates | `backend/env/prod.env.example`, `backend/env/stag.env.example` |
-| Nginx (DNS re-resolve for replicas) | `nginx/prod.conf`, `nginx/stag.conf` |
+| Nginx (DNS re-resolve for replicas) | `nginx/prod/default.conf`, `nginx/stag/default.conf` |
