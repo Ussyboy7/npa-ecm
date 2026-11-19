@@ -554,6 +554,23 @@ class DispatchRecordSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "correspondence", "dispatched_by", "acknowledged_by", "created_at"]
 
 
+class MinuteListSerializer(MinuteSerializer):
+    """Minute rows for queues, without the inline signature artwork.
+
+    ``signature_payload`` carries base64 signature data and made up ~514 KB of
+    a six-row approvals page. Detail views keep the full payload.
+    """
+
+    class Meta(MinuteSerializer.Meta):
+        fields = [field for field in MinuteSerializer.Meta.fields if field != "signature_payload"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # The parent re-injects the raw payload after field filtering.
+        data.pop("signature_payload", None)
+        return data
+
+
 class CorrespondenceSerializer(serializers.ModelSerializer):
     workflow_template = serializers.PrimaryKeyRelatedField(read_only=True)
     workflow_template_details = serializers.SerializerMethodField()
@@ -1129,6 +1146,65 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             )
         return branches
 
+
+
+class CorrespondenceListSerializer(CorrespondenceSerializer):
+    """Queue rows without the nested minutes and lifecycle artifacts.
+
+    The full serializer embeds every minute, and each minute embeds signature
+    artwork, so a six-row inbox was ~588 KB. Detail views keep the full payload.
+    """
+
+    class Meta(CorrespondenceSerializer.Meta):
+        fields = [
+            "id",
+            "reference_number",
+            "reference_classification",
+            "subject",
+            "source",
+            "received_date",
+            "sender_name",
+            "sender_organization",
+            "sender_reference",
+            "status",
+            "priority",
+            "document_type",
+            "direction",
+            "archive_level",
+            "division",
+            "department",
+            "owning_office",
+            "owning_office_name",
+            "current_office",
+            "current_office_name",
+            "letter_date",
+            "dispatch_date",
+            "recipient_name",
+            "remarks",
+            "tags",
+            "created_by",
+            "current_approver",
+            "acting_principal_name",
+            "is_acting_seat",
+            "attachments",
+            "required_approval_level",
+            "amount",
+            "strategic_flag",
+            "workflow_state",
+            "active_parallel_branches",
+            "completed_parallel_branches",
+            "has_physical_copy",
+            "flow_type",
+            "is_inward",
+            "is_outward",
+            "is_internal",
+            "is_external",
+            "is_read",
+            "completed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = CorrespondenceSerializer.Meta.read_only_fields
 
 
 class ParallelRoutingGroupSerializer(serializers.ModelSerializer):

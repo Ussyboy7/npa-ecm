@@ -84,6 +84,7 @@ from .serializers import (
     CorrespondenceDraftSerializer,
     CorrespondenceDistributionSerializer,
     CorrespondenceDocumentLinkSerializer,
+    CorrespondenceListSerializer,
     CorrespondenceSerializer,
     CorrespondenceTemplateSerializer,
     DelegationSerializer,
@@ -365,10 +366,26 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         ),
     )
     serializer_class = CorrespondenceSerializer
+    list_serializer_actions = frozenset(
+        {
+            "list",
+            "registered",
+            "my_inbox",
+            "my_sent",
+            "office_inbox",
+            "office_sent",
+            "secretary_inbox",
+        }
+    )
     permission_classes = [IsAuthenticated]
     pagination_class = StandardPageNumberPagination
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+
+    def get_serializer_class(self):
+        if getattr(self, "action", None) in self.list_serializer_actions:
+            return CorrespondenceListSerializer
+        return super().get_serializer_class()
     filterset_fields = [
         "status",
         "priority",

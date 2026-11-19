@@ -39,7 +39,7 @@ from .models import (
     minute_satisfies_assignment_outcome,
 )
 from .archive_policy import assert_correspondence_writable
-from .serializers import MinuteSerializer, ParallelRoutingGroupSerializer
+from .serializers import MinuteListSerializer, MinuteSerializer, ParallelRoutingGroupSerializer
 from .services import (
     CaseService,
     CorrespondenceDocumentService,
@@ -57,6 +57,13 @@ User = get_user_model()
 class MinuteViewSet(viewsets.ModelViewSet):
     queryset = Minute.objects.select_related("correspondence", "user", "seal_applied", "seal_applied__sealed_by", "seal_applied__signature_used")
     serializer_class = MinuteSerializer
+
+    def get_serializer_class(self):
+        # Queues do not render signatures, and the inline base64 payload is the
+        # bulk of the response. Detail and PDF routes keep the full serializer.
+        if getattr(self, "action", None) == "list":
+            return MinuteListSerializer
+        return super().get_serializer_class()
     permission_classes = [IsAuthenticated]
     pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
