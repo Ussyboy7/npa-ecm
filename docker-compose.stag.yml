@@ -117,8 +117,9 @@ services:
       # Staging is reached directly on :4646, so nginx is the only trusted
       # hop (client -> nginx -> Daphne). See docs/ops/proxy-chain.md.
       THROTTLE_NUM_PROXIES: "1"
-    expose:
-      - "8000"
+    # Localhost-only publish for host-network nginx (see nginx service).
+    ports:
+      - "127.0.0.1:8046:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -187,8 +188,9 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
       NEXT_PUBLIC_ENVIRONMENT: staging
-    expose:
-      - "3000"
+    # Localhost-only publish for host-network nginx (see nginx service).
+    ports:
+      - "127.0.0.1:3046:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -196,11 +198,13 @@ services:
       - ecm_stag_network
     restart: unless-stopped
 
+  # Host network on staging: Docker published-port DNAT (4646→80) accepts remote
+  # SYNs but the SYN-ACK return path on this host is broken (same issue as EMR).
+  # Bind :4646 on the host stack; proxy to localhost-published frontend/backend.
   nginx:
     image: nginx:alpine
     container_name: ecm-nginx-stag
-    ports:
-      - "4646:80"
+    network_mode: host
     volumes:
       # Single-file mount: after `git pull` replaces this file, the container keeps
       # the old inode, so config changes need `docker restart ecm-nginx-stag`
@@ -215,8 +219,6 @@ services:
         condition: service_started
       backend:
         condition: service_healthy
-    networks:
-      - ecm_stag_network
     restart: unless-stopped
 
   prometheus:
