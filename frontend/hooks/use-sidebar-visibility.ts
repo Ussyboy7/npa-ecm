@@ -240,7 +240,9 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showRegisteredCorrespondence = registryOn && allowedPage("registered");
 
     const showMyCases = casesOn && allowedPage("cases_my");
-    const showOfficeCases = casesOn && allowedPage("cases_office") && hasOfficeQueueRole;
+    // The backend already resolves office-queue scope (seat holders and global
+    // case viewers), so trust the page rule rather than re-deriving seats here.
+    const showOfficeCases = casesOn && allowedPage("cases_office");
     const showCreateCase = casesOn && has("can_create_cases");
     const showCaseTemplates = adminOn && allowedPage("case_templates");
     const showAllCases = casesOn && allowedPage("cases_all");

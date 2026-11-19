@@ -96,6 +96,12 @@ def resolve_page_access(user) -> dict[str, dict[str, bool | str]]:
             from organization.office_access import get_office_queue_office_ids
 
             scope_allowed = bool(get_office_queue_office_ids(user))
+            if page_id == "cases_office":
+                # Global case viewers supervise every office queue even without a seat.
+                scope_allowed = scope_allowed or bool(
+                    permissions.get("can_view_all_correspondence", False)
+                    or permissions.get("can_access_all_cases", False)
+                )
         elif scope_mode == "organisation":
             scope_allowed = (
                 scope_level in {"organisation", "directorate", "division", "department"}

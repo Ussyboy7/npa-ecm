@@ -321,10 +321,16 @@ class CaseViewSet(viewsets.ModelViewSet):
             else:
                 queryset = queryset.none()
         elif scope == "office":
-            if queue_office_ids:
+            office_ids = queue_office_ids
+            if not office_ids and (can_view_all or is_superuser):
+                # Global viewers hold no office seat but still supervise every office queue.
+                from organization.models import Office
+
+                office_ids = list(Office.objects.values_list("id", flat=True))
+            if office_ids:
                 queryset = queryset.filter(
-                    Q(owning_office_id__in=queue_office_ids) |
-                    Q(current_office_id__in=queue_office_ids)
+                    Q(owning_office_id__in=office_ids) |
+                    Q(current_office_id__in=office_ids)
                 )
             else:
                 queryset = queryset.none()

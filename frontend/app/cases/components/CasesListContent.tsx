@@ -122,16 +122,8 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const currentUserId = currentUser?.id;
-  const {divisions, departments: _departments, offices, officeMemberships } = useOrganization();
+  const {divisions, departments: _departments, offices } = useOrganization();
   const { getSignal, reset } = useAbortController();
-  
-  // Get user's office IDs for scope filtering
-  const userOfficeIds = useMemo(() => {
-    if (!currentUserId) return [];
-    return officeMemberships
-      .filter(m => m.userId === currentUserId && m.isActive)
-      .map(m => m.officeId);
-  }, [currentUserId, officeMemberships]);
 
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,7 +240,9 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
         if (scope === "my") {
           params.scope = "my";
           params.assignedTo = currentUserId;
-        } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
+        } else if (scope === "office") {
+          // The backend resolves which offices the caller may see (queue seats
+          // for office holders, every office for global case viewers).
           params.scope = "office";
         } else if (scope === "all") {
           // Use the scope from scopeChecks (department/division/directorate/organization)
@@ -288,7 +282,6 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
     isSuperAdmin,
     scope,
     scopeChecks.caseScope,
-    userOfficeIds.length,
     dateFrom,
     dateTo,
     sortBy,
@@ -339,7 +332,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
       if (scope === "my") {
         baseParams.scope = "my";
         baseParams.assignedTo = currentUserId;
-      } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
+      } else if (scope === "office") {
         baseParams.scope = "office";
       } else if (scope === "all") {
         baseParams.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
