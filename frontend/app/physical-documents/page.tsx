@@ -53,6 +53,7 @@ import { ListSkeleton } from '@/components/shared/PageSkeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { ListRowCard } from '@/components/shared/ListRowCard';
+import { UserSearchCombobox } from '@/components/shared/UserSearchCombobox';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import { RegistryTabList } from '@/components/registry/RegistryTabList';
 import { StatStrip } from '@/components/shared/StatStrip';
@@ -150,13 +151,12 @@ function PhysicalDocumentsForm() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
-  const [users, setUsers] = useState<UserBrief[]>([]);
+  const [checkOutUser, setCheckOutUser] = useState<{ id: string; name: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Check-out state
   const [checkOutOpen, setCheckOutOpen] = useState(false);
   const [checkOutDoc, setCheckOutDoc] = useState<PhysicalDocument | null>(null);
-  const [checkOutUserId, setCheckOutUserId] = useState('');
   const [checkOutNotes, setCheckOutNotes] = useState('');
   const [expectedReturnAt, setExpectedReturnAt] = useState('');
 
@@ -233,15 +233,6 @@ function PhysicalDocumentsForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocation, debouncedSearch, pagination.page, pagination.pageSize]);
 
-  const fetchUsers = async () => {
-    try {
-      const list = await fetchAllCatalogPaginated<UserBrief>('/accounts/users/?is_active=true');
-      setUsers(list);
-    } catch {
-      setUsers([]);
-    }
-  };
-
   const fetchOffices = async () => {
     try {
       const list = await fetchAllCatalogPaginated<OfficeOption>('/organization/offices/?is_active=true&ordering=name');
@@ -262,7 +253,6 @@ function PhysicalDocumentsForm() {
 
   useEffect(() => {
     fetchLocations();
-    fetchUsers();
     fetchOffices();
   }, []);
 
@@ -271,10 +261,10 @@ function PhysicalDocumentsForm() {
   }, [fetchDocuments]);
 
   const handleCheckOut = async () => {
-    if (!checkOutDoc || !checkOutUserId) return;
+    if (!checkOutDoc || !checkOutUser) return;
     setSubmitting(true);
     try {
-      const body: Record<string, unknown> = { user_id: checkOutUserId, purpose: checkOutNotes };
+      const body: Record<string, unknown> = { user_id: checkOutUser.id, purpose: checkOutNotes };
       if (expectedReturnAt) body.expected_return_at = expectedReturnAt;
       await apiFetch(`/correspondence/physical-documents/${checkOutDoc.id}/check-out/`, {
         method: 'POST',
@@ -284,7 +274,7 @@ function PhysicalDocumentsForm() {
       toast.success('Document checked out successfully');
       setCheckOutOpen(false);
       setCheckOutDoc(null);
-      setCheckOutUserId('');
+      setCheckOutUser(null);
       setCheckOutNotes('');
       setExpectedReturnAt('');
       fetchDocuments();
@@ -818,18 +808,13 @@ function PhysicalDocumentsForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="check-out-user">Check Out To</Label>
-                <Select value={checkOutUserId} onValueChange={setCheckOutUserId}>
-                  <SelectTrigger id="check-out-user">
-                    <SelectValue placeholder="Select a user..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <UserSearchCombobox
+                  id="check-out-user"
+                  value={checkOutUser?.id}
+                  selectedLabel={checkOutUser?.name}
+                  onSelect={(userId, userName) => setCheckOutUser({ id: userId, name: userName })}
+                  placeholder="Select a user..."
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="check-out-notes">Purpose / Notes</Label>
@@ -852,7 +837,7 @@ function PhysicalDocumentsForm() {
               <Button
                 className="w-full"
                 onClick={handleCheckOut}
-                disabled={!checkOutUserId || submitting}
+                disabled={!checkOutUser || submitting}
               >
                 {submitting ? 'Checking Out...' : 'Confirm Check Out'}
               </Button>
