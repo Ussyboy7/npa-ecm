@@ -1194,7 +1194,6 @@ class CorrespondenceListSerializer(CorrespondenceSerializer):
             "active_parallel_branches",
             "completed_parallel_branches",
             "has_physical_copy",
-            "completion_package",
             "flow_type",
             "is_inward",
             "is_outward",

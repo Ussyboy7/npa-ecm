@@ -54,7 +54,9 @@ class ListPayloadTests(TestCase):
             self.minute.signature_payload,
         )
 
-    def test_records_archive_keeps_completion_package_without_minutes(self):
+    def test_records_archive_keeps_completion_package_and_minutes(self):
+        # RecordCard renders completionPackage.versionId for its download link,
+        # so the archive list deliberately keeps the full serializer.
         completed = Correspondence.objects.create(
             reference_number=f"NPA/PAYLOAD/{uuid.uuid4().hex[:8].upper()}",
             subject="Archive payload shape",
@@ -64,7 +66,6 @@ class ListPayloadTests(TestCase):
             correspondence=completed,
             user=self.user,
             minute_text="Filed after completion.",
-            signature_payload={"image_data": "data:image/png;base64," + "A" * 4096},
         )
 
         response = self.client.get("/api/v1/correspondence/items/records-archive/")
@@ -74,8 +75,7 @@ class ListPayloadTests(TestCase):
         row = next((r for r in rows if str(r["id"]) == str(completed.id)), None)
         self.assertIsNotNone(row, "completed record missing from records archive")
         self.assertIn("completion_package", row)
-        self.assertNotIn("minutes", row)
-        self.assertNotIn("signature_payload", row)
+        self.assertEqual(len(row["minutes"]), 1)
 
     def test_archive_records_omits_minutes_and_signature_payload(self):
         archived = Correspondence.objects.create(

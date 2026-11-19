@@ -376,7 +376,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             "office_sent",
             "secretary_inbox",
             "archive_records",
-            "records_archive",
         }
     )
     permission_classes = [IsAuthenticated]
