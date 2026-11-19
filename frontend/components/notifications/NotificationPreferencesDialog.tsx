@@ -113,6 +113,12 @@ export const NotificationPreferencesDialog = ({
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notification Preferences</DialogTitle>
+            <DialogDescription>
+              Configure how and when you receive notifications
+            </DialogDescription>
+          </DialogHeader>
           <div className="p-8 text-center">Loading preferences...</div>
         </DialogContent>
       </Dialog>
