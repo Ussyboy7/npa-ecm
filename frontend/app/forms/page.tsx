@@ -7,7 +7,7 @@ export default function FormsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/dms");
+    router.replace("/dms?tab=forms");
   }, [router]);
 
   return null;
