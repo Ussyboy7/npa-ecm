@@ -127,7 +127,7 @@ export async function listFormDocuments(
 
   const query = queryParams.toString();
   const response = await apiFetch<PaginatedResponse<FormDocument> | FormDocument[]>(
-    `${BASE_PATH}/form-documents${query ? `?${query}` : ''}`,
+    `${BASE_PATH}/form-documents/${query ? `?${query}` : ''}`,
     { signal: params?.signal },
   );
 

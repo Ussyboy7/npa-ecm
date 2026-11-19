@@ -3,19 +3,16 @@ import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { Correspondence, Minute } from '@/lib/npa-structure';
 import type { ApiCorrespondence, ApiMinute } from '@/lib/api/correspondence';
-import type { Delegation } from '@/lib/api/delegations';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
-import { fetchAllPaginated } from '@/lib/pagination-utils';
 import { isRecord, asString, unwrapResults } from '@/lib/type-utils';
-import { mapApiCorrespondence, mapApiMinute, mapApiDelegation } from '@/lib/api/correspondence-mappers';
+import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
 
 interface CorrespondenceContextType {
   correspondence: Correspondence[];
   minutes: Minute[];
-  delegations: Delegation[];
   dataVersion: number;
   getCorrespondenceById: (id: string) => Correspondence | undefined;
   getMinutesByCorrespondenceId: (id: string) => Minute[];
@@ -114,7 +111,6 @@ const normalizeMinutePayload = (payload: Record<string, unknown>) => {
 export const CorrespondenceProvider = ({ children }: { children: ReactNode }) => {
   const [correspondence, setCorrespondence] = useState<Correspondence[]>([]);
   const [minutes, setMinutes] = useState<Minute[]>([]);
-  const [delegations, setDelegations] = useState<Delegation[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
   const {currentUser: _currentUser, hydrated: _hydrated } = useCurrentUser();
 
@@ -124,20 +120,16 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     if (!hasTokens()) return;
 
     try {
-      // Bootstrap: first page of correspondence for context cache; pages load more as needed.
-      const [correspondenceRaw, delegationsRaw] = await Promise.all([
-        apiFetch<{ results: ApiCorrespondence[] } | ApiCorrespondence[]>(`/correspondence/items/?page_size=${DEFAULT_LIST_PAGE_SIZE}&page=1`),
-        fetchAllPaginated<Record<string, unknown>>('/correspondence/delegations/'),
-      ]);
+      // Bootstrap: first page of correspondence for context cache; pages load
+      // more as needed. Delegations live in OrganizationContext (assistant
+      // assignments); fetching them here duplicated that request.
+      const correspondenceRaw = await apiFetch<
+        { results: ApiCorrespondence[] } | ApiCorrespondence[]
+      >(`/correspondence/items/?page_size=${DEFAULT_LIST_PAGE_SIZE}&page=1`);
 
       const correspondenceList = unwrapResults(correspondenceRaw).filter(isRecord).map(mapApiCorrespondence);
-      const delegationsList = delegationsRaw
-        .filter(isRecord)
-        .map(mapApiDelegation)
-        .filter((delegation) => delegation.correspondenceId);
 
       setCorrespondence(correspondenceList);
-      setDelegations(delegationsList);
       setDataVersion(v => v + 1);
     } catch (error: unknown) {
       if (error instanceof Error && (error instanceof Error ? error.message : ERROR_UNKNOWN).toLowerCase().includes('auth')) {
@@ -258,7 +250,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const contextValue = React.useMemo(() => ({
     correspondence,
     minutes,
-    delegations,
     dataVersion,
     getCorrespondenceById,
     getMinutesByCorrespondenceId,
@@ -271,7 +262,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   }), [
     correspondence,
     minutes,
-    delegations,
     dataVersion,
     getCorrespondenceById,
     getMinutesByCorrespondenceId,

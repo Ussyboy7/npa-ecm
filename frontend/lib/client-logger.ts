@@ -1,3 +1,5 @@
+import { AUTH_CSRF_COOKIE_NAME, AUTH_SESSION_COOKIE_NAME } from '@/lib/auth-cookies';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface ClientLogEntryPayload {
@@ -36,8 +38,38 @@ const getBaseUrl = () => {
   return base.endsWith('/') ? base.slice(0, -1) : base;
 };
 
+const getCookieValue = (name: string): string | null => {
+  if (!isBrowser) return null;
+  const cookie = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${name}=`));
+  if (!cookie) return null;
+  const value = cookie.split('=').slice(1).join('=');
+  return value ? decodeURIComponent(value) : null;
+};
+
+/**
+ * Browser logs are only useful for a session that exists, and the ingest view
+ * rejects anonymous posts. Posting from the login page produced a stream of
+ * 401s and then disabled logging for the rest of the page.
+ */
+const hasSession = () => Boolean(getCookieValue(AUTH_SESSION_COOKIE_NAME));
+
+/** Same CSRF header the API client sends; the ingest view requires it. */
+const logHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const csrfToken = getCookieValue(AUTH_CSRF_COOKIE_NAME);
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  return headers;
+};
+
 const flushLogs = async () => {
   if (!isBrowser || batch.length === 0 || loggingDisabled) {
+    return;
+  }
+  if (!hasSession()) {
+    // Keep the entries in memory for a session that may still start, but do
+    // not spend a guaranteed 401 on every flush.
     return;
   }
 
@@ -48,15 +80,19 @@ const flushLogs = async () => {
     const baseUrl = getBaseUrl();
     const response = await fetch(`${baseUrl}/support/client-logs/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: logHeaders(),
       credentials: 'include',
       body,
       // Don't wait for response to avoid blocking
       keepalive: true,
     });
-    
+
     // Reset failure counter on success
     if (response.ok) {
+      consecutiveFailures = 0;
+    } else if (response.status === 401 || response.status === 403) {
+      // A rejected session is not a transport failure; retrying this batch
+      // would keep failing. Drop it and stay enabled for the next session.
       consecutiveFailures = 0;
     } else {
       consecutiveFailures++;
@@ -122,13 +158,13 @@ export const logError = (...args: unknown[]) => log('error', args);
 
 if (isBrowser) {
   window.addEventListener('beforeunload', () => {
-    if (batch.length && !loggingDisabled) {
+    if (batch.length && !loggingDisabled && hasSession()) {
       const body = JSON.stringify({ entries: batch.splice(0, batch.length) });
       const baseUrl = getBaseUrl();
       // Use fetch with keepalive for beforeunload (similar to sendBeacon but with auth)
       fetch(`${baseUrl}/support/client-logs/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: logHeaders(),
         credentials: 'include',
         body,
         keepalive: true,

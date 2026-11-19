@@ -138,7 +138,7 @@ const Dashboard = () => {
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxRefreshToken, setInboxRefreshToken] = useState(0);
   const [summary, setSummary] = useState<InboxSummary | null>(null);
-  const [priorityItems, setPriorityItems] = useState<Correspondence[] | null>(null);
+  const [inboxItems, setInboxItems] = useState<Correspondence[] | null>(null);
 
   const [approvalsLoading, setApprovalsLoading] = useState(true);
   const [approvalsError, setApprovalsError] = useState<string | null>(null);
@@ -210,14 +210,7 @@ const Dashboard = () => {
           dueSoon: typeof summaryData?.due_soon === "number" ? summaryData.due_soon : 0,
         });
 
-        const actionable = mapped
-          .filter((item) => {
-            if (!slaTargets) return true;
-            const sla = calculateSLAStatus(item, slaTargets);
-            return sla.status === "overdue" || sla.status === "due-soon" || item.priority === "urgent";
-          })
-          .slice(0, 5);
-        setPriorityItems(actionable.length > 0 ? actionable : mapped.slice(0, 5));
+        setInboxItems(mapped);
       } catch {
         if (!ignore) setInboxError("Failed to load your inbox.");
       } finally {
@@ -227,7 +220,24 @@ const Dashboard = () => {
 
     void loadInbox();
     return () => { ignore = true; };
-  }, [currentUser?.id, slaTargets, inboxRefreshToken]);
+  }, [currentUser?.id, inboxRefreshToken]);
+
+  // SLA targets refine the priority list but must not refetch the inbox: the
+  // effect above used to depend on them, so every dashboard load fetched the
+  // 50-row inbox twice.
+  const priorityItems = useMemo(() => {
+    if (!inboxItems) return null;
+    if (!slaTargets) return inboxItems.slice(0, 5);
+    const actionable = inboxItems.filter((item) => {
+      const sla = calculateSLAStatus(item, slaTargets);
+      return (
+        sla.status === "overdue" ||
+        sla.status === "due-soon" ||
+        item.priority === "urgent"
+      );
+    });
+    return (actionable.length > 0 ? actionable : inboxItems).slice(0, 5);
+  }, [inboxItems, slaTargets]);
 
   // Approvals are independent: a failure here must not blank the queue summary
   // or the priority inbox.

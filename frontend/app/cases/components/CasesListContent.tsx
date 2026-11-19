@@ -170,10 +170,10 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch executives for secretaries and super admins
+  // Fetch executives for secretaries only: the endpoint is secretary-scoped
+  // and returns 403 for every other role, including super admins.
   useEffect(() => {
-    // Only fetch if user is a secretary or super admin
-    if (!currentUserId || (!isSecretary && !isSuperAdmin)) {
+    if (!currentUserId || !isSecretary) {
       setExecutives([]);
       return;
     }
@@ -203,7 +203,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
     return () => {
       abortController.abort();
     };
-  }, [currentUserId, isSecretary, isSuperAdmin]);
+  }, [currentUserId, isSecretary]);
 
   // Default division to holder's office division for office-scoped views (e.g. ICT for gmict)
   useEffect(() => {

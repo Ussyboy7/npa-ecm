@@ -134,6 +134,17 @@ async function attemptTokenRefresh(): Promise<boolean> {
         credentials: "include",
       });
       if (!res.ok) {
+        // A rejected cookie-only refresh usually means the httpOnly refresh
+        // cookie survived a client-side clear while the CSRF cookie did not.
+        // clearTokens() cannot remove the httpOnly cookie, so every later load
+        // would retry refresh without CSRF and fail with 401/403 forever. Ask
+        // the server to clear its cookies before giving up.
+        if (res.status === 401 || res.status === 403) {
+          await fetch(`${getBaseUrl()}/accounts/auth/logout/`, {
+            method: "POST",
+            credentials: "include",
+          }).catch(() => undefined);
+        }
         clearTokens();
         return false;
       }

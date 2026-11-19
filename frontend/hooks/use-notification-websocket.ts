@@ -12,6 +12,7 @@ import {
   NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS,
   NOTIFICATION_WS_PING_INTERVAL_MS,
   NOTIFICATION_WS_RECONNECT_DELAY_MS,
+  NOTIFICATION_WS_SLOW_RETRY_MS,
 } from '@/lib/constants';
 
 interface UseNotificationWebSocketOptions {
@@ -199,8 +200,18 @@ export class WebSocketManager {
             }
           }, delay);
         } else if (this.reconnectAttempts >= NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS && !this.maxAttemptsReached) {
+          // Do not leave notifications dead until a page reload. Back off to a
+          // slow retry so a backend restart is picked up automatically.
           this.maxAttemptsReached = true;
-          logWarn('Max WebSocket reconnection attempts reached');
+          logWarn(
+            `Max WebSocket reconnection attempts reached; retrying in ${NOTIFICATION_WS_SLOW_RETRY_MS}ms`,
+          );
+          this.reconnectTimeout = setTimeout(() => {
+            if (!this.enabled) return;
+            this.maxAttemptsReached = false;
+            this.reconnectAttempts = 0;
+            this.connect(this.currentUser);
+          }, NOTIFICATION_WS_SLOW_RETRY_MS);
         }
       };
 
@@ -308,7 +319,8 @@ export class WebSocketManager {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
-      logWarn('WebSocket is not connected');
+      // Normal during connect/reconnect; not worth a warning per call.
+      logInfo('WebSocket is not connected; message not sent');
     }
   }
 

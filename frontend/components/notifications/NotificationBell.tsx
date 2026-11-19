@@ -46,8 +46,15 @@ export const NotificationBell = () => {
     },
   });
 
-  // Seed badge from REST once on mount; WebSocket takes over for live updates.
+  // One source for the badge: ask over the socket when it is connected, and
+  // fall back to REST only while it is not. Seeding from REST *and* sending
+  // get_unread_count on connect fetched the same count twice per mount.
   useEffect(() => {
+    if (isConnected) {
+      sendMessage({ type: 'get_unread_count' });
+      return;
+    }
+
     let cancelled = false;
     void getUnreadCount().then((count) => {
       if (!cancelled) {
@@ -57,12 +64,7 @@ export const NotificationBell = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    if (isOpen || !isConnected) return;
-    sendMessage({ type: 'get_unread_count' });
-  }, [isOpen, isConnected, sendMessage]);
+  }, [isConnected, sendMessage]);
 
   const ariaLabel = unreadCount > 0
     ? `Notifications, ${unreadCount} unread`
