@@ -253,6 +253,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "common.pagination.StandardPageNumberPagination",
     "DEFAULT_SCHEMA_CLASS": "common.openapi.LenientAutoSchema",
     "EXCEPTION_HANDLER": "ecm_backend.exception_handler.custom_exception_handler",
+    # Trusted proxy hops in front of Django. Must equal the exact number of
+    # proxies that append to X-Forwarded-For: too low keys every client on the
+    # proxy address, too high lets clients choose their own throttle key.
+    # Configure per stack in Docker compose; see docs/ops/proxy-chain.md.
+    "NUM_PROXIES": int(os.getenv("THROTTLE_NUM_PROXIES", "1")),
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -268,6 +273,10 @@ REST_FRAMEWORK = {
         "seal_verify": os.getenv("THROTTLE_SEAL_VERIFY_RATE", "20/minute"),
     },
 }
+
+# Whether the trusted-proxy hop count was set explicitly (common.checks warns
+# when a non-local environment falls back to the default).
+THROTTLE_NUM_PROXIES_SET = "THROTTLE_NUM_PROXIES" in os.environ
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "NPA Electronic Content Management API",

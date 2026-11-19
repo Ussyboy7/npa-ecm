@@ -90,6 +90,7 @@ services:
     environment:
       DB_HOST: pgbouncer
       DB_PORT: "5432"
+      THROTTLE_NUM_PROXIES: "${THROTTLE_NUM_PROXIES:?Set THROTTLE_NUM_PROXIES to the confirmed number of trusted proxy hops; see docs/ops/proxy-chain.md}"
     entrypoint: ["/app/scripts/docker-migrate.sh"]
     depends_on:
       pgbouncer:
@@ -105,6 +106,12 @@ services:
       DB_HOST: pgbouncer
       DB_PORT: "5432"
       DB_CONN_MAX_AGE: "60"
+      # Trusted proxy hops in front of Django. 1 = the nginx container only.
+      # A TLS-terminating load balancer or CDN in front of nginx adds a hop:
+      # set this to that many hops + 1. It must match the real chain exactly
+      # (too low buckets every client on the proxy address, too high lets
+      # clients spoof X-Forwarded-For). See docs/ops/proxy-chain.md.
+      THROTTLE_NUM_PROXIES: "${THROTTLE_NUM_PROXIES:?Set THROTTLE_NUM_PROXIES to the confirmed number of trusted proxy hops; see docs/ops/proxy-chain.md}"
     expose:
       - "8000"
     depends_on:

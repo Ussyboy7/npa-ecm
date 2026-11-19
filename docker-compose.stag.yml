@@ -98,6 +98,7 @@ services:
     environment:
       DB_HOST: pgbouncer
       DB_PORT: "5432"
+      THROTTLE_NUM_PROXIES: "1"
     entrypoint: ["/app/scripts/docker-migrate.sh"]
     depends_on:
       pgbouncer:
@@ -113,6 +114,9 @@ services:
       DB_HOST: pgbouncer
       DB_PORT: "5432"
       DB_CONN_MAX_AGE: "60"
+      # Staging is reached directly on :4646, so nginx is the only trusted
+      # hop (client -> nginx -> Daphne). See docs/ops/proxy-chain.md.
+      THROTTLE_NUM_PROXIES: "1"
     expose:
       - "8000"
     depends_on:
