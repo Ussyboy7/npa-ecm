@@ -3,6 +3,10 @@ export { DEFAULT_LIST_PAGE_SIZE as DEFAULT_PAGE_SIZE } from '@/lib/pagination-co
 export const NOTIFICATION_WS_PING_INTERVAL_MS = 30_000;
 export const NOTIFICATION_WS_RECONNECT_DELAY_MS = 3_000;
 export const NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS = 5;
+/** Close code the consumer sends when no credentials arrived within its auth timeout. */
+export const NOTIFICATION_WS_AUTH_CLOSE_CODE = 4001;
+/** Cookie refreshes allowed per connection before the socket gives up. */
+export const NOTIFICATION_WS_MAX_AUTH_RECOVERIES = 2;
 
 export const SYSTEM_ROLE_SUPER_ADMIN = "Super Admin";
 

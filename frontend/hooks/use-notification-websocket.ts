@@ -5,7 +5,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { useCurrentUser } from './use-current-user';
 import type { User } from '@/lib/npa-structure';
 import { type Notification } from '@/lib/api/notifications';
+import { restoreAuthCookies } from '@/lib/api-client';
 import {
+  NOTIFICATION_WS_AUTH_CLOSE_CODE,
+  NOTIFICATION_WS_MAX_AUTH_RECOVERIES,
   NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS,
   NOTIFICATION_WS_PING_INTERVAL_MS,
   NOTIFICATION_WS_RECONNECT_DELAY_MS,
@@ -23,16 +26,19 @@ const WS_DISABLED =
 
 // Global WebSocket connection singleton to prevent multiple connections
 // This ensures only one WebSocket connection exists across all hook instances
-class WebSocketManager {
+export class WebSocketManager {
   private ws: WebSocket | null = null;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxAttemptsReached = false;
   private isConnecting = false;
+  private authRecoveryAttempts = 0;
+  private recoveringAuth = false;
   private subscribers = new Set<{
     onNotification?: (notification: Notification) => void;
     onUnreadCountChange?: (count: number) => void;
+    onConnectionChange?: (connected: boolean) => void;
   }>();
   private unreadCount = 0;
   private isConnected = false;
@@ -97,7 +103,9 @@ class WebSocketManager {
         this.isConnecting = false;
 
         // Authentication comes from the httpOnly session cookie during the
-        // handshake; the server sends `authenticated` automatically.
+        // handshake, so the token is never readable here. When the cookie is
+        // valid the server sends `authenticated` immediately; when it is not,
+        // it closes with 4001 and `recoverAuthAndReconnect` refreshes it.
       };
 
       ws.onmessage = (event) => {
@@ -105,8 +113,9 @@ class WebSocketManager {
           const data = JSON.parse(event.data);
           
           if (data.type === 'authenticated') {
-            this.isConnected = true;
+            this.setConnected(true);
             this.reconnectAttempts = 0;
+            this.authRecoveryAttempts = 0;
             this.maxAttemptsReached = false;
 
             // Request initial unread count
@@ -123,7 +132,7 @@ class WebSocketManager {
 
           if (data.type === 'auth_error') {
             logWarn('WebSocket authentication failed', data);
-            this.isConnected = false;
+            this.setConnected(false);
             this.isConnecting = false;
             ws.close();
             return;
@@ -152,7 +161,7 @@ class WebSocketManager {
 
       ws.onerror = (error) => {
         logWarn('Notifications WebSocket error', { error });
-        this.isConnected = false;
+        this.setConnected(false);
         this.isConnecting = false;
       };
 
@@ -162,7 +171,7 @@ class WebSocketManager {
           reason: event.reason || 'No reason provided',
           wasClean: event.wasClean,
         });
-        this.isConnected = false;
+        this.setConnected(false);
         this.ws = null;
         this.isConnecting = false;
 
@@ -170,6 +179,13 @@ class WebSocketManager {
         if (this.pingInterval) {
           clearInterval(this.pingInterval);
           this.pingInterval = null;
+        }
+
+        // 4001 means no valid credentials reached the handshake. Retrying with
+        // the same expired cookies can never succeed, so refresh them first.
+        if (event.code === NOTIFICATION_WS_AUTH_CLOSE_CODE) {
+          void this.recoverAuthAndReconnect();
+          return;
         }
 
         if (this.enabled && this.reconnectAttempts < NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS && !this.maxAttemptsReached) {
@@ -191,9 +207,61 @@ class WebSocketManager {
       this.ws = ws;
     } catch (error: unknown) {
       logWarn('Failed to create WebSocket connection', error);
-      this.isConnected = false;
+      this.setConnected(false);
       this.isConnecting = false;
     }
+  }
+
+  /**
+   * Refresh the httpOnly auth cookies, then reconnect with a clean budget.
+   * A rejected handshake is not transient: the old access token stays invalid
+   * for every retry, which is what used to exhaust the attempts and leave the
+   * socket dead until a page reload.
+   */
+  private async recoverAuthAndReconnect() {
+    if (this.recoveringAuth || !this.enabled) {
+      return;
+    }
+    if (this.authRecoveryAttempts >= NOTIFICATION_WS_MAX_AUTH_RECOVERIES) {
+      this.maxAttemptsReached = true;
+      logWarn('Notifications WebSocket could not authenticate after refreshing credentials');
+      return;
+    }
+
+    this.recoveringAuth = true;
+    this.authRecoveryAttempts += 1;
+
+    try {
+      const restored = await restoreAuthCookies();
+      if (!restored) {
+        // No session to refresh: the user is signed out, so stop retrying.
+        this.maxAttemptsReached = true;
+        logWarn('Notifications WebSocket stopped: no session available to refresh');
+        return;
+      }
+
+      this.reconnectAttempts = 0;
+      this.maxAttemptsReached = false;
+
+      if (this.enabled && this.currentUser) {
+        this.reconnectTimeout = setTimeout(() => {
+          this.reconnectTimeout = null;
+          this.connect(this.currentUser);
+        }, NOTIFICATION_WS_RECONNECT_DELAY_MS);
+      }
+    } finally {
+      this.recoveringAuth = false;
+    }
+  }
+
+  /** Record connection state and tell every subscriber, so no consumer has
+   * to guess from a stale snapshot taken when it mounted. */
+  private setConnected(connected: boolean) {
+    if (this.isConnected === connected) {
+      return;
+    }
+    this.isConnected = connected;
+    this.subscribers.forEach(sub => sub.onConnectionChange?.(connected));
   }
 
   disconnect() {
@@ -201,6 +269,11 @@ class WebSocketManager {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
+    // A sign-out (or disabled socket) ends the retry budget: the next sign-in
+    // must be able to connect even if the previous session exhausted attempts.
+    this.reconnectAttempts = 0;
+    this.authRecoveryAttempts = 0;
+    this.maxAttemptsReached = false;
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
@@ -211,13 +284,18 @@ class WebSocketManager {
       }
       this.ws = null;
     }
-    this.isConnected = false;
+    this.setConnected(false);
     this.isConnecting = false;
   }
 
-  subscribe(callbacks: { onNotification?: (notification: Notification) => void; onUnreadCountChange?: (count: number) => void }) {
+  subscribe(callbacks: {
+    onNotification?: (notification: Notification) => void;
+    onUnreadCountChange?: (count: number) => void;
+    onConnectionChange?: (connected: boolean) => void;
+  }) {
     this.subscribers.add(callbacks);
-    // Immediately send current unread count to new subscriber
+    // Deliver current state immediately so a late subscriber is not blind.
+    callbacks.onConnectionChange?.(this.isConnected);
     if (this.isConnected) {
       callbacks.onUnreadCountChange?.(this.unreadCount);
     }
@@ -265,19 +343,18 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
     wsManager.setEnabled(isWsEnabled);
   }, [isWsEnabled]);
 
-  // Subscribe to WebSocket manager for updates
+  // Subscribe to WebSocket manager for updates. Connection state is pushed by
+  // the manager; reading a snapshot here would go stale the moment the socket
+  // dropped, which made the bell keep sending on a closed connection.
   useEffect(() => {
     const unsubscribe = wsManager.subscribe({
       onNotification,
+      onConnectionChange: setIsConnected,
       onUnreadCountChange: (count) => {
         setUnreadCount(count);
         onUnreadCountChange?.(count);
       },
     });
-
-    // Update local state from manager
-    setIsConnected(wsManager.getIsConnected());
-    setUnreadCount(wsManager.getUnreadCount());
 
     return unsubscribe;
   }, [onNotification, onUnreadCountChange]);
@@ -307,9 +384,11 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
     wsManager.disconnect();
   };
 
-  const sendMessage = (message: Record<string, unknown>) => {
+  // Stable identity: consumers list it in effect dependencies, and a new
+  // function every render made those effects re-run and re-send each pass.
+  const sendMessage = useCallback((message: Record<string, unknown>) => {
     wsManager.sendMessage(message);
-  };
+  }, []);
 
   const markAsRead = (notificationId: string) => {
     wsManager.sendMessage({ type: 'mark_read', notification_id: notificationId });
