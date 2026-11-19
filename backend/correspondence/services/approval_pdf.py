@@ -43,6 +43,7 @@ from reportlab.platypus import (
 from common.media_urls import build_media_url
 
 from correspondence.models import CorrespondenceDocumentLink, Minute
+from correspondence.services.approval_snapshot import approval_record_minutes
 from dms.models import Document, DocumentVersion
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ GREEN = colors.HexColor("#047857")
 LIGHT_GREEN = colors.HexColor("#ecfdf5")
 LINE = colors.HexColor("#cbd5e1")
 CONTENT_WIDTH = 6.5 * inch
+NOT_RECORDED = "Not recorded"
 _SCAN_IMAGE_EXTENSIONS = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
 _SCAN_IMAGE_TYPES = {
     "image/bmp",
@@ -578,11 +580,7 @@ def _render_back_pdf(
     """Render the certificate and approval-record pages after the memo."""
     minutes = []
     if snapshot is None:
-        minutes = list(
-            Minute.objects.filter(correspondence=correspondence)
-            .select_related("user", "from_office", "to_office", "seal_applied")
-            .order_by("timestamp", "step_number")
-        )
+        minutes = list(approval_record_minutes(correspondence, minute))
     story = _approval_certificate(
         minute,
         correspondence,
@@ -888,129 +886,115 @@ def _memo_flowables(html: str, styles, allow_header: bool = True):
     return flow
 
 
-def _minutes_table(minutes, styles, snapshot=None):
-    """Render the approval trail as a compact minutes table."""
-    data = [
-        [
-            Paragraph("Step", styles["minute_header"]),
-            Paragraph("Action", styles["minute_header"]),
-            Paragraph("By", styles["minute_header"]),
-            Paragraph("Office", styles["minute_header"]),
-            Paragraph("Date", styles["minute_header"]),
-            Paragraph("Note", styles["minute_header"]),
-        ]
-    ]
-    approval_rows = []
+def _record_date(value) -> str:
+    """Format a snapshot or live timestamp for the record table."""
+    if isinstance(value, datetime):
+        return _format_date(value, "d M Y")
+    try:
+        return _format_date(datetime.fromisoformat(str(value)), "d M Y")
+    except (TypeError, ValueError):
+        return str(value or "")[:10]
+
+
+def _record_rows(minutes, snapshot) -> list[dict[str, str]]:
+    """Return the record rows from a frozen snapshot or from live minutes."""
     if snapshot is not None:
-        for row_index, item in enumerate(snapshot.minutes or [], start=1):
-            action = str(item.get("action") or "")
-            by = str(item.get("by") or "Unknown")
-            identity = " · ".join(
+        return [
+            {
+                "step": item.get("step"),
+                "action": str(item.get("action") or ""),
+                "by": str(item.get("by") or "Unknown"),
+                "personnel_number": str(item.get("personnel_number") or ""),
+                "designation": str(item.get("designation") or ""),
+                "office": str(item.get("office") or ""),
+                "date": _record_date(item.get("date")),
+                "note": str(item.get("note") or ""),
+            }
+            for item in (snapshot.minutes or [])
+        ]
+
+    rows = []
+    for minute in minutes:
+        user = getattr(minute, "user", None)
+        if user:
+            name = " ".join(
                 filter(
                     None,
                     [
-                        item.get("personnel_number") or "",
-                        item.get("designation") or "",
+                        getattr(user, "honorific", ""),
+                        user.first_name,
+                        getattr(user, "middle_name", ""),
+                        user.last_name,
                     ],
                 )
+            ) or user.get_full_name() or user.username
+            personnel_number = (
+                getattr(user, "personnel_number", "")
+                or getattr(user, "employee_id", "")
             )
-            user = f"<b>{_safe_text(by)}</b>"
-            if identity:
-                user += f"<br/>{_safe_text(identity)}"
-            date_text = str(item.get("date") or "")
-            try:
-                date_text = _format_date(
-                    datetime.fromisoformat(date_text), "d M Y"
-                )
-            except (TypeError, ValueError):
-                date_text = date_text[:10]
-            data.append(
-                [
-                    Paragraph(_safe_text(item.get("step")), styles["minute"]),
-                    Paragraph(_safe_text(action), styles["minute"]),
-                    Paragraph(user, styles["minute"]),
-                    Paragraph(
-                        _safe_text(item.get("office") or "—"), styles["minute"]
-                    ),
-                    Paragraph(_safe_text(date_text), styles["minute"]),
-                    Paragraph(
-                        _safe_text(item.get("note") or "—").replace("\n", "<br/>"),
-                        styles["minute"],
-                    ),
-                ]
-            )
-            if action.lower() == "approve":
-                approval_rows.append(row_index)
-    else:
-        for row_index, minute in enumerate(minutes, start=1):
-            action = (
-                minute.get_action_type_display()
-                if hasattr(minute, "get_action_type_display")
-                else str(minute.action_type).title()
-            )
-            user_obj = getattr(minute, "user", None)
-            if user_obj:
-                full_name = " ".join(
-                    filter(
-                        None,
-                        [
-                            getattr(user_obj, "honorific", ""),
-                            user_obj.first_name,
-                            getattr(user_obj, "middle_name", ""),
-                            user_obj.last_name,
-                        ],
-                    )
-                ) or user_obj.get_full_name() or user_obj.username
-                identity = " · ".join(
-                    filter(
-                        None,
-                        [
-                            getattr(user_obj, "personnel_number", "")
-                            or getattr(user_obj, "employee_id", ""),
-                            getattr(user_obj, "designation", ""),
-                        ],
-                    )
-                )
-                user = f"<b>{_safe_text(full_name)}</b>"
-                if identity:
-                    user += f"<br/>{_safe_text(identity)}"
-            else:
-                user = "Unknown"
-            office = (
-                minute.from_office.name
-                if getattr(minute, "from_office", None)
-                else minute.to_office.name
-                if getattr(minute, "to_office", None)
-                else "—"
-            )
-            note = _safe_text(minute.minute_text or "—").replace("\n", "<br/>")
-            if minute.action_type != Minute.ActionType.APPROVE and len(note) > 280:
-                note = note[:277] + "…"
-            data.append(
-                [
-                    Paragraph(_safe_text(minute.step_number), styles["minute"]),
-                    Paragraph(_safe_text(action), styles["minute"]),
-                    Paragraph(user, styles["minute"]),
-                    Paragraph(_safe_text(office), styles["minute"]),
-                    Paragraph(
-                        _safe_text(_format_date(minute.timestamp, "d M Y")),
-                        styles["minute"],
-                    ),
-                    Paragraph(note or "&nbsp;", styles["minute"]),
-                ]
-            )
-            if minute.action_type == Minute.ActionType.APPROVE:
-                approval_rows.append(row_index)
+            designation = (getattr(user, "designation", "") or "").strip()
+        else:
+            name, personnel_number, designation = "Unknown", "", ""
+        rows.append(
+            {
+                "step": minute.step_number,
+                "action": minute.get_action_type_display(),
+                "by": name,
+                "personnel_number": personnel_number,
+                "designation": designation,
+                "office": (
+                    minute.from_office.name
+                    if getattr(minute, "from_office", None)
+                    else minute.to_office.name
+                    if getattr(minute, "to_office", None)
+                    else ""
+                ),
+                "date": _record_date(minute.timestamp),
+                "note": minute.minute_text or "",
+            }
+        )
+    return rows
+
+
+def _minutes_table(minutes, styles, snapshot=None):
+    """Render the approval trail as a compact minutes table."""
+    headers = ("Step", "Action", "By", "Designation", "Office", "Date", "Note")
+    data = [[Paragraph(header, styles["minute_header"]) for header in headers]]
+    approval_rows = []
+    for row_index, row in enumerate(_record_rows(minutes, snapshot), start=1):
+        by = f"<b>{_safe_text(row['by'])}</b>"
+        if row["personnel_number"]:
+            by += f"<br/>{_safe_text(row['personnel_number'])}"
+        note = _safe_text(row["note"] or "—").replace("\n", "<br/>")
+        if row["action"].lower() != "approve" and len(note) > 280:
+            note = note[:277] + "…"
+        data.append(
+            [
+                Paragraph(_safe_text(row["step"]), styles["minute"]),
+                Paragraph(_safe_text(row["action"]), styles["minute"]),
+                Paragraph(by, styles["minute"]),
+                Paragraph(
+                    _safe_text(row["designation"] or NOT_RECORDED),
+                    styles["minute"],
+                ),
+                Paragraph(_safe_text(row["office"] or "—"), styles["minute"]),
+                Paragraph(_safe_text(row["date"]), styles["minute"]),
+                Paragraph(note, styles["minute"]),
+            ]
+        )
+        if row["action"].lower() == "approve":
+            approval_rows.append(row_index)
 
     table = Table(
         data,
         colWidths=[
-            0.35 * inch,
-            0.65 * inch,
-            1.55 * inch,
-            1.45 * inch,
-            0.85 * inch,
-            1.65 * inch,
+            0.36 * inch,
+            0.52 * inch,
+            1.22 * inch,
+            1.02 * inch,
+            1.16 * inch,
+            0.72 * inch,
+            1.50 * inch,
         ],
         repeatRows=1,
     )
@@ -1326,5 +1310,56 @@ def build_approval_pdf(minute, correspondence, snapshot=None) -> bytes:
     back_pdf = _brand_approved_copy(back_pdf)
     return _merge_pdfs(
         [memo_pdf, back_pdf],
+        title=f"Approved copy — {correspondence.reference_number or correspondence.id}",
+    )
+
+
+def rebuild_approval_record_pdf(
+    *,
+    minute,
+    correspondence,
+    snapshot,
+    issued_pdf: bytes,
+) -> bytes:
+    """Re-issue an approved copy whose approval record was corrected.
+
+    The memo pages are copied from the PDF that was issued, so an edit to the
+    source memo cannot change the pages that make up the document being
+    corrected. Only the certificate and approval-record pages are rendered
+    again from the corrected snapshot.
+    """
+    reader = PdfReader(BytesIO(issued_pdf))
+    memo_pages = []
+    certificate_found = False
+    for page in reader.pages:
+        if not certificate_found and "Approval Certificate" in (page.extract_text() or ""):
+            certificate_found = True
+        if not certificate_found:
+            memo_pages.append(page)
+    if not certificate_found:
+        raise ValueError("Issued PDF has no approval certificate page.")
+
+    styles = _styles()
+    seal = getattr(minute, "seal_applied", None)
+    seal_png = _seal_png(seal) if seal else None
+    back_pdf = _render_back_pdf(
+        minute,
+        correspondence,
+        seal,
+        seal_png,
+        styles,
+        page_offset=len(memo_pages),
+        snapshot=snapshot,
+    )
+    back_pdf = _brand_approved_copy(back_pdf)
+
+    memo_buffer = BytesIO()
+    writer = PdfWriter()
+    for page in memo_pages:
+        writer.add_page(page)
+    writer.write(memo_buffer)
+
+    return _merge_pdfs(
+        [memo_buffer.getvalue(), back_pdf],
         title=f"Approved copy — {correspondence.reference_number or correspondence.id}",
     )

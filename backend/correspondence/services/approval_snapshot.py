@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from django.core.files.base import ContentFile
+from django.db.models import Q
 from django.utils import timezone
 
 from correspondence.models import ApprovalSnapshot, Minute
@@ -23,21 +24,42 @@ def _personnel_number(user) -> str:
 
 
 def _designation(user) -> str:
+    """Return the designation on file, never a permission role.
+
+    ``system_role.name`` describes access control, not what the officer held,
+    so it is not substituted when ``designation`` is empty. An empty value is
+    rendered as "Not recorded".
+    """
     if not user:
         return ""
-    designation = getattr(user, "designation", "") or ""
-    if designation:
-        return designation
-    role = getattr(user, "system_role", None)
-    return getattr(role, "name", "") if role else ""
+    return (getattr(user, "designation", "") or "").strip()
 
 
-def _minutes_snapshot(correspondence) -> list[dict[str, str | int]]:
+def approval_record_minutes(correspondence, approval_minute):
+    """Return the minutes that belong in the approval record.
+
+    The record documents one approval, so minutes created after that approval
+    are excluded (a late or backfilled capture must not add later routing) and
+    recalled minutes are excluded because they no longer stand.
+    """
     minutes = (
-        Minute.objects.filter(correspondence=correspondence)
+        Minute.objects.filter(correspondence=correspondence, is_recalled=False)
         .select_related("user", "from_office", "to_office")
         .order_by("timestamp", "step_number")
     )
+    if approval_minute.timestamp:
+        minutes = minutes.filter(
+            Q(timestamp__lt=approval_minute.timestamp)
+            | Q(
+                timestamp=approval_minute.timestamp,
+                step_number__lte=approval_minute.step_number,
+            )
+        )
+    return minutes
+
+
+def _minutes_snapshot(correspondence, approval_minute) -> list[dict[str, str | int]]:
+    minutes = approval_record_minutes(correspondence, approval_minute)
     result = []
     for minute in minutes:
         office = (
@@ -97,7 +119,7 @@ def _snapshot_defaults(minute, correspondence, seal, approved_document) -> dict:
         "seal_serial": getattr(seal, "serial_number", "") if seal else "",
         "seal_verification_url": _verification_url(seal) if seal else "",
         "sealed_at": getattr(seal, "sealed_at", None) if seal else None,
-        "minutes": _minutes_snapshot(correspondence),
+        "minutes": _minutes_snapshot(correspondence, minute),
     }
 
 
