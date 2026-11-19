@@ -910,7 +910,14 @@ class CookieTokenRefreshView(APIView):
             raise PermissionDenied("CSRF verification failed.")
 
         serializer = TokenRefreshSerializer(data={"refresh": refresh_raw})
-        if not serializer.is_valid():
+        try:
+            valid = serializer.is_valid()
+        except (TokenError, User.DoesNotExist, TypeError, KeyError):
+            # A blacklisted/rotated token or a token whose user row is gone is
+            # a dead session, not a server fault. SimpleJWT raises these out of
+            # validate(), where is_valid() does not catch them.
+            valid = False
+        if not valid:
             response = Response(
                 {"detail": "Your session has expired. Please sign in again."},
                 status=status.HTTP_401_UNAUTHORIZED,

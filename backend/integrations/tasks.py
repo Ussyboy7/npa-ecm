@@ -42,8 +42,9 @@ def deliver_webhook(self, webhook_event_id: str):
 @shared_task(name="integrations.tasks.retry_failed_webhooks")
 def retry_failed_webhooks():
     """Periodic task to retry failed webhook deliveries."""
+    # WebhookService already logs the count; logging it here duplicated every
+    # run in the worker log.
     retried = WebhookService.retry_failed_webhooks()
-    logger.info(f"Retried {retried} failed webhook events")
     return {"retried": retried}
 
 

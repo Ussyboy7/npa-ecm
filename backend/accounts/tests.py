@@ -123,6 +123,61 @@ class AuthAPITests(TestCase):
         ):
             self.assertEqual(response.cookies[cookie_name]["max-age"], 0)
 
+    def test_refresh_with_a_blacklisted_token_is_a_401_not_a_500(self):
+        login = self.client.post(self.login_url, {
+            "username": "testuser",
+            "password": "testpass123",
+        })
+        refresh = login.cookies["npa_ecm_refresh_token"].value
+        csrf = login.cookies["npa_ecm_csrf_token"].value
+        RefreshToken(refresh).blacklist()
+
+        response = self.client.post(
+            reverse("api_v1:token_refresh"),
+            {},
+            format="json",
+            HTTP_X_CSRF_TOKEN=csrf,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.cookies["npa_ecm_refresh_token"]["max-age"], 0)
+
+    def test_refresh_for_a_missing_user_is_a_401_not_a_500(self):
+        # A signed refresh token whose user row no longer exists must end the
+        # session, not raise DoesNotExist out of the serializer.
+        orphan = RefreshToken()
+        orphan["user_id"] = 999_999_999
+        self.client.cookies["npa_ecm_refresh_token"] = str(orphan)
+        self.client.cookies["npa_ecm_csrf_token"] = "csrf-value"
+
+        response = self.client.post(
+            reverse("api_v1:token_refresh"),
+            {},
+            format="json",
+            HTTP_X_CSRF_TOKEN="csrf-value",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.cookies["npa_ecm_refresh_token"]["max-age"], 0)
+
+    def test_logging_out_twice_is_idempotent(self):
+        login = self.client.post(self.login_url, {
+            "username": "testuser",
+            "password": "testpass123",
+        })
+        csrf = login.cookies["npa_ecm_csrf_token"].value
+
+        first = self.client.post(
+            reverse("api_v1:logout"), {}, format="json", HTTP_X_CSRF_TOKEN=csrf
+        )
+        second = self.client.post(
+            reverse("api_v1:logout"), {}, format="json", HTTP_X_CSRF_TOKEN=csrf
+        )
+
+        self.assertEqual(first.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(second.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(second.cookies["npa_ecm_refresh_token"]["max-age"], 0)
+
     def test_impersonation_and_return_keep_jwts_in_cookies(self):
         admin = User.objects.create_superuser(
             username="cookie-impersonation-admin",
