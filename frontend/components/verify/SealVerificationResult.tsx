@@ -3,13 +3,19 @@
 import { useState, useRef } from "react";
 import { logError } from '@/lib/client-logger';
 import { CheckCircle2, XCircle, Shield, Calendar, User, FileText, AlertTriangle, ExternalLink, Eye, Copy, Share2, Printer, Download, FileCheck2 } from "lucide-react";
-import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatSealDate, formatSealDateLong } from "@/lib/datetime";
 import { toast } from "@/components/ui/sonner";
-import { checkSealDocument, type SealDocumentCheck, type SealVerification } from "@/lib/api/seal-verification";
+import {
+  checkSealDocument,
+  getSealImageUrl,
+  getSealResultState,
+  type SealDocumentCheck,
+  type SealResultState,
+  type SealVerification,
+} from "@/lib/api/seal-verification";
 
 interface SealVerificationResultProps {
   verification: SealVerification;
@@ -17,6 +23,81 @@ interface SealVerificationResultProps {
   onRetry?: () => void;
   onVerifyAnother?: () => void;
 }
+
+type FailedResultState = Exclude<SealResultState, 'matched'>;
+
+/**
+ * Wording for each way a lookup can end without a matching record. Each
+ * variant states what the registry returned, so an outage is never shown as a
+ * finding about the seal.
+ */
+const FAILED_RESULT_VIEW: Record<
+  FailedResultState,
+  {
+    banner: string;
+    title: string;
+    summary: string;
+    serialPanel: string;
+    serialLabel: string;
+    badge: string;
+    badgeText: string;
+    icon: typeof XCircle;
+    guidancePanel: string;
+    guidanceTitle: string;
+    guidanceText: string;
+    guidance: string;
+  }
+> = {
+  invalidated: {
+    banner: "from-red-600 to-red-500",
+    title: "Seal record invalidated",
+    summary: "This serial exists in NPA ECM, but its seal has been invalidated.",
+    serialPanel:
+      "border-red-200 bg-gradient-to-r from-red-50 to-red-100/80 dark:border-red-800/30 dark:from-red-950/30 dark:to-red-900/20",
+    serialLabel: "text-red-700 dark:text-red-400",
+    badge:
+      "border-red-300 bg-red-100 text-red-800 dark:border-red-600/50 dark:bg-red-600/20 dark:text-red-400",
+    badgeText: "Invalidated",
+    icon: XCircle,
+    guidancePanel: "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/50",
+    guidanceTitle: "text-red-700 dark:text-red-400",
+    guidanceText: "text-red-600 dark:text-red-300",
+    guidance:
+      "This seal was recorded against an approved document but has since been withdrawn. Follow NPA guidance before relying on the document.",
+  },
+  not_found: {
+    banner: "from-amber-600 to-amber-500",
+    title: "No seal record found",
+    summary: "NPA ECM has no seal record for this serial.",
+    serialPanel:
+      "border-amber-200 bg-gradient-to-r from-amber-50 to-amber-100/80 dark:border-amber-800/30 dark:from-amber-950/30 dark:to-amber-900/20",
+    serialLabel: "text-amber-700 dark:text-amber-400",
+    badge:
+      "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-600/50 dark:bg-amber-600/20 dark:text-amber-400",
+    badgeText: "Not found",
+    icon: AlertTriangle,
+    guidancePanel: "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/50",
+    guidanceTitle: "text-amber-800 dark:text-amber-400",
+    guidanceText: "text-amber-700 dark:text-amber-200",
+    guidance:
+      "The registry was checked and returned no record for this serial. Check the serial against the document for typos, or contact NPA. A missing record is not by itself a finding that the document is inauthentic.",
+  },
+  unavailable: {
+    banner: "from-slate-700 to-slate-600",
+    title: "Check could not be completed",
+    summary: "NPA ECM could not complete the lookup, so no record was checked.",
+    serialPanel: "border-border bg-muted/30",
+    serialLabel: "text-muted-foreground",
+    badge: "border-border bg-muted text-muted-foreground",
+    badgeText: "Not checked",
+    icon: AlertTriangle,
+    guidancePanel: "border-border bg-muted/40",
+    guidanceTitle: "text-foreground",
+    guidanceText: "text-muted-foreground",
+    guidance:
+      "This result says nothing about the seal. Retry the check, or contact NPA if the problem continues.",
+  },
+};
 
 export function SealVerificationResult({ 
   verification, 
@@ -28,7 +109,7 @@ export function SealVerificationResult({
   const [documentCheck, setDocumentCheck] = useState<SealDocumentCheck | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [checkingDocument, setCheckingDocument] = useState(false);
-  const sealPreviewRef = useRef<{ getCanvas: () => HTMLCanvasElement | null; download: (filename?: string) => void }>(null);
+  const [sealImageFailed, setSealImageFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCopySerial = () => {
@@ -44,8 +125,8 @@ export function SealVerificationResult({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Seal Verification: ${verification.valid ? 'Valid' : 'Invalid'}`,
-          text: `Verify seal ${verification.serial_number || serial}`,
+          title: `Seal record: ${verification.serial_number || serial}`,
+          text: `Check the seal record for ${verification.serial_number || serial}`,
           url,
         });
         toast.success('Shared successfully');
@@ -69,18 +150,24 @@ export function SealVerificationResult({
     window.print();
   };
 
-  const handleDownloadCertificate = () => {
-    if (sealPreviewRef.current) {
-      try {
-        const filename = `seal-verification-certificate-${verification.serial_number}-${new Date().toISOString().split('T')[0]}.png`;
-        sealPreviewRef.current.download(filename);
-        toast.success('Certificate downloaded successfully');
-      } catch (error: unknown) {
-        logError('Failed to download certificate:', error);
-        toast.error('Failed to download certificate. Please try again.');
+  const handleDownloadSealImage = async () => {
+    try {
+      const response = await fetch(getSealImageUrl(verification.serial_number || serial));
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-    } else {
-      toast.error('Seal preview not available. Please refresh the page.');
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `seal-${verification.serial_number || serial}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      toast.success('Seal image downloaded');
+    } catch (error: unknown) {
+      logError('Failed to download seal image:', error);
+      toast.error('Failed to download the seal image. Please try again.');
     }
   };
 
@@ -108,7 +195,33 @@ export function SealVerificationResult({
     }
   };
 
-  if (verification.valid) {
+  const resultState = getSealResultState(verification);
+
+  // The archived-copy comparison has exactly one outcome at a time, including
+  // the state before any file is supplied.
+  const comparison = documentCheck
+    ? {
+        label: documentCheck.matches ? "Matched" : "Different",
+        detail: documentCheck.matches
+          ? "The uploaded file is identical to the archived approved copy."
+          : "The uploaded file is not identical to the archived approved copy. It may have changed since approval, or been re-saved or re-exported.",
+        tone: documentCheck.matches
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+          : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200",
+      }
+    : documentError
+      ? {
+          label: "Could not compare",
+          detail: documentError,
+          tone: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200",
+        }
+      : {
+          label: "Not checked",
+          detail: "Upload the PDF to compare it with the archived approved copy.",
+          tone: "border-border bg-background text-muted-foreground",
+        };
+
+  if (resultState === 'matched') {
     return (
       <Card className="overflow-hidden">
         {/* Success Banner */}
@@ -119,8 +232,8 @@ export function SealVerificationResult({
                 <CheckCircle2 className="h-10 w-10" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold">Valid Seal</h2>
-                <p className="text-emerald-100">This document has been digitally approved</p>
+                <h2 className="text-2xl font-bold">Seal record found</h2>
+                <p className="text-emerald-100">The serial matches a seal record in NPA ECM.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -147,19 +260,23 @@ export function SealVerificationResult({
         </div>
 
         <CardContent className="p-6 space-y-6">
-          {/* Digital Seal Preview */}
-          <div className="flex justify-center rounded-lg border border-border bg-muted/30 py-6">
-            <DigitalSealPreview
-              ref={sealPreviewRef}
-              officeName={verification.office_name}
-              officeTitle={verification.office_title}
-              serialNumber={verification.serial_number}
-              signatureText={verification.sealed_by}
-              timestamp={verification.sealed_at}
-              size={220}
-              showQR={true}
-              verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
-            />
+          {/* Issued seal image: the stored, hash-verified artifact */}
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-muted/30 py-6">
+            {sealImageFailed ? (
+              <p className="text-xs text-muted-foreground">Seal image unavailable.</p>
+            ) : (
+              /* The issued seal is evidence; the optimizer must not re-encode it. */
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={getSealImageUrl(verification.serial_number || serial, 440)}
+                srcSet={`${getSealImageUrl(verification.serial_number || serial, 220)} 1x, ${getSealImageUrl(verification.serial_number || serial, 440)} 2x`}
+                alt={`Issued seal for ${verification.serial_number || serial}`}
+                width={220}
+                height={220}
+                className="rounded-full"
+                onError={() => setSealImageFailed(true)}
+              />
+            )}
           </div>
 
           {/* Serial Number - Enhanced */}
@@ -184,7 +301,7 @@ export function SealVerificationResult({
             <div className="mt-3 flex items-center justify-center gap-2">
               <Badge variant="outline" className="border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-600/50 dark:bg-emerald-600/20 dark:text-emerald-400">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
-                Verified
+                Record found
               </Badge>
             </div>
           </div>
@@ -277,16 +394,15 @@ export function SealVerificationResult({
                 <FileCheck2 className="h-5 w-5 text-sky-500" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">Check a downloaded PDF</p>
+                <p className="text-sm font-semibold text-foreground">Compare a PDF with the archived approved copy</p>
                 {verification.pdf_sha256 ? (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Upload the approved-copy PDF to compare it with the archived copy.
-                    This detects edits made after approval.
+                    This compares the SHA-256 fingerprint of the PDF you upload with the archived approved copy for this seal.
+                    It shows whether the two files are identical — not legal validity or every aspect of a document&apos;s authenticity.
                   </p>
                 ) : (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    No archived approved-copy hash is available for this seal yet.
-                    Generate or download the approved copy once to create one.
+                    Not checked: no archived approved copy is available for this seal, so an uploaded file cannot be compared.
                   </p>
                 )}
                 {verification.pdf_sha256 && (
@@ -298,34 +414,23 @@ export function SealVerificationResult({
                       className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-background file:px-3 file:py-2 file:text-xs file:font-medium file:text-foreground hover:file:bg-muted"
                       onChange={(event) => void handleDocumentCheck(event.target.files?.[0])}
                       disabled={checkingDocument}
-                      aria-label="Upload approved-copy PDF to verify"
+                      aria-label="Upload approved-copy PDF to compare"
                     />
-                    {checkingDocument && (
-                      <p className="text-xs text-muted-foreground">Checking document…</p>
-                    )}
-                    {documentCheck && (
+                    {checkingDocument ? (
+                      <p className="text-xs text-muted-foreground">Comparing file…</p>
+                    ) : (
                       <div
-                        className={`rounded-md border p-3 text-xs ${
-                          documentCheck.matches
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
-                            : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200"
-                        }`}
+                        className={`rounded-md border p-3 text-xs ${comparison.tone}`}
                         role="status"
                       >
-                        <p className="font-semibold">
-                          {documentCheck.matches
-                            ? "Document matches the archived approved copy."
-                            : "Document differs from the archived approved copy."}
-                        </p>
-                        <p className="mt-1 font-mono break-all opacity-80">
-                          SHA-256: {documentCheck.actual_sha256}
-                        </p>
+                        <p className="font-semibold">{comparison.label}</p>
+                        <p className="mt-1">{comparison.detail}</p>
+                        {documentCheck && (
+                          <p className="mt-1 font-mono break-all opacity-80">
+                            SHA-256: {documentCheck.actual_sha256}
+                          </p>
+                        )}
                       </div>
-                    )}
-                    {documentError && (
-                      <p className="text-xs text-destructive" role="alert">
-                        {documentError}
-                      </p>
                     )}
                   </div>
                 )}
@@ -338,25 +443,25 @@ export function SealVerificationResult({
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 dark:border-emerald-800/50 dark:bg-emerald-950/30">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Verified & Authentic</p>
+                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Seal record matched</p>
               </div>
               <div className="text-center space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  Verified on {formatSealDateLong(new Date().toISOString())}
+                  Checked on {formatSealDateLong(new Date().toISOString())}
                 </p>
                 <p className="max-w-md text-xs text-muted-foreground/80">
-                  The authenticity of this document is confirmed by the Nigerian Ports Authority 
-                  Electronic Correspondence Management system.
+                  A record match confirms that this serial exists in NPA ECM. It is not, by itself, a determination
+                  that a document is authentic. Compare the details with the document you hold and follow NPA policy.
                 </p>
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleDownloadCertificate}
+                  onClick={() => void handleDownloadSealImage()}
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  Download Certificate
+                  Download seal image
                 </Button>
                 {onVerifyAnother && (
                   <Button
@@ -375,23 +480,22 @@ export function SealVerificationResult({
     );
   }
 
-  // Invalid seal
+  // No matching record: invalidated, absent, or the check did not complete.
+  const failedView = FAILED_RESULT_VIEW[resultState];
+  const StateIcon = failedView.icon;
+
   return (
     <Card className="overflow-hidden">
-      {/* Error Banner */}
-      <div className="bg-gradient-to-r from-red-600 to-red-500 p-6 text-white">
+      {/* Outcome Banner */}
+      <div className={`bg-gradient-to-r ${failedView.banner} p-6 text-white`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
-              <XCircle className="h-10 w-10" />
+              <StateIcon className="h-10 w-10" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">
-                {verification.invalidated_at ? "Invalidated Seal" : "Invalid Seal"}
-              </h2>
-              <p className="text-red-100">
-                {verification.error || "This seal could not be verified"}
-              </p>
+              <h2 className="text-2xl font-bold">{failedView.title}</h2>
+              <p className="text-white/90">{failedView.summary}</p>
             </div>
           </div>
           {onRetry && (
@@ -410,8 +514,8 @@ export function SealVerificationResult({
 
       <CardContent className="p-6 space-y-6">
         {/* Serial Number - Enhanced */}
-        <div className="rounded-lg border border-red-200 bg-gradient-to-r from-red-50 to-red-100/80 py-5 text-center dark:border-red-800/30 dark:from-red-950/30 dark:to-red-900/20">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Serial Number</p>
+        <div className={`rounded-lg border py-5 text-center ${failedView.serialPanel}`}>
+          <p className={`mb-2 text-xs font-semibold uppercase tracking-wider ${failedView.serialLabel}`}>Serial Number</p>
           <div className="flex items-center justify-center gap-2 mb-2">
             <p className="text-2xl font-mono font-bold text-foreground tracking-wider">{serial}</p>
             <Button
@@ -429,9 +533,12 @@ export function SealVerificationResult({
             </Button>
           </div>
           <div className="mt-3 flex items-center justify-center gap-2">
-            <Badge variant="destructive" className="border-red-300 bg-red-100 text-red-800 dark:border-red-600/50 dark:bg-red-600/20 dark:text-red-400">
-              <XCircle className="h-3 w-3 mr-1" />
-              Invalid
+            <Badge
+              variant={resultState === 'invalidated' ? 'destructive' : 'outline'}
+              className={failedView.badge}
+            >
+              <StateIcon className="h-3 w-3 mr-1" />
+              {failedView.badgeText}
             </Badge>
           </div>
         </div>
@@ -455,16 +562,16 @@ export function SealVerificationResult({
           </div>
         )}
 
-        {/* Warning */}
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/50">
+        {/* What the outcome means */}
+        <div className={`rounded-lg border p-4 ${failedView.guidancePanel}`}>
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700 dark:text-amber-400" />
+            <AlertTriangle className={`mt-0.5 h-5 w-5 flex-shrink-0 ${failedView.guidanceTitle}`} />
             <div>
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-400">Warning</p>
-              <p className="mt-1 text-xs text-amber-700 dark:text-amber-200">
-                This document may be fraudulent or the seal may have been tampered with. 
-                Please contact the Nigerian Ports Authority to verify the authenticity of this document.
-              </p>
+              <p className={`text-sm font-medium ${failedView.guidanceTitle}`}>What this means</p>
+              <p className={`mt-1 text-xs ${failedView.guidanceText}`}>{failedView.guidance}</p>
+              {resultState === 'unavailable' && verification.error && (
+                <p className={`mt-1 text-xs ${failedView.guidanceText}`}>Details: {verification.error}</p>
+              )}
             </div>
           </div>
         </div>

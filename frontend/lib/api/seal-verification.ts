@@ -1,11 +1,18 @@
 /** API client for seal verification. */
 
 import { logError, logInfo } from '@/lib/client-logger';
-import { apiFetch, isAbortError } from '@/lib/api-client';
-import { getApiErrorMessage } from '@/lib/api-error';
+import { apiFetch, getBaseUrl, isAbortError } from '@/lib/api-client';
+import { getApiErrorMessage, getApiErrorStatus } from '@/lib/api-error';
+
+/** Why the lookup ended the way it did, independent of the seal's own state. */
+export type SealLookupStatus = 'found' | 'not_found' | 'unavailable';
+
+/** What the page can state about the check it actually performed. */
+export type SealResultState = 'matched' | 'invalidated' | 'not_found' | 'unavailable';
 
 export interface SealVerification {
   valid: boolean;
+  lookup_status?: SealLookupStatus;
   serial_number: string;
   sealed_by: string;
   office_name: string;
@@ -23,6 +30,16 @@ export interface SealVerification {
   pdf_sha256?: string;
   pdf_generated_at?: string | null;
   snapshot_reference?: string;
+}
+
+/**
+ * Public, hash-verified image of the issued seal for a valid serial.
+ * Pass a width for the server's downscaled rendition; omit it for the
+ * full-resolution artifact.
+ */
+export function getSealImageUrl(serialNumber: string, width?: number): string {
+  const path = `${getBaseUrl()}/accounts/seal/public-image/${encodeURIComponent(serialNumber)}/`;
+  return width ? `${path}?width=${width}` : path;
 }
 
 export interface SealDocumentCheck {
@@ -69,9 +86,11 @@ export async function verifySeal(serialNumber: string, signal?: AbortSignal): Pr
       data.serial_number = serialNumber;
     }
     
+    data.lookup_status = 'found';
+
     // If API returned valid: false, ensure error message is set
     if (!data.valid && !data.error) {
-      data.error = 'Seal not found or invalid';
+      data.error = 'This seal record is not valid.';
     }
     
     logInfo('[Seal Verification] Success:', {
@@ -86,14 +105,33 @@ export async function verifySeal(serialNumber: string, signal?: AbortSignal): Pr
       throw error;
     }
 
-    // Network error (CORS, connection failed, etc.) - throw so hook can retry
-    logError('Network error during seal verification:', error);
+    logError('Seal verification request failed:', error);
+    // A 404 means the registry answered and has no such record. Anything else
+    // (network, 5xx, bad gateway) means no conclusion can be drawn at all.
+    const lookup_status: SealLookupStatus =
+      getApiErrorStatus(error) === 404 ? 'not_found' : 'unavailable';
     return {
       valid: false,
       serial_number: serialNumber,
-      error: getApiErrorMessage(error, 'Network error. Please check your connection and try again.'),
+      lookup_status,
+      error:
+        lookup_status === 'not_found'
+          ? 'No seal record found for this serial.'
+          : getApiErrorMessage(error, 'Network error. Please check your connection and try again.'),
     } as SealVerification;
   }
+}
+
+/**
+ * Collapse a lookup response into the one claim the result page may make.
+ * Unknown failure shapes are treated as an incomplete check, never as a
+ * finding about the seal.
+ */
+export function getSealResultState(verification: SealVerification): SealResultState {
+  if (verification.valid) return 'matched';
+  if (verification.invalidated_at) return 'invalidated';
+  if (verification.lookup_status === 'not_found') return 'not_found';
+  return 'unavailable';
 }
 
 /**

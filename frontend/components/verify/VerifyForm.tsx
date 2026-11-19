@@ -22,7 +22,7 @@ export function VerifyForm({
   className = "",
   showLabel = true,
   compact = false,
-  placeholder = "NPA-20241201-A8F3B2C1"
+  placeholder = "e.g. NPA-20241201-A8F3B2C1"
 }: VerifyFormProps) {
   const router = useRouter();
   const [serialInput, setSerialInput] = useState("");
@@ -101,7 +101,7 @@ export function VerifyForm({
       )}
       {!validationError && (
         <p className="text-xs text-muted-foreground">
-          Format: NPA-YYYYMMDD-XXXXXXXX
+          Example only — replace with your serial.
         </p>
       )}
       <Button 

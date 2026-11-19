@@ -95,7 +95,7 @@ export default function VerifyPage() {
                 <p className="text-xs text-muted-foreground font-mono bg-muted px-3 py-1.5 rounded inline-block">
                   {serial}
                 </p>
-                <p className="text-xs text-muted-foreground mt-3">Please wait while we verify authenticity.</p>
+                <p className="text-xs text-muted-foreground mt-3">Please wait while we check the seal record.</p>
               </div>
             </div>
           </div>
@@ -113,10 +113,10 @@ export default function VerifyPage() {
             <div className="flex flex-col items-center gap-6 px-6 text-center">
               <Shield className="h-16 w-16 text-muted-foreground" />
               <div>
-                <h3 className="text-lg font-semibold mb-2">Verification Failed</h3>
+                <h3 className="text-lg font-semibold mb-2">Check could not be completed</h3>
                 <div className="space-y-3 mb-6">
                   <p className="text-sm text-muted-foreground">
-                    {error || 'Unable to verify seal. Please try again.'}
+                    {error || 'Enter the serial printed on the document to run a check.'}
                   </p>
                   {serial && (
                     <div className="p-3 bg-muted rounded-lg border">
@@ -124,15 +124,6 @@ export default function VerifyPage() {
                       <p className="text-sm font-mono">{serial}</p>
                     </div>
                   )}
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Possible reasons:</p>
-                    <ul className="list-disc list-inside space-y-1 text-left max-w-md mx-auto">
-                      <li>Serial number format is incorrect</li>
-                      <li>Seal does not exist in the system</li>
-                      <li>Network connection issue</li>
-                      <li>Server is temporarily unavailable</li>
-                    </ul>
-                  </div>
                 </div>
                 <div className="flex items-center justify-center gap-2">
                   <Button onClick={retry} variant="outline" disabled={loading}>

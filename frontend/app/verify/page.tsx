@@ -10,7 +10,7 @@ export default function VerifyPage() {
     <PublicPortalShell portalSubtitle="Seal Verification">
       <QueuePageShell
         title="Verify Seal"
-        subtitle="Confirm document authenticity by checking an executive seal serial number."
+        subtitle="Check an executive seal record using its serial number."
       >
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="rounded-xl border border-border/60 lg:col-span-2">
@@ -20,7 +20,7 @@ export default function VerifyPage() {
                 <div className="space-y-1">
                   <h2 className="text-base font-semibold">Enter a seal serial number</h2>
                   <p className="text-sm text-muted-foreground">
-                    Use the serial printed on the approved document to verify if the seal is valid.
+                    Enter the serial printed on the approved document.
                   </p>
                 </div>
               </div>
@@ -35,13 +35,13 @@ export default function VerifyPage() {
                 How it works
               </h3>
               <ol className="list-decimal space-y-2 pl-4 text-sm text-muted-foreground">
-                <li>Enter the serial number shown on the sealed document.</li>
-                <li>Review the verification status and seal details returned.</li>
-                <li>Use the result to validate authenticity before processing.</li>
+                <li>Enter the serial printed on the approved document.</li>
+                <li>Review the seal status and recorded details.</li>
+                <li>Compare those details with the document and follow NPA policy.</li>
               </ol>
               <div className="flex items-start gap-2 rounded-xl bg-muted/30 p-3 text-xs text-muted-foreground">
                 <Info className="mt-0.5 h-4 w-4 text-primary" />
-                <p>Example format: NPA-YYYYMMDD-XXXXXXXX.</p>
+                <p>Serial format: NPA-YYYYMMDD-XXXXXXXX.</p>
               </div>
             </div>
           </div>

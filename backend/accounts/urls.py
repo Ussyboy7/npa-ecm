@@ -25,6 +25,7 @@ from .views import (
     InitialPasswordSetView,
     RequestEmailOTPView,
     SealImageView,
+    SealPublicImageView,
     SealDocumentCheckView,
     SealSignatureImageView,
     SealVerificationView,
@@ -101,6 +102,11 @@ urlpatterns = [
     path("seal/apply/", ApplySealView.as_view(), name="seal_apply"),
     path("seal/signature-image/<str:serial_number>/", SealSignatureImageView.as_view(), name="seal_signature_image"),
     path("seal/image/<str:serial_number>/", SealImageView.as_view(), name="seal_image"),
+    path(
+        "seal/public-image/<str:serial_number>/",
+        SealPublicImageView.as_view(),
+        name="seal_public_image",
+    ),
     path("seal/verify/<str:serial_number>/", SealVerificationView.as_view(), name="seal_verify"),
     path(
         "seal/document-check/<str:serial_number>/",

@@ -37,6 +37,8 @@ from .login_mfa import (
     user_requires_login_mfa,
 )
 from common.throttles import (
+    AnonSealImageThrottle,
+    AnonSealVerifyThrottle,
     LoginRateThrottle,
     OTPRateThrottle,
     PasswordChangeRateThrottle,
@@ -1281,7 +1283,8 @@ class SealVerificationView(APIView):
     """
     
     permission_classes = []  # Public access for verification
-    
+    throttle_classes = [AnonSealVerifyThrottle]
+
     def get(self, request, serial_number):
         """Verify a seal by serial number."""
         try:
@@ -1332,6 +1335,70 @@ class SealVerificationView(APIView):
                 {"valid": False, "error": "Seal not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class SealPublicImageView(APIView):
+    """Serve the issued seal image to anyone holding a valid serial.
+
+    This is the evidence artifact itself (hash-verified against the seal
+    record), not a client rendering. Invalidated and unknown seals return 404
+    so a verifier is never shown artwork that implies a valid seal.
+
+    ``?width=<px>`` returns a downscaled rendition of the same stored PNG for
+    page display; the full-resolution artifact is always the no-parameter
+    response and remains the download.
+    """
+
+    permission_classes = []
+    throttle_classes = [AnonSealImageThrottle]
+    DISPLAY_WIDTHS = (220, 440, 660)
+
+    def get(self, request, serial_number):
+        try:
+            seal = DocumentSeal.objects.get(serial_number=serial_number, is_valid=True)
+        except DocumentSeal.DoesNotExist:
+            raise NotFound("Seal not found")
+
+        from .services import SealGenerationService
+
+        # Read-only: an anonymous GET must never render or cache-miss regenerate.
+        image_bytes = SealGenerationService.stored_seal_image(seal)
+        if not image_bytes:
+            raise NotFound("Seal image unavailable")
+
+        cache_control = "public, max-age=300"
+        requested_width = request.query_params.get("width")
+        if requested_width:
+            try:
+                width = int(requested_width)
+            except (TypeError, ValueError):
+                raise ValidationError({"width": "Unsupported display width."})
+            if width not in self.DISPLAY_WIDTHS:
+                raise ValidationError(
+                    {"width": f"Supported display widths: {', '.join(map(str, self.DISPLAY_WIDTHS))}."}
+                )
+            image_bytes = self._downscale(image_bytes, width)
+            cache_control = "public, max-age=86400"
+
+        response = FileResponse(io.BytesIO(image_bytes), content_type="image/png", as_attachment=False)
+        response["Cache-Control"] = cache_control
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    @staticmethod
+    def _downscale(image_bytes: bytes, width: int) -> bytes:
+        """Scale the stored artifact down; never upscale or redraw it."""
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            if image.width <= width:
+                return image_bytes
+            rendition = image.convert("RGBA")
+            height = max(1, round(rendition.height * (width / rendition.width)))
+            rendition = rendition.resize((width, height), Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            rendition.save(buffer, format="PNG", optimize=True)
+            return buffer.getvalue()
 
 
 class SealDocumentCheckView(APIView):

@@ -264,6 +264,8 @@ REST_FRAMEWORK = {
         "otp": os.getenv("THROTTLE_OTP_RATE", "5/minute"),
         "password_change": os.getenv("THROTTLE_PASSWORD_CHANGE_RATE", "5/hour"),
         "totp_setup": os.getenv("THROTTLE_TOTP_SETUP_RATE", "5/minute"),
+        "seal_image": os.getenv("THROTTLE_SEAL_IMAGE_RATE", "20/minute"),
+        "seal_verify": os.getenv("THROTTLE_SEAL_VERIFY_RATE", "20/minute"),
     },
 }
 

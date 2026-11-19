@@ -1,6 +1,6 @@
 """Custom DRF throttle classes for rate limiting."""
 
-from rest_framework.throttling import UserRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 
 class LoginRateThrottle(UserRateThrottle):
@@ -17,3 +17,15 @@ class PasswordChangeRateThrottle(UserRateThrottle):
 
 class TotpSetupRateThrottle(UserRateThrottle):
     scope = "totp_setup"
+
+
+class AnonSealImageThrottle(AnonRateThrottle):
+    """IP-scoped limit for the public seal-image route."""
+
+    scope = "seal_image"
+
+
+class AnonSealVerifyThrottle(AnonRateThrottle):
+    """IP-scoped limit for the public seal verification lookup."""
+
+    scope = "seal_verify"

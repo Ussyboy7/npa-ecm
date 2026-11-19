@@ -1037,6 +1037,37 @@ class SealGenerationService:
         )
 
     @classmethod
+    def stored_seal_image(cls, seal) -> bytes | None:
+        """Return the stored seal PNG only when it matches its recorded hash.
+
+        Read-only by design: never renders, regenerates, or writes. Public
+        endpoints use this so an anonymous request cannot trigger storage
+        writes or serve artwork that fails hash verification.
+        """
+        if not seal or not seal.seal_image or not seal.seal_image_sha256:
+            return None
+
+        try:
+            with seal.seal_image.open("rb") as image_file:
+                stored = image_file.read()
+        except (OSError, ValueError, AttributeError) as exc:
+            logger.warning(
+                "Could not read stored seal image for %s: %s",
+                getattr(seal, "serial_number", "unknown"),
+                exc,
+            )
+            return None
+
+        if not compare_digest(hashlib.sha256(stored).hexdigest(), seal.seal_image_sha256):
+            logger.error(
+                "Stored seal image hash mismatch for %s; refusing to serve it",
+                getattr(seal, "serial_number", "unknown"),
+            )
+            return None
+
+        return stored
+
+    @classmethod
     def ensure_seal_image(
         cls,
         seal,
@@ -1058,20 +1089,10 @@ class SealGenerationService:
         if requested_url and requested_url.rstrip("/") != (seal.verification_url or "").rstrip("/"):
             force = True
 
-        if not force and seal.seal_image and seal.seal_image_sha256:
-            try:
-                with seal.seal_image.open("rb") as image_file:
-                    cached = image_file.read()
-            except (OSError, ValueError, AttributeError) as exc:
-                logger.warning("Could not read cached seal image for %s: %s", seal.serial_number, exc)
-            else:
-                actual_digest = hashlib.sha256(cached).hexdigest()
-                if compare_digest(actual_digest, seal.seal_image_sha256):
-                    return cached
-                logger.error(
-                    "Seal image hash mismatch for %s; regenerating from seal snapshot",
-                    seal.serial_number,
-                )
+        if not force:
+            cached = cls.stored_seal_image(seal)
+            if cached is not None:
+                return cached
 
         try:
             png = cls.render_seal_png(seal, verification_url=requested_url or None)
