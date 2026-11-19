@@ -98,9 +98,12 @@ stack_init_env() {
             # Scaled services have no fixed container_name; match compose project prefix
             STACK_BACKEND_CONTAINER="npa-ecm-stag-backend"
             STACK_NGINX_CONTAINER="ecm-nginx-stag"
-            STACK_BACKEND_REPLICAS="${BACKEND_REPLICAS:-2}"
+            # backend/frontend must stay at 1: host-network nginx proxies via
+            # fixed localhost ports (127.0.0.1:8046 / :3046). Scaling those
+            # services would fight over the same host bind.
+            STACK_BACKEND_REPLICAS="${BACKEND_REPLICAS:-1}"
             STACK_CELERY_REPLICAS="${CELERY_REPLICAS:-2}"
-            STACK_FRONTEND_REPLICAS="${FRONTEND_REPLICAS:-2}"
+            STACK_FRONTEND_REPLICAS="${FRONTEND_REPLICAS:-1}"
             STACK_HEALTH_URL="${STACK_HEALTH_URL_OVERRIDE:-http://172.16.0.46:4646/api/v1/health/live/}"
             STACK_FRONTEND_URL="${STACK_FRONTEND_URL_OVERRIDE:-http://172.16.0.46:4646}"
             ;;

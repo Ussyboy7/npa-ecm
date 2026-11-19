@@ -2,7 +2,8 @@
 # On Mac: use docker-compose.local.yml (or `docker compose up` via compose.yaml).
 # To run staging locally for a one-off test: ECM_ALLOW_LOCAL_STAG=1 scripts/staging/env-manager.sh start
 #
-# Scaled like prod (smaller defaults). Scale via BACKEND_REPLICAS / CELERY_REPLICAS / FRONTEND_REPLICAS.
+# Celery may scale (CELERY_REPLICAS). Backend/frontend stay at 1 on staging —
+# host-network nginx needs fixed localhost publishes (8046/3046).
 name: npa-ecm-stag
 
 networks:
@@ -117,7 +118,8 @@ services:
       # Staging is reached directly on :4646, so nginx is the only trusted
       # hop (client -> nginx -> Daphne). See docs/ops/proxy-chain.md.
       THROTTLE_NUM_PROXIES: "1"
-    # Localhost-only publish for host-network nginx (see nginx service).
+    # Localhost-only publish for host-network nginx. Do not scale this service
+    # above 1 on staging — replicas would collide on :8046.
     ports:
       - "127.0.0.1:8046:8000"
     depends_on:
@@ -188,7 +190,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
       NEXT_PUBLIC_ENVIRONMENT: staging
-    # Localhost-only publish for host-network nginx (see nginx service).
+    # Localhost-only publish for host-network nginx. Do not scale above 1.
     ports:
       - "127.0.0.1:3046:3000"
     depends_on:
