@@ -1,12 +1,10 @@
 "use client";
-import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
-
 import { logError } from '@/lib/client-logger';
-import { useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { PageSuspenseFallback } from "@/components/shared/PageSuspenseFallback";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { ShieldCheck, ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,82 +28,29 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
-import { login, clearTokens, isMfaChallenge, verifyLoginMFA, requestLoginMFAEmail, getOidcLoginUrl, fetchOidcStatus, restoreAuthCookies } from "@/lib/api-client";
+import { login, isMfaChallenge, verifyLoginMFA, requestLoginMFAEmail, getOidcLoginUrl, fetchOidcStatus, restoreAuthCookies } from "@/lib/api-client";
 import { getStoredRedirectPath } from "@/lib/auth-errors";
+import { resolveRedirectPath } from "@/lib/auth-redirect";
 
-/** Valid route prefixes for post-login redirect. Invalid or unknown paths fall back to /dashboard to avoid 404s. */
-const ALLOWED_REDIRECT_PREFIXES = [
-  "/inbox", "/dashboard", "/correspondence", "/cases", "/admin", "/analytics",
-  "/approvals", "/audit", "/dms", "/documents", "/forms", "/help", "/integrations",
-  "/notifications", "/records", "/seal-preview", "/search", "/settings",
-];
+const REMEMBERED_USERNAME_KEY = "npa_ecm_remember_me";
 
-const DEFAULT_POST_LOGIN_PATH = "/dashboard";
-
-function resolveRedirectPath(raw: string | null | undefined): string {
-  const s = (raw || "").trim();
-  if (!s || s === "/") return DEFAULT_POST_LOGIN_PATH;
-  if (!s.startsWith("/") || s.includes("//") || s.includes("..")) return DEFAULT_POST_LOGIN_PATH;
-  if (s.startsWith("/login") || s.startsWith("/verify")) return DEFAULT_POST_LOGIN_PATH;
-  const pathname = s.split("?")[0];
-  const allowed = ALLOWED_REDIRECT_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
-  return allowed ? s : DEFAULT_POST_LOGIN_PATH;
+function readRememberedUsername(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(REMEMBERED_USERNAME_KEY) || "null");
+    const username = (parsed as { username?: unknown } | null)?.username;
+    return typeof username === "string" ? username : "";
+  } catch {
+    return "";
+  }
 }
 
-type PersonaOption = {
-  id: string;
-  label: string;
-  username: string;
-  password: string;
-  summary: string;
-};
-
-const DEMO_PERSONAS: PersonaOption[] = [
-  {
-    id: "superadmin",
-    label: SYSTEM_ROLE_SUPER_ADMIN,
-    username: "superadmin",
-    password: "ChangeMe123!",
-    summary: "Full tenancy access for system administration.",
-  },
-  {
-    id: "user-md",
-    label: "Managing Director",
-    username: "md",
-    password: "ChangeMe123!",
-    summary: "Executive dashboard with approvals workload.",
-  },
-  {
-    id: "user-ed-fa",
-    label: "Executive Director · Finance & Administration",
-    username: "edfa",
-    password: "ChangeMe123!",
-    summary: "Directorate-level routing and delegation flows.",
-  },
-  {
-    id: "user-gm-ict",
-    label: "General Manager · Information & Communication Technology",
-    username: "gmict",
-    password: "ChangeMe123!",
-    summary: "Division leadership view with distribution lists.",
-  },
-  {
-    id: "user-pa-md",
-    label: "Personal Assistant · MD",
-    username: "pamd",
-    password: "ChangeMe123!",
-    summary: "Assistant persona with delegated approvals.",
-  },
-];
-
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
@@ -113,11 +58,31 @@ function LoginForm() {
   const [mfaCode, setMfaCode] = useState("");
   const [mfaMethod, setMfaMethod] = useState<"email" | "totp" | "backup_code">("email");
   const [mfaEmailSent, setMfaEmailSent] = useState(false);
+  const [mfaEmailSending, setMfaEmailSending] = useState(false);
   const [oidcEnabled, setOidcEnabled] = useState(false);
-  const ssoError = searchParams?.get("sso_error");
+  const [ssoError, setSsoError] = useState<string | null>(null);
 
-  const personaMap = useMemo(() => new Map(DEMO_PERSONAS.map((persona) => [persona.id, persona])), []);
   const resumedRef = useRef(false);
+  const ssoErrorHandledRef = useRef(false);
+
+  // Show the SSO failure once, then drop it from the address bar so a reload or
+  // a shared link cannot replay it.
+  useEffect(() => {
+    if (ssoErrorHandledRef.current || !searchParams?.has("sso_error")) return;
+    ssoErrorHandledRef.current = true;
+    const error = searchParams.get("sso_error");
+    if (error) setSsoError(error);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("sso_error");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const remembered = readRememberedUsername();
+    if (!remembered) return;
+    setUsername((current) => current || remembered);
+    setRememberMe(true);
+  }, []);
 
   // The proxy gates routes on the auth cookie, which can lapse while the
   // session itself is still valid in storage. When it bounced us here with a
@@ -138,50 +103,36 @@ function LoginForm() {
       .catch(() => setOidcEnabled(false));
   }, []);
 
-  useEffect(() => {
-    if (!selectedUserId) return;
-    const persona = personaMap.get(selectedUserId);
-    if (!persona) return;
-    setUsername(persona.username);
-    setPassword(persona.password);
-  }, [personaMap, selectedUserId]);
-
-  const completeLoginRedirect = () => {
-      const redirectFromCookie = typeof document !== 'undefined' 
-        ? document.cookie.split('; ').find(row => row.startsWith('redirect_after_login='))?.split('=')[1]
-        : null;
-      const redirectFromStorage = getStoredRedirectPath();
-      const redirectFromUrl = searchParams?.get('redirect');
-      const redirectPath = resolveRedirectPath(
-        redirectFromUrl || redirectFromCookie || redirectFromStorage || DEFAULT_POST_LOGIN_PATH
-      );
-      if (redirectFromCookie && typeof document !== 'undefined') {
-        document.cookie = 'redirect_after_login=; path=/; max-age=0; samesite=lax';
-      }
-      if (typeof window !== "undefined") {
-        window.location.assign(redirectPath);
-        return;
-      }
-      router.refresh();
-      router.push(redirectPath);
+  const completeSignIn = (signedInUsername: string) => {
+    if (rememberMe && signedInUsername) {
+      window.localStorage.setItem(REMEMBERED_USERNAME_KEY, JSON.stringify({ username: signedInUsername }));
+    } else {
+      window.localStorage.removeItem(REMEMBERED_USERNAME_KEY);
+    }
+    toast.success("Signed in successfully");
+    // Full navigation so the server-owned session cookies apply to the next page.
+    const requested = searchParams?.get("redirect") || getStoredRedirectPath();
+    window.location.assign(resolveRedirectPath(requested));
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    const identifier = username.trim();
+    if (!identifier || !password) {
+      toast.error("Enter your username and password.");
+      return;
+    }
+
     setIsSubmitting(true);
-
     try {
-      if (!username || !password) {
-        toast.error("Enter your username and password.");
-        return;
-      }
-
-      const result = await login(username, password);
+      const result = await login(identifier, password);
 
       if (isMfaChallenge(result)) {
         setMfaChallengeId(result.challenge_id);
         setMfaMethods(result.methods);
+        setMfaCode("");
+        setMfaEmailSent(false);
         setMfaMethod(
           result.methods.includes("totp")
             ? "totp"
@@ -193,17 +144,11 @@ function LoginForm() {
         return;
       }
 
-      if (rememberMe) {
-        localStorage.setItem("npa_ecm_remember_me", JSON.stringify({ username }));
-      } else {
-        localStorage.removeItem("npa_ecm_remember_me");
-      }
-
-      toast.success("Signed in successfully");
-      completeLoginRedirect();
+      completeSignIn(identifier);
     } catch (error: unknown) {
       logError(error);
-      clearTokens();
+      // A failed sign-in attempt sets no cookies either way, so the existing
+      // session is left untouched for a user who already has one.
       toast.error(
         error instanceof Error ? error.message : "Unable to sign in. Please check your credentials."
       );
@@ -221,8 +166,7 @@ function LoginForm() {
     setIsSubmitting(true);
     try {
       await verifyLoginMFA(mfaChallengeId, mfaCode.trim(), mfaMethod);
-      toast.success("Signed in successfully");
-      completeLoginRedirect();
+      completeSignIn(username.trim());
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Invalid verification code.");
     } finally {
@@ -231,13 +175,16 @@ function LoginForm() {
   };
 
   const handleRequestMfaEmail = async () => {
-    if (!mfaChallengeId) return;
+    if (!mfaChallengeId || mfaEmailSending) return;
+    setMfaEmailSending(true);
     try {
       await requestLoginMFAEmail(mfaChallengeId);
       setMfaEmailSent(true);
       toast.success("Verification code sent to your email.");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Could not send email code.");
+    } finally {
+      setMfaEmailSending(false);
     }
   };
 
@@ -319,7 +266,7 @@ function LoginForm() {
             <CardHeader>
               <CardTitle className="text-2xl font-semibold">Sign in to NPA ECM</CardTitle>
               <CardDescription>
-                Use your official credentials. For this demo, you may select a persona to auto-fill seeded accounts (passwords are <code>ChangeMe123!</code>).
+                Sign in with your official NPA ECM credentials.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -367,8 +314,18 @@ function LoginForm() {
                     />
                   </div>
                   {mfaMethod === "email" && mfaMethods.includes("email") && (
-                    <Button type="button" variant="outline" className="w-full" onClick={handleRequestMfaEmail}>
-                      {mfaEmailSent ? "Resend email code" : "Send code to my email"}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleRequestMfaEmail}
+                      disabled={mfaEmailSending}
+                    >
+                      {mfaEmailSending
+                        ? "Sending…"
+                        : mfaEmailSent
+                        ? "Resend email code"
+                        : "Send code to my email"}
                     </Button>
                   )}
                   <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
@@ -381,7 +338,8 @@ function LoginForm() {
                     onClick={() => {
                       setMfaChallengeId(null);
                       setMfaCode("");
-                      clearTokens();
+                      setMfaEmailSent(false);
+                      setMfaMethods([]);
                     }}
                   >
                     Back to sign in
@@ -396,11 +354,12 @@ function LoginForm() {
                     name="username"
                     type="text"
                     autoComplete="username"
-                    placeholder="superadmin"
+                    placeholder="Enter your username"
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
-                    aria-label="Username input"
-                    aria-required="true"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -415,8 +374,6 @@ function LoginForm() {
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       required
-                      aria-label="Password input"
-                      aria-required="true"
                       className="pr-10"
                     />
                     <button
@@ -434,31 +391,13 @@ function LoginForm() {
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Select a demo persona</Label>
-                  <Select onValueChange={setSelectedUserId} value={selectedUserId ?? ""}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose grade level / role" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      {DEMO_PERSONAS.map((persona) => (
-                        <SelectItem key={persona.id} value={persona.id}>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{persona.label}</span>
-                            <span className="text-xs text-muted-foreground">{persona.summary}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="flex items-center justify-between">
                   <label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox
                       checked={rememberMe}
                       onCheckedChange={(value) => setRememberMe(Boolean(value))}
                     />
-                    Remember me
+                    Remember username
                   </label>
                   <button
                     type="button"
