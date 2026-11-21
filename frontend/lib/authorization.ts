@@ -1,5 +1,10 @@
 /** Canonical client authorization sources shared by navigation and guards. */
 
+import { APP_ROUTES } from "./app-routes";
+
+// Re-exported so existing `@/lib/authorization` imports keep one source.
+export { APP_ROUTES };
+
 // Keep these keys in sync with backend/organization/permissions_catalog.py.
 // A contract test compares both lists so drift fails locally.
 export const PERMISSION_KEYS = [
@@ -91,39 +96,6 @@ export const PAGE_ACCESS_KEYS = [
 
 export type PageId = (typeof PAGE_ACCESS_KEYS)[number];
 
-export const APP_ROUTES = {
-  login: "/login",
-  dashboard: "/dashboard",
-  myInbox: "/inbox",
-  mySent: "/correspondence/my-sent",
-  cases: "/cases?tab=my",
-  casesMy: "/cases/my",
-  casesBase: "/cases",
-  documents: "/documents",
-  dms: "/dms",
-  documentsForms: "/dms?tab=forms",
-  approvals: "/approvals",
-  notifications: "/notifications",
-  officeInbox: "/correspondence/inbox",
-  officeSent: "/correspondence/office-sent",
-  registered: "/correspondence/registered",
-  physicalRecords: "/physical-documents",
-  records: "/correspondence/records",
-  search: "/search",
-  foia: "/foia",
-  verify: "/verify",
-  actingWorkspace: "/acting",
-  admin: "/admin",
-  adminOrganization: "/admin/organization",
-  adminActingAppointments: "/admin/organization/acting",
-  adminWorkflowSla: "/admin/workflow-sla",
-  adminTemplates: "/admin/templates-hub",
-  adminRecordsGovernance: "/admin/records-governance",
-  settings: "/settings",
-  help: "/help",
-  helpdesk: "/helpdesk",
-} as const;
-
 export const PAGE_ROUTES: Record<PageId, string> = {
   dashboard: APP_ROUTES.dashboard,
   my_sent: APP_ROUTES.mySent,
@@ -133,19 +105,19 @@ export const PAGE_ROUTES: Record<PageId, string> = {
   approvals_departmental: APP_ROUTES.approvals,
   cases: APP_ROUTES.cases,
   cases_my: APP_ROUTES.cases,
-  cases_office: "/cases/office",
-  cases_all: "/cases/all",
+  cases_office: APP_ROUTES.casesOffice,
+  cases_all: APP_ROUTES.casesAll,
   case_templates: APP_ROUTES.adminTemplates,
   registered: APP_ROUTES.registered,
   physical_records: APP_ROUTES.physicalRecords,
   documents: APP_ROUTES.dms,
-  forms: "/forms",
-  audit: "/audit",
+  forms: APP_ROUTES.forms,
+  audit: APP_ROUTES.audit,
   templates: APP_ROUTES.adminTemplates,
   records: APP_ROUTES.records,
   records_governance: APP_ROUTES.adminRecordsGovernance,
   administration: APP_ROUTES.admin,
-  analytics: "/analytics",
+  analytics: APP_ROUTES.analytics,
   platform: APP_ROUTES.admin,
   office_inbox: APP_ROUTES.officeInbox,
   admin_overview: APP_ROUTES.admin,

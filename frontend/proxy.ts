@@ -35,7 +35,9 @@ export function proxy(request: NextRequest) {
 
   if (!token) {
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
+    // Keep the full target, including query params, so tab and filter state
+    // survives the sign-in round trip.
+    loginUrl.searchParams.set('redirect', `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
 
