@@ -95,6 +95,7 @@ Docker Compose and Django both use `backend/env/<env>.env`.
 | `shell` | Shell in backend container |
 | `migrate` | `manage.py migrate --noinput` |
 | `seed` | `seed_demo_data` |
+| `load-users` | Import nominal-roll users, then map roles/offices (`--apply` writes) |
 | `backup` | `scripts/backup/backup-db.sh` |
 | `verify-backup` | `scripts/backup/verify_backup.sh` (integrity check on latest dump) |
 | `restore-backup` | `scripts/backup/restore_backup.sh` (destructive — see `scripts/backup/README.md`) |
@@ -114,6 +115,18 @@ scripts/staging/env-manager.sh deploy
 `deploy` does: optional pre-deploy DB snapshot, `git pull`, media dir prep, `compose down`, `up --build`, Docker health wait on `/health/live/`, rollback on failure.
 
 Flags: `--no-backup`, `--no-pull`, `--no-rollback`, `--skip-health`
+
+## Load users from the nominal roll
+
+Run **on the target server** after the stack is up:
+
+```bash
+cd /srv/npa-ecm
+scripts/staging/env-manager.sh load-users cleaned_npa_nominal_roll2.xlsx          # dry run
+scripts/staging/env-manager.sh load-users cleaned_npa_nominal_roll2.xlsx --apply
+```
+
+New accounts use `ChangeMe123!` unless `--password VALUE` is passed. Existing roles, offices, and passwords are retained; no users are deleted. Add `--no-roles` to import identities only.
 
 ## Legacy scripts
 

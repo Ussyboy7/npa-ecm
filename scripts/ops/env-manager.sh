@@ -33,6 +33,7 @@ Commands:
   shell            Shell into backend container
   migrate          Run Django migrations
   seed             seed_demo_data
+  load-users       Import nominal-roll users + roles/offices (dry run unless --apply)
   seed-reset       Wipe + reseed (prompts)
   backup           Database snapshot (scripts/backup/backup-db.sh)
   verify-backup    Verify latest SQL backup integrity
@@ -142,6 +143,10 @@ cmd_migrate() {
 
 cmd_seed() {
     "${SCRIPT_DIR}/../stack/seed.sh" "$STACK_ENVIRONMENT" "$@"
+}
+
+cmd_load_users() {
+    "${SCRIPT_DIR}/../stack/load-users.sh" "$STACK_ENVIRONMENT" "$@"
 }
 
 cmd_seed_reset() {
@@ -504,6 +509,7 @@ case "$CMD" in
     shell)          cmd_shell ;;
     migrate)        cmd_migrate ;;
     seed)           cmd_seed "$@" ;;
+    load-users)     cmd_load_users "$@" ;;
     seed-reset)     cmd_seed_reset ;;
     backup)         cmd_backup ;;
     verify-backup)  cmd_verify_backup "$@" ;;
