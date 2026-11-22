@@ -24,7 +24,6 @@ interface MemoCompositionSectionProps {
   onTemplateSave: (name: string, content: string) => void;
   newTemplateName: string;
   onNewTemplateNameChange: (name: string) => void;
-  getTemplatePlainText: (template: DocumentTemplate) => string;
   signatureImageUrl?: string;
   showSuggestedNote: boolean;
   suggestedCoveringNote: string;
@@ -48,7 +47,6 @@ export const MemoCompositionSection = ({
   onTemplateSave,
   newTemplateName,
   onNewTemplateNameChange,
-  getTemplatePlainText,
   signatureImageUrl,
   showSuggestedNote,
   suggestedCoveringNote,

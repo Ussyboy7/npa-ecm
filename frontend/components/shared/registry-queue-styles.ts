@@ -72,6 +72,10 @@ export const correspondenceQueueSubjectClass =
 export const correspondenceQueueBadgeClass =
   "h-5 gap-0.5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none";
 
+/** Awaiting-action state: amber, not red. Red is reserved for urgent, overdue and invalid. */
+export const correspondenceQueueWarningBadgeClass =
+  "border-warning/50 bg-warning/10 text-amber-800 dark:border-warning/40 dark:text-amber-300";
+
 /** Meta row: inline, wraps */
 export const correspondenceQueueMetaRowClass =
   "flex flex-wrap gap-x-2.5 gap-y-0.5 border-t border-border/60 pt-1.5 text-[11px] leading-tight text-muted-foreground";

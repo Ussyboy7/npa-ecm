@@ -18,7 +18,7 @@ type ListRowCardProps = {
   href?: string;
   /** Select row without navigation (e.g. preview panel). Avoid wrapping the card in `<button>`. */
   onRowClick?: () => void;
-  /** Right column (e.g. View); not part of the main link. */
+  /** Right column (e.g. View); not part of the main link. Multiple actions sit side by side. */
   actions?: ReactNode;
   /** Full-width row below main content (e.g. sent-list actions). */
   footer?: ReactNode;
@@ -143,7 +143,7 @@ const ListRowCard_ = ({
           {actions ? (
             <div
               className={cn(
-                "flex shrink-0 flex-col self-start pt-0.5",
+                "flex shrink-0 flex-row flex-wrap items-start self-start pt-0.5",
                 density === "compact" || density === "dense" ? "gap-0.5" : "gap-2",
               )}
             >

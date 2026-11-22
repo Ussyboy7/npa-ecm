@@ -30,33 +30,47 @@ import { ListRowCard } from "@/components/shared/ListRowCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
+  correspondenceQueueSubjectClass,
+  correspondenceQueueWarningBadgeClass,
 } from "@/components/shared/registry-queue-styles";
 import { cn } from "@/lib/utils";
 import { formatDateShort } from "@/lib/datetime";
 
 function jobStatusBadge(status: CaptureJob["status"]) {
-  const styles: Record<CaptureJob["status"], string> = {
-    pending: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-    processing: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-    completed: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
-    failed: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-    cancelled: "bg-muted text-muted-foreground border-border",
+  const variants: Record<CaptureJob["status"], { variant: "secondary" | "destructive" | "outline"; className?: string }> = {
+    pending: { variant: "outline", className: correspondenceQueueWarningBadgeClass },
+    processing: { variant: "secondary" },
+    completed: { variant: "outline", className: "border-success/40 bg-success/10 text-success" },
+    failed: { variant: "destructive" },
+    cancelled: { variant: "secondary" },
   };
-  return <Badge className={styles[status]}>{status}</Badge>;
+  const style = variants[status];
+  return (
+    <Badge variant={style.variant} className={cn(correspondenceQueueBadgeClass, style.className)}>
+      {status}
+    </Badge>
+  );
 }
 
 function batchStatusBadge(status: BatchUpload["status"]) {
-  const styles: Record<BatchUpload["status"], string> = {
-    uploading: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-    processing: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-    completed: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
-    failed: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-    partial: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
+  const variants: Record<BatchUpload["status"], { variant: "secondary" | "destructive" | "outline"; className?: string }> = {
+    uploading: { variant: "outline", className: correspondenceQueueWarningBadgeClass },
+    processing: { variant: "secondary" },
+    completed: { variant: "outline", className: "border-success/40 bg-success/10 text-success" },
+    failed: { variant: "destructive" },
+    partial: { variant: "outline", className: correspondenceQueueWarningBadgeClass },
   };
-  return <Badge className={styles[status]}>{status}</Badge>;
+  const style = variants[status];
+  return (
+    <Badge variant={style.variant} className={cn(correspondenceQueueBadgeClass, style.className)}>
+      {status}
+    </Badge>
+  );
 }
 
 /** Scan / batch / OCR job queue — rendered on the standalone /capture page. */
@@ -306,15 +320,15 @@ export function CaptureJobsPanel() {
                 >
                   <div className="mb-1 flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-semibold text-foreground">
+                      <h4 className={correspondenceQueueSubjectClass}>
                         {job.document ? job.document.title : "Untitled"}
-                      </h3>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] font-medium uppercase text-muted-foreground">{job.job_type}</span>
+                      </h4>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
                         {jobStatusBadge(job.status)}
+                        <span className="text-[10px] font-medium uppercase text-muted-foreground">{job.job_type}</span>
                       </div>
                     </div>
-                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                    <span className={correspondenceQueueDateClass}>
                       {formatDateShort(job.created_at)}
                     </span>
                   </div>
@@ -374,8 +388,8 @@ export function CaptureJobsPanel() {
                     <div className="flex flex-wrap items-center gap-2">
                       {batchStatusBadge(batch.status)}
                       {batch.process_ocr && (
-                        <Badge variant="outline" className="h-5 gap-1 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none">
-                          <CheckCircle2 className="h-3 w-3" />
+                        <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "gap-1")}>
+                          <CheckCircle2 className="h-2.5 w-2.5" />
                           OCR
                         </Badge>
                       )}

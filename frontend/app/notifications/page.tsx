@@ -57,11 +57,11 @@ export default function NotificationsPage() {
     loadNotifications();
   }, [loadNotifications]);
 
-  useNotificationWebSocket({
-    onNotification: () => {
-      void loadNotifications();
-    },
-  });
+  const handleSocketNotification = useCallback(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  useNotificationWebSocket({ onNotification: handleSocketNotification });
 
   const handleMarkRead = async (notification: Notification) => {
     try {

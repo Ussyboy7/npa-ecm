@@ -201,12 +201,6 @@ export function useSidebarVisibility(): SidebarVisibility {
         m.isActive &&
         QUEUE_ROLES.has(String(m.assignmentRole || '').toLowerCase()),
     );
-    const hasExecutiveAssignment =
-      roleChecks.isSecretary &&
-      assistantAssignments.some((a) => String(a.assistantId) === String(currentUser.id));
-    const hasOrgUnit = Boolean(
-      currentUser.division || currentUser.department || currentUser.directorate,
-    );
     const registryOn = section("sidebar_show_offices_registry", true);
     const casesOn = section("sidebar_show_case_management", true);
     const documentsOn = section("sidebar_show_documents_records", true);

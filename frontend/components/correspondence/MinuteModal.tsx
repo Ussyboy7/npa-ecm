@@ -719,7 +719,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
     const contentHtml = convertTextToHtml(content);
     try {
-      const created = await createDocumentTemplate({
+      await createDocumentTemplate({
         scope: 'user',
         scopeId: currentUser.id,
         title: resolvedName.slice(0, 80),

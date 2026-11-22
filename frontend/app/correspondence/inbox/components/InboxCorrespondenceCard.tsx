@@ -17,7 +17,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
 } from "@/components/shared/registry-queue-styles";
-import { useOrganization } from "@/contexts/OrganizationContext";
 import type { Correspondence } from "@/lib/npa-structure";
 
 export type UserOrgIds = {
@@ -82,29 +81,14 @@ function getPurposeLabel(purpose?: string): string {
   }
 }
 
-function getPurposeColor(purpose?: string): string {
-  switch (purpose) {
-    case "action": return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800";
-    case "information": return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800";
-    default: return "bg-muted text-muted-foreground border-border";
-  }
-}
-
 type InboxCorrespondenceCardProps = {
   corr: Correspondence;
   userOrgIds: UserOrgIds;
 };
 
 function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenceCardProps) {
-  const { divisions } = useOrganization();
-
-  const division = useMemo(
-    () => corr.divisionId ? divisions.find((div) => div.id === corr.divisionId) : undefined,
-    [corr.divisionId, divisions],
-  );
   const overdue = useMemo(() => isOverdue(corr), [corr]);
   const daysPending = useMemo(() => calculateDaysPending(corr), [corr]);
-  const daysPendingColor = daysPending > 5 ? "destructive" : daysPending > 2 ? "default" : "secondary";
   const ccInfo = useMemo(() => getCCInfo(corr, userOrgIds), [corr, userOrgIds]);
   const statusBadge = getCorrespondenceStatusBadge(corr.status);
 
@@ -150,37 +134,17 @@ function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenc
       <h4 className={correspondenceQueueSubjectClass}>{corr.subject}</h4>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          {ccInfo.isCC && (
-            <Badge
-              variant="outline"
-              className={cn(correspondenceQueueBadgeClass, getPurposeColor(ccInfo.purpose))}
-            >
-              <Copy className="h-2.5 w-2.5" />
-              {getPurposeLabel(ccInfo.purpose)}
-            </Badge>
-          )}
+          {/* Three chips at most: priority, state, deadline. */}
           <Badge variant={getPriorityBadgeVariant(corr.priority)} className={correspondenceQueueBadgeClass}>
             {corr.priority.toUpperCase()}
-          </Badge>
-          <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, "gap-0.5")}>
-            {corr.direction === "downward" ? (
-              <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
-            ) : (
-              <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
-            )}
           </Badge>
           <Badge variant={statusBadge.variant} className={cn(correspondenceQueueBadgeClass, statusBadge.className)}>
             {statusBadge.label}
           </Badge>
           {overdue && (
-            <Badge variant="destructive" className={correspondenceQueueBadgeClass}>
-              SLA Breach
-            </Badge>
-          )}
-          {daysPending > 0 && (
-            <Badge variant={daysPendingColor as "destructive" | "default" | "secondary"} className={cn(correspondenceQueueBadgeClass, "gap-0.5")}>
-              <Clock className="h-2.5 w-2.5" />
-              {daysPending} day{daysPending !== 1 ? "s" : ""} pending
+            <Badge variant="destructive" className={cn(correspondenceQueueBadgeClass, "gap-0.5")}>
+              <AlertCircle className="h-2.5 w-2.5" />
+              Overdue
             </Badge>
           )}
         </div>
@@ -195,15 +159,23 @@ function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenc
           <Mail className={correspondenceQueueMetaIconClass} />
           <span className="truncate">Ref: {corr.referenceNumber}</span>
         </span>
-        {division && (
+        <span className={correspondenceQueueMetaItemClass}>
+          {corr.direction === "downward" ? (
+            <ArrowDown className={cn(correspondenceQueueMetaIconClass, "text-info")} />
+          ) : (
+            <ArrowUp className={cn(correspondenceQueueMetaIconClass, "text-success")} />
+          )}
+          <span className="truncate">{corr.direction === "downward" ? "Downward" : "Upward"}</span>
+        </span>
+        {ccInfo.isCC && (
           <span className={correspondenceQueueMetaItemClass}>
-            <AlertCircle className={correspondenceQueueMetaIconClass} />
-            <span className="truncate">Division: {division.name}</span>
+            <Copy className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">CC: {getPurposeLabel(ccInfo.purpose)}</span>
           </span>
         )}
         {corr.currentApproverName && (
           <span className={correspondenceQueueMetaItemClass}>
-            <Clock className={correspondenceQueueMetaIconClass} />
+            <UserIcon className={correspondenceQueueMetaIconClass} />
             <span className="truncate">Current: {corr.currentApproverName}</span>
           </span>
         )}
@@ -211,6 +183,14 @@ function InboxCorrespondenceCardContent({ corr, userOrgIds }: InboxCorrespondenc
           <span className={correspondenceQueueMetaItemClass}>
             <Building2 className={correspondenceQueueMetaIconClass} />
             <span className="truncate">Office: {corr.currentOfficeName}</span>
+          </span>
+        )}
+        {!overdue && daysPending > 0 && (
+          <span className={correspondenceQueueMetaItemClass}>
+            <Clock className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">
+              {daysPending} day{daysPending !== 1 ? "s" : ""} pending
+            </span>
           </span>
         )}
       </div>

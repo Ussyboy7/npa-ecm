@@ -123,7 +123,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const currentUserId = currentUser?.id;
   const {divisions, departments: _departments, offices } = useOrganization();
-  const { getSignal, reset } = useAbortController();
+  const { getSignal } = useAbortController();
 
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);

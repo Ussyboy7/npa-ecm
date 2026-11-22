@@ -77,11 +77,15 @@ vi.mock("@/components/analytics/AnalyticsHeaderSlots", () => ({
   },
 }));
 
+import { apiFetch } from "@/lib/api-client";
+import { fetchSLATargets } from "@/lib/sla-client";
 import DashboardPage from "../page";
 
 beforeEach(() => {
   searchParams = new URLSearchParams();
   router.replace.mockClear();
+  vi.mocked(apiFetch).mockClear();
+  vi.mocked(fetchSLATargets).mockClear();
   state.visibility = {
     isVisibilityReady: true,
     showExecutiveDashboard: true,
@@ -129,6 +133,22 @@ describe("Dashboard analytics tabs", () => {
     await waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith("/dashboard", { scroll: false });
     });
+  });
+
+  it("does not load the My-work queues behind an analytics tab", () => {
+    searchParams = new URLSearchParams("tab=executive");
+
+    render(<DashboardPage />);
+
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(fetchSLATargets).not.toHaveBeenCalled();
+  });
+
+  it("loads the My-work queues on the work tab", () => {
+    render(<DashboardPage />);
+
+    expect(apiFetch).toHaveBeenCalled();
+    expect(fetchSLATargets).toHaveBeenCalled();
   });
 
   it("writes tab changes to the URL", async () => {

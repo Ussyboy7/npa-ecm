@@ -7,7 +7,7 @@ import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
-import { isRecord, asString, unwrapResults } from '@/lib/type-utils';
+import { isRecord, unwrapResults } from '@/lib/type-utils';
 import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
 
 interface CorrespondenceContextType {

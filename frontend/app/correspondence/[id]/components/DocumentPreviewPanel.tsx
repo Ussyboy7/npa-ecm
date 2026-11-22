@@ -27,7 +27,6 @@ import {
   FileCode,
   ExternalLink,
   Printer,
-  Eye,
   PanelRightClose,
   PanelRightOpen,
   FolderOpen,
@@ -77,7 +76,6 @@ interface DocumentPreviewPanelProps {
   onSetSelectedAttachmentIndex: (index: number | null) => void;
   onSetSelectedLinkedDocumentId: (id: string | null) => void;
   onOpenLinkDocument: () => void;
-  onOpenDocumentPreview: () => void;
   onOpenPrintPreview?: () => void;
   onSyncFromApi: () => Promise<void>;
 }
@@ -198,7 +196,6 @@ export const DocumentPreviewPanel = ({
   onSetSelectedAttachmentIndex,
   onSetSelectedLinkedDocumentId,
   onOpenLinkDocument,
-  onOpenDocumentPreview,
   onOpenPrintPreview,
   onSyncFromApi,
 }: DocumentPreviewPanelProps) => {

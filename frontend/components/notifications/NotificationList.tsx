@@ -54,11 +54,13 @@ export const NotificationList = ({ onClose, isOpen = false }: NotificationListPr
     }
   }, []);
 
+  const handleSocketNotification = useCallback(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
   useNotificationWebSocket({
     enabled: isOpen,
-    onNotification: () => {
-      void loadNotifications();
-    },
+    onNotification: handleSocketNotification,
   });
 
   useEffect(() => {

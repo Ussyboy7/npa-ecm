@@ -8,7 +8,6 @@ import {
   SEAL_INK,
   SEAL_PANEL_BG,
   SEAL_QR,
-  SEAL_SIGNATURE_BG,
 } from '@/lib/theme-colors';
 import QRCode from "qrcode";
 

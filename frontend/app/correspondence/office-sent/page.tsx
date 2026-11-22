@@ -26,6 +26,7 @@ import {
   Send,
   Building2,
   Download,
+  User as UserIcon,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -41,9 +42,15 @@ import { logError } from '@/lib/client-logger';
 import { cn } from '@/lib/utils';
 import { StatStrip } from '@/components/shared/StatStrip';
 import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
 } from '@/components/shared/registry-queue-styles';
 import { FlowTypeBadge } from '@/components/correspondence/FlowTypeBadge';
@@ -206,6 +213,11 @@ const OfficeSentPage = () => {
       setLoading(false);
       return;
     }
+    // Wait for the default office so the page does not fetch "all" first and
+    // then immediately refetch the holder's office.
+    if (!isSuperAdmin && !hasSetDefaultOffice && firstActiveMemberOfficeId) {
+      return;
+    }
 
     const controller = new AbortController();
 
@@ -257,6 +269,9 @@ const OfficeSentPage = () => {
     return () => controller.abort();
   }, [
     hasOfficeAccess,
+    isSuperAdmin,
+    hasSetDefaultOffice,
+    firstActiveMemberOfficeId,
     pagination.page,
     pagination.pageSize,
     debouncedQuery,
@@ -417,7 +432,7 @@ const OfficeSentPage = () => {
                         </div>
                       )}
                     >
-                      <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{item.subject}</h3>
+                      <h4 className={correspondenceQueueSubjectClass}>{item.subject}</h4>
                       <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                           <FlowTypeBadge
@@ -427,47 +442,50 @@ const OfficeSentPage = () => {
                             isInternal={item.isInternal}
                             isExternal={item.isExternal}
                             compact
-                            className="h-5 gap-0.5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none"
+                            className={correspondenceQueueBadgeClass}
                           />
                           <Badge
                             variant={getStatusBadgeVariant(item.status as string)}
-                            className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none"
+                            className={correspondenceQueueBadgeClass}
                           >
                             {(item.status as string).replace('-', ' ')}
                           </Badge>
                           {latestDispatch?.dispatchMode && (
-                            <Badge variant="outline" className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none">
+                            <Badge variant="outline" className={correspondenceQueueBadgeClass}>
                               {latestDispatch.dispatchMode.replace('_', ' ')}
                             </Badge>
                           )}
                         </div>
-                        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                        <span className={correspondenceQueueDateClass}>
                           {item.dispatchDate ? formatDateShort(item.dispatchDate) : '—'}
                         </span>
                       </div>
-                      <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 border-t border-border/60 pt-1.5 text-[11px] leading-tight text-muted-foreground">
-                        <span className="inline-flex max-w-full items-center gap-1">
-                          <Mail className="h-3 w-3 shrink-0 opacity-80" />
+                      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <Mail className={correspondenceQueueMetaIconClass} />
                           <span className="truncate">Ref: {item.referenceNumber}</span>
                         </span>
                         {owningOffice && (
-                          <span className="inline-flex max-w-full items-center gap-1">
-                            <Building2 className="h-3 w-3 shrink-0 opacity-80" />
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <Building2 className={correspondenceQueueMetaIconClass} />
                             <span className="truncate">{owningOffice.name}</span>
                           </span>
                         )}
                         {division && (
-                          <span className="inline-flex max-w-full items-center gap-1">
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <Building2 className={correspondenceQueueMetaIconClass} />
                             <span className="truncate">Division: {division.name}</span>
                           </span>
                         )}
                         {latestDispatch?.dispatchedByName && (
-                          <span className="inline-flex max-w-full items-center gap-1">
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <UserIcon className={correspondenceQueueMetaIconClass} />
                             <span className="truncate">By: {latestDispatch.dispatchedByName}</span>
                           </span>
                         )}
                         {latestDispatch?.trackingNumber && (
-                          <span className="inline-flex max-w-full items-center gap-1">
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <Mail className={correspondenceQueueMetaIconClass} />
                             <span className="truncate">Tracking: {latestDispatch.trackingNumber}</span>
                           </span>
                         )}

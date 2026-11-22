@@ -253,7 +253,6 @@ const ArchiveRecordContent = () => {
     onSetSelectedAttachmentIndex: setSelectedAttachmentIndex,
     onSetSelectedLinkedDocumentId: setSelectedLinkedDocumentId,
     onOpenLinkDocument: noop,
-    onOpenDocumentPreview: noop,
     onSyncFromApi: refreshDetail,
   };
 

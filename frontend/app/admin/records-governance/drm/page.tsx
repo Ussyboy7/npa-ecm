@@ -54,7 +54,6 @@ export default function DrmPoliciesPage() {
   const [policies, setPolicies] = useState<DocumentRightsPolicy[]>([]);
   const [form, setForm] = useState(defaultForm);
   const [editing, setEditing] = useState<DocumentRightsPolicy | null>(null);
-  const [viewing, setViewing] = useState<DocumentRightsPolicy | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

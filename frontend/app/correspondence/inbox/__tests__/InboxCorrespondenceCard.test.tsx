@@ -69,12 +69,12 @@ describe('InboxCorrespondenceCard', () => {
     expect(screen.getByText('In Progress')).toBeDefined();
   });
 
-  it('shows direction badge', () => {
+  it('shows direction in the meta line', () => {
     render(<InboxCorrespondenceCard corr={baseCorr} userOrgIds={emptyUserOrgIds} />);
     expect(screen.getByText('Upward')).toBeDefined();
   });
 
-  it('shows SLA Breach badge when item is overdue', () => {
+  it('shows Overdue badge when item is overdue', () => {
     const pastDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const oldCorr: Correspondence = {
       ...baseCorr,
@@ -82,10 +82,10 @@ describe('InboxCorrespondenceCard', () => {
       receivedDate: pastDate,
     };
     render(<InboxCorrespondenceCard corr={oldCorr} userOrgIds={emptyUserOrgIds} />);
-    expect(screen.getByText('SLA Breach')).toBeDefined();
+    expect(screen.getByText('Overdue')).toBeDefined();
   });
 
-  it('does not show SLA Breach badge for recent items', () => {
+  it('does not show Overdue badge for recent items', () => {
     const recent = new Date().toISOString();
     const recentCorr: Correspondence = {
       ...baseCorr,
@@ -93,10 +93,10 @@ describe('InboxCorrespondenceCard', () => {
       receivedDate: recent,
     };
     render(<InboxCorrespondenceCard corr={recentCorr} userOrgIds={emptyUserOrgIds} />);
-    expect(screen.queryByText('SLA Breach')).toBeNull();
+    expect(screen.queryByText('Overdue')).toBeNull();
   });
 
-  it('shows CC badge when user org is in distribution', () => {
+  it('shows CC in the meta line when user org is in distribution', () => {
     const corrWithCC: Correspondence = {
       ...baseCorr,
       distribution: [
@@ -108,7 +108,7 @@ describe('InboxCorrespondenceCard', () => {
       officeIds: new Set(['office-1']),
     };
     render(<InboxCorrespondenceCard corr={corrWithCC} userOrgIds={orgIds} />);
-    expect(screen.getByText('For Info')).toBeDefined();
+    expect(screen.getByText(/CC: For Info/)).toBeDefined();
   });
 
   it('renders assigned approver when present', () => {

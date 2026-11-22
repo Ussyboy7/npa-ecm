@@ -2,7 +2,6 @@
  * Utility functions for Register Correspondence page
  */
 
-import { generateUUID } from '@/lib/utils';
 import { formatDateForAPI } from '@/lib/datetime';
 import { REGISTER_CONSTANTS } from './register-constants';
 import { toast } from "@/components/ui/sonner";

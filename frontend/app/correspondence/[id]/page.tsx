@@ -124,7 +124,7 @@ const CorrespondenceDetailContent = () => {
   const [setMinutes, setRemoteCorrespondence, setDetailLoading, setBackendDelegation,
     setLinkedDocuments, setSelectedMinute, setSelectedAttachmentIndex,
     setSelectedLinkedDocumentId,
-    setMobileActiveTab, setAttachmentSearchQuery, setSelectedLinkedDocVersion,
+    setMobileActiveTab, setAttachmentSearchQuery,
     setIsPreviewFullscreen, setDocumentFocus] = useMemo(() => [
     (m: Minute[]) => dispatch({ type: 'SET_MINUTES', payload: m }),
     (c: Correspondence | null) => dispatch({ type: 'SET_REMOTE_CORRESPONDENCE', payload: c }),
@@ -136,7 +136,6 @@ const CorrespondenceDetailContent = () => {
     (id: string | null) => dispatch({ type: 'SET_SELECTED_LINKED_DOCUMENT_ID', payload: id }),
     (t: 'document' | 'routing') => dispatch({ type: 'SET_MOBILE_ACTIVE_TAB', payload: t }),
     (q: string) => dispatch({ type: 'SET_ATTACHMENT_SEARCH_QUERY', payload: q }),
-    (v: Record<string, number>) => dispatch({ type: 'SET_SELECTED_LINKED_DOC_VERSION', payload: v }),
     (f: boolean) => dispatch({ type: 'SET_PREVIEW_FULLSCREEN', payload: f }),
     (f: boolean) => dispatch({ type: 'SET_DOCUMENT_FOCUS', payload: f }),
   ], [dispatch]);
@@ -664,7 +663,6 @@ const CorrespondenceDetailContent = () => {
     openModal('additional-minute');
   }, [openModal, setSelectedMinute]);
 
-  const openFullscreenPreview = useCallback(() => openModal('document-preview'), [openModal]);
   const openPrintPreview = useCallback(() => openModal('print-preview'), [openModal]);
 
   const documentPanelProps = {
@@ -680,7 +678,6 @@ const CorrespondenceDetailContent = () => {
     onSetSelectedAttachmentIndex: setSelectedAttachmentIndex,
     onSetSelectedLinkedDocumentId: setSelectedLinkedDocumentId,
     onOpenLinkDocument: () => openModal('link-document'),
-    onOpenDocumentPreview: openFullscreenPreview,
     onOpenPrintPreview: openPrintPreview,
     onSyncFromApi: syncFromApi,
   };

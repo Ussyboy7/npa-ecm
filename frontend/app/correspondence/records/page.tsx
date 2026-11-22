@@ -25,7 +25,6 @@ import { formatDateShort } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
-import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
 import { toast } from "@/components/ui/sonner";
@@ -65,8 +64,8 @@ const RecordsArchiveForm = () => {
   const searchParams = useSearchParams();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganization();
-  const { dataVersion: _dataVersion } = useCorrespondence();
   const { getSignal } = useAbortController();
+  const [filtersRestored, setFiltersRestored] = useState(false);
 
   // Initialize filters from URL params or localStorage
   useEffect(() => {
@@ -78,28 +77,34 @@ const RecordsArchiveForm = () => {
       }
     });
     if (typeof window === 'undefined') return;
-    const readFilter = (key: string, setter: (v: string) => void, defaultValue: string, isArray?: boolean) => {
+    const readFilter = (key: string, setter: (v: string) => void, defaultValue: string, isArray?: boolean): string | undefined => {
       const urlParam = searchParams.get(key);
       if (urlParam) {
         (setter as (v: string | string[]) => void)(isArray ? urlParam.split(',') : urlParam);
-        return;
+        return urlParam;
       }
       const saved = localStorage.getItem(`records_filter_${key}`);
       if (saved) {
         try {
-          setter(JSON.parse(saved));
+          const value = JSON.parse(saved);
+          setter(value);
+          return typeof value === 'string' ? value : undefined;
         } catch {
           setter(saved);
+          return saved;
         }
       }
+      return undefined;
     };
-    readFilter('search', setSearchQuery, '');
+    const restoredSearch = readFilter('search', setSearchQuery, '');
+    setDebouncedSearch((restoredSearch ?? '').trim());
     readFilter('directorate', setSelectedDirectorate, 'all');
     readFilter('division', setSelectedDivision, 'all');
     readFilter('department', setSelectedDepartment, 'all');
     readFilter('priority', setSelectedPriority, '');
     readFilter('sortBy', setSortBy, 'completed');
     readFilter('sortOrder', (v) => setSortOrder(v as 'asc' | 'desc'), 'desc');
+    setFiltersRestored(true);
   }, [searchParams]);
 
   // Filters
@@ -426,6 +431,8 @@ const RecordsArchiveForm = () => {
   // Reset before fetching so a filter change on a later page never requests
   // the old page first.
   useEffect(() => {
+    // Wait for saved filters so the archive does not load twice on mount.
+    if (!filtersRestored) return;
     const filtersChanged = previousFilterKeyRef.current !== filterKey;
     previousFilterKeyRef.current = filterKey;
     if (filtersChanged && pagination.page !== 1) {
@@ -434,7 +441,7 @@ const RecordsArchiveForm = () => {
     }
     void fetchRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filterKey captures filters; page/pageSize trigger fetches
-  }, [filterKey, pagination.page, pagination.pageSize, fetchRecords]);
+  }, [filtersRestored, filterKey, pagination.page, pagination.pageSize, fetchRecords]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -708,9 +715,7 @@ const RecordsArchiveForm = () => {
 
 const RecordsArchivePage = () => (
   <Suspense fallback={null}>
-    <CorrespondenceProvider>
-      <RecordsArchiveForm />
-    </CorrespondenceProvider>
+    <RecordsArchiveForm />
   </Suspense>
 );
 

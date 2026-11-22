@@ -20,6 +20,7 @@ import {
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
+  correspondenceQueueWarningBadgeClass,
 } from '@/components/shared/registry-queue-styles';
 import { useRouter } from 'next/navigation';
 
@@ -89,10 +90,7 @@ export const InboxApprovalCard = ({ approval, taskStatus }: InboxApprovalCardPro
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
           <Badge
             variant="outline"
-            className={cn(
-              correspondenceQueueBadgeClass,
-              'gap-0.5 border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-            )}
+            className={cn(correspondenceQueueBadgeClass, 'gap-0.5', correspondenceQueueWarningBadgeClass)}
           >
             <Shield className="h-2.5 w-2.5" />
             Pending Approval
@@ -105,8 +103,8 @@ export const InboxApprovalCard = ({ approval, taskStatus }: InboxApprovalCardPro
           )}
           {taskStatus.status === 'due-soon' && (
             <Badge
-              variant="default"
-              className={cn(correspondenceQueueBadgeClass, 'gap-0.5 bg-orange-500 hover:bg-orange-600')}
+              variant="outline"
+              className={cn(correspondenceQueueBadgeClass, 'gap-0.5', correspondenceQueueWarningBadgeClass)}
             >
               <Clock className="h-2.5 w-2.5" />
               Due in {taskStatus.daysUntilDue} day{taskStatus.daysUntilDue !== 1 ? 's' : ''}

@@ -31,9 +31,7 @@ import {
   Inbox,
   Lock,
   CheckCircle,
-  AlertCircle,
   FileCheck,
-  MailQuestion,
 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";

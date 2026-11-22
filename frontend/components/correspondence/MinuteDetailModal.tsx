@@ -1,4 +1,3 @@
-import { ERROR_UNKNOWN } from '@/lib/constants';
 import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import Image from "next/image";
@@ -110,7 +109,6 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
   const [viewPdfBytes, setViewPdfBytes] = useState<ArrayBuffer | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
-  const [wordError, setWordError] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<unknown[]>([]);
   const [loadingDistribution, setLoadingDistribution] = useState(false);
   const [signatureImageSrc, setSignatureImageSrc] = useState<string | null>(null);
@@ -1164,12 +1162,6 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
             ) : viewAttachment && (viewAttachment.fileType === 'application/pdf' || viewAttachment.fileName?.toLowerCase().endsWith('.pdf')) && viewPdfBytes ? (
               <div className="w-full overflow-auto py-4">
                 <SecurePdfCanvasPreview data={viewPdfBytes} minHeightClassName="min-h-[600px]" />
-              </div>
-            ) : viewAttachment && wordError ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
-                <p className="text-lg font-medium mb-2 text-destructive">Error loading Word document</p>
-                <p className="text-sm text-muted-foreground mb-4">{wordError}</p>
               </div>
             ) : viewAttachment && wordHtml ? (
               <div className="w-full py-4">

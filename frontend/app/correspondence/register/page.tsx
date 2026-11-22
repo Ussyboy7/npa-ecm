@@ -34,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { REGISTER_CONSTANTS, FORM_STEPS } from './register-constants';
+import { FORM_STEPS } from './register-constants';
 import {
   FormData,
   FlowType,
@@ -76,8 +76,8 @@ const CorrespondenceRegisterForm = () => {
   );
   const { fetchWithRetry } = useApiRetry();
   const roleChecks = useRoleChecks();
-  const { getSignal, reset } = useAbortController();
-  const { getSignal: getEditLoadSignal, reset: resetEditLoad } = useAbortController();
+  const { getSignal } = useAbortController();
+  const { getSignal: getEditLoadSignal } = useAbortController();
   const submittingRef = useRef(false);
   const [loadingCorrespondence, setLoadingCorrespondence] = useState(!!editId);
   const [loadError, setLoadError] = useState<string | null>(null);

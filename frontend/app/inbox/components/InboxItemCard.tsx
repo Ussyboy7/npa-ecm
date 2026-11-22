@@ -20,6 +20,7 @@ import {
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
+  correspondenceQueueWarningBadgeClass,
 } from '@/components/shared/registry-queue-styles';
 import type { Correspondence } from '@/lib/npa-structure';
 import { useRouter } from 'next/navigation';
@@ -32,16 +33,13 @@ const getPriorityColor = (priority: string) => {
   }
 };
 
+/** Awaiting action is a normal queue state: amber, never red. */
 const getStatusBadge = (status: string) => {
-  if (status === 'pending') return { label: 'Awaiting action', variant: 'destructive' as const };
-  if (status === 'in-progress') return { label: 'In progress', variant: 'secondary' as const };
-  return { label: status, variant: 'outline' as const };
-};
-
-const getStatusBadgeVariant = (status: string): 'destructive' | 'secondary' | 'default' | 'outline' => {
-  if (status === 'pending') return 'destructive';
-  if (status === 'in-progress') return 'secondary';
-  return 'outline';
+  if (status === 'pending') {
+    return { label: 'Awaiting action', variant: 'outline' as const, className: correspondenceQueueWarningBadgeClass };
+  }
+  if (status === 'in-progress') return { label: 'In progress', variant: 'secondary' as const, className: undefined };
+  return { label: status, variant: 'outline' as const, className: undefined };
 };
 
 interface SLAStatus {
@@ -59,7 +57,6 @@ interface InboxItemCardProps {
 export const InboxItemCard = ({ corr, slaStatus, daysPending = 0 }: InboxItemCardProps) => {
   const router = useRouter();
   const statusBadge = getStatusBadge(corr.status);
-  const statusBadgeVariant = getStatusBadgeVariant(corr.status);
 
   return (
     <ListRowCard
@@ -113,57 +110,30 @@ export const InboxItemCard = ({ corr, slaStatus, daysPending = 0 }: InboxItemCar
       <h4 className={correspondenceQueueSubjectClass}>{corr.subject}</h4>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
-            <Mail className="h-2.5 w-2.5" />
-            Correspondence
-          </Badge>
+          {/* Three chips at most: priority, state, deadline. */}
           <Badge variant={getPriorityColor(corr.priority)} className={correspondenceQueueBadgeClass}>
             {corr.priority.toUpperCase()}
           </Badge>
-          <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
-            {corr.direction === 'downward' ? (
-              <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
-            ) : (
-              <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
-            )}
-          </Badge>
-          <Badge variant={statusBadgeVariant} className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+          <Badge
+            variant={statusBadge.variant}
+            className={cn(correspondenceQueueBadgeClass, statusBadge.className)}
+          >
             <Clock className="h-2.5 w-2.5" />
             {statusBadge.label}
           </Badge>
-          {corr.isActingSeat && (
-            <Badge
-              variant="outline"
-              className={cn(
-                correspondenceQueueBadgeClass,
-                'gap-0.5 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
-              )}
-            >
-              <UserIcon className="h-2.5 w-2.5" />
-              {corr.actingPrincipalName
-                ? `Acting for ${corr.actingPrincipalName}`
-                : 'Acting seat'}
-            </Badge>
-          )}
-          {slaStatus && slaStatus.status === 'overdue' && (
+          {slaStatus?.status === 'overdue' && (
             <Badge variant="destructive" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
               <AlertCircle className="h-2.5 w-2.5" />
               Overdue {slaStatus.daysOverdue} day{slaStatus.daysOverdue !== 1 ? 's' : ''}
             </Badge>
           )}
-          {slaStatus && slaStatus.status === 'due-soon' && (
+          {slaStatus?.status === 'due-soon' && (
             <Badge
-              variant="default"
-              className={cn(correspondenceQueueBadgeClass, 'gap-0.5 bg-orange-500 hover:bg-orange-600')}
+              variant="outline"
+              className={cn(correspondenceQueueBadgeClass, 'gap-0.5', correspondenceQueueWarningBadgeClass)}
             >
               <Clock className="h-2.5 w-2.5" />
               Due in {slaStatus.daysUntilDue} day{slaStatus.daysUntilDue !== 1 ? 's' : ''}
-            </Badge>
-          )}
-          {!slaStatus && daysPending > 0 && (
-            <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
-              <Clock className="h-2.5 w-2.5" />
-              {daysPending} day{daysPending !== 1 ? 's' : ''} pending
             </Badge>
           )}
         </div>
@@ -182,6 +152,30 @@ export const InboxItemCard = ({ corr, slaStatus, daysPending = 0 }: InboxItemCar
           <span className={correspondenceQueueMetaItemClass}>
             <AlertCircle className={correspondenceQueueMetaIconClass} />
             <span className="truncate">Office: {corr.currentOfficeName}</span>
+          </span>
+        )}
+        <span className={correspondenceQueueMetaItemClass}>
+          {corr.direction === 'downward' ? (
+            <ArrowDown className={cn(correspondenceQueueMetaIconClass, 'text-info')} />
+          ) : (
+            <ArrowUp className={cn(correspondenceQueueMetaIconClass, 'text-success')} />
+          )}
+          <span className="truncate">{corr.direction === 'downward' ? 'Downward' : 'Upward'}</span>
+        </span>
+        {corr.isActingSeat && (
+          <span className={correspondenceQueueMetaItemClass}>
+            <UserIcon className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">
+              {corr.actingPrincipalName ? `Acting for ${corr.actingPrincipalName}` : 'Acting seat'}
+            </span>
+          </span>
+        )}
+        {!slaStatus && daysPending > 0 && (
+          <span className={correspondenceQueueMetaItemClass}>
+            <Clock className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">
+              {daysPending} day{daysPending !== 1 ? 's' : ''} pending
+            </span>
           </span>
         )}
       </div>

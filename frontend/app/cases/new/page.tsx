@@ -54,7 +54,7 @@ const NewCasePage = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, departments, offices } = useOrganization();
-  const { getSignal, reset } = useAbortController();
+  const { getSignal } = useAbortController();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 

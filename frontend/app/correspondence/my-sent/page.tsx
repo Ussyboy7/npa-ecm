@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -20,12 +22,11 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
-import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import type { Minute } from '@/lib/npa-structure';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { useRouter } from 'next/navigation';
 import { toast } from "@/components/ui/sonner";
-import { DocumentCard } from './components/DocumentCard';
+import { DocumentRowCard } from '@/components/shared/DocumentRowCard';
 import { SentCorrespondenceCard } from './components/SentCorrespondenceCard';
 import { correspondenceQueueListStackClass } from '@/components/shared/registry-queue-styles';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
@@ -53,10 +54,13 @@ const MySentPageContent = () => {
   const router = useRouter();
   const {currentUser} = useCurrentUser();
   const { divisions } = useOrganization();
-  const { dataVersion } = useCorrespondence();
 
+  const [activeTab, setActiveTab] = useState<'sent' | 'documents'>('sent');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  // Each tab searches its own collection: typing in Sent must not refetch documents.
+  const [documentQuery, setDocumentQuery] = useState('');
+  const [debouncedDocumentQuery, setDebouncedDocumentQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -80,7 +84,6 @@ const MySentPageContent = () => {
   });
   const [sentLoading, setSentLoading] = useState(true);
   const [documentsLoading, setDocumentsLoading] = useState(true);
-  const loading = sentLoading || documentsLoading;
   const [error, setError] = useState<string | null>(null);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
@@ -114,6 +117,11 @@ const MySentPageContent = () => {
   }, [query]);
 
   useEffect(() => {
+    const handle = setTimeout(() => setDebouncedDocumentQuery(documentQuery.trim()), 350);
+    return () => clearTimeout(handle);
+  }, [documentQuery]);
+
+  useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQuery, selectedStatus, sortBy, sortOrder, dateFrom, dateTo, pagination.pageSize]);
@@ -121,7 +129,7 @@ const MySentPageContent = () => {
   useEffect(() => {
     documentPagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery]);
+  }, [debouncedDocumentQuery]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -185,7 +193,7 @@ const MySentPageContent = () => {
 
     void fetchMySent();
     return () => { abortController.abort(); };
-  }, [currentUser?.id, debouncedQuery, selectedStatus, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey, dataVersion]);
+  }, [currentUser?.id, debouncedQuery, selectedStatus, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -197,7 +205,7 @@ const MySentPageContent = () => {
       setDocumentsError(null);
       try {
         const response = await getDocumentsSharedByUser(currentUser.id, {
-          search: debouncedQuery || undefined,
+          search: debouncedDocumentQuery || undefined,
           page: documentPagination.page,
           pageSize: documentPagination.pageSize,
           signal: abortController.signal,
@@ -219,7 +227,7 @@ const MySentPageContent = () => {
 
     void fetchSharedDocuments();
     return () => { abortController.abort(); };
-  }, [currentUser?.id, debouncedQuery, documentPagination.page, documentPagination.pageSize, refreshKey, dataVersion]);
+  }, [currentUser?.id, debouncedDocumentQuery, documentPagination.page, documentPagination.pageSize, refreshKey]);
 
   const handleWithdrawClick = useCallback((item: Correspondence) => {
     if (item.status !== 'pending' && item.status !== 'in-progress') {
@@ -357,6 +365,20 @@ const MySentPageContent = () => {
             />
           )}
         >
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'sent' | 'documents')}>
+          <TabsList>
+            <TabsTrigger value="sent" className="text-xs px-2.5 py-1">Sent</TabsTrigger>
+            <TabsTrigger value="documents" className="text-xs px-2.5 py-1 gap-1.5">
+              Shared documents
+              {documentCount > 0 && (
+                <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
+                  {documentCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="sent" className="mt-4 space-y-4">
         {/* Inline Filter Bar */}
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -390,24 +412,20 @@ const MySentPageContent = () => {
       </div>
 
         {error && <ErrorState message={error} variant="inline" />}
-        {documentsError && <ErrorState message={documentsError} variant="inline" />}
 
-        {/* Sent Items */}
-        {loading ? (
+        {sentLoading ? (
           <ListSkeleton rows={5} />
-        ) : sentItems.length === 0 && sharedDocuments.length === 0 ? (
-          error || documentsError ? null : (
+        ) : sentItems.length === 0 ? (
+          error ? null : (
             <EmptyState
               icon="inbox"
-              title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence or documents'}
-              message={debouncedQuery || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'You have no correspondence or shared documents at the moment.'}
+              title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence sent yet'}
+              message={debouncedQuery || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'Correspondence you create will appear here.'}
               actionLabel={debouncedQuery || activeFilterCount > 0 ? 'Clear Filters' : undefined}
               onAction={debouncedQuery || activeFilterCount > 0 ? clearFilters : undefined}
             />
           )
         ) : (
-          <div className="space-y-6">
-            {sentItems.length > 0 && (
               <div className="space-y-3">
                 <div className={correspondenceQueueListStackClass}>
                   {sentItems.map((item) => (
@@ -434,19 +452,39 @@ const MySentPageContent = () => {
                   />
                 )}
               </div>
-            )}
+        )}
+          </TabsContent>
 
-            {sharedDocuments.length > 0 && (
+          <TabsContent value="documents" className="mt-4 space-y-4">
+            <div className="relative max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search shared documents..."
+                value={documentQuery}
+                onChange={(e) => setDocumentQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+
+            {documentsError && <ErrorState message={documentsError} variant="inline" />}
+
+            {documentsLoading ? (
+              <ListSkeleton rows={5} />
+            ) : sharedDocuments.length === 0 ? (
+              documentsError ? null : (
+                <EmptyState
+                  icon="file"
+                  title={debouncedDocumentQuery ? 'No documents match your search' : 'No shared documents'}
+                  message={debouncedDocumentQuery ? 'Try a different search term.' : 'Documents you share with others will appear here.'}
+                  actionLabel={debouncedDocumentQuery ? 'Clear Search' : undefined}
+                  onAction={debouncedDocumentQuery ? () => setDocumentQuery('') : undefined}
+                />
+              )
+            ) : (
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-4">
-                  <h2 className="text-sm font-semibold text-foreground">Shared documents</h2>
-                  <span className="text-xs text-muted-foreground">
-                    {documentCount} document{documentCount === 1 ? '' : 's'}
-                  </span>
-                </div>
                 <div className={correspondenceQueueListStackClass}>
                   {sharedDocuments.map((doc) => (
-                    <DocumentCard key={doc.id} doc={doc} />
+                    <DocumentRowCard key={doc.id} doc={doc} />
                   ))}
                 </div>
                 {documentCount > 0 && (
@@ -458,8 +496,8 @@ const MySentPageContent = () => {
                 )}
               </div>
             )}
-          </div>
-        )}
+          </TabsContent>
+        </Tabs>
         </QueuePageShell>
       )}
 
@@ -564,10 +602,4 @@ const MySentPageContent = () => {
   );
 };
 
-const MySentPage = () => (
-  <CorrespondenceProvider>
-    <MySentPageContent />
-  </CorrespondenceProvider>
-);
-
-export default MySentPage;
+export default MySentPageContent;

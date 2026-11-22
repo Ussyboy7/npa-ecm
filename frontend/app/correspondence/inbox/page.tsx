@@ -33,7 +33,6 @@ import { getSelectableOffices } from '@/lib/office-choice-utils';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
-import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { usePagination } from '@/hooks/use-pagination';
 import { useCorrespondenceQueueFilters } from '@/hooks/use-correspondence-queue-filters';
 import { PaginationControls } from '@/components/shared/PaginationControls';
@@ -65,7 +64,6 @@ const CorrespondenceInboxContent = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { offices, officeMemberships, myOfficeMembershipsLoaded, officeCatalogLoaded } = useOrganization();
-  const { dataVersion } = useCorrespondence();
   const currentUserId = currentUser?.id;
 
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -289,7 +287,7 @@ const CorrespondenceInboxContent = () => {
     return () => {
       controller.abort();
     };
-  }, [hasCorrespondenceAccess, officeCatalogLoaded, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, dataVersion]);
+  }, [hasCorrespondenceAccess, officeCatalogLoaded, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   return (
     <>
@@ -454,10 +452,4 @@ const CorrespondenceInboxContent = () => {
   );
 };
 
-const CorrespondenceInbox = () => (
-  <CorrespondenceProvider>
-    <CorrespondenceInboxContent />
-  </CorrespondenceProvider>
-);
-
-export default CorrespondenceInbox;
+export default CorrespondenceInboxContent;

@@ -1,4 +1,3 @@
-import { ERROR_UNKNOWN } from '@/lib/constants';
 import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
 import { subscribeToStore, getCurrentUserSnapshot } from '@/hooks/use-current-user';

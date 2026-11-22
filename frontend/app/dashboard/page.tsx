@@ -106,6 +106,9 @@ const Dashboard = () => {
     [dashboardTabs],
   );
   const activeTab = isVisibilityReady && allowedTabs.has(dashboardView) ? dashboardView : "work";
+  // The My-work sections render only on the work tab, so an analytics tab must
+  // not fire their inbox, approvals and SLA requests behind the scenes.
+  const workTabActive = isVisibilityReady && activeTab === "work";
 
   useEffect(() => {
     if (!isVisibilityReady) return;
@@ -165,6 +168,7 @@ const Dashboard = () => {
   }, [currentUser?.name, roleDisplay, division?.name]);
 
   useEffect(() => {
+    if (!workTabActive) return;
     let ignore = false;
     const loadTargets = async () => {
       try {
@@ -176,11 +180,11 @@ const Dashboard = () => {
     };
     void loadTargets();
     return () => { ignore = true; };
-  }, []);
+  }, [workTabActive]);
 
   // Inbox summary and priority list are one independent dashboard section.
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || !workTabActive) return;
     let ignore = false;
 
     const loadInbox = async () => {
@@ -220,7 +224,7 @@ const Dashboard = () => {
 
     void loadInbox();
     return () => { ignore = true; };
-  }, [currentUser?.id, inboxRefreshToken]);
+  }, [currentUser?.id, inboxRefreshToken, workTabActive]);
 
   // SLA targets refine the priority list but must not refetch the inbox: the
   // effect above used to depend on them, so every dashboard load fetched the
@@ -242,7 +246,7 @@ const Dashboard = () => {
   // Approvals are independent: a failure here must not blank the queue summary
   // or the priority inbox.
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || !workTabActive) return;
     let ignore = false;
 
     const loadApprovals = async () => {
@@ -266,7 +270,7 @@ const Dashboard = () => {
 
     void loadApprovals();
     return () => { ignore = true; };
-  }, [currentUser?.id, approvalsRefreshToken]);
+  }, [currentUser?.id, approvalsRefreshToken, workTabActive]);
 
   const retryInbox = () => setInboxRefreshToken((token) => token + 1);
   const retryApprovals = () => setApprovalsRefreshToken((token) => token + 1);

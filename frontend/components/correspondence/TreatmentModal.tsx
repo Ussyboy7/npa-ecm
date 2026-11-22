@@ -561,14 +561,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   };
 
   // Template handlers
-  const getTemplatePlainText = (template: DocumentTemplate): string => {
-    if (template.contentText && template.contentText.trim().length > 0) {
-      return template.contentText.trim();
-    }
-    if (!template.contentHtml) return '';
-    return template.contentHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  };
-
   const handleApplyTemplate = (template: DocumentTemplate) => {
       let content = template.contentHtml || template.contentText || '';
 
@@ -1430,7 +1422,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               onTemplateSave={handleSaveAsTemplate}
               newTemplateName={newTemplateName}
               onNewTemplateNameChange={setNewTemplateName}
-              getTemplatePlainText={getTemplatePlainText}
               signatureImageUrl={userSignature?.imageData}
               showSuggestedNote={showSuggestedNote}
               suggestedCoveringNote={suggestedCoveringNote}

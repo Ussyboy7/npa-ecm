@@ -206,13 +206,6 @@ function RecordCardContent({ corr }: RecordCardProps) {
           <Badge variant={getPriorityBadgeVariant(corr.priority)} className={correspondenceQueueBadgeClass}>
             {corr.priority.toUpperCase()}
           </Badge>
-          <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "gap-0.5")}>
-            {corr.direction === "downward" ? (
-              <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
-            ) : (
-              <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
-            )}
-          </Badge>
           <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, "gap-0.5 text-success bg-success/10")}>
             <CheckCircle2 className="h-2.5 w-2.5" />
             {corr.status === "archived" ? "Archived" : "Completed"}
@@ -244,6 +237,14 @@ function RecordCardContent({ corr }: RecordCardProps) {
         <span className={correspondenceQueueMetaItemClass}>
           <FileText className={correspondenceQueueMetaIconClass} />
           <span className="truncate">Ref: {corr.referenceNumber || "N/A"}</span>
+        </span>
+        <span className={correspondenceQueueMetaItemClass}>
+          {corr.direction === "downward" ? (
+            <ArrowDown className={cn(correspondenceQueueMetaIconClass, "text-info")} />
+          ) : (
+            <ArrowUp className={cn(correspondenceQueueMetaIconClass, "text-success")} />
+          )}
+          <span className="truncate">{corr.direction === "downward" ? "Downward" : "Upward"}</span>
         </span>
         {orgPath ? (
           <span className={correspondenceQueueMetaItemClass}>

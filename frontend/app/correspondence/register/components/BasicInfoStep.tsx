@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Clock, HelpCircle, FileText } from 'lucide-react';
+import { ArrowRight, Clock, HelpCircle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';

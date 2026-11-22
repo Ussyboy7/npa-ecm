@@ -13,6 +13,9 @@ import type { User } from "@/lib/npa-structure";
 import type { Office, OfficeMembership } from "@/contexts/OrganizationContext";
 import { useScopedOfficeMemberships } from "@/hooks/use-scoped-office-memberships";
 
+/** Audit routing forwards at departmental level; there is no level picker here. */
+const FORWARD_APPROVAL_LEVEL = "departmental";
+
 export type AuditRouteSubmitPayload = {
   subject: string;
   bodyHtml: string;
@@ -79,7 +82,6 @@ export function AuditRouteDialog({
   const [forwardSubject, setForwardSubject] = useState(defaultSubject);
   const [forwardDueDate, setForwardDueDate] = useState("");
   const [forwardActionRequired, setForwardActionRequired] = useState(true);
-  const [forwardRequiredApprovalLevel, setForwardRequiredApprovalLevel] = useState("departmental");
   const [forwardAttentionUser, setForwardAttentionUser] = useState("");
   const officeMemberships = useScopedOfficeMemberships({
     enabled: open,
@@ -147,7 +149,7 @@ export function AuditRouteDialog({
       bodyHtml: defaultBodyHtml,
       actionRequired: forwardActionRequired,
       dueDate: forwardDueDate.trim() || null,
-      requiredApprovalLevel: forwardRequiredApprovalLevel,
+      requiredApprovalLevel: FORWARD_APPROVAL_LEVEL,
       attentionUserId: forwardAttentionUser.trim() || null,
       ccUserIds: distributionUserIds,
       ccOfficeIds: distributionOfficeIds,

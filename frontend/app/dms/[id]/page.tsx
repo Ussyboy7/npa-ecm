@@ -31,7 +31,6 @@ import {
   type DocumentVersion,
   type DocumentAccessLog,
 } from '@/lib/api/dms';
-import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { DocumentMobileTabBar, DocumentWorkspace } from '@/app/dms/[id]/components/DocumentWorkspace';
 import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
@@ -487,9 +486,7 @@ const DocumentDetailContent = () => {
 
 const DocumentDetailPage = () => (
   <ClientErrorBoundary>
-    <CorrespondenceProvider>
-      <DocumentDetailContent />
-    </CorrespondenceProvider>
+    <DocumentDetailContent />
   </ClientErrorBoundary>
 );
 

@@ -102,7 +102,6 @@ const ExecutiveInboxContent = () => {
   const [inboxItems, setInboxItems] = useState<Correspondence[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, overdue: 0, pending: 0, inProgress: 0, dueSoon: 0 });
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [slaTargets, setSlaTargets] = useState<{ urgent: number; high: number; medium: number; low: number } | null>(null);
   const counts = useSidebarCounts();
@@ -131,7 +130,6 @@ const ExecutiveInboxContent = () => {
     if (!currentUser?.id) return;
 
     const fetchInbox = async () => {
-      setLoading(true);
       setError(null);
       try {
         const params = appendQueueParams(new URLSearchParams());
@@ -174,8 +172,6 @@ const ExecutiveInboxContent = () => {
         setSummary({ total: 0, urgent: 0, overdue: 0, pending: 0, inProgress: 0, dueSoon: 0 });
         setCount(0);
         setSharedDocumentsCount(0);
-      } finally {
-        setLoading(false);
       }
     };
 

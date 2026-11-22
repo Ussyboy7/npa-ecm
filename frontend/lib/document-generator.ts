@@ -19,7 +19,7 @@ export interface DocumentContent {
  * Generate PDF content as HTML string for printing/downloading
  */
 export function generateDocumentHTML(content: DocumentContent): string {
-  const { correspondence, minutes, documentContentHtml, attachmentFileName } = content;
+  const { correspondence, minutes, documentContentHtml } = content;
   
   // Prefer composed HTML (DMS / minutes) — binary files use canonical download helpers.
   if (documentContentHtml) {

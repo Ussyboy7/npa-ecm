@@ -22,12 +22,20 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
 import { ListRowCard } from '@/components/shared/ListRowCard';
+import { ListSkeleton } from '@/components/shared/PageSkeleton';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import { StatStrip } from '@/components/shared/StatStrip';
 import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
 } from '@/components/shared/registry-queue-styles';
 import { cn } from '@/lib/utils';
 
@@ -159,24 +167,19 @@ const DelegatedInbox = () => {
         )}
 
         {loading ? (
-          <div className="rounded-xl border border-border/60 py-12 text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-            <p className="text-sm text-muted-foreground">Loading delegated items...</p>
-          </div>
+          <ListSkeleton rows={5} />
         ) : filteredItems.length === 0 ? (
-          <div className="rounded-xl border border-border/60 text-center py-12 px-4">
-            <Users2 className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-            <p className="text-muted-foreground mb-2">No delegated items</p>
-            <p className="text-xs text-muted-foreground">
-              {searchQuery
-                ? 'No items match your search criteria'
+          <EmptyState
+            icon="inbox"
+            title="No delegated items"
+            message={
+              searchQuery
+                ? 'No items match your search criteria.'
                 : 'No executives have delegated correspondence to you yet.'
-              }
-            </p>
-            <Button variant="outline" size="sm" onClick={() => router.push('/inbox')} className="mt-4">
-              Go to My Inbox
-            </Button>
-          </div>
+            }
+            actionLabel="Go to My Inbox"
+            onAction={() => router.push('/inbox')}
+          />
         ) : (
           <div className={correspondenceQueueListStackClass}>
             {filteredItems.map((item) => (
@@ -224,40 +227,39 @@ const DelegatedInbox = () => {
                   </div>
                 )}
               >
-                <div className="flex items-start justify-between gap-3 mb-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant={getPriorityColor(item.correspondence.priority)} className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none">
+                <h4 className={correspondenceQueueSubjectClass}>{item.correspondence.subject}</h4>
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                    <Badge variant={getPriorityColor(item.correspondence.priority)} className={correspondenceQueueBadgeClass}>
                       {item.correspondence.priority.toUpperCase()}
                     </Badge>
-                    <Badge variant="outline" className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none gap-1">
-                      <FileText className="h-3 w-3" />
+                    <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-1')}>
+                      <FileText className="h-2.5 w-2.5" />
                       {item.correspondence.correspondence_type}
                     </Badge>
                     {item.expires_at && (
-                      <Badge variant="secondary" className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none gap-1">
-                        <Calendar className="h-3 w-3" />
+                      <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-1')}>
+                        <Calendar className="h-2.5 w-2.5" />
                         Expires: {formatDateShort(item.expires_at)}
                       </Badge>
                     )}
                   </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                  <span className={correspondenceQueueDateClass}>
                     {formatDateShort(item.delegated_at)}
                   </span>
                 </div>
-                <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
-                  {item.correspondence.subject}
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Ref: {item.correspondence.reference_number}
-                </p>
-                <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 border-t border-border/60 pt-1.5 text-[11px] leading-tight text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <UserIcon className="h-3 w-3 shrink-0 opacity-80" />
-                    <span>Delegated by: {item.principal.first_name} {item.principal.last_name}</span>
+                <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                  <span className={correspondenceQueueMetaItemClass}>
+                    <FileText className={correspondenceQueueMetaIconClass} />
+                    <span className="truncate">Ref: {item.correspondence.reference_number}</span>
+                  </span>
+                  <span className={correspondenceQueueMetaItemClass}>
+                    <UserIcon className={correspondenceQueueMetaIconClass} />
+                    <span className="truncate">Delegated by: {item.principal.first_name} {item.principal.last_name}</span>
                   </span>
                   {item.notes && (
-                    <span className="inline-flex items-center gap-1 italic max-w-full truncate">
-                      “{item.notes}”
+                    <span className={cn(correspondenceQueueMetaItemClass, 'italic')}>
+                      <span className="truncate">“{item.notes}”</span>
                     </span>
                   )}
                 </div>

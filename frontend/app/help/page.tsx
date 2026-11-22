@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import DOMPurify from "dompurify";
-import { Building2, CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users, RefreshCw, AlertCircle } from "lucide-react";
+import { CheckCircle2, HelpCircle, Mail, RefreshCw, AlertCircle } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

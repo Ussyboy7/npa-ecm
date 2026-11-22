@@ -53,9 +53,7 @@ export const RolesManagementTab = forwardRef<
   {
     searchQuery: controlledSearchQuery,
     onSearchQueryChange,
-    hideInlineSearch = false,
     hideHeaderActions = false,
-    hideCardHeader = false,
   },
   ref,
 ) {

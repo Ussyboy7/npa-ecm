@@ -131,7 +131,6 @@ const clerkUser = {
 };
 
 function setupMocks(activeUser: typeof mdUser) {
-  const isMD = activeUser.gradeLevel === 'MDCS';
   mockUseCurrentUser.mockReturnValue({ currentUser: activeUser, hydrated: true });
   mockUseOrganization.mockReturnValue({
     offices: [

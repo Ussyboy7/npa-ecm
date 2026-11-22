@@ -128,23 +128,31 @@ function ApprovalsForm() {
   } | null>(null);
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
   const [pdfActionBusy, setPdfActionBusy] = useState(false);
+  const [filtersRestored, setFiltersRestored] = useState(false);
   const approvalsRequestRef = useRef(0);
 
   // Restore filters from localStorage after mount
   useEffect(() => {
-    const restore = (key: string, setter: (v: string) => void, _defaultValue: string) => {
+    const restore = (key: string, setter: (v: string) => void, _defaultValue: string): string | undefined => {
       const urlParam = searchParams.get(key);
-      if (urlParam) { setter(urlParam); return; }
+      if (urlParam) { setter(urlParam); return urlParam; }
       const saved = localStorage.getItem(`approvals_filter_${key}`);
-      if (saved) { setter(JSON.parse(saved)); }
+      if (saved) {
+        const value = JSON.parse(saved);
+        setter(value);
+        return value;
+      }
+      return undefined;
     };
-    restore('search', setSearchQuery, '');
+    const restoredSearch = restore('search', setSearchQuery, '');
+    setDebouncedSearch((restoredSearch ?? '').trim());
     restore('role', v => setFilterRole(v), 'all');
     restore('status', v => setFilterStatus(v), 'all');
     restore('dateFrom', v => setDateFrom(v), '');
     restore('dateTo', v => setDateTo(v), '');
     restore('sortBy', v => setSortBy(v), 'sealedAt');
     restore('sortOrder', v => setSortOrder(v as 'asc' | 'desc'), 'desc');
+    setFiltersRestored(true);
   }, [searchParams, setSearchQuery, setFilterRole, setFilterStatus, setDateFrom, setDateTo, setSortBy, setSortOrder]);
   const [count, setCount] = useState(0);
 
@@ -400,6 +408,8 @@ function ApprovalsForm() {
   // Load data when pagination or filters change. Reset to page one before fetching
   // so a filter change never requests the previous page and then page one.
   useEffect(() => {
+    // Wait for saved filters so the register does not load twice on mount.
+    if (!filtersRestored) return;
     const filtersChanged = previousFilterKeyRef.current !== filterKey;
     previousFilterKeyRef.current = filterKey;
     if (filtersChanged && pagination.page !== 1) {
@@ -408,7 +418,7 @@ function ApprovalsForm() {
     }
     void loadApprovals(pagination.page, pagination.pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey, pagination.page, pagination.pageSize, loadApprovals]);
+  }, [filtersRestored, filterKey, pagination.page, pagination.pageSize, loadApprovals]);
 
   // Sync pagination with URL
   useEffect(() => {
