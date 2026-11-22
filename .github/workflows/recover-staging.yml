@@ -38,4 +38,4 @@ jobs:
             -c "DROP DATABASE IF EXISTS npa_ecm_stag;" \
             -c "CREATE DATABASE npa_ecm_stag OWNER ecmadmin;"
           docker exec -i ecm-postgres-stag psql -U ecmadmin -d npa_ecm_stag -v ON_ERROR_STOP=1 < "${snapshot}"
-          DEPLOY_PATH=/srv/npa-ecm SERVER_IP=172.16.0.46 ./scripts/staging/env-manager.sh deploy --no-pull
+          DEPLOY_PATH=/srv/npa-ecm SERVER_IP=172.16.0.46 ./scripts/staging/env-manager.sh deploy

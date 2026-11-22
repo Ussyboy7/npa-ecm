@@ -223,7 +223,9 @@ cmd_deploy() {
     ui_header "ECM ${STACK_ENVIRONMENT_TITLE} Deployment"
     _deploy_check_server
     _deploy_ensure_repo
-    $DO_PULL && _deploy_pull_latest || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
+    if $DO_PULL; then
+        _deploy_pull_latest || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
+    fi
     _deploy_preflight_build_network || { ui_error "Deployment aborted before stopping the running ${STACK_ENVIRONMENT_TITLE} stack."; return 1; }
     # Snapshot after pull/re-exec/preflight so a script update cannot create two backups.
     $DO_BACKUP && _deploy_backup_database "$PG_CONTAINER" "$DB_USER" "$DB_NAME" || true
@@ -232,7 +234,9 @@ cmd_deploy() {
     _deploy_build_up || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     _deploy_apply_runtime_configuration || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
     _deploy_verify_nginx_config || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
-    $DO_HEALTH && _deploy_wait_healthy || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
+    if $DO_HEALTH; then
+        _deploy_wait_healthy || { $DO_ROLLBACK && _deploy_rollback "$PG_CONTAINER" "$DB_USER" "$DB_NAME"; return 1; }
+    fi
     _deploy_show_summary
     ui_success "ECM ${STACK_ENVIRONMENT} deployment complete"
 }
