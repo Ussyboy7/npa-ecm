@@ -389,10 +389,16 @@ _deploy_build_up() {
     local celery_n="${STACK_CELERY_REPLICAS:-1}"
     local frontend_n="${STACK_FRONTEND_REPLICAS:-1}"
     ui_step "Starting stack (backend×${backend_n} celery-worker×${celery_n} frontend×${frontend_n})"
-    stack_compose up -d --build \
+    if ! stack_compose up -d --build \
         --scale "backend=${backend_n}" \
         --scale "celery-worker=${celery_n}" \
-        --scale "frontend=${frontend_n}"
+        --scale "frontend=${frontend_n}"; then
+        ui_error "Stack start failed — recent service logs follow."
+        stack_compose ps || true
+        stack_compose logs --tail 200 migrate || true
+        stack_compose logs --tail 40 postgres || true
+        return 1
+    fi
 }
 
 _deploy_apply_runtime_configuration() {
