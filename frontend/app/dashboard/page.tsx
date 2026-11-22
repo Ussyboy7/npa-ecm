@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
@@ -150,6 +150,13 @@ const Dashboard = () => {
 
   const [slaTargets, setSlaTargets] = useState<{ urgent: number; high: number; medium: number; low: number } | null>(null);
 
+  // Leaving My work re-runs these effects, so remember the load each section
+  // already completed. Keys include the user id and the retry token, so a
+  // different user or an explicit retry still reloads.
+  const slaLoadedFor = useRef<string | null>(null);
+  const inboxLoadedFor = useRef<string | null>(null);
+  const approvalsLoadedFor = useRef<string | null>(null);
+
   const division = useMemo(() => {
     if (!currentUser?.division) return undefined;
     return divisions.find((item) => item.id as string === currentUser.division);
@@ -168,23 +175,25 @@ const Dashboard = () => {
   }, [currentUser?.name, roleDisplay, division?.name]);
 
   useEffect(() => {
-    if (!workTabActive) return;
+    if (!workTabActive || !currentUser?.id) return;
+    const loadedFor = currentUser.id;
+    if (slaLoadedFor.current === loadedFor) return;
     let ignore = false;
     const loadTargets = async () => {
-      try {
-        const targets = await fetchSLATargets();
-        if (!ignore) setSlaTargets(targets);
-      } catch {
-        if (!ignore) setSlaTargets(DEFAULT_SLA_TARGETS);
-      }
+      const targets = await fetchSLATargets().catch(() => DEFAULT_SLA_TARGETS);
+      if (ignore) return;
+      setSlaTargets(targets);
+      slaLoadedFor.current = loadedFor;
     };
     void loadTargets();
     return () => { ignore = true; };
-  }, [workTabActive]);
+  }, [currentUser?.id, workTabActive]);
 
   // Inbox summary and priority list are one independent dashboard section.
   useEffect(() => {
     if (!currentUser?.id || !workTabActive) return;
+    const loadedFor = `${currentUser.id}:${inboxRefreshToken}`;
+    if (inboxLoadedFor.current === loadedFor) return;
     let ignore = false;
 
     const loadInbox = async () => {
@@ -215,6 +224,7 @@ const Dashboard = () => {
         });
 
         setInboxItems(mapped);
+        inboxLoadedFor.current = loadedFor;
       } catch {
         if (!ignore) setInboxError("Failed to load your inbox.");
       } finally {
@@ -247,6 +257,8 @@ const Dashboard = () => {
   // or the priority inbox.
   useEffect(() => {
     if (!currentUser?.id || !workTabActive) return;
+    const loadedFor = `${currentUser.id}:${approvalsRefreshToken}`;
+    if (approvalsLoadedFor.current === loadedFor) return;
     let ignore = false;
 
     const loadApprovals = async () => {
@@ -261,6 +273,7 @@ const Dashboard = () => {
           ? (approvalsResponse.results as PendingApproval[])
           : [];
         setPendingApprovals(approvals);
+        approvalsLoadedFor.current = loadedFor;
       } catch {
         if (!ignore) setApprovalsError("Failed to load pending approvals.");
       } finally {

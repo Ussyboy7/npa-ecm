@@ -151,6 +151,26 @@ describe("Dashboard analytics tabs", () => {
     expect(fetchSLATargets).toHaveBeenCalled();
   });
 
+  it("reuses the loaded My-work data when returning to the work tab", async () => {
+    const emptyPage = { results: [], summary: { total: 0, urgent: 0, overdue: 0, due_soon: 0 }, count: 0 };
+    vi.mocked(apiFetch).mockResolvedValueOnce(emptyPage).mockResolvedValueOnce(emptyPage);
+    vi.mocked(fetchSLATargets).mockResolvedValueOnce({ urgent: 1, high: 2, medium: 3, low: 4 });
+
+    const user = userEvent.setup();
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledTimes(2);
+      expect(fetchSLATargets).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Performance" }));
+    await user.click(screen.getByRole("tab", { name: "My work" }));
+
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(fetchSLATargets).toHaveBeenCalledTimes(1);
+  });
+
   it("writes tab changes to the URL", async () => {
     const user = userEvent.setup();
     render(<DashboardPage />);
