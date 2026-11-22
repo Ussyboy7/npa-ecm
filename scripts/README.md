@@ -94,7 +94,7 @@ Docker Compose and Django both use `backend/env/<env>.env`.
 | `backend-status` | Container + DB smoke check |
 | `shell` | Shell in backend container |
 | `migrate` | `manage.py migrate --noinput` |
-| `seed` | `seed_demo_data` |
+| `seed` | `seed_demo_data` (org structure + staff from `backend/scripts/nominal_roll.xlsx`) |
 | `load-users` | Import nominal-roll users, then map roles/offices (`--apply` writes) |
 | `backup` | `scripts/backup/backup-db.sh` |
 | `verify-backup` | `scripts/backup/verify_backup.sh` (integrity check on latest dump) |
@@ -122,8 +122,8 @@ Run **on the target server** after the stack is up:
 
 ```bash
 cd /srv/npa-ecm
-scripts/staging/env-manager.sh load-users cleaned_npa_nominal_roll2.xlsx          # dry run
-scripts/staging/env-manager.sh load-users cleaned_npa_nominal_roll2.xlsx --apply
+scripts/staging/env-manager.sh load-users backend/scripts/nominal_roll.xlsx          # dry run
+scripts/staging/env-manager.sh load-users backend/scripts/nominal_roll.xlsx --apply
 ```
 
 New accounts use `ChangeMe123!` unless `--password VALUE` is passed. Existing roles, offices, and passwords are retained; no users are deleted. Add `--no-roles` to import identities only.

@@ -71,12 +71,12 @@ scripts/local/env-manager.sh start
 # or: docker compose up -d
 ```
 
-4. **Seed demo data (optional)**
+4. **Seed NPA structure and staff (optional)**
 ```bash
 scripts/local/env-manager.sh seed
 ```
 
-Dev login users (`superadmin`, `md`, `edfa`, `gmict`, `pamd` / `ChangeMe123!`) are created automatically on backend start via `ensure_dev_login_users`.
+`superadmin` / `ChangeMe123!` is created on backend start via `ensure_dev_login_users`. Staff accounts come from the NPA nominal roll (`backend/scripts/nominal_roll.xlsx`), imported by the seed step above — no mock staff accounts are created.
 
 5. **Access the applications**
 - Frontend: http://localhost:3002

@@ -5,7 +5,6 @@
       "name": "Managing Director",
       "code": "MD",
       "executiveDirector": "Managing Director",
-      "executiveDirectorId": "user-md",
       "active": true
     },
     {
@@ -13,7 +12,6 @@
       "name": "Executive Director, Finance & Administration",
       "code": "EDFA",
       "executiveDirector": "Executive Director, Finance & Administration",
-      "executiveDirectorId": "user-ed-fa",
       "active": true
     },
     {
@@ -21,7 +19,6 @@
       "name": "Executive Director, Marine & Operations",
       "code": "EDMO",
       "executiveDirector": "Executive Director, Marine & Operations",
-      "executiveDirectorId": "user-ed-mo",
       "active": true
     },
     {
@@ -29,7 +26,6 @@
       "name": "Executive Director, Engineering & Technical Services",
       "code": "EDETS",
       "executiveDirector": "Executive Director, Engineering & Technical Services",
-      "executiveDirectorId": "user-ed-ets",
       "active": true
     }
   ],
@@ -39,7 +35,6 @@
       "name": "Procurement",
       "code": "PROCUREMENT",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-procurement",
       "active": true
     },
     {
@@ -47,7 +42,6 @@
       "name": "Corporate & Strategic Planning",
       "code": "C&SP",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-csp",
       "active": true
     },
     {
@@ -55,7 +49,6 @@
       "name": "Corporate & Strategic Communications",
       "code": "C&SC",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-csc",
       "active": true
     },
     {
@@ -63,7 +56,6 @@
       "name": "Audit",
       "code": "AUDIT",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-audit",
       "active": true
     },
     {
@@ -71,7 +63,6 @@
       "name": "Information & Communication Technology",
       "code": "ICT",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-ict",
       "active": true
     },
     {
@@ -79,7 +70,6 @@
       "name": "Legal Services",
       "code": "LEGAL",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-legal",
       "active": true
     },
     {
@@ -87,7 +77,6 @@
       "name": "Monitoring",
       "code": "MONITORING",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-monitoring",
       "active": true
     },
     {
@@ -95,7 +84,6 @@
       "name": "SERVICOM",
       "code": "SERVICOM",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-servicom",
       "active": true
     },
     {
@@ -103,7 +91,6 @@
       "name": "Abuja Liaison Office",
       "code": "ABUJA",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-liaison",
       "active": true
     },
     {
@@ -111,7 +98,6 @@
       "name": "Oversea Liaison Office",
       "code": "OVERSEA",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-oversea-liaison",
       "active": true
     },
     {
@@ -119,7 +105,6 @@
       "name": "Special Duties",
       "code": "SPECIAL_DUTIES",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-special-duties",
       "active": true
     },
     {
@@ -127,7 +112,6 @@
       "name": "GM MD's Office",
       "code": "GM_MD_OFFICE",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-md-office",
       "active": true
     },
     {
@@ -135,7 +119,6 @@
       "name": "Seaview Properties Limited",
       "code": "SEAVIEW_PROPERTIES",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-seaview-properties",
       "active": true
     },
     {
@@ -143,7 +126,6 @@
       "name": "Regulatory Services",
       "code": "REGULATORY",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-regulatory",
       "active": true
     },
     {
@@ -151,7 +133,6 @@
       "name": "Public-Private Partnership",
       "code": "PPP",
       "directorateId": "dir-md",
-      "generalManagerId": "user-gm-ppp",
       "active": true
     },
     {
@@ -159,7 +140,6 @@
       "name": "Human Resources",
       "code": "HR",
       "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-hr",
       "active": true
     },
     {
@@ -167,7 +147,6 @@
       "name": "Finance",
       "code": "FINANCE",
       "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-finance",
       "active": true
     },
     {
@@ -175,7 +154,6 @@
       "name": "Administration",
       "code": "ADMIN",
       "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-admin",
       "active": true
     },
     {
@@ -191,7 +169,6 @@
       "name": "Medical Services",
       "code": "MEDICAL",
       "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-medical",
       "active": true
     },
     {
@@ -199,7 +176,6 @@
       "name": "Superannuation & Investment",
       "code": "S&I",
       "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-superannuation-investment",
       "active": true
     },
     {
@@ -207,7 +183,6 @@
       "name": "Marine",
       "code": "MARINE",
       "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-marine-alt",
       "active": true
     },
     {
@@ -215,7 +190,6 @@
       "name": "Operations",
       "code": "OPERATIONS",
       "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-operations",
       "active": true
     },
     {
@@ -223,7 +197,6 @@
       "name": "Tariff & Billing",
       "code": "TARIFF",
       "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-tariff",
       "active": true
     },
     {
@@ -231,7 +204,6 @@
       "name": "Security",
       "code": "SECURITY",
       "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-security",
       "active": true
     },
     {
@@ -239,7 +211,6 @@
       "name": "Health, Safety & Environment",
       "code": "HSE",
       "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-hse",
       "active": true
     },
     {
@@ -247,7 +218,6 @@
       "name": "Engineering & Technical Services",
       "code": "ENGINEERING",
       "directorateId": "dir-edets",
-      "generalManagerId": "user-gm-engineering",
       "active": true
     },
     {
@@ -255,7 +225,6 @@
       "name": "Lands & Assets Administration",
       "code": "LANDS_ASSETS",
       "directorateId": "dir-edets",
-      "generalManagerId": "user-gm-lands-assets",
       "active": true
     }
   ],
@@ -265,7 +234,6 @@
       "name": "Ports Engineering",
       "code": "PORTS_ENG",
       "divisionId": "div-engineering",
-      "assistantGeneralManagerId": "user-agm-ports-eng",
       "active": true
     },
     {
@@ -273,7 +241,6 @@
       "name": "Electrical & Corrosion",
       "code": "ELECTRICAL",
       "divisionId": "div-engineering",
-      "assistantGeneralManagerId": "user-agm-electrical",
       "active": true
     },
     {
@@ -281,7 +248,6 @@
       "name": "Hydrographic",
       "code": "HYDROGRAPHIC",
       "divisionId": "div-engineering",
-      "assistantGeneralManagerId": "user-agm-hydrographic",
       "active": true
     },
     {
@@ -289,7 +255,6 @@
       "name": "Civil Engineering",
       "code": "CIVIL",
       "divisionId": "div-engineering",
-      "assistantGeneralManagerId": "user-agm-civil",
       "active": true
     },
     {
@@ -297,7 +262,6 @@
       "name": "Physical Planning & Development",
       "code": "PPD",
       "divisionId": "div-lands-assets",
-      "assistantGeneralManagerId": "user-agm-ppd",
       "active": true
     },
     {
@@ -305,7 +269,6 @@
       "name": "Lands And Estate",
       "code": "LE",
       "divisionId": "div-lands-assets",
-      "assistantGeneralManagerId": "user-agm-lands-assets",
       "active": true
     },
     {
@@ -313,7 +276,6 @@
       "name": "Harbours",
       "code": "HARBOURS",
       "divisionId": "div-marine",
-      "assistantGeneralManagerId": "user-agm-harbours",
       "active": true
     },
     {
@@ -321,7 +283,6 @@
       "name": "Vessel Management",
       "code": "VESSEL",
       "divisionId": "div-marine",
-      "assistantGeneralManagerId": "user-agm-vessel",
       "active": true
     },
     {
@@ -329,7 +290,6 @@
       "name": "Aids to Navigation & Vessel Traffic System",
       "code": "ATONS_VTS",
       "divisionId": "div-marine",
-      "assistantGeneralManagerId": "user-agm-atons-vts",
       "active": true
     },
     {
@@ -337,7 +297,6 @@
       "name": "Operations",
       "code": "OPERATIONS",
       "divisionId": "div-operations",
-      "assistantGeneralManagerId": "user-agm-operations",
       "active": true
     },
     {
@@ -345,7 +304,6 @@
       "name": "Tariff & Billing",
       "code": "TARIFF",
       "divisionId": "div-tariff",
-      "assistantGeneralManagerId": "user-agm-tariff",
       "active": true
     },
     {
@@ -353,7 +311,6 @@
       "name": "Environment",
       "code": "ENVIRONMENT",
       "divisionId": "div-hse",
-      "assistantGeneralManagerId": "user-agm-environment",
       "active": true
     },
     {
@@ -361,7 +318,6 @@
       "name": "Safety",
       "code": "SAFETY",
       "divisionId": "div-hse",
-      "assistantGeneralManagerId": "user-agm-safety",
       "active": true
     },
     {
@@ -369,7 +325,6 @@
       "name": "Fire & Rescue",
       "code": "FIRE_RESCUE",
       "divisionId": "div-hse",
-      "assistantGeneralManagerId": "user-agm-fire-rescue",
       "active": true
     },
     {
@@ -377,7 +332,6 @@
       "name": "Security",
       "code": "SECURITY",
       "divisionId": "div-security",
-      "assistantGeneralManagerId": "user-agm-security",
       "active": true
     },
     {
@@ -385,7 +339,6 @@
       "name": "HR Management",
       "code": "HR_MGT",
       "divisionId": "div-hr",
-      "assistantGeneralManagerId": "user-agm-hr-mgt",
       "active": true
     },
     {
@@ -393,7 +346,6 @@
       "name": "Employee & Labour Relations",
       "code": "HR_LABOUR",
       "divisionId": "div-hr",
-      "assistantGeneralManagerId": "user-agm-hr-labour",
       "active": true
     },
     {
@@ -401,7 +353,6 @@
       "name": "Performance Management",
       "code": "PERFORMANCE",
       "divisionId": "div-hr",
-      "assistantGeneralManagerId": "user-agm-performance",
       "active": true
     },
     {
@@ -409,7 +360,6 @@
       "name": "Learning & Development",
       "code": "HR_LD",
       "divisionId": "div-hr",
-      "assistantGeneralManagerId": "user-agm-hr-ld",
       "active": true
     },
     {
@@ -417,7 +367,6 @@
       "name": "Accounts",
       "code": "ACCOUNTS",
       "divisionId": "div-finance",
-      "assistantGeneralManagerId": "user-agm-accounts",
       "active": true
     },
     {
@@ -425,7 +374,6 @@
       "name": "Finance",
       "code": "FINANCE",
       "divisionId": "div-finance",
-      "assistantGeneralManagerId": "user-agm-finance",
       "active": true
     },
     {
@@ -433,7 +381,6 @@
       "name": "Budget",
       "code": "BUDGET",
       "divisionId": "div-finance",
-      "assistantGeneralManagerId": "user-agm-budget",
       "active": true
     },
     {
@@ -441,7 +388,6 @@
       "name": "Tax",
       "code": "TAX",
       "divisionId": "div-finance",
-      "assistantGeneralManagerId": "user-agm-tax",
       "active": true
     },
     {
@@ -449,7 +395,6 @@
       "name": "Administration",
       "code": "ADMIN_GENERAL",
       "divisionId": "div-admin",
-      "assistantGeneralManagerId": "user-agm-admin-general",
       "active": true
     },
     {
@@ -457,7 +402,6 @@
       "name": "Facility Management",
       "code": "ADMIN_FACILITY",
       "divisionId": "div-admin",
-      "assistantGeneralManagerId": "user-agm-admin-facility",
       "active": true
     },
     {
@@ -465,7 +409,6 @@
       "name": "Archives & Records Management",
       "code": "ADMIN_ARCHIVES",
       "divisionId": "div-admin",
-      "assistantGeneralManagerId": "user-agm-admin-archives",
       "active": true
     },
     {
@@ -474,7 +417,6 @@
       "code": "ERM",
       "directorateId": "dir-edfa",
       "divisionId": "div-edfa-direct",
-      "assistantGeneralManagerId": "user-agm-erm",
       "active": true
     },
     {
@@ -482,7 +424,6 @@
       "name": "Superannuation",
       "code": "SUPERANNUATION",
       "divisionId": "div-S&I",
-      "assistantGeneralManagerId": "user-agm-superannuation",
       "active": true
     },
     {
@@ -490,7 +431,6 @@
       "name": "Investment",
       "code": "INVESTMENT",
       "divisionId": "div-S&I",
-      "assistantGeneralManagerId": "user-agm-investment",
       "active": true
     },
     {
@@ -498,7 +438,6 @@
       "name": "Medical Services",
       "code": "MEDICAL",
       "divisionId": "div-medical",
-      "assistantGeneralManagerId": "user-agm-medical",
       "active": true
     },
     {
@@ -506,7 +445,6 @@
       "name": "Pharmacy",
       "code": "PHARMACY",
       "divisionId": "div-medical",
-      "assistantGeneralManagerId": "user-agm-pharmacy",
       "active": true
     },
     {
@@ -514,7 +452,6 @@
       "name": "Occupational Health",
       "code": "OCCUPATIONAL",
       "divisionId": "div-medical",
-      "assistantGeneralManagerId": "user-agm-occupational",
       "active": true
     },
     {
@@ -522,7 +459,6 @@
       "name": "Nursing",
       "code": "NURSING",
       "divisionId": "div-medical",
-      "assistantGeneralManagerId": "user-agm-nursing",
       "active": true
     },
     {
@@ -530,7 +466,6 @@
       "name": "Radiology",
       "code": "RADIOLOGY",
       "divisionId": "div-medical",
-      "assistantGeneralManagerId": "user-agm-radiology",
       "active": true
     },
     {
@@ -538,7 +473,6 @@
       "name": "Projects",
       "code": "PROJECTS",
       "divisionId": "div-procurement",
-      "assistantGeneralManagerId": "user-agm-projects",
       "active": true
     },
     {
@@ -546,7 +480,6 @@
       "name": "Bids MGT & Selection",
       "code": "BMS",
       "divisionId": "div-procurement",
-      "assistantGeneralManagerId": "user-agm-bms",
       "active": true
     },
     {
@@ -554,7 +487,6 @@
       "name": "Compliance & Records",
       "code": "C_R",
       "divisionId": "div-procurement",
-      "assistantGeneralManagerId": "user-agm-cr",
       "active": true
     },
     {
@@ -562,7 +494,6 @@
       "name": "Corporate Social Responsibility",
       "code": "CSC_CSR",
       "divisionId": "div-csc",
-      "assistantGeneralManagerId": "user-agm-csc-csr",
       "active": true
     },
     {
@@ -570,7 +501,6 @@
       "name": "Protocol & Events Management",
       "code": "CSC_PEM",
       "divisionId": "div-csc",
-      "assistantGeneralManagerId": "user-agm-csc-pem",
       "active": true
     },
     {
@@ -578,7 +508,6 @@
       "name": "Research & Statistics",
       "code": "CSP_RESEARCH",
       "divisionId": "div-csp",
-      "assistantGeneralManagerId": "user-agm-csp-research",
       "active": true
     },
     {
@@ -586,7 +515,6 @@
       "name": "Planning & Monitoring",
       "code": "CSP_PLANNING",
       "divisionId": "div-csp",
-      "assistantGeneralManagerId": "user-agm-csp-planning",
       "active": true
     },
     {
@@ -594,7 +522,6 @@
       "name": "Legal Services",
       "code": "LEGAL",
       "divisionId": "div-legal",
-      "assistantGeneralManagerId": "user-agm-legal",
       "active": true
     },
     {
@@ -602,7 +529,6 @@
       "name": "Board Secretary",
       "code": "BOARD_SECRETARY",
       "divisionId": "div-legal",
-      "assistantGeneralManagerId": "user-agm-board-registry",
       "active": true
     },
     {
@@ -610,7 +536,6 @@
       "name": "Finance & Investment",
       "code": "AUDIT_FINANCE",
       "divisionId": "div-audit",
-      "assistantGeneralManagerId": "user-agm-audit-finance",
       "active": true
     },
     {
@@ -618,7 +543,6 @@
       "name": "System & ICT",
       "code": "AUDIT_SYSTEMS",
       "divisionId": "div-audit",
-      "assistantGeneralManagerId": "user-agm-audit-systems",
       "active": true
     },
     {
@@ -626,7 +550,6 @@
       "name": "Policy Compliance",
       "code": "AUDIT_POLICY",
       "divisionId": "div-audit",
-      "assistantGeneralManagerId": "user-agm-audit-policy",
       "active": true
     },
     {
@@ -634,7 +557,6 @@
       "name": "Public-Private Partnership",
       "code": "PPP",
       "divisionId": "div-ppp",
-      "assistantGeneralManagerId": "user-agm-ppp",
       "active": true
     },
     {
@@ -642,7 +564,6 @@
       "name": "New-Business-Venture",
       "code": "NBV",
       "divisionId": "div-ppp",
-      "assistantGeneralManagerId": "user-agm-nbv",
       "active": true
     },
     {
@@ -650,7 +571,6 @@
       "name": "Networks & Communication",
       "code": "ICT_NETWORKS",
       "divisionId": "div-ict",
-      "assistantGeneralManagerId": "user-agm-networks",
       "active": true
     },
     {
@@ -658,7 +578,6 @@
       "name": "Hardware, Infrastructure & Support",
       "code": "ICT_HARDWARE",
       "divisionId": "div-ict",
-      "assistantGeneralManagerId": "user-agm-infra",
       "active": true
     },
     {
@@ -666,7 +585,6 @@
       "name": "Research & Special Projects",
       "code": "ICT_RESEARCH",
       "divisionId": "div-ict",
-      "assistantGeneralManagerId": "user-agm-research",
       "active": true
     },
     {
@@ -674,7 +592,6 @@
       "name": "Software Applications & Database Management",
       "code": "ICT_SOFTWARE",
       "divisionId": "div-ict",
-      "assistantGeneralManagerId": "user-agm-software",
       "active": true
     },
     {
@@ -682,7 +599,6 @@
       "name": "Monitoring",
       "code": "MONITORING",
       "divisionId": "div-monitoring",
-      "assistantGeneralManagerId": "user-agm-monitoring",
       "active": true
     },
     {
@@ -690,7 +606,6 @@
       "name": "Regulatory Services",
       "code": "REGULATORY",
       "divisionId": "div-regulatory",
-      "assistantGeneralManagerId": "user-agm-regulatory",
       "active": true
     },
     {
@@ -698,7 +613,6 @@
       "name": "SERVICOM",
       "code": "SERVICOM",
       "divisionId": "div-servicom",
-      "assistantGeneralManagerId": "user-agm-servicom",
       "active": true
     },
     {
@@ -706,7 +620,6 @@
       "name": "Abuja Liaison Office",
       "code": "ABUJA",
       "divisionId": "div-abuja",
-      "assistantGeneralManagerId": "user-agm-abuja",
       "active": true
     },
     {
@@ -714,1304 +627,6 @@
       "name": "Seaview Properties Limited",
       "code": "SEAVIEW",
       "divisionId": "div-seaview-properties",
-      "assistantGeneralManagerId": "user-agm-seaview-properties",
-      "active": true
-    }
-  ],
-  "MOCK_USERS": [
-    {
-      "id": "user-agmabuja",
-      "name": "Mr. Musa",
-      "email": "agm.abuja@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-abuja",
-      "department": "dept-abuja"
-    },
-    {
-      "id": "user-agmaccounts",
-      "name": "Mr. Okafor",
-      "email": "agm.accounts@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance",
-      "department": "dept-accounts"
-    },
-    {
-      "id": "user-agmadminarchives",
-      "name": "Mrs. Obi",
-      "email": "agm.admin.archives@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin",
-      "department": "dept-admin-archives"
-    },
-    {
-      "id": "user-agmadminfacility",
-      "name": "Mr. Adewale",
-      "email": "agm.admin.facility@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin",
-      "department": "dept-admin-facility"
-    },
-    {
-      "id": "user-agmadmingeneral",
-      "name": "Mrs. Lawal",
-      "email": "agm.admin@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin",
-      "department": "dept-admin-general"
-    },
-    {
-      "id": "user-agmatonsvts",
-      "name": "Engr. Okafor",
-      "email": "agm.atons.vts@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-marine",
-      "department": "dept-atons-vts"
-    },
-    {
-      "id": "user-agmauditfinance",
-      "name": "Mrs. Mohammed",
-      "email": "agm.audit.finance@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-audit",
-      "department": "dept-audit-finance"
-    },
-    {
-      "id": "user-agmauditpolicy",
-      "name": "Mrs. Adekunle",
-      "email": "agm.audit.policy@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-audit",
-      "department": "dept-audit-policy"
-    },
-    {
-      "id": "user-agmauditsystems",
-      "name": "Mr. Yusuf",
-      "email": "agm.audit.systems@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-audit",
-      "department": "dept-audit-systems"
-    },
-    {
-      "id": "user-agmbms",
-      "name": "Mrs. Nwosu",
-      "email": "agm.bms@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-procurement",
-      "department": "dept-bids-mgt-selection"
-    },
-    {
-      "id": "user-agmboardregistry",
-      "name": "Barr. Okoro",
-      "email": "agm.board.registry@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-legal",
-      "department": "dept-board-registry"
-    },
-    {
-      "id": "user-agmbudget",
-      "name": "Mr. Uche",
-      "email": "agm.budget@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance",
-      "department": "dept-budget"
-    },
-    {
-      "id": "user-agmcivil",
-      "name": "Engr. Ibrahim",
-      "email": "agm.civil@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-engineering",
-      "department": "dept-civil"
-    },
-    {
-      "id": "user-agmcr",
-      "name": "Mrs. Adeyemi",
-      "email": "agm.cr@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-procurement",
-      "department": "dept-compliance-records"
-    },
-    {
-      "id": "user-agmcsccsr",
-      "name": "Mr. Fashola",
-      "email": "agm.csc.csr@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-csc",
-      "department": "dept-csc-csr"
-    },
-    {
-      "id": "user-agmcscpem",
-      "name": "Mrs. Adebayo",
-      "email": "agm.csc.pem@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-csc",
-      "department": "dept-csc-pem"
-    },
-    {
-      "id": "user-agmcspplanning",
-      "name": "Kemi Funmi",
-      "email": "agm.csp.planning@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-csp",
-      "department": "dept-csp-planning"
-    },
-    {
-      "id": "user-agmcspresearch",
-      "name": "Dr. Ogunleye",
-      "email": "agm.csp.research@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-csp",
-      "department": "dept-csp-research"
-    },
-    {
-      "id": "user-agmelectrical",
-      "name": "Engr. Bello",
-      "email": "agm.electrical@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-engineering",
-      "department": "dept-electrical"
-    },
-    {
-      "id": "user-agmenvironment",
-      "name": "Mrs. Alade",
-      "email": "agm.environment@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-hse",
-      "department": "dept-environment"
-    },
-    {
-      "id": "user-agmerm",
-      "name": "Mustapha Adeyemi",
-      "email": "agm.erm@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-edfa-direct",
-      "department": "dept-erm"
-    },
-    {
-      "id": "user-agmfinance",
-      "name": "Ngozi Okoro",
-      "email": "agm.finance@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance",
-      "department": "dept-finance"
-    },
-    {
-      "id": "user-agmfirerescue",
-      "name": "Bukola Ihuoma",
-      "email": "agm.fire.rescue@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-hse",
-      "department": "dept-fire-rescue"
-    },
-    {
-      "id": "user-agmharbours",
-      "name": "Capt. Nwankwo",
-      "email": "agm.harbours@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-marine",
-      "department": "dept-harbours"
-    },
-    {
-      "id": "user-agmhrlabour",
-      "name": "Mr. Udo",
-      "email": "agm.hr.labour@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-hr",
-      "department": "dept-hr-labour"
-    },
-    {
-      "id": "user-agmhrld",
-      "name": "Mrs. Okonkwo",
-      "email": "agm.hr.ld@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-hr",
-      "department": "dept-hr-learning-development"
-    },
-    {
-      "id": "user-agmhrmgt",
-      "name": "Oluwafunmi Adekunle",
-      "email": "agm.hr.mgt@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-hr",
-      "department": "dept-hr-management"
-    },
-    {
-      "id": "user-agmhydrographic",
-      "name": "Kunle Oluwatosin",
-      "email": "agm.hydrographic@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-engineering",
-      "department": "dept-hydrographic"
-    },
-    {
-      "id": "user-agmict",
-      "name": "Kayode Ejiro",
-      "email": "agmict@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict"
-    },
-    {
-      "id": "user-agminfra",
-      "name": "Chiamaka Eze",
-      "email": "agm.infra@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-hardware"
-    },
-    {
-      "id": "user-agminvestment",
-      "name": "Mr. Balogun",
-      "email": "agm.investment@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-S&I",
-      "department": "dept-investment"
-    },
-    {
-      "id": "user-agmlandsassets",
-      "name": "Engr. Okoro",
-      "email": "agm.lands.assets@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-lands-assets",
-      "department": "dept-land-estate"
-    },
-    {
-      "id": "user-agmlegal",
-      "name": "Barr. Okeke",
-      "email": "agm.legal@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-legal",
-      "department": "dept-legal"
-    },
-    {
-      "id": "user-agmmedical",
-      "name": "Dr. Yusuf",
-      "email": "agm.medical@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-medical",
-      "department": "dept-medical"
-    },
-    {
-      "id": "user-agmmonitoring",
-      "name": "Mr. Adeyeye",
-      "email": "agm.monitoring@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-monitoring",
-      "department": "dept-monitoring"
-    },
-    {
-      "id": "user-agmnbv",
-      "name": "Tunde Ojo",
-      "email": "agm.nbv@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ppp",
-      "department": "dept-new-business-venture"
-    },
-    {
-      "id": "user-agmnetworks",
-      "name": "Engr. Ogunleye",
-      "email": "agm.networks@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-networks"
-    },
-    {
-      "id": "user-agmnursing",
-      "name": "Funmi Ifunanya",
-      "email": "agm.nursing@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-medical",
-      "department": "dept-nursing"
-    },
-    {
-      "id": "user-agmoccupational",
-      "name": "Dr. Okeke",
-      "email": "agm.occupational@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-medical",
-      "department": "dept-occupational"
-    },
-    {
-      "id": "user-agmoperations",
-      "name": "Mr. Okonkwo",
-      "email": "agm.operations@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-operations",
-      "department": "dept-operations"
-    },
-    {
-      "id": "user-agmperformance",
-      "name": "Mrs. Okoro",
-      "email": "agm.performance@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-hr",
-      "department": "dept-performance"
-    },
-    {
-      "id": "user-agmpharmacy",
-      "name": "Pharm. Nnamdi",
-      "email": "agm.pharmacy@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-medical",
-      "department": "dept-pharmacy"
-    },
-    {
-      "id": "user-agmportseng",
-      "name": "Engr. Adeyemi",
-      "email": "agm.ports.eng@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-engineering",
-      "department": "dept-ports-eng"
-    },
-    {
-      "id": "user-agmppd",
-      "name": "Engr. Eze",
-      "email": "agm.ppd@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-lands-assets",
-      "department": "dept-physical-planning-dev"
-    },
-    {
-      "id": "user-agmppp",
-      "name": "Maryam Obi",
-      "email": "agm.ppp@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ppp",
-      "department": "dept-public-private-partnership"
-    },
-    {
-      "id": "user-agmprojects",
-      "name": "Musa Emeka",
-      "email": "agm.projects@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-procurement",
-      "department": "dept-projects"
-    },
-    {
-      "id": "user-agmradiology",
-      "name": "Dr. Okonkwo",
-      "email": "agm.radiology@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-medical",
-      "department": "dept-radiology"
-    },
-    {
-      "id": "user-agmregulatory",
-      "name": "Musa Mariam",
-      "email": "agm.regulatory@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-regulatory",
-      "department": "dept-regulatory"
-    },
-    {
-      "id": "user-agmresearch",
-      "name": "Ms. Nnaji",
-      "email": "agm.research@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-research"
-    },
-    {
-      "id": "user-agmsafety",
-      "name": "Ikechukwu Adewale",
-      "email": "agm.safety@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-hse",
-      "department": "dept-safety"
-    },
-    {
-      "id": "user-agmseaviewproperties",
-      "name": "Esther Kolawole",
-      "email": "agm.seaview.properties@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-seaview-properties",
-      "department": "dept-seaview-properties"
-    },
-    {
-      "id": "user-agmsecurity",
-      "name": "Mr. Obasi",
-      "email": "agm.security@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-security",
-      "department": "dept-security"
-    },
-    {
-      "id": "user-agmservicom",
-      "name": "Ms. Enem",
-      "email": "agm.servicom@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-servicom",
-      "department": "dept-servicom"
-    },
-    {
-      "id": "user-agmsoftware",
-      "name": "Fola Adeyinka",
-      "email": "agm.software@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-software"
-    },
-    {
-      "id": "user-agmsuperannuation",
-      "name": "Chukwudi Oluwatobi",
-      "email": "agm.superannuation@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-S&I",
-      "department": "dept-superannuation"
-    },
-    {
-      "id": "user-agmtariff",
-      "name": "Mrs. Adesina",
-      "email": "agm.tariff@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-tariff",
-      "department": "dept-tariff"
-    },
-    {
-      "id": "user-agmtax",
-      "name": "Kunle Emeka",
-      "email": "agm.tax@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance",
-      "department": "dept-tax"
-    },
-    {
-      "id": "user-agmvessel",
-      "name": "Capt. Fashola",
-      "email": "agm.vessel@npa.gov.ng",
-      "gradeLevel": "MSS2",
-      "systemRole": "Assistant General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-marine",
-      "department": "dept-vessel"
-    },
-    {
-      "id": "user-assistantgm",
-      "name": "Mrs. Usman",
-      "email": "assistant.gm@npa.gov.ng",
-      "gradeLevel": "SSS1",
-      "systemRole": "Assistant",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-software"
-    },
-    {
-      "id": "user-assistantmanager",
-      "name": "Mrs. Ibrahim",
-      "email": "assistant.manager@npa.gov.ng",
-      "gradeLevel": "SSS1",
-      "systemRole": "Assistant Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance",
-      "department": "dept-accounts"
-    },
-    {
-      "id": "user-assistantmd",
-      "name": "Oluwatobi Mariam",
-      "email": "assistant.md@npa.gov.ng",
-      "gradeLevel": "SSS1",
-      "systemRole": "Assistant",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-abuja",
-      "department": "dept-abuja"
-    },
-    {
-      "id": "user-asst3",
-      "name": "Ibrahim Lawal",
-      "email": "asst3@npa.gov.ng",
-      "gradeLevel": "JSS3",
-      "systemRole": "Assistant",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-marine",
-      "department": "dept-vessel"
-    },
-    {
-      "id": "user-asst_mgr",
-      "name": "Femi Adesina",
-      "email": "asstmgr@npa.gov.ng",
-      "gradeLevel": "SSS1",
-      "systemRole": "Assistant Manager",
-      "active": true,
-      "department": "dept-hr-management"
-    },
-    {
-      "id": "user-edets",
-      "name": "Engr. Umar",
-      "email": "ed.ets@npa.gov.ng",
-      "gradeLevel": "EDCS",
-      "systemRole": "Executive Director",
-      "active": true
-    },
-    {
-      "id": "user-edfa",
-      "name": "Mrs. Richard-Edet",
-      "email": "ed.fa@npa.gov.ng",
-      "gradeLevel": "EDCS",
-      "systemRole": "Executive Director",
-      "active": true
-    },
-    {
-      "id": "user-edmo",
-      "name": "Engr. Badmus",
-      "email": "ed.mo@npa.gov.ng",
-      "gradeLevel": "EDCS",
-      "systemRole": "Executive Director",
-      "active": true
-    },
-    {
-      "id": "user-gmadmin",
-      "name": "Mrs. Obi-Okafor",
-      "email": "gm.admin@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin"
-    },
-    {
-      "id": "user-gmaudit",
-      "name": "Gofwan Paul",
-      "email": "gm.audit@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-audit"
-    },
-    {
-      "id": "user-gmcsc",
-      "name": "Onyemekara C.",
-      "email": "gm.csc@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-csc"
-    },
-    {
-      "id": "user-gmcsp",
-      "name": "Iyawe Akinyemi",
-      "email": "gm.csp@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-csp"
-    },
-    {
-      "id": "user-gmengineering",
-      "name": "Isa Umar",
-      "email": "gm.engineering@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-engineering"
-    },
-    {
-      "id": "user-gmfinance",
-      "name": "Danbatta M.",
-      "email": "gm.finance@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance"
-    },
-    {
-      "id": "user-gmhr",
-      "name": "Dantiye Magaji",
-      "email": "gm.hr@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-hr"
-    },
-    {
-      "id": "user-gmhse",
-      "name": "Engr. Sani",
-      "email": "gm.hse@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-hse"
-    },
-    {
-      "id": "user-gmict",
-      "name": "Gbotolorun Ayodele",
-      "email": "gm.ict@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict"
-    },
-    {
-      "id": "user-gmlandsassets",
-      "name": "Chioma Okoro",
-      "email": "gm.lands@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edets",
-      "division": "div-lands-assets"
-    },
-    {
-      "id": "user-gmlegal",
-      "name": "Barr. Okafor",
-      "email": "gm.legal.services@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-legal"
-    },
-    {
-      "id": "user-gmliaison",
-      "name": "Mrs. Suleiman",
-      "email": "gm.liaison@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-abuja"
-    },
-    {
-      "id": "user-gmmarinealt",
-      "name": "Capt. Okafor",
-      "email": "gm.marine.alt@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-marine"
-    },
-    {
-      "id": "user-gmmdoffice",
-      "name": "Mr. Manager",
-      "email": "gm.md.office@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-gm-md-office"
-    },
-    {
-      "id": "user-gmmedical",
-      "name": "Dr. Nwosu",
-      "email": "gm.medical@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-medical"
-    },
-    {
-      "id": "user-gmmonitoring",
-      "name": "Salau Adesina",
-      "email": "gm.monitoring@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-monitoring"
-    },
-    {
-      "id": "user-gmoperations",
-      "name": "Mr. Lawal",
-      "email": "gm.ops@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-operations"
-    },
-    {
-      "id": "user-gmoversealiaison",
-      "name": "Mrs. Ogbonna",
-      "email": "gm.oversea.liaison@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-oversea"
-    },
-    {
-      "id": "user-gmppp",
-      "name": "Abdulkadir Nurudeen",
-      "email": "gm.ppp@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ppp"
-    },
-    {
-      "id": "user-gmprocurement",
-      "name": "Adedapo Adekunle",
-      "email": "gm.procurement@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-procurement"
-    },
-    {
-      "id": "user-gmregulatory",
-      "name": "Wanka Yakubu",
-      "email": "gm.regulatory@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-regulatory"
-    },
-    {
-      "id": "user-gmseaviewproperties",
-      "name": "Mr. Nwankwo",
-      "email": "gm.seaview.properties@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-seaview-properties"
-    },
-    {
-      "id": "user-gmsecurity",
-      "name": "Edosomwan Anthony",
-      "email": "gm.security@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-security"
-    },
-    {
-      "id": "user-gmservicom",
-      "name": "Mr. Ibrahim",
-      "email": "gm.servicom@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-servicom"
-    },
-    {
-      "id": "user-gmspecialduties",
-      "name": "Engr. T.",
-      "email": "gm.specialduties@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-special-duties"
-    },
-    {
-      "id": "user-gmsuperannuationinvestment",
-      "name": "Temi Hassan",
-      "email": "gm.superannuation@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-S&I"
-    },
-    {
-      "id": "user-gmtariff",
-      "name": "Lukman Olanrewaju",
-      "email": "gm.tariff@npa.gov.ng",
-      "gradeLevel": "MSS1",
-      "systemRole": "General Manager",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-tariff"
-    },
-    {
-      "id": "user-managersupport",
-      "name": "Mustapha Favour",
-      "email": "manager.support@npa.gov.ng",
-      "gradeLevel": "MSS5",
-      "systemRole": "Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-hardware"
-    },
-    {
-      "id": "user-md",
-      "name": "Dr. Dantsoho",
-      "email": "md@npa.gov.ng",
-      "gradeLevel": "MDCS",
-      "systemRole": "Managing Director",
-      "active": true
-    },
-    {
-      "id": "user-mgr",
-      "name": "Seun Bakare",
-      "email": "mgr@npa.gov.ng",
-      "gradeLevel": "MSS5",
-      "systemRole": "Manager",
-      "active": true,
-      "department": "dept-civil"
-    },
-    {
-      "id": "user-officer1",
-      "name": "James Okafor",
-      "email": "officer1@npa.gov.ng",
-      "gradeLevel": "SSS3",
-      "systemRole": "Officer I",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict"
-    },
-    {
-      "id": "user-officer2",
-      "name": "Aisha Mohammed",
-      "email": "officer2@npa.gov.ng",
-      "gradeLevel": "SSS4",
-      "systemRole": "Officer II",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance"
-    },
-    {
-      "id": "user-officer_i",
-      "name": "Tunde Adeyemi",
-      "email": "officeri@npa.gov.ng",
-      "gradeLevel": "SSS3",
-      "systemRole": "Officer I",
-      "active": true
-    },
-    {
-      "id": "user-officer_ii",
-      "name": "Kemi Ogunleye",
-      "email": "officerii@npa.gov.ng",
-      "gradeLevel": "SSS4",
-      "systemRole": "Officer II",
-      "active": true,
-      "department": "dept-hr-learning-development"
-    },
-    {
-      "id": "user-officeradmin",
-      "name": "Tolu Okafor",
-      "email": "officer.admin@npa.gov.ng",
-      "gradeLevel": "SSS3",
-      "systemRole": "Officer",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin",
-      "department": "dept-admin-archives"
-    },
-    {
-      "id": "user-officerdev",
-      "name": "Mr. Nwosu",
-      "email": "officer.dev@npa.gov.ng",
-      "gradeLevel": "SSS2",
-      "systemRole": "Senior Officer",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-software"
-    },
-    {
-      "id": "user-officersupport",
-      "name": "Miss Mohammed",
-      "email": "officer.support@npa.gov.ng",
-      "gradeLevel": "SSS4",
-      "systemRole": "Officer",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-hardware"
-    },
-    {
-      "id": "user-pamd",
-      "name": "Grace Nnaji",
-      "email": "pamd@npa.gov.ng",
-      "gradeLevel": "SSS2",
-      "systemRole": "Personal Assistant",
-      "active": true
-    },
-    {
-      "id": "user-pmgr",
-      "name": "Ngozi Eze",
-      "email": "pmgr@npa.gov.ng",
-      "gradeLevel": "MSS3",
-      "systemRole": "Principal Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance"
-    },
-    {
-      "id": "user-pmsadm",
-      "name": "Maureen Ukonu",
-      "email": "pmsadm@npa.gov.ng",
-      "gradeLevel": "MSS3",
-      "systemRole": "Principal Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-networks"
-    },
-    {
-      "id": "user-pmsoftware",
-      "name": "Kayode Bello",
-      "email": "pm.software@npa.gov.ng",
-      "gradeLevel": "MSS3",
-      "systemRole": "Principal Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-software"
-    },
-    {
-      "id": "user-sec_md",
-      "name": "Tolulope Okafor",
-      "email": "secmd@npa.gov.ng",
-      "gradeLevel": "SSS2",
-      "systemRole": "Secretary",
-      "active": true
-    },
-    {
-      "id": "user-secretaryed",
-      "name": "Miss Ibrahim",
-      "email": "secretary.ed@npa.gov.ng",
-      "gradeLevel": "SSS2",
-      "systemRole": "Secretary",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-software"
-    },
-    {
-      "id": "user-secretarymd",
-      "name": "Mrs. Bello",
-      "email": "secretary.md@npa.gov.ng",
-      "gradeLevel": "SSS2",
-      "systemRole": "Secretary",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-abuja",
-      "department": "dept-abuja"
-    },
-    {
-      "id": "user-smfinance",
-      "name": "Adeyemi Adeleke",
-      "email": "sm.finance@npa.gov.ng",
-      "gradeLevel": "MSS4",
-      "systemRole": "Senior Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-finance",
-      "department": "dept-finance"
-    },
-    {
-      "id": "user-smgr2",
-      "name": "Hassan Yusuf",
-      "email": "smgr2@npa.gov.ng",
-      "gradeLevel": "MSS4",
-      "systemRole": "Senior Manager",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict"
-    },
-    {
-      "id": "user-smhr",
-      "name": "Adekunle Femi",
-      "email": "sm.hr@npa.gov.ng",
-      "gradeLevel": "MSS4",
-      "systemRole": "Senior Manager",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-hr",
-      "department": "dept-hr-management"
-    },
-    {
-      "id": "user-sofficer",
-      "name": "Rashida Bello",
-      "email": "sofficer@npa.gov.ng",
-      "gradeLevel": "SSS2",
-      "systemRole": "Senior Officer",
-      "active": true,
-      "department": "dept-civil"
-    },
-    {
-      "id": "user-staff1",
-      "name": "Peter Nwosu",
-      "email": "staff1@npa.gov.ng",
-      "gradeLevel": "JSS1",
-      "systemRole": "Staff I",
-      "active": true,
-      "department": "dept-civil"
-    },
-    {
-      "id": "user-staff2",
-      "name": "Fatima Abubakar",
-      "email": "staff2@npa.gov.ng",
-      "gradeLevel": "JSS2",
-      "systemRole": "Staff II",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-marine",
-      "department": "dept-vessel"
-    },
-    {
-      "id": "user-staff3",
-      "name": "Chidi Eze",
-      "email": "staff3@npa.gov.ng",
-      "gradeLevel": "JSS3",
-      "systemRole": "Staff III",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin",
-      "department": "dept-admin-general"
-    },
-    {
-      "id": "user-staff_i",
-      "name": "Bola Adebayo",
-      "email": "staffi@npa.gov.ng",
-      "gradeLevel": "JSS1",
-      "systemRole": "Staff I",
-      "active": true,
-      "directorate": "dir-edmo",
-      "division": "div-marine",
-      "department": "dept-vessel"
-    },
-    {
-      "id": "user-staff_ii",
-      "name": "Emeka Okafor",
-      "email": "staffii@npa.gov.ng",
-      "gradeLevel": "JSS2",
-      "systemRole": "Staff II",
-      "active": true
-    },
-    {
-      "id": "user-staff_iii",
-      "name": "Zainab Mohammed",
-      "email": "staffiii@npa.gov.ng",
-      "gradeLevel": "JSS3",
-      "systemRole": "Staff III",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin",
-      "department": "dept-admin-facility"
-    },
-    {
-      "id": "user-staffjunior",
-      "name": "Mr. Okoro",
-      "email": "staff.junior@npa.gov.ng",
-      "gradeLevel": "JSS3",
-      "systemRole": "Staff",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-admin",
-      "department": "dept-admin-facility"
-    },
-    {
-      "id": "user-staffmid",
-      "name": "Miss Adeyemi",
-      "email": "staff.mid@npa.gov.ng",
-      "gradeLevel": "JSS2",
-      "systemRole": "Staff",
-      "active": true,
-      "directorate": "dir-edfa",
-      "division": "div-hr",
-      "department": "dept-hr-management"
-    },
-    {
-      "id": "user-staffsenior",
-      "name": "Mr. Ojo",
-      "email": "staff.senior@npa.gov.ng",
-      "gradeLevel": "JSS1",
-      "systemRole": "Staff",
-      "active": true,
-      "directorate": "dir-md",
-      "division": "div-ict",
-      "department": "dept-ict-software"
-    },
-    {
-      "id": "user-superadmin",
-      "name": "Super Admin",
-      "email": "superadmin@npa.gov.ng",
-      "gradeLevel": "MDCS",
-      "systemRole": "Super Admin",
       "active": true
     }
   ],
@@ -3261,1078 +1876,6 @@
       "isActive": true,
       "allowExternalIntake": true,
       "allowLateralRouting": true
-    }
-  ],
-  "OFFICE_MEMBERSHIPS": [
-    {
-      "officeId": "office-dept-abuja",
-      "userId": "user-agmabuja",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-accounts",
-      "userId": "user-agmaccounts",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-admin-archives",
-      "userId": "user-agmadminarchives",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-admin-facility",
-      "userId": "user-agmadminfacility",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-admin-general",
-      "userId": "user-agmadmingeneral",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-atons-vts",
-      "userId": "user-agmatonsvts",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-audit-finance",
-      "userId": "user-agmauditfinance",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-audit-policy",
-      "userId": "user-agmauditpolicy",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-audit-systems",
-      "userId": "user-agmauditsystems",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-bids-mgt-selection",
-      "userId": "user-agmbms",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-board-registry",
-      "userId": "user-agmboardregistry",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-budget",
-      "userId": "user-agmbudget",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-civil",
-      "userId": "user-agmcivil",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-compliance-records",
-      "userId": "user-agmcr",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-csc-csr",
-      "userId": "user-agmcsccsr",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-csc-pem",
-      "userId": "user-agmcscpem",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-csp-planning",
-      "userId": "user-agmcspplanning",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-csp-research",
-      "userId": "user-agmcspresearch",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-electrical",
-      "userId": "user-agmelectrical",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-environment",
-      "userId": "user-agmenvironment",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-erm",
-      "userId": "user-agmerm",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-finance",
-      "userId": "user-agmfinance",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-fire-rescue",
-      "userId": "user-agmfirerescue",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-harbours",
-      "userId": "user-agmharbours",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-hr-labour",
-      "userId": "user-agmhrlabour",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-hr-learning-development",
-      "userId": "user-agmhrld",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-hr-management",
-      "userId": "user-agmhrmgt",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-hydrographic",
-      "userId": "user-agmhydrographic",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-hardware",
-      "userId": "user-agminfra",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-investment",
-      "userId": "user-agminvestment",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-land-estate",
-      "userId": "user-agmlandsassets",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-legal",
-      "userId": "user-agmlegal",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-medical",
-      "userId": "user-agmmedical",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-monitoring",
-      "userId": "user-agmmonitoring",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-new-business-venture",
-      "userId": "user-agmnbv",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-networks",
-      "userId": "user-agmnetworks",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-nursing",
-      "userId": "user-agmnursing",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-occupational",
-      "userId": "user-agmoccupational",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-operations",
-      "userId": "user-agmoperations",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-performance",
-      "userId": "user-agmperformance",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-pharmacy",
-      "userId": "user-agmpharmacy",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ports-eng",
-      "userId": "user-agmportseng",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-physical-planning-dev",
-      "userId": "user-agmppd",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-public-private-partnership",
-      "userId": "user-agmppp",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-projects",
-      "userId": "user-agmprojects",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-radiology",
-      "userId": "user-agmradiology",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-regulatory",
-      "userId": "user-agmregulatory",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-research",
-      "userId": "user-agmresearch",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-safety",
-      "userId": "user-agmsafety",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-seaview-properties",
-      "userId": "user-agmseaviewproperties",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-security",
-      "userId": "user-agmsecurity",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-servicom",
-      "userId": "user-agmservicom",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-software",
-      "userId": "user-agmsoftware",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-superannuation",
-      "userId": "user-agmsuperannuation",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-tariff",
-      "userId": "user-agmtariff",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-tax",
-      "userId": "user-agmtax",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-vessel",
-      "userId": "user-agmvessel",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-software",
-      "userId": "user-assistantgm",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-accounts",
-      "userId": "user-assistantmanager",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-abuja",
-      "userId": "user-assistantmd",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-edets",
-      "userId": "user-edets",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-edfa",
-      "userId": "user-edfa",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-edmo",
-      "userId": "user-edmo",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-admin",
-      "userId": "user-gmadmin",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-audit",
-      "userId": "user-gmaudit",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-csc",
-      "userId": "user-gmcsc",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-csp",
-      "userId": "user-gmcsp",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-engineering",
-      "userId": "user-gmengineering",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-finance",
-      "userId": "user-gmfinance",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-hr",
-      "userId": "user-gmhr",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-hse",
-      "userId": "user-gmhse",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-ict",
-      "userId": "user-gmict",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-lands-assets",
-      "userId": "user-gmlandsassets",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-legal",
-      "userId": "user-gmlegal",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-abuja",
-      "userId": "user-gmliaison",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-marine",
-      "userId": "user-gmmarinealt",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-gm-md-office",
-      "userId": "user-gmmdoffice",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-medical",
-      "userId": "user-gmmedical",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-monitoring",
-      "userId": "user-gmmonitoring",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-operations",
-      "userId": "user-gmoperations",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-oversea",
-      "userId": "user-gmoversealiaison",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-ppp",
-      "userId": "user-gmppp",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-procurement",
-      "userId": "user-gmprocurement",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-regulatory",
-      "userId": "user-gmregulatory",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-seaview-properties",
-      "userId": "user-gmseaviewproperties",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-security",
-      "userId": "user-gmsecurity",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-servicom",
-      "userId": "user-gmservicom",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-special-duties",
-      "userId": "user-gmspecialduties",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-S&I",
-      "userId": "user-gmsuperannuationinvestment",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-div-tariff",
-      "userId": "user-gmtariff",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-hardware",
-      "userId": "user-managersupport",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-md",
-      "userId": "user-md",
-      "assignmentRole": "principal",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": true,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-admin-archives",
-      "userId": "user-officeradmin",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-software",
-      "userId": "user-officerdev",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-hardware",
-      "userId": "user-officersupport",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-csp-planning",
-      "userId": "user-pamd",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-networks",
-      "userId": "user-pmsadm",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-software",
-      "userId": "user-pmsoftware",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-edets",
-      "userId": "user-secretaryed",
-      "assignmentRole": "secretariat",
-      "isPrimary": false,
-      "canRegister": true,
-      "canRoute": false,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-edfa",
-      "userId": "user-secretaryed",
-      "assignmentRole": "secretariat",
-      "isPrimary": false,
-      "canRegister": true,
-      "canRoute": false,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-edmo",
-      "userId": "user-secretaryed",
-      "assignmentRole": "secretariat",
-      "isPrimary": false,
-      "canRegister": true,
-      "canRoute": false,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dir-md",
-      "userId": "user-secretarymd",
-      "assignmentRole": "secretariat",
-      "isPrimary": false,
-      "canRegister": true,
-      "canRoute": false,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-finance",
-      "userId": "user-smfinance",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-hr-management",
-      "userId": "user-smhr",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-admin-facility",
-      "userId": "user-staffjunior",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-hr-management",
-      "userId": "user-staffmid",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
-    },
-    {
-      "officeId": "office-dept-ict-software",
-      "userId": "user-staffsenior",
-      "assignmentRole": "staff",
-      "isPrimary": true,
-      "canRegister": true,
-      "canRoute": true,
-      "canApprove": false,
-      "isActive": true
     }
   ],
   "GRADE_LEVELS": [

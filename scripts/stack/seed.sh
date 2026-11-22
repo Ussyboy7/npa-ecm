@@ -24,7 +24,7 @@ MANAGE_ARGS=("$@")
 
 stack_init_env "$ENVIRONMENT"
 
-echo "Seeding demo data in ${STACK_ENVIRONMENT}..."
+echo "Seeding NPA structure and staff in ${STACK_ENVIRONMENT}..."
 if [[ ${#MANAGE_ARGS[@]} -gt 0 ]]; then
     stack_backend_manage seed_demo_data "${MANAGE_ARGS[@]}"
 else

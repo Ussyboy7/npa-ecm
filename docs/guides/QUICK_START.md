@@ -18,24 +18,25 @@ scripts/local/env-manager.sh start
 | Swagger | http://localhost:8002/api/docs |
 | Health (liveness) | http://localhost:8002/api/v1/health/live/ |
 
-### Dev login users
+### Login accounts
 
-Created automatically on backend start (`ensure_dev_login_users`):
+`superadmin` / `ChangeMe123!` is created automatically on backend start (`ensure_dev_login_users`).
+
+Staff accounts come from the NPA nominal roll (`backend/scripts/nominal_roll.xlsx`):
 
 | Username | Password | Role |
 |----------|----------|------|
-| `superadmin` | `ChangeMe123!` | System admin |
-| `md` | `ChangeMe123!` | Managing Director |
-| `edfa` | `ChangeMe123!` | Executive Director |
-| `gmict` | `ChangeMe123!` | GM ICT |
-| `pamd` | `ChangeMe123!` | PA to MD |
+| `superadmin` | `ChangeMe123!` | Break-glass system admin |
+| real staff (e.g. `md`) | `ChangeMe123!` until changed | Imported role and office |
 
-### Demo data (optional)
+### Seeding NPA users (optional)
 
 ```bash
 scripts/local/env-manager.sh seed
 # or: docker exec ecm-backend-local python manage.py seed_demo_data
 ```
+
+Add `--with-demo-content` if you also want sample documents and correspondence.
 
 ---
 

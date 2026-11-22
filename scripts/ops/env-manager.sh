@@ -34,9 +34,8 @@ Commands:
   backend-status   Backend + DB smoke check
   shell            Shell into backend container
   migrate          Run Django migrations
-  seed             seed_demo_data
+  seed             Seed org structure + staff from the nominal roll
   load-users       Import nominal-roll users + roles/offices (dry run unless --apply)
-  seed-reset       Wipe + reseed (prompts)
   backup           Database snapshot (scripts/backup/backup-db.sh)
   verify-backup    Verify latest SQL backup integrity
   restore-backup   Restore from backup (scripts/backup/restore_backup.sh)
@@ -149,13 +148,6 @@ cmd_seed() {
 
 cmd_load_users() {
     "${SCRIPT_DIR}/../stack/load-users.sh" "$STACK_ENVIRONMENT" "$@"
-}
-
-cmd_seed_reset() {
-    ui_warning "This will DELETE existing seeded domain data."
-    read -r -p "Type 'YES' to continue: " confirm
-    [[ "$confirm" == "YES" ]] || return 0
-    "${SCRIPT_DIR}/../stack/seed.sh" "$STACK_ENVIRONMENT" -- --reset
 }
 
 cmd_backup() {
@@ -527,7 +519,6 @@ case "$CMD" in
     migrate)        cmd_migrate ;;
     seed)           cmd_seed "$@" ;;
     load-users)     cmd_load_users "$@" ;;
-    seed-reset)     cmd_seed_reset ;;
     backup)         cmd_backup ;;
     verify-backup)  cmd_verify_backup "$@" ;;
     restore-backup) cmd_restore_backup "$@" ;;

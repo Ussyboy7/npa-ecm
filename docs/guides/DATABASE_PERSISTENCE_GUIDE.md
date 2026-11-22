@@ -7,7 +7,7 @@ If database data (users, departments, divisions, directorates) is being wiped af
 
 1. **Docker volumes are being removed** - Using `docker-compose down -v` removes volumes
 2. **Database is being dropped/recreated** - Running bootstrap scripts that drop the database
-3. **Seed script with --reset flag** - Running `seed_demo_data --reset` wipes organization data
+3. **Database restore/rollback** - A restore that recreates the database replaces all rows with the snapshot's contents
 
 ### Solutions
 
@@ -29,13 +29,14 @@ CREATE DATABASE npa_ecm_stag OWNER ecmadmin;
 
 **This will wipe all data!** Only run this script on a fresh setup, never on an existing database.
 
-#### 3. Never Use --reset Flag in Production/Staging
+#### 3. Never Seed Over Live Data in Production/Staging
 ```bash
-# ❌ WRONG - This wipes organization data!
-scripts/seed-data.sh stag -- --reset
-
-# ✅ CORRECT - Only seed if needed, without reset
+# ❌ WRONG - Re-imports the roll and remaps roles/offices on live accounts
 scripts/seed-data.sh stag
+
+# ✅ CORRECT - Seed only when building a new environment; use
+# `load-users` for a controlled, reviewed import of the roll.
+scripts/staging/env-manager.sh load-users backend/scripts/nominal_roll.xlsx
 ```
 
 #### 4. Check Volume Status
@@ -70,7 +71,7 @@ Before deploying:
 During deployment:
 - [ ] Use `docker-compose down` (NOT `down -v`)
 - [ ] Run migrations: `python manage.py migrate` (NOT `migrate --run-syncdb` or `--reset`)
-- [ ] Never run `seed_demo_data --reset` in staging/production
+- [ ] Never run `seed_demo_data` in staging/production (it is a bootstrap step for new environments)
 
 After deployment:
 - [ ] Verify data still exists

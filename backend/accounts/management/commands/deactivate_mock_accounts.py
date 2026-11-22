@@ -1,9 +1,10 @@
-"""Safely deactivate seeded mock accounts without deleting them.
+"""Safely deactivate legacy mock accounts without deleting them.
 
-The command identifies mock accounts from the same MOCK_USERS source used by
-the demo seeder, reports every account and active office membership it would
-disable, and refuses --apply while any targeted account would remove the last
-active real principal from an office or still owns actionable open work.
+The mock seed data has been removed from the repository; the usernames it
+created are kept here so existing databases can still be cleaned up. The
+command reports every account and active office membership it would disable,
+and refuses --apply while any targeted account would remove the last active
+real principal from an office or still owns actionable open work.
 """
 
 from __future__ import annotations
@@ -21,8 +22,6 @@ from django.db.models import Q
 from accounts.models import User
 from audit.models import ActivityLog
 from audit.services import AuditService
-from common.management.commands.seed_demo_data import Command as SeedCommand
-from common.user_identity import canonical_username
 from correspondence.models import Case, Correspondence, CorrespondenceDistribution, Minute
 from organization.models import (
     ActingAppointment,
@@ -34,6 +33,134 @@ from organization.models import (
 from workflow.models import ApprovalTask
 
 HOLD_USERNAMES = frozenset({"superadmin"})
+
+# Usernames created by the former MOCK_USERS seed, retained only so existing
+# databases can be cleaned up. Nothing seeds these accounts any more.
+LEGACY_MOCK_USERNAMES = frozenset({
+    "agmabuja",
+    "agmaccounts",
+    "agmadminarchives",
+    "agmadminfacility",
+    "agmadmingeneral",
+    "agmatonsvts",
+    "agmauditfinance",
+    "agmauditpolicy",
+    "agmauditsystems",
+    "agmbms",
+    "agmboardregistry",
+    "agmbudget",
+    "agmcivil",
+    "agmcr",
+    "agmcsccsr",
+    "agmcscpem",
+    "agmcspplanning",
+    "agmcspresearch",
+    "agmelectrical",
+    "agmenvironment",
+    "agmerm",
+    "agmfinance",
+    "agmfirerescue",
+    "agmharbours",
+    "agmhrlabour",
+    "agmhrld",
+    "agmhrmgt",
+    "agmhydrographic",
+    "agmict",
+    "agminfra",
+    "agminvestment",
+    "agmlandsassets",
+    "agmlegal",
+    "agmmedical",
+    "agmmonitoring",
+    "agmnbv",
+    "agmnetworks",
+    "agmnursing",
+    "agmoccupational",
+    "agmoperations",
+    "agmperformance",
+    "agmpharmacy",
+    "agmportseng",
+    "agmppd",
+    "agmppp",
+    "agmprojects",
+    "agmradiology",
+    "agmregulatory",
+    "agmresearch",
+    "agmsafety",
+    "agmseaviewproperties",
+    "agmsecurity",
+    "agmservicom",
+    "agmsoftware",
+    "agmsuperannuation",
+    "agmtariff",
+    "agmtax",
+    "agmvessel",
+    "assistantgm",
+    "assistantmanager",
+    "assistantmd",
+    "asst3",
+    "asst_mgr",
+    "edets",
+    "edfa",
+    "edmo",
+    "gmadmin",
+    "gmaudit",
+    "gmcsc",
+    "gmcsp",
+    "gmengineering",
+    "gmfinance",
+    "gmhr",
+    "gmhse",
+    "gmict",
+    "gmlandsassets",
+    "gmlegal",
+    "gmliaison",
+    "gmmarinealt",
+    "gmmdoffice",
+    "gmmedical",
+    "gmmonitoring",
+    "gmoperations",
+    "gmoversealiaison",
+    "gmppp",
+    "gmprocurement",
+    "gmregulatory",
+    "gmseaviewproperties",
+    "gmsecurity",
+    "gmservicom",
+    "gmspecialduties",
+    "gmsuperannuationinvestment",
+    "gmtariff",
+    "managersupport",
+    "mgr",
+    "officer1",
+    "officer2",
+    "officer_i",
+    "officer_ii",
+    "officeradmin",
+    "officerdev",
+    "officersupport",
+    "pamd",
+    "pmgr",
+    "pmsadm",
+    "pmsoftware",
+    "sec_md",
+    "secretaryed",
+    "secretarymd",
+    "smfinance",
+    "smgr2",
+    "smhr",
+    "sofficer",
+    "staff1",
+    "staff2",
+    "staff3",
+    "staff_i",
+    "staff_ii",
+    "staff_iii",
+    "staffjunior",
+    "staffmid",
+    "staffsenior",
+    "superadmin",
+})
 OPEN_CORRESPONDENCE_STATUSES = ("pending", "in-progress")
 OPEN_CASE_STATUSES = ("open", "in_progress")
 OPEN_TASK_STATUSES = ("pending", "in-progress")
@@ -148,7 +275,7 @@ class Command(BaseCommand):
         )
         if not targets:
             raise CommandError(
-                "No mock accounts were found. Verify the seed source and database."
+                "No legacy mock accounts were found in this database."
             )
 
         all_memberships = list(
@@ -275,15 +402,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _seed_usernames() -> set[str]:
-        try:
-            data = SeedCommand()._load_structure_data()
-        except (OSError, ValueError) as exc:
-            raise CommandError(f"Could not load seed MOCK_USERS: {exc}") from exc
-        return {
-            canonical_username(entry.get("id") or entry.get("username"))
-            for entry in data.get("MOCK_USERS", [])
-            if entry.get("id") or entry.get("username")
-        }
+        return set(LEGACY_MOCK_USERNAMES)
 
     @staticmethod
     def _office_principals() -> dict[int, list[OfficeMembership]]:

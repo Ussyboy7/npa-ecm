@@ -33,10 +33,10 @@ Run from repo root with venv active (`make backend-install`).
 | Command | Description |
 |---------|-------------|
 | `make backend-migrate` | Run migrations |
-| `make backend-seed` | Load demo data |
+| `make backend-seed` | Seed org structure + staff from the nominal roll |
 | `make test-backend` | Django tests via `settings_test` (needs Postgres) |
 | `make security-check` | bandit + pip-audit |
-| `python manage.py ensure_dev_login_users` | Bootstrap dev login users (local Docker entrypoint) |
+| `python manage.py ensure_dev_login_users` | Ensure the superadmin break-glass login (local Docker entrypoint) |
 | `python manage.py setup_role_permissions --force` | Sync role permission presets (deploy/CI) |
 | `cd backend && python manage.py makemigrations --check --dry-run` | Catch missing migrations |
 

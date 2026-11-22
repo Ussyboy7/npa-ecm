@@ -1,19 +1,23 @@
-"""Seed the database with demo data matching the frontend mocks."""
+"""Seed the NPA organisation structure and user accounts.
+
+User accounts come from the NPA nominal roll, never from mock seed data.
+Demo documents and correspondence are opt-in via ``--with-demo-content``.
+"""
 
 from __future__ import annotations
 
 import json
 from datetime import date, timedelta
 from pathlib import Path
+from tempfile import gettempdir
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management import call_command
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
 from analytics.models import ReportSnapshot, UsageMetric
-from common.grade_utils import MANAGEMENT_GRADES
-from common.user_identity import canonical_email, canonical_employee_id, canonical_username
 from correspondence.models import (
     Case,
     CaseCorrespondenceLink,
@@ -40,7 +44,7 @@ from dms.models import (
     DocumentVersion,
     FormDocument,
 )
-from organization.models import Department, Directorate, Division, Office, OfficeMembership, Role
+from organization.models import Department, Directorate, Division, Office, OfficeMembership
 from support.models import FaqEntry, HelpGuide, SupportTicket
 from workflow.models import ApprovalTask, TaskAction, WorkflowStep, WorkflowTemplate
 
@@ -68,70 +72,93 @@ def parse_structure_data(content: str) -> dict:
 
 
 class Command(BaseCommand):
-    help = "Seed demo data for development environments."
+    help = "Seed the NPA organisation structure and user accounts from the nominal roll."
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--reset",
-            action="store_true",
-            help="Purge existing organization structure before seeding",
+            "--nominal-roll",
+            type=Path,
+            default=Path(__file__).resolve().parents[3] / "scripts" / "nominal_roll.xlsx",
+            help="Path to the NPA nominal-roll workbook used to seed user accounts.",
         )
         parser.add_argument(
             "--skip-users",
             action="store_true",
-            help="Skip creating mock users (only seed organization structure)",
+            help="Skip importing the nominal roll (only seed organisation structure).",
+        )
+        parser.add_argument(
+            "--with-demo-content",
+            action="store_true",
+            help="Also seed sample documents, correspondence, cases, and support content.",
         )
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.MIGRATE_HEADING("Starting demo data seeding"))
+        self.stdout.write(self.style.MIGRATE_HEADING("Starting data seeding"))
 
         data = self._load_structure_data()
+        roll_path = Path(options["nominal_roll"])
 
         with transaction.atomic():
-            if options.get("reset"):
-                self._reset_organization_units()
             directorates, divisions, departments = self._ensure_organization_units(data)
             offices = self._ensure_offices(data, directorates, divisions, departments)
-            
-            # Only create users if not skipped
-            if options.get("skip_users"):
-                self.stdout.write(self.style.WARNING("Skipping mock user creation (--skip-users flag set)"))
-                users = {u.username: u for u in User.objects.filter(is_active=True)}
-                self.stdout.write(self.style.SUCCESS(f"Using {len(users)} existing active users"))
-            else:
-                users = self._ensure_users(data.get("MOCK_USERS", []), directorates, divisions, departments)
-            
-            # Only assign leadership and create demo data if users were created
-            if users:
-                self._assign_org_leadership(data, directorates, divisions, departments, users)
-                self._ensure_office_memberships(data, offices, users)
-                self._ensure_leadership_office_memberships(directorates, divisions, departments)
-                documents = self._ensure_documents(users, divisions, departments)
-                correspondence_items = self._ensure_correspondence(users, divisions, departments, documents, offices)
-                self._ensure_workflows(users, correspondence_items)
-                self._ensure_support_content(users)
-                self._ensure_analytics(users)
-                self._ensure_physical_tracking(users, correspondence_items, documents)
-                self._ensure_drm_policies()
-                self._ensure_case_templates(users)
-                self._ensure_correspondence_templates()
-                self._ensure_audit_form_templates()
-                self._ensure_project_cases(users, divisions, departments, offices)
-                self._ensure_audit_case_aggregate()
-            else:
-                self.stdout.write(self.style.WARNING("Skipping demo data creation (no users available)"))
-                
-        # Collapse any leftover user-* shells into login usernames (idempotent).
-        if not options.get("skip_users"):
-            from django.core.management import call_command
 
-            self.stdout.write("Canonicalizing user identities…")
-            call_command("canonicalize_users", stdout=self.stdout, stderr=self.stderr)
+            if options.get("skip_users"):
+                self.stdout.write(self.style.WARNING("Skipping nominal-roll import (--skip-users flag set)"))
+            else:
+                if not roll_path.exists():
+                    raise CommandError(
+                        f"Nominal roll not found: {roll_path}. "
+                        "Pass --nominal-roll or use --skip-users."
+                    )
+                self.stdout.write(self.style.MIGRATE_HEADING(f"Importing users from {roll_path.name}"))
+                call_command(
+                    "import_nominal_roll",
+                    str(roll_path),
+                    apply=True,
+                    stdout=self.stdout,
+                    stderr=self.stderr,
+                )
+                self.stdout.write(self.style.MIGRATE_HEADING("Mapping roles and primary offices"))
+                call_command(
+                    "assign_nominal_roll_roles",
+                    str(roll_path),
+                    out=Path(gettempdir()) / "nominal_roll-role-office-mapping.csv",
+                    apply=True,
+                    stdout=self.stdout,
+                    stderr=self.stderr,
+                )
+
+            users = {u.username: u for u in User.objects.filter(is_active=True)}
+            self.stdout.write(self.style.SUCCESS(f"Using {len(users)} active user accounts"))
+
+            if options.get("with_demo_content"):
+                if not users:
+                    self.stdout.write(self.style.WARNING("Skipping demo content (no users available)"))
+                else:
+                    self._assign_org_leadership(data, directorates, divisions, departments, users)
+                    self._ensure_office_memberships(data, offices, users)
+                    self._ensure_leadership_office_memberships(directorates, divisions, departments)
+                    documents = self._ensure_documents(users, divisions, departments)
+                    correspondence_items = self._ensure_correspondence(users, divisions, departments, documents, offices)
+                    self._ensure_workflows(users, correspondence_items)
+                    self._ensure_support_content(users)
+                    self._ensure_analytics(users)
+                    self._ensure_physical_tracking(users, correspondence_items, documents)
+                    self._ensure_case_templates(users)
+                    self._ensure_project_cases(users, divisions, departments, offices)
+                    self._ensure_audit_case_aggregate()
+            else:
+                self.stdout.write(self.style.WARNING("Skipping demo content (--with-demo-content not set)"))
+
+        # Templates and policies are application configuration, not sample data.
+        self._ensure_drm_policies()
+        self._ensure_correspondence_templates()
+        self._ensure_audit_form_templates()
 
         # Set up role permissions
         self._setup_role_permissions()
 
-        self.stdout.write(self.style.SUCCESS("Demo data seeding complete."))
+        self.stdout.write(self.style.SUCCESS("Data seeding complete."))
 
     def _load_structure_data(self) -> dict:
         data_path = Path(__file__).resolve().parents[3] / "scripts" / "organization_data.json"
@@ -139,19 +166,6 @@ class Command(BaseCommand):
             raise FileNotFoundError("Expected organization_data.json to seed organization structure")
         
         return parse_structure_data(data_path.read_text())
-
-    def _reset_organization_units(self) -> None:
-        self.stdout.write("Purging existing organization hierarchy…")
-        # Purge dependent records first to avoid FK constraint issues
-        from accounts.models import DocumentSeal
-        DocumentSeal.objects.all().delete()
-        # Purge users
-        User.objects.all().delete()
-        self.stdout.write(self.style.WARNING("Existing users removed."))
-        Department.objects.all().delete()
-        Division.objects.all().delete()
-        Directorate.objects.all().delete()
-        self.stdout.write(self.style.WARNING("Existing directorates, divisions, and departments removed."))
 
     def _ensure_organization_units(self, data: dict):
         directorate_map: dict[str, Directorate] = {}
@@ -461,196 +475,6 @@ class Command(BaseCommand):
 
         if created:
             self.stdout.write(self.style.SUCCESS(f"Ensured {created} leadership office memberships."))
-
-    def _ensure_users(
-        self,
-        users_data: list[dict],
-        directorates: dict[str, Directorate],
-        divisions: dict[str, Division],
-        departments: dict[str, Department],
-    ) -> dict[str, User]:
-        created_users: dict[str, User] = {}
-        pending_assignments: list[tuple[str, str | None, str | None, str | None]] = []
-
-        management_grades = MANAGEMENT_GRADES
-
-        def resolve_email(desired_email: str, username: str) -> str | None:
-            """Return canonical email if free (or already owned by username); else None."""
-            email = canonical_email(desired_email or f"{username}@npa.gov.ng")
-            if not email:
-                return None
-            conflict = User.objects.filter(email__iexact=email).exclude(username=username).first()
-            if conflict:
-                return None
-            return email
-
-        def resolve_employee_id(desired_employee_id: str, username: str) -> str | None:
-            employee_id = canonical_employee_id(desired_employee_id or "")
-            if not employee_id:
-                return None
-            conflict = (
-                User.objects.filter(employee_id=employee_id).exclude(username=username).first()
-            )
-            if conflict:
-                return None
-            return employee_id
-
-        for entry in users_data:
-            source_key = entry.get("id") or entry.get("username")
-            if not source_key:
-                continue
-            username = canonical_username(source_key)
-
-            name = (entry.get("name") or "").strip()
-            name_parts = name.split()
-            first_name = name_parts[0] if name_parts else username
-            last_name = name_parts[-1] if len(name_parts) > 1 else ""
-
-            # Look up or create Role object by name
-            system_role = None
-            system_role_name = entry.get("systemRole", "").strip()
-            if system_role_name:
-                system_role, _ = Role.objects.get_or_create(
-                    name=system_role_name,
-                    defaults={
-                        "description": f"System role: {system_role_name}",
-                        "is_system": True,
-                    },
-                )
-
-            defaults = {
-                "first_name": first_name,
-                "last_name": last_name,
-                "system_role": system_role,
-                "grade_level": entry.get("gradeLevel", ""),
-                "is_management": entry.get("gradeLevel", "") in management_grades,
-            }
-            email = resolve_email(entry.get("email") or f"{username}@npa.gov.ng", username)
-            if email:
-                defaults["email"] = email
-            employee_id = resolve_employee_id(entry.get("employeeId", ""), username)
-            if employee_id:
-                defaults["employee_id"] = employee_id
-
-            user, created = User.objects.update_or_create(
-                username=username,
-                defaults=defaults,
-            )
-            if created and not user.email:
-                # Last-resort unique placeholder so NOT NULL constraints pass.
-                placeholder = f"{username}@npa.gov.ng"
-                if not User.objects.filter(email__iexact=placeholder).exclude(pk=user.pk).exists():
-                    user.email = placeholder
-                    user.save(update_fields=["email"])
-            if created or not user.has_usable_password():
-                user.set_password("ChangeMe123!")
-                user.save(update_fields=["password"])
-
-            created_users[source_key] = user
-            created_users[username] = user
-            pending_assignments.append(
-                (source_key, entry.get("directorate"), entry.get("division"), entry.get("department"))
-            )
-
-        # Ensure super admin account
-        superadmin_role, _ = Role.objects.get_or_create(
-            name="Super Admin",
-            defaults={
-                "description": "Super Administrator with full system access",
-                "is_system": True,
-            },
-        )
-        superadmin_defaults = {
-            "first_name": "Super",
-            "last_name": "Admin",
-            "is_staff": True,
-            "is_superuser": True,
-            "system_role": superadmin_role,
-            "grade_level": "MDCS",
-            "is_management": True,
-        }
-        email = resolve_email("superadmin@npa.gov.ng", "superadmin")
-        if email:
-            superadmin_defaults["email"] = email
-        superadmin, created = User.objects.update_or_create(
-            username="superadmin",
-            defaults=superadmin_defaults,
-        )
-        if created or not superadmin.has_usable_password():
-            superadmin.set_password("ChangeMe123!")
-            superadmin.save(update_fields=["password"])
-        # Assign superadmin to MD's directorate
-        directorate_md = directorates.get("dir-md")
-        if directorate_md:
-            superadmin.directorate = directorate_md
-            superadmin.division = None
-            superadmin.department = None
-            superadmin.save(update_fields=["directorate", "division", "department"])
-        created_users["superadmin"] = superadmin
-
-        # Apply organizational placement
-        for username, directorate_id, division_id, department_id in pending_assignments:
-            user = created_users.get(username)
-            if not user:
-                continue
-            division = divisions.get(division_id)
-            department = departments.get(department_id)
-            directorate = directorates.get(directorate_id) if directorate_id else None
-            if not directorate:
-                if department and department.division:
-                    directorate = department.division.directorate
-                elif division:
-                    directorate = division.directorate
-            user.division = division
-            user.department = department
-            user.directorate = directorate
-            user.save(update_fields=["division", "department", "directorate"])
-
-        # Ensure personal assistant demo account exists even if missing from source data
-        pa_source_key = "user-pa-md"
-        pa_username = canonical_username(pa_source_key)
-        if pa_username not in created_users and pa_source_key not in created_users:
-            pa_role, _ = Role.objects.get_or_create(
-                name="Personal Assistant",
-                defaults={"description": "Personal Assistant role", "is_system": True},
-            )
-            pamd_defaults = {
-                "first_name": "Grace",
-                "last_name": "Nnaji",
-                "system_role": pa_role,
-                "grade_level": "SSS2",
-                "is_management": False,
-            }
-            email = resolve_email("pa.md@npa.gov.ng", pa_username)
-            if email:
-                pamd_defaults["email"] = email
-            employee_id = resolve_employee_id("NPA-PA-001", pa_username)
-            if employee_id:
-                pamd_defaults["employee_id"] = employee_id
-            pamd_user, created = User.objects.update_or_create(
-                username=pa_username,
-                defaults=pamd_defaults,
-            )
-            if created or not pamd_user.has_usable_password():
-                pamd_user.set_password("ChangeMe123!")
-                pamd_user.save(update_fields=["password"])
-            directorate_md = directorates.get("dir-md")
-            if directorate_md:
-                pamd_user.directorate = directorate_md
-                pamd_user.division = None
-                pamd_user.department = None
-                pamd_user.save(update_fields=["directorate", "division", "department"])
-            created_users[pa_source_key] = pamd_user
-            created_users[pa_username] = pamd_user
-
-        # Remove stale debug superuser that has been observed in local DBs
-        # (blank email, no org, is_superuser=True) — safe to never seed.
-        removed_debug, _ = User.objects.filter(username="debug").delete()
-        if removed_debug:
-            self.stdout.write(self.style.WARNING(f"Removed stale debug user ({removed_debug} row(s))."))
-
-        self.stdout.write(self.style.SUCCESS(f"Ensured {len(created_users)} users."))
-        return created_users
 
     def _assign_org_leadership(
         self,

@@ -25,9 +25,10 @@ python manage.py seed_demo_data
 cat <<'EONOTE'
 Backend setup complete ✔
 
-Default credentials created:
-  - username: superadmin / password: ChangeMe123!
-  - username: md         / password: ChangeMe123!
+Staff accounts and roles were imported from backend/scripts/nominal_roll.xlsx.
+
+Bootstrap administrator:
+  - username: superadmin / password: ChangeMe123! (change this before sharing the environment)
 
 Remember to run the Postgres bootstrap script once:
   psql -U postgres -f backend/scripts/bootstrap_postgres.sql

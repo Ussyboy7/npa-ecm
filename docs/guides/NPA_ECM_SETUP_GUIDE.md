@@ -37,9 +37,9 @@ scripts/local/env-manager.sh start
 | Swagger | http://localhost:8002/api/docs |
 | Admin | http://localhost:8002/admin |
 
-**Dev login** (auto via `ensure_dev_login_users`): `superadmin`, `md`, `edfa`, `gmict`, `pamd` / `ChangeMe123!`
+**Bootstrap login** (auto via `ensure_dev_login_users`): `superadmin` / `ChangeMe123!`
 
-**Full demo org:** `scripts/local/env-manager.sh seed`
+**Staff accounts + org structure:** `scripts/local/env-manager.sh seed` imports the NPA nominal roll (`backend/scripts/nominal_roll.xlsx`); no mock staff accounts are created.
 
 ---
 
@@ -78,17 +78,14 @@ Lagos (LPC), Onne, Lekki, Tin Can (TCIPC), Port Harcourt, Warri, Calabar, Headqu
 ### Divisions (23+)
 HR, Finance, Procurement, Administration, Medical, Superannuation, Marine & Operations, Security, HSE, Regulatory, PPP, Engineering & Technical, ICT, Lands & Assets, Corporate Planning, Communications, Audit, Legal, Tariff & Billing, Monitoring, SERVICOM, ERM, Admin Support & Liaison, Special Duties.
 
-### Sample accounts
+### Accounts
 
 | Username | Password | Role |
 |----------|----------|------|
-| `superadmin` | `ChangeMe123!` | System administrator |
-| `md` | `ChangeMe123!` | Managing Director |
-| `edfa` | `ChangeMe123!` | Executive Director |
-| `gmict` | `ChangeMe123!` | GM ICT |
-| `pamd` | `ChangeMe123!` | PA to MD |
+| `superadmin` | `ChangeMe123!` | Break-glass system administrator |
+| real staff (e.g. `md`) | `ChangeMe123!` until changed | Imported from the nominal roll |
 
-`seed_demo_data` creates the full hierarchy and additional port/division users.
+`seed_demo_data` creates the organisation hierarchy and imports the NPA nominal roll (`backend/scripts/nominal_roll.xlsx`), then maps roles and primary offices.
 
 ### Hierarchy (summary)
 
@@ -194,7 +191,7 @@ Full schema: http://localhost:8002/api/docs/
 
 ## Smoke test checklist
 
-1. **Login** — `md` / `ChangeMe123!` at `/login`
+1. **Login** — `superadmin` / `ChangeMe123!` at `/login`
 2. **Upload** — `/dms` → upload PDF, set sensitivity
 3. **Register** — `/correspondence/register` → create memo
 4. **Route** — minute/approve from `/inbox` or `/tasks`

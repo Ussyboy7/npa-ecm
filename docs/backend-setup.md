@@ -23,17 +23,15 @@ The script will:
 - run `python manage.py migrate`
 - execute `python manage.py seed_demo_data`
 
-The seeding step mirrors the mock data the frontend relied on so the new REST API remains consistent.
+The seeding step creates the NPA organisation structure and imports staff accounts from the nominal roll (`backend/scripts/nominal_roll.xlsx`), then maps their roles and primary offices. No mock staff accounts are created.
 
-Default accounts created during seeding:
+The only bootstrap login is the break-glass administrator:
 
-| Username   | Password     | Role                |
-|------------|--------------|---------------------|
-| superadmin | ChangeMe123! | Superuser           |
-| md         | ChangeMe123! | Managing Director   |
-| edfa       | ChangeMe123! | Executive Director  |
-| gmict      | ChangeMe123! | General Manager ICT |
-| pamd       | ChangeMe123! | Personal Assistant  |
+| Username   | Password     | Role      |
+|------------|--------------|-----------|
+| superadmin | ChangeMe123! | Superuser |
+
+Staff sign in with their own imported account (`b.idowu`, `md`, …). New accounts receive the initial password `ChangeMe123!` unless the import is run with `--password ""` to issue one-time set-password links instead.
 
 ## 3. Running the backend
 
@@ -55,7 +53,7 @@ GET  /api/v1/accounts/auth/me/
 ## 4. Optional helpers
 
 - `python backend/manage.py ensure_dev_login_users` – bootstrap dev login users (Docker entrypoint).
-- `python backend/manage.py seed_demo_data` – re-seed when you reset the database.
+- `python backend/manage.py seed_demo_data` – re-seed structure and nominal-roll accounts (`--with-demo-content` for sample records).
 - `python backend/manage.py createsuperuser` – add additional admin accounts.
 - `docker-compose.local.yml` – spin up PostgreSQL/Redis and run the backend in containers.
 

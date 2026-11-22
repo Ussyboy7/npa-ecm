@@ -40,7 +40,7 @@ python manage.py migrate
 python manage.py seed_demo_data
 ```
 
-Demo users (password `ChangeMe123!`): `superadmin`, `md`, `edfa`, `gmict`, `pamd`.
+`seed_demo_data` imports staff accounts from the NPA nominal roll (`scripts/nominal_roll.xlsx`) and maps their roles and primary offices. The only shared login is the break-glass `superadmin` / `ChangeMe123!` created by `ensure_dev_login_users`; no mock staff accounts are seeded.
 
 ## Running the API
 
@@ -89,7 +89,7 @@ bash scripts/ci/run-backend-tests.sh
 
 | Command | Description |
 |---------|-------------|
-| `python manage.py seed_demo_data` | Demo org, correspondence, DMS, workflows |
+| `python manage.py seed_demo_data` | NPA org structure + staff from the nominal roll (`--with-demo-content` adds sample records) |
 | `python manage.py makemigrations --check --dry-run` | Verify migrations are committed |
 | `make security-check` | bandit + pip-audit |
 
