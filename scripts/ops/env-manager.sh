@@ -13,6 +13,8 @@ source "${SCRIPT_DIR}/../lib/stack-utils.sh"
 source "${SCRIPT_DIR}/../lib/ui.sh"
 # shellcheck source=../lib/deploy-reexec.sh
 source "${SCRIPT_DIR}/../lib/deploy-reexec.sh"
+# shellcheck source=../lib/db-restore.sh
+source "${SCRIPT_DIR}/../lib/db-restore.sh"
 
 usage() {
     cat <<'USAGE'
@@ -161,8 +163,9 @@ cmd_backup() {
 }
 
 cmd_verify_backup() {
-    BACKUP_DIR="${BACKUP_DIR:-${PROJECT_ROOT}/backups/${STACK_ENVIRONMENT}}" \
-        "${PROJECT_ROOT}/scripts/backup/verify_backup.sh" "$@"
+    local verify_dir="${PROJECT_ROOT}/backups/${STACK_ENVIRONMENT}"
+    $_BACKUP_DIR_EXPLICIT && verify_dir="$BACKUP_DIR"
+    BACKUP_DIR="$verify_dir" "${PROJECT_ROOT}/scripts/backup/verify_backup.sh" "$@"
 }
 
 cmd_restore_backup() {
@@ -491,9 +494,13 @@ _deploy_rollback() {
     if [[ -n "$latest" && -f "$latest" ]]; then
         ui_step "Restoring pre-deploy database snapshot"
         stack_compose up -d "$STACK_POSTGRES_SERVICE"
-        sleep 10
-        if docker ps --format '{{.Names}}' | grep -q "^${pg_container}$"; then
-            docker exec -i "$pg_container" psql -U "$db_user" -d "$db_name" < "$latest" >/dev/null 2>&1 || ui_warning "Restore reported errors"
+        if ! db_restore_wait_ready "$pg_container" "$db_user"; then
+            ui_warning "${pg_container} did not become ready — skipping the database restore"
+        elif db_restore_snapshot "$pg_container" "$db_user" "$db_name" "$latest" >/dev/null; then
+            ui_success "Database restored from ${latest}"
+        else
+            ui_warning "Restore from ${latest} failed — ${db_name} may be incomplete"
+            ui_info "Retry with: scripts/backup/restore_backup.sh --env ${STACK_ENVIRONMENT} --backup-file ${latest} --yes"
         fi
     else
         ui_warning "Pre-deploy snapshot unavailable — restarting the previous stack without a database restore"

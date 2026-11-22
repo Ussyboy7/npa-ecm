@@ -7,8 +7,8 @@ Operational scripts for ECM database backups.
 | Script | Purpose |
 |--------|---------|
 | `backup-db.sh` | Create a plain SQL dump via `pg_dump` |
-| `verify_backup.sh` | Restore into a temporary DB to verify integrity |
-| `restore_backup.sh` | Disaster recovery — restore production/staging from SQL |
+| `verify_backup.sh` | Restore into a throwaway DB, then check tables, migration state, and `migrate --check` |
+| `restore_backup.sh` | Disaster recovery — recreate the DB, restore SQL, realign sequences |
 
 ## Backup layout
 
@@ -40,5 +40,16 @@ BACKUP_ROOT=/srv/npa-ecm/backups scripts/backup/restore_backup.sh --env stag --b
 ## Notes
 
 - Backups are **plain SQL** (`pg_dump` stdout), not custom format — use `psql` to restore.
-- `verify_backup.sh` creates a throwaway database and drops it after validation.
+- Restores always **drop and recreate** the target database first. Restoring into a
+  populated database merges rows, ignores duplicate-key errors, and leaves the
+  `django_migrations` sequence behind — the cause of the staging duplicate-key
+  outage. `scripts/lib/db-restore.sh` owns this flow for both manual restores and
+  deploy rollback.
+- After restoring, every sequence is realigned to `MAX(column)` (including
+  `django_migrations_id_seq`), so migrations can insert without colliding.
+- `verify_backup.sh` creates a throwaway database, restores into it with
+  `ON_ERROR_STOP=1`, checks the table count and migration state, runs
+  `manage.py migrate --check` against it (requires the backend container), and
+  drops the database afterward. Results are written to `verify.log`
+  next to the backup.
 - Always take a pre-deploy snapshot before `env-manager deploy` (enabled by default).

@@ -185,10 +185,10 @@ services:
       # Build on the host network; the server's Docker default bridge has no egress.
       network: host
       args:
-        NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
+        NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api/v1
         NEXT_PUBLIC_ENVIRONMENT: staging
     environment:
-      NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
+      NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api/v1
       NEXT_PUBLIC_ENVIRONMENT: staging
     # Localhost-only publish for host-network nginx. Do not scale above 1.
     ports:

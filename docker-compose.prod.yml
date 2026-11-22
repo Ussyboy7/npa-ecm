@@ -168,10 +168,10 @@ services:
       context: .
       dockerfile: ./frontend/Dockerfile.prod
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm.nigerianports.gov.ng/api}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm.nigerianports.gov.ng/api/v1}
         NEXT_PUBLIC_ENVIRONMENT: production
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm.nigerianports.gov.ng/api}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm.nigerianports.gov.ng/api/v1}
       NODE_ENV: production
     expose:
       - "3000"

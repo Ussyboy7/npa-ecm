@@ -23,4 +23,13 @@ export DB_PASSWORD="${DB_PASSWORD:-ci_password}"
 export THROTTLE_NUM_PROXIES="${THROTTLE_NUM_PROXIES:-1}"
 docker compose -f docker-compose.prod.yml config --quiet
 
+echo "Checking frontend API base URLs..."
+# The backend serves /api/v1/ only; a base ending in /api makes every API call 404.
+for file in docker-compose.stag.yml docker-compose.prod.yml docker-compose.local.yml; do
+  if grep -nE 'NEXT_PUBLIC_API_URL:.*/api(\}|[[:space:]]*$)' "$file"; then
+    echo "${file}: NEXT_PUBLIC_API_URL must end with /api/v1" >&2
+    exit 1
+  fi
+done
+
 echo "Compose files OK."

@@ -5,6 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/stack-utils.sh
 source "${SCRIPT_DIR}/../lib/stack-utils.sh"
+# shellcheck source=../lib/db-restore.sh
+source "${SCRIPT_DIR}/../lib/db-restore.sh"
 
 BACKUP_ROOT="${BACKUP_ROOT:-${PROJECT_ROOT}/backups}"
 RECOVERY_LOG="${RECOVERY_LOG:-${BACKUP_ROOT}/recovery.log}"
@@ -75,13 +77,14 @@ fi
 log "Stopping backend services"
 stack_compose stop "$STACK_BACKEND_SERVICE" celery-worker celery-beat 2>/dev/null || true
 
-log "Restoring database"
+log "Restoring database (recreating ${DB_NAME})"
 stack_compose up -d "$PG_SERVICE"
-sleep 5
-stack_compose exec -T "$PG_SERVICE" psql -U "$DB_USER" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();" >>"$RECOVERY_LOG" 2>&1 || true
-stack_compose exec -T "$PG_SERVICE" psql -U "$DB_USER" -d postgres -c "DROP DATABASE IF EXISTS ${DB_NAME};" >>"$RECOVERY_LOG" 2>&1
-stack_compose exec -T "$PG_SERVICE" psql -U "$DB_USER" -d postgres -c "CREATE DATABASE ${DB_NAME};" >>"$RECOVERY_LOG" 2>&1
-stack_compose exec -T "$PG_SERVICE" psql -U "$DB_USER" -d "$DB_NAME" <"$BACKUP_FILE" >>"$RECOVERY_LOG" 2>&1
+PG_CONTAINER="${PG_CONTAINER:-$(stack_compose ps -q "$PG_SERVICE" 2>/dev/null | head -1)}"
+[[ -n "$PG_CONTAINER" ]] || error_exit "Postgres container for ${PG_SERVICE} is not running"
+db_restore_wait_ready "$PG_CONTAINER" "$DB_USER" || error_exit "Postgres did not become ready"
+db_restore_snapshot "$PG_CONTAINER" "$DB_USER" "$DB_NAME" "$BACKUP_FILE" >>"$RECOVERY_LOG" 2>&1 \
+  || error_exit "Restore failed — see ${RECOVERY_LOG}"
+log "Restored ${DB_NAME} and realigned sequences"
 
 log "Starting stack"
 stack_compose up -d
