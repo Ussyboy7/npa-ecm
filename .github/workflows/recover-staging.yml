@@ -38,4 +38,27 @@ jobs:
             -c "DROP DATABASE IF EXISTS npa_ecm_stag;" \
             -c "CREATE DATABASE npa_ecm_stag OWNER ecmadmin;"
           docker exec -i ecm-postgres-stag psql -U ecmadmin -d npa_ecm_stag -v ON_ERROR_STOP=1 < "${snapshot}"
+          # The dump's sequence values are stale; align every sequence with its column.
+          docker exec -i ecm-postgres-stag psql -U ecmadmin -d npa_ecm_stag -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE r record;
+          BEGIN
+            FOR r IN
+              SELECT n.nspname AS schema_name, c.relname AS table_name, a.attname AS column_name
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+              WHERE c.relkind = 'r' AND n.nspname = 'public'
+                AND pg_get_serial_sequence(
+                  quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname
+                ) IS NOT NULL
+            LOOP
+              EXECUTE format(
+                'SELECT setval(pg_get_serial_sequence(%L, %L), GREATEST(COALESCE((SELECT MAX(%I) FROM %I.%I), 1), 1))',
+                r.schema_name || '.' || r.table_name, r.column_name,
+                r.column_name, r.schema_name, r.table_name
+              );
+            END LOOP;
+          END $$;
+          SQL
           DEPLOY_PATH=/srv/npa-ecm SERVER_IP=172.16.0.46 ./scripts/staging/env-manager.sh deploy
