@@ -7,9 +7,12 @@ from accounts.services import TotpProvisioningService
 
 
 class TotpProvisioningServiceTests(SimpleTestCase):
+    # 32 base32 characters = 160 bits, above pyotp's 112-bit minimum.
+    SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+
     def test_builds_authenticator_payload_from_one_secret(self):
         user = SimpleNamespace(email="officer@npa.gov.ng", username="officer")
-        secret = "JBSWY3DPEHPK3PXP"
+        secret = self.SECRET
 
         payload = TotpProvisioningService.build_payload(secret, user)
 
@@ -23,8 +26,6 @@ class TotpProvisioningServiceTests(SimpleTestCase):
     def test_falls_back_to_username_without_email(self):
         user = SimpleNamespace(email="", username="officer")
 
-        payload = TotpProvisioningService.build_payload(
-            "JBSWY3DPEHPK3PXP", user
-        )
+        payload = TotpProvisioningService.build_payload(self.SECRET, user)
 
         self.assertIn("officer", payload["provisioning_uri"])
