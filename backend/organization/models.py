@@ -105,6 +105,11 @@ class Role(UUIDModel, TimeStampedModel):
     name = models.CharField(max_length=100, unique=True, db_index=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True, db_index=True)
+    is_system = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Seeded roles whose name and lifecycle are managed by the application.",
+    )
     permissions = models.JSONField(
         default=dict,
         blank=True,

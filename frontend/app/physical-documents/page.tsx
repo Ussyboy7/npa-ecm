@@ -44,8 +44,8 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
 import { unwrapResults } from '@/lib/type-utils';
-import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
 import { usePagination } from '@/hooks/use-pagination';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
@@ -123,11 +123,6 @@ interface HandoverEvent {
   receipt_notes: string;
 }
 
-interface OfficeOption {
-  id: string;
-  name: string;
-}
-
 interface CheckOutEvent {
   id: string;
   physical_document: string;
@@ -141,7 +136,11 @@ interface CheckOutEvent {
 
 function PhysicalDocumentsForm() {
   const [locations, setLocations] = useState<Location[]>([]);
-  const [offices, setOffices] = useState<OfficeOption[]>([]);
+  const { offices: organizationOffices } = useOrganization();
+  const offices = useMemo(
+    () => organizationOffices.filter((office) => office.isActive),
+    [organizationOffices],
+  );
   const [pendingReceiptIds, setPendingReceiptIds] = useState<Set<string>>(new Set());
   const [documents, setDocuments] = useState<PhysicalDocument[]>([]);
   const [count, setCount] = useState(0);
@@ -233,15 +232,6 @@ function PhysicalDocumentsForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocation, debouncedSearch, pagination.page, pagination.pageSize]);
 
-  const fetchOffices = async () => {
-    try {
-      const list = await fetchAllCatalogPaginated<OfficeOption>('/organization/offices/?is_active=true&ordering=name');
-      setOffices(list);
-    } catch {
-      setOffices([]);
-    }
-  };
-
   const fetchPendingReceipts = async () => {
     try {
       const result = await apiFetch<{ physical_document_ids: string[] }>('/correspondence/physical-documents/my-handover/');
@@ -253,7 +243,6 @@ function PhysicalDocumentsForm() {
 
   useEffect(() => {
     fetchLocations();
-    fetchOffices();
   }, []);
 
   useEffect(() => {

@@ -9,6 +9,11 @@ const navigation = vi.hoisted(() => ({
   replace: vi.fn(),
   searchParams: new URLSearchParams(),
 }));
+const visibilityState = vi.hoisted(() => ({
+  isVisibilityReady: true,
+  showExecutiveApprovals: true,
+  showDepartmentalApprovals: true,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
@@ -17,10 +22,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/hooks/use-sidebar-visibility", () => ({
-  useSidebarVisibility: () => ({
-    showExecutiveApprovals: true,
-    showDepartmentalApprovals: true,
-  }),
+  useSidebarVisibility: () => visibilityState,
 }));
 
 vi.mock("@/lib/api-client", () => ({ apiFetch: api.apiFetch }));
@@ -92,6 +94,9 @@ beforeEach(() => {
     clear: vi.fn(),
   });
   navigation.searchParams = new URLSearchParams();
+  visibilityState.isVisibilityReady = true;
+  visibilityState.showExecutiveApprovals = true;
+  visibilityState.showDepartmentalApprovals = true;
   navigation.push.mockClear();
   navigation.replace.mockClear();
   api.apiFetch.mockReset();
@@ -101,6 +106,28 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("Approvals pagination and stale responses", () => {
+  it("shows a denial card and skips approval requests without approval access", () => {
+    visibilityState.showExecutiveApprovals = false;
+    visibilityState.showDepartmentalApprovals = false;
+
+    renderPage();
+
+    expect(screen.getByText("Approvals access required")).toBeTruthy();
+    expect(api.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the allowed level when the URL requests another level", async () => {
+    visibilityState.showExecutiveApprovals = false;
+    navigation.searchParams = new URLSearchParams("level=executive");
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(calledUrls().some((url) => url.includes("approval_level=departmental"))).toBe(true),
+    );
+    expect(calledUrls().every((url) => !url.includes("approval_level=executive"))).toBe(true);
+  });
+
   it("resets to page 1 before requesting a changed filter", async () => {
     renderPage();
     await screen.findByText("Initial approval");

@@ -58,6 +58,7 @@ import {
 import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import { HubTabList, type HubTabLink } from "@/components/admin/HubTabList";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
+import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 
 interface ExecutiveApproval {
   id: string;
@@ -91,11 +92,14 @@ function ApprovalsForm() {
   const searchParams = useSearchParams();
   const visibility = useSidebarVisibility();
   const requestedLevel = searchParams.get('level');
+  const canViewExecutive = visibility.showExecutiveApprovals;
+  const canViewDepartmental = visibility.showDepartmentalApprovals;
   const level = (
-    requestedLevel === 'departmental' ||
-    (!requestedLevel && !visibility.showExecutiveApprovals && visibility.showDepartmentalApprovals)
-      ? 'departmental'
-      : 'executive'
+    requestedLevel === 'departmental'
+      ? (canViewDepartmental ? 'departmental' : 'executive')
+      : requestedLevel === 'executive'
+        ? (canViewExecutive ? 'executive' : 'departmental')
+        : (canViewExecutive ? 'executive' : 'departmental')
   ) as 'executive' | 'departmental';
   const isDepartmental = level === 'departmental';
   const approvalTabs: HubTabLink[] = [
@@ -795,6 +799,25 @@ function ApprovalsForm() {
 }
 
 export default function ApprovalsPage() {
+  const visibility = useSidebarVisibility();
+
+  if (!visibility.isVisibilityReady) return null;
+
+  if (!visibility.showExecutiveApprovals && !visibility.showDepartmentalApprovals) {
+    return (
+      <QueuePageShell
+        title="Approvals"
+        subtitle="Executive and departmental approval registers"
+      >
+        <PermissionDeniedCard
+          title="Approvals access required"
+          check={null}
+          fallbackMessage="Your role does not include approval or endorsement register access."
+        />
+      </QueuePageShell>
+    );
+  }
+
   return (
     <Suspense fallback={null}>
       <ApprovalsForm />

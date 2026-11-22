@@ -6,8 +6,8 @@
  * root fails locally instead of silently breaking deep links such as the
  * post-login redirect.
  *
- * Public auth flows (`login`, `set-password`, `auth/callback`, `verify`) are
- * intentionally absent because they are never post-login destinations.
+ * Public and auth flows live in `PUBLIC_ROUTE_PATHS` instead: they are served
+ * without a session and are never post-login destinations.
  */
 export const APP_ROUTE_ROOTS = [
   "acting",
@@ -35,6 +35,22 @@ export const APP_ROUTE_ROOTS = [
   "settings",
   "workspaces",
 ] as const;
+
+/** Paths served without a session, including the landing page and auth flows. */
+export const PUBLIC_ROUTE_PATHS = [
+  "/",
+  "/login",
+  "/set-password",
+  "/verify",
+  "/auth/callback",
+  "/foia/public",
+] as const;
+
+/** True for a public route and anything nested under it. */
+export const isPublicRoute = (pathname: string): boolean =>
+  PUBLIC_ROUTE_PATHS.some((route) =>
+    route === "/" ? pathname === "/" : pathname === route || pathname.startsWith(`${route}/`),
+  );
 
 export const DEFAULT_APP_ROUTE = "/dashboard";
 
@@ -67,6 +83,7 @@ export const APP_ROUTES = {
   actingWorkspace: "/acting",
   admin: "/admin",
   adminOrganization: "/admin/organization",
+  adminOrganizationEntities: "/admin/organization/entities",
   adminActingAppointments: "/admin/organization/acting",
   adminWorkflowSla: "/admin/workflow-sla",
   adminTemplates: "/admin/templates-hub",

@@ -3,12 +3,13 @@
 import { Suspense } from "react";
 import { HubTabList, type HubTabLink } from "@/components/admin/HubTabList";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
+import { APP_ROUTES } from "@/lib/app-routes";
 
 function orgTabActive(section: string) {
   return (pathname: string, searchTab: string | null) => {
-    if (pathname.startsWith("/admin/organization/acting")) return section === "acting";
-    if (pathname.startsWith("/admin/organization/entities")) return section === "entities";
-    if (pathname === "/admin/organization" || pathname.startsWith("/admin/organization?")) {
+    if (pathname.startsWith(APP_ROUTES.adminActingAppointments)) return section === "acting";
+    if (pathname.startsWith(APP_ROUTES.adminOrganizationEntities)) return section === "entities";
+    if (pathname === APP_ROUTES.adminOrganization || pathname.startsWith(`${APP_ROUTES.adminOrganization}?`)) {
       const current = searchTab === "memberships" ? "offices" : searchTab || "structure";
       return current === section;
     }
@@ -22,17 +23,17 @@ function OrganizationTabListInner() {
   if (visibility.showOrganizationOffices) {
     tabs.push(
       {
-        href: "/admin/organization?tab=structure",
+        href: `${APP_ROUTES.adminOrganization}?tab=structure`,
         label: "Structure",
         isActive: orgTabActive("structure"),
       },
       {
-        href: "/admin/organization?tab=offices",
+        href: `${APP_ROUTES.adminOrganization}?tab=offices`,
         label: "Offices",
         isActive: orgTabActive("offices"),
       },
       {
-        href: "/admin/organization?tab=locations",
+        href: `${APP_ROUTES.adminOrganization}?tab=locations`,
         label: "Locations",
         isActive: orgTabActive("locations"),
       },
@@ -40,21 +41,21 @@ function OrganizationTabListInner() {
   }
   if (visibility.showOrganizationActing) {
     tabs.push({
-      href: "/admin/organization/acting",
+      href: APP_ROUTES.adminActingAppointments,
       label: "Acting",
       isActive: orgTabActive("acting"),
     });
   }
   if (visibility.showUsersRoles) {
     tabs.push({
-      href: "/admin/organization?tab=people",
+      href: `${APP_ROUTES.adminOrganization}?tab=people`,
       label: "People & access",
       isActive: orgTabActive("people"),
     });
   }
   if (visibility.showExternalEntities) {
     tabs.push({
-      href: "/admin/organization/entities",
+      href: APP_ROUTES.adminOrganizationEntities,
       label: "External entities",
       isActive: orgTabActive("entities"),
     });

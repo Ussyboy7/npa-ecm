@@ -270,7 +270,13 @@ export default function FOIAListPage() {
               </Button>
             ))}
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => {
+              setStatusFilter(value);
+              setActiveTab("all");
+            }}
+          >
             <SelectTrigger className="h-8 w-[140px] text-xs">
               <SelectValue placeholder="Status" />
             </SelectTrigger>

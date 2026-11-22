@@ -10,11 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { StatStrip } from "@/components/shared/StatStrip";
+import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
+import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { LifeBuoy, Search } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { fetchSupportTickets, resolveSupportTicket, type SupportTicket } from "@/lib/support-api";
 
 export default function AdminHelpdeskPage() {
+  const visibility = useSidebarVisibility();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
@@ -25,8 +28,9 @@ export default function AdminHelpdeskPage() {
   };
 
   useEffect(() => {
+    if (!visibility.showHelpdeskQueue) return;
     void load();
-  }, []);
+  }, [visibility.showHelpdeskQueue]);
 
   const filteredTickets = useMemo(() => {
     let result = tickets;
@@ -43,6 +47,28 @@ export default function AdminHelpdeskPage() {
     }
     return result;
   }, [tickets, searchQuery, statusFilter]);
+
+  if (!visibility.isVisibilityReady) return null;
+
+  if (!visibility.showHelpdeskQueue) {
+    return (
+      <AdminPageShell
+        title="Platform"
+        subtitle="Tier-1 ticket triage and resolution."
+        icon={LifeBuoy}
+      >
+        <div className="mt-4 space-y-3">
+          <AdminHubTabList />
+          <PlatformTabList />
+        </div>
+        <PermissionDeniedCard
+          title="Platform support access required"
+          check={null}
+          fallbackMessage="Your role does not include the platform support queue."
+        />
+      </AdminPageShell>
+    );
+  }
 
   return (
     <AdminPageShell title="Platform" subtitle="Tier-1 ticket triage and resolution." icon={LifeBuoy} stats={<StatStrip

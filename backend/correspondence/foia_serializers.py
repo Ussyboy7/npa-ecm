@@ -82,9 +82,11 @@ class FOIARequestDetailSerializer(FOIARequestListSerializer):
 
     def get_notes_entries(self, obj):
         user = self.context.get("request").user if self.context.get("request") else None
-        qs = obj.notes_entries.select_related("user").order_by("-created_at")[:50]
+        qs = obj.notes_entries.select_related("user").order_by("-created_at")
         if user and user.is_staff:
-            return FOIANoteSerializer(qs, many=True, context=self.context).data
+            visible = qs
+        else:
+            visible = qs.filter(is_internal=False)
         return FOIANoteSerializer(
-            qs.filter(is_internal=False), many=True, context=self.context
+            visible[:50], many=True, context=self.context
         ).data

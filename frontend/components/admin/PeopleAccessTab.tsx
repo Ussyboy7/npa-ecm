@@ -113,17 +113,26 @@ export function PeopleAccessTab({ canManageUsers, canManageRoles }: PeopleAccess
       ];
     }
     if (activeTab === "roles") {
+      const activeAssigned = roles.reduce(
+        (sum, role) => sum + (role.activeUserCount ?? role.userCount ?? 0),
+        0,
+      );
+      const unusedRoles = roles.filter(
+        (role) => (role.activeUserCount ?? role.userCount ?? 0) === 0,
+      ).length;
       return [
         { key: "total", label: "Total Roles", value: roles.length },
         {
           key: "assigned",
-          label: "Users Assigned",
-          value: roles.reduce((sum, role) => sum + (role.userCount ?? 0), 0),
+          label: "Active Users Assigned",
+          value: activeAssigned,
+          hint: "Active users across all roles. Inactive accounts are excluded.",
         },
         {
           key: "unused",
           label: "Unused Roles",
-          value: roles.filter((role) => (role.userCount ?? 0) === 0).length,
+          value: unusedRoles,
+          hint: "Roles with no active users assigned.",
         },
       ];
     }

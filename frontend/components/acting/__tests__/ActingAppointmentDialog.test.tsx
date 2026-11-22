@@ -31,6 +31,7 @@ const principalUser = { id: "user-1", name: "User One" } as User;
 const offices = [
   { id: "office-1", name: "ICT Office", isActive: true },
   { id: "office-2", name: "Finance Office", isActive: true },
+  { id: "office-3", name: "Inactive Office", isActive: false },
 ] as Office[];
 
 const principalMembership = {
@@ -86,6 +87,35 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("ActingAppointmentDialog admin mode", () => {
+  it("offers only active offices for a new appointment", async () => {
+    const user = userEvent.setup();
+    render(<ActingAppointmentDialog {...baseProps} mode="admin" currentUser={admin} />);
+
+    await user.click(screen.getByRole("combobox", { name: "Office" }));
+
+    expect(await screen.findByRole("option", { name: "ICT Office" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "Inactive Office" })).toBeNull();
+  });
+
+  it("keeps an inactive office visible when resuming its existing request", async () => {
+    const user = userEvent.setup();
+    render(
+      <ActingAppointmentDialog
+        {...baseProps}
+        mode="admin"
+        currentUser={admin}
+        initialRequest={{ ...pendingRequest, office: "office-3", officeName: "Inactive Office" }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Office" }).textContent).toContain("Inactive Office");
+    });
+    await user.click(screen.getByRole("combobox", { name: "Office" }));
+
+    expect(await screen.findByRole("option", { name: "Inactive Office" })).toBeTruthy();
+  });
+
   it("appoints for the selected request principal instead of the signed-in admin", async () => {
     const user = userEvent.setup();
     render(
@@ -183,13 +213,17 @@ describe("ActingAppointmentDialog admin mode", () => {
 });
 
 describe("ActingAppointmentDialog self-service mode", () => {
-  it("offers only offices where the signed-in user is principal", async () => {
+  it("offers only active offices where the signed-in user is principal", async () => {
     const user = userEvent.setup();
     render(
       <ActingAppointmentDialog
         {...baseProps}
         mode="self-service"
         currentUser={principalUser}
+        principalOffices={[
+          principalMembership,
+          { ...principalMembership, id: "membership-inactive", officeId: "office-3", officeName: "Inactive Office" },
+        ]}
       />,
     );
 
@@ -197,6 +231,7 @@ describe("ActingAppointmentDialog self-service mode", () => {
 
     expect(await screen.findByRole("option", { name: "ICT Office" })).toBeTruthy();
     expect(screen.queryByRole("option", { name: "Finance Office" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Inactive Office" })).toBeNull();
     expect(screen.queryByRole("combobox", { name: "Principal (absent)" })).toBeNull();
   });
 

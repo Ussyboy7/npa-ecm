@@ -10,8 +10,9 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
-from common.pagination import StandardPageNumberPagination
 from audit.services import AuditService
+from common.pagination import StandardPageNumberPagination
+from organization.permission_utils import user_has_permission
 from .foia_models import FOIARequest, FOIARequestDocument, FOIANote
 from .foia_serializers import (
     FOIARequestListSerializer,
@@ -34,6 +35,34 @@ def _filter_overdue_queryset(qs):
     return qs.filter(deadline_date__lt=today).exclude(status__in=_OVERDUE_EXCLUDED_STATUSES)
 
 
+def _can_view_all_foia(user):
+    return bool(
+        user
+        and getattr(user, "is_authenticated", False)
+        and (
+            getattr(user, "is_superuser", False)
+            or user_has_permission(user, "can_view_all_correspondence")
+        )
+    )
+
+
+def _foia_queryset_for_user(user):
+    """Requests visible to the caller: their assignments, or all for global roles."""
+    queryset = FOIARequest.objects.select_related("assigned_to").prefetch_related(
+        "documents", "notes_entries"
+    )
+    if not user or not getattr(user, "is_authenticated", False):
+        return queryset.none()
+    if _can_view_all_foia(user):
+        return queryset
+    return queryset.filter(assigned_to=user)
+
+
+def _ensure_foia_request_access(user, foia_request):
+    if foia_request and not _foia_queryset_for_user(user).filter(pk=foia_request.pk).exists():
+        raise PermissionDenied({"detail": "You do not have access to this FOIA request."})
+
+
 class FOIARequestViewSet(viewsets.ModelViewSet):
     queryset = FOIARequest.objects.select_related("assigned_to").prefetch_related(
         "documents", "notes_entries"
@@ -47,7 +76,7 @@ class FOIARequestViewSet(viewsets.ModelViewSet):
     ordering = ["-received_date"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = _foia_queryset_for_user(self.request.user)
         overdue_raw = self.request.query_params.get("overdue", "").lower()
         if overdue_raw in ("1", "true", "yes"):
             qs = _filter_overdue_queryset(qs)
@@ -127,11 +156,7 @@ class FOIARequestViewSet(viewsets.ModelViewSet):
     def overdue(self, request):
         """Paginated overdue list (prefer ?overdue=true on the list endpoint)."""
         qs = self.filter_queryset(
-            _filter_overdue_queryset(
-                FOIARequest.objects.select_related("assigned_to").prefetch_related(
-                    "documents", "notes_entries"
-                )
-            )
+            _filter_overdue_queryset(_foia_queryset_for_user(request.user))
         )
         page = self.paginate_queryset(qs)
         serializer = FOIARequestListSerializer(page, many=True, context={"request": request})
@@ -139,7 +164,7 @@ class FOIARequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
-        base = FOIARequest.objects.all()
+        base = _foia_queryset_for_user(request.user)
         return Response({
             "total": base.count(),
             "submitted": base.filter(status=FOIARequest.Status.SUBMITTED).count(),
@@ -161,8 +186,24 @@ class FOIARequestDocumentViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["foia_request", "is_response"]
 
+    def get_queryset(self):
+        return super().get_queryset().filter(
+            foia_request__in=_foia_queryset_for_user(self.request.user).values("id")
+        )
+
+    def _ensure_parent_access(self, serializer):
+        _ensure_foia_request_access(
+            self.request.user,
+            serializer.validated_data.get("foia_request"),
+        )
+
     def perform_create(self, serializer):
+        self._ensure_parent_access(serializer)
         serializer.save(added_by=self.request.user)
+
+    def perform_update(self, serializer):
+        self._ensure_parent_access(serializer)
+        serializer.save()
 
 
 class FOIANoteViewSet(viewsets.ModelViewSet):
@@ -172,5 +213,25 @@ class FOIANoteViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["foia_request", "is_internal"]
 
+    def get_queryset(self):
+        queryset = super().get_queryset().filter(
+            foia_request__in=_foia_queryset_for_user(self.request.user).values("id")
+        )
+        user = self.request.user
+        if user and getattr(user, "is_authenticated", False) and user.is_staff:
+            return queryset
+        return queryset.filter(is_internal=False)
+
+    def _ensure_parent_access(self, serializer):
+        _ensure_foia_request_access(
+            self.request.user,
+            serializer.validated_data.get("foia_request"),
+        )
+
     def perform_create(self, serializer):
+        self._ensure_parent_access(serializer)
         serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        self._ensure_parent_access(serializer)
+        serializer.save()

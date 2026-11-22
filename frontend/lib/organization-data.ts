@@ -131,8 +131,10 @@ const mapApiRole = (item: Record<string, unknown>): Role => ({
   name: asString(item.name, 'Role'),
   description: asString(item.description),
   isActive: asBoolean(item.is_active, true),
+  isSystem: asBoolean(item.is_system, false),
   permissions: (isRecord(item.permissions) ? (item.permissions as Record<string, boolean>) : {}) ?? {},
   userCount: typeof item.user_count === 'number' ? item.user_count : 0,
+  activeUserCount: typeof item.active_user_count === 'number' ? item.active_user_count : undefined,
   createdAt: asStringOptional(item.created_at),
   updatedAt: asStringOptional(item.updated_at),
 });

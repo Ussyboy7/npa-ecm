@@ -157,6 +157,25 @@ const OrganizationStructurePage = () => {
 
 const OrganizationStructureContent = () => {
   const router = useRouter();
+  const { currentUser, hydrated } = useCurrentUser();
+  const permissions = useUserPermissions(currentUser ?? undefined);
+  const canAccessOrganization =
+    permissions.canManageOrgStructure ||
+    permissions.canManageUsers ||
+    permissions.canManageRoles;
+
+  useEffect(() => {
+    if (hydrated && !canAccessOrganization) {
+      router.replace("/dashboard", { scroll: false });
+    }
+  }, [hydrated, canAccessOrganization, router]);
+
+  if (!hydrated || !canAccessOrganization) return null;
+  return <OrganizationStructureAdminContent />;
+};
+
+const OrganizationStructureAdminContent = () => {
+  const router = useRouter();
   const {
     directorates,
     divisions,

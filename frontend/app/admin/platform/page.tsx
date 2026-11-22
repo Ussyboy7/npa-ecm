@@ -2,6 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Activity } from "lucide-react";
+import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { getPlatformHomePath } from "@/lib/platform-navigation";
 
@@ -9,11 +12,29 @@ import { getPlatformHomePath } from "@/lib/platform-navigation";
 export default function PlatformIndexPage() {
   const router = useRouter();
   const visibility = useSidebarVisibility();
+  const target = getPlatformHomePath(visibility);
 
   useEffect(() => {
-    const target = getPlatformHomePath(visibility);
     if (target) router.replace(target);
-  }, [router, visibility]);
+  }, [router, target]);
+
+  if (!visibility.isVisibilityReady) return null;
+
+  if (!target) {
+    return (
+      <AdminPageShell
+        title="Platform"
+        subtitle="Platform administration"
+        icon={Activity}
+      >
+        <PermissionDeniedCard
+          title="Platform access required"
+          check={null}
+          fallbackMessage="Your role does not include platform administration access."
+        />
+      </AdminPageShell>
+    );
+  }
 
   return null;
 }

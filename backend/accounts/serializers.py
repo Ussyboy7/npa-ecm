@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from organization.models import Department, Directorate, Division, Role
 from organization.permission_utils import get_role_permissions
+from organization.permissions_catalog import role_has_privileged_permissions
 
 from .models import User, ExecutiveSignature, DocumentSeal, SignatureTemplate, UserSignaturePreferences
 
@@ -76,7 +77,6 @@ class UserListSerializer(serializers.ModelSerializer):
             "date_joined",
         ]
         read_only_fields = ["id", "last_login", "date_joined"]
-
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=False, trim_whitespace=False)
@@ -187,11 +187,39 @@ class UserSerializer(serializers.ModelSerializer):
             "last_login",
             "date_joined",
         ]
-        read_only_fields = ["id", "last_login", "date_joined"]
+        read_only_fields = [
+            "id",
+            "last_login",
+            "date_joined",
+            "is_superuser",
+            "is_staff",
+        ]
 
     def validate(self, attrs):
         if self.instance is None and "password" not in attrs:
             raise serializers.ValidationError({"password": "Password is required."})
+
+        if "system_role" in attrs:
+            system_role = attrs.get("system_role")
+            request = self.context.get("request")
+            request_user = getattr(request, "user", None)
+            if not (request_user is not None and getattr(request_user, "is_superuser", False)):
+                current_role_id = self.instance.system_role_id if self.instance is not None else None
+                new_role_id = system_role.pk if system_role is not None else None
+                same_role = self.instance is not None and new_role_id == current_role_id
+                if not same_role:
+                    if system_role is not None and role_has_privileged_permissions(system_role):
+                        raise serializers.ValidationError(
+                            {"system_role": "Only a super administrator can assign an administrative role."}
+                        )
+                    if (
+                        self.instance is not None
+                        and request_user is not None
+                        and self.instance.pk == getattr(request_user, "pk", None)
+                    ):
+                        raise serializers.ValidationError(
+                            {"system_role": "You cannot change your own system role."}
+                        )
 
         if "password" in attrs:
             from django.contrib.auth.password_validation import validate_password

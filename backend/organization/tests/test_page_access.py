@@ -174,6 +174,43 @@ class PageAccessTests(TestCase):
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200, response.content)
 
+    def test_officer_i_personal_queues_do_not_require_a_queue_seat(self):
+        from organization.models import Directorate, Division
+
+        directorate = Directorate.objects.create(
+            name="Officer queue directorate",
+            code="OQD",
+        )
+        division = Division.objects.create(
+            name="Officer queue division",
+            code="OQV",
+            directorate=directorate,
+        )
+        role = Role.objects.create(
+            name="Officer I page access",
+            permissions=ROLE_PERMISSION_PRESETS["Officer I"],
+        )
+        user = User.objects.create_user(
+            username="officer-i-page-access",
+            password="x",
+            grade_level="SSS3",
+            system_role=role,
+            directorate=directorate,
+            division=division,
+        )
+
+        pages = resolve_page_access(user)
+
+        self.assertTrue(pages["my_inbox"]["allowed"])
+        self.assertTrue(pages["my_sent"]["allowed"])
+        self.client.force_authenticate(user=user)
+        for url_name in (
+            "api_v1:correspondence-my-inbox",
+            "api_v1:correspondence-my-sent",
+        ):
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 200, response.content)
+
     def test_page_access_endpoint_requires_authentication(self):
         response = self.client.get(reverse("api_v1:page_access"))
         self.assertIn(response.status_code, (401, 403))
@@ -185,9 +222,9 @@ class PageAccessTests(TestCase):
         self.assertTrue(response.data["pages"]["forms"]["allowed"])
         self.assertFalse(response.data["pages"]["audit"]["allowed"])
 
-    def test_agm_lacks_administrative_management_by_default(self):
+    def test_agm_gets_scoped_user_management_but_not_role_administration(self):
         permissions = ROLE_PERMISSION_PRESETS["Assistant General Manager"]
-        self.assertFalse(permissions.get("can_manage_users", False))
+        self.assertTrue(permissions.get("can_manage_users", False))
         self.assertFalse(permissions.get("can_manage_roles", False))
         self.assertFalse(permissions.get("can_manage_org_structure", False))
         self.assertTrue(permissions.get("can_archive", False))

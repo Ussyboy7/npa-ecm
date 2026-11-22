@@ -9,6 +9,12 @@ const routeState = vi.hoisted(() => ({
   router: { replace: vi.fn(), push: vi.fn() },
 }));
 
+const permissionState = vi.hoisted(() => ({
+  canManageOrgStructure: true,
+  canManageUsers: true,
+  canManageRoles: true,
+}));
+
 const organization = vi.hoisted(() => ({
   directorates: [],
   divisions: [],
@@ -113,7 +119,7 @@ vi.mock("@/hooks/use-org-users", () => ({
 }));
 
 vi.mock("@/hooks/use-user-permissions", () => ({
-  useUserPermissions: () => ({ canManageOrgStructure: true, canManageUsers: true, canManageRoles: true }),
+  useUserPermissions: () => permissionState,
 }));
 
 vi.mock("@/lib/api-client", () => ({ apiFetch: vi.fn(async () => []) }));
@@ -162,6 +168,9 @@ beforeEach(() => {
   routeState.search = "";
   routeState.router.replace.mockReset();
   routeState.router.push.mockReset();
+  permissionState.canManageOrgStructure = true;
+  permissionState.canManageUsers = true;
+  permissionState.canManageRoles = true;
   organization.fetchOfficeMemberships.mockClear();
   organization.lastMembershipFilters = null;
   const updateRoute = (href: string) => {
@@ -177,6 +186,19 @@ beforeEach(() => {
 });
 
 describe("Organization offices memberships view", () => {
+  it("redirects an account without organization or people administration rights", async () => {
+    permissionState.canManageOrgStructure = false;
+    permissionState.canManageUsers = false;
+    permissionState.canManageRoles = false;
+
+    renderOrganizationAt("tab=structure");
+
+    await waitFor(() =>
+      expect(routeState.router.replace).toHaveBeenCalledWith("/dashboard", { scroll: false }),
+    );
+    expect(screen.queryByText(/Build the hierarchy from directorates down to departments/i)).toBeNull();
+  });
+
   it("does not redirect the obsolete memberships tab alias", async () => {
     renderOrganizationAt("tab=memberships");
     expect(await screen.findByText(/Build the hierarchy from directorates down to departments/i)).toBeDefined();

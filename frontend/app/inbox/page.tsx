@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useSidebarCounts } from '@/hooks/use-sidebar-counts';
+import { useSidebarVisibility } from '@/hooks/use-sidebar-visibility';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
@@ -31,6 +32,7 @@ import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { PermissionDeniedCard } from '@/components/shared/PermissionDeniedCard';
 import { correspondenceQueueListStackClass } from '@/components/shared/registry-queue-styles';
 import { InboxSummaryCards } from './components/InboxSummaryCards';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
@@ -68,7 +70,7 @@ interface PendingApproval {
   created_at: string;
 }
 
-const ExecutiveInbox = () => {
+const ExecutiveInboxContent = () => {
   const { currentUser } = useCurrentUser();
   const {
     searchQuery,
@@ -324,4 +326,27 @@ const ExecutiveInbox = () => {
   );
 };
 
-export default ExecutiveInbox;
+const InboxPage = () => {
+  const visibility = useSidebarVisibility();
+
+  if (!visibility.isVisibilityReady) return null;
+
+  if (!visibility.showMyInbox) {
+    return (
+      <QueuePageShell
+        title="My Inbox"
+        subtitle="Correspondence and documents that need your action"
+      >
+        <PermissionDeniedCard
+          title="Inbox access required"
+          check={null}
+          fallbackMessage="Your role does not include access to the personal correspondence inbox."
+        />
+      </QueuePageShell>
+    );
+  }
+
+  return <ExecutiveInboxContent />;
+};
+
+export default InboxPage;

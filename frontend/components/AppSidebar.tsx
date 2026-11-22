@@ -27,6 +27,7 @@ import type { SidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { useHomePath } from "@/hooks/use-home-path";
 import { SidebarNavItem, AdminNavItem } from "@/components/shared/SidebarNavItem";
 import { APP_ROUTES, PAGE_ROUTES } from "@/lib/authorization";
+import { getOrganizationHomePath } from "@/lib/organization-navigation";
 
 interface AppSidebarProps {
   visibility: SidebarVisibility;
@@ -101,13 +102,7 @@ export function AppSidebar({ visibility }: AppSidebarProps) {
     visibility.showLegacyImport ||
     visibility.showIntegrationHub;
   const showAdminHub = visibility.showAdminDashboard || showPlatformHub;
-  const organizationHref =
-    visibility.showOrganizationActing &&
-    !visibility.showOrganizationOffices &&
-    !visibility.showUsersRoles &&
-    !visibility.showExternalEntities
-      ? APP_ROUTES.adminActingAppointments
-      : APP_ROUTES.adminOrganization;
+  const organizationHref = getOrganizationHomePath(visibility);
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border overflow-hidden">

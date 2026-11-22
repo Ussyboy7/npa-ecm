@@ -219,7 +219,7 @@ export const RoleFormModal = ({
           <DialogDescription>
             {existingRole
               ? `Edit the role "${existingRole.name}". This role is assigned to ${usersWithRole.length} user(s).`
-              : "Create a new system role. It will be available for assignment when creating or editing users."}
+              : "Create a new role. It will be available for assignment when creating or editing users."}
           </DialogDescription>
         </DialogHeader>
 
@@ -232,6 +232,7 @@ export const RoleFormModal = ({
                 id="roleName"
                 name="roleName"
                 value={roleName}
+                disabled={Boolean(existingRole?.isSystem)}
                 onChange={(e) => {
                   setRoleName(e.target.value);
                   // Clear validation error when user types
@@ -250,6 +251,11 @@ export const RoleFormModal = ({
                 aria-describedby={validationErrors.roleName ? "roleName-error" : duplicateRoleName ? "roleName-duplicate" : undefined}
                 className={validationErrors.roleName || duplicateRoleName ? "border-destructive" : ""}
               />
+              {existingRole?.isSystem ? (
+                <p className="text-xs text-muted-foreground">
+                  System role names are fixed. You can still edit permissions and the description.
+                </p>
+              ) : null}
               {validationErrors.roleName && (
                 <p id="roleName-error" className="text-xs text-destructive" role="alert">
                   {validationErrors.roleName}

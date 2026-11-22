@@ -8,6 +8,7 @@ from accounts.models import User
 
 from .permissions_catalog import (
     PAGE_ACCESS_RULES,
+    PERMISSION_KEYS,
     PERMISSION_LABELS,
     merge_superuser_permissions,
     normalize_permissions,
@@ -44,6 +45,8 @@ def get_role_permissions(user: User) -> dict[str, bool]:
         return merge_superuser_permissions({})
 
     role = getattr(user, "system_role", None)
+    if role is not None and not getattr(role, "is_active", True):
+        return {key: False for key in PERMISSION_KEYS}
     raw = getattr(role, "permissions", None) if role else None
     return normalize_permissions(raw if isinstance(raw, dict) else {})
 
@@ -52,6 +55,26 @@ def user_has_permission(user: User, permission: str) -> bool:
     if getattr(user, "is_superuser", False):
         return True
     return get_role_permissions(user).get(permission, False)
+
+
+ORG_HIERARCHY_READ_PERMISSIONS: tuple[str, ...] = (
+    "can_manage_org_structure",
+    "can_manage_users",
+    "can_manage_roles",
+    "can_view_registry",
+    "can_view_all_correspondence",
+    "can_access_administration",
+)
+
+
+def user_can_read_full_org_hierarchy(user: User) -> bool:
+    """Administrative, registry, and global-correspondence roles need the full tree."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    permissions = get_role_permissions(user)
+    return any(permissions.get(key, False) for key in ORG_HIERARCHY_READ_PERMISSIONS)
 
 
 def _page_scope_context(user) -> tuple[str, bool]:
@@ -87,7 +110,10 @@ def resolve_page_access(user) -> dict[str, dict[str, bool | str]]:
         if scope_mode == "authenticated":
             scope_allowed = True
         elif scope_mode == "personal_or_assignment":
-            scope_allowed = has_org_context or permissions.get("can_view_all_correspondence", False)
+            # Personal queues (my inbox / my sent) are scoped to the signed-in
+            # user's own assignments; they do not require a leadership or
+            # office-queue seat.
+            scope_allowed = True
         elif scope_mode == "role":
             scope_allowed = True
         elif scope_mode == "personal":
@@ -108,7 +134,7 @@ def resolve_page_access(user) -> dict[str, dict[str, bool | str]]:
                 or permissions.get("can_view_all_correspondence", False)
                 or (page_id == "cases_all" and permissions.get("can_access_all_cases", False))
             )
-        elif scope_mode in {"personal_or_assignment", "organisation_boundary"}:
+        elif scope_mode == "organisation_boundary":
             scope_allowed = has_org_context or permissions.get("can_view_all_correspondence", False)
         else:
             scope_allowed = False

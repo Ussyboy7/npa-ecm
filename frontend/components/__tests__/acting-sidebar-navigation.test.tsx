@@ -114,7 +114,7 @@ describe("Organization Acting sidebar entry", () => {
     expect(screen.queryByRole("link", { name: "Acting" })).toBeNull();
   });
 
-  it("keeps external-entity-only users on the Organization hub", () => {
+  it("sends external-entity-only users to External entities", () => {
     render(
       <AppSidebar
         visibility={visibility({ showOrganizationActing: false, showExternalEntities: true })}
@@ -122,7 +122,19 @@ describe("Organization Acting sidebar entry", () => {
     );
 
     expect(screen.getByRole("link", { name: "Organization" }).getAttribute("href")).toBe(
-      "/admin/organization",
+      "/admin/organization/entities",
+    );
+  });
+
+  it("prefers Acting when both Acting and External entities are available", () => {
+    render(
+      <AppSidebar
+        visibility={visibility({ showOrganizationActing: true, showExternalEntities: true })}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Organization" }).getAttribute("href")).toBe(
+      "/admin/organization/acting",
     );
   });
 });

@@ -8,6 +8,7 @@ import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Button } from "@/components/ui/button";
 import {
   Shield,
+  Lock,
   Plus,
   Edit,
   Trash2,
@@ -211,6 +212,12 @@ export const RolesManagementTab = forwardRef<
                           <div className="flex items-center gap-2">
                             <Shield className="h-4 w-4 text-primary" />
                             <span className="font-medium">{role.name}</span>
+                            {role.isSystem ? (
+                              <Badge variant="outline" className="gap-1 text-[10px]">
+                                <Lock className="h-3 w-3" />
+                                System
+                              </Badge>
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -248,7 +255,9 @@ export const RolesManagementTab = forwardRef<
                         <TableCell>
                           <Badge variant="secondary" className="gap-1">
                             <Users className="h-3 w-3" />
-                            {userCount} {userCount === 1 ? "user" : "users"}
+                            {typeof role.activeUserCount === "number"
+                              ? `${role.activeUserCount} active / ${userCount} total`
+                              : `${userCount} ${userCount === 1 ? "user" : "users"}`}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -268,7 +277,8 @@ export const RolesManagementTab = forwardRef<
                                 e.stopPropagation();
                                 handleDeleteClick(role);
                               }}
-                              disabled={isDeleting === role.id}
+                              disabled={isDeleting === role.id || role.isSystem}
+                              title={role.isSystem ? "System roles cannot be deleted" : undefined}
                               className="text-destructive hover:text-destructive"
                               aria-label={`Delete role ${role.name}`}
                             >
@@ -310,7 +320,11 @@ export const RolesManagementTab = forwardRef<
                 {roleToDelete && (roleToDelete.userCount ?? 0) > 0 ? (
                   <div className="space-y-2">
                     <p>
-                      This role is assigned to <strong>{roleToDelete.userCount}</strong> user(s).
+                      This role is assigned to <strong>{roleToDelete.userCount}</strong> user(s)
+                      {typeof roleToDelete.activeUserCount === "number"
+                        ? ` (${roleToDelete.activeUserCount} active)`
+                        : ""}
+                      .
                     </p>
                     <p>Deleting <strong>"{roleToDelete.name}"</strong> will:</p>
                     <ul className="list-disc list-inside space-y-1 text-sm">

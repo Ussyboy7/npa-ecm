@@ -99,6 +99,75 @@ def resolve_user_org_scope(user) -> UserOrgScope:
     )
 
 
+def scoped_people_admin_boundary(user) -> UserOrgScope | None:
+    """Return the unit a non-superuser people manager may administer.
+
+    General Managers (division grades) are limited to their division; Assistant
+    General Managers (department grades) to their department. Role
+    administrators keep organisation-wide reach, and superusers are
+    unrestricted.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return None
+    if getattr(user, "is_superuser", False):
+        return None
+    if user_has_permission(user, "can_manage_roles"):
+        return None
+    if not user_has_permission(user, "can_manage_users"):
+        return None
+
+    grade = (getattr(user, "grade_level", None) or "").upper()
+    role_name = (getattr(getattr(user, "system_role", None), "name", "") or "").strip().lower()
+    division_id = getattr(user, "division_id", None)
+    department_id = getattr(user, "department_id", None)
+
+    # Grade is the primary signal; the protected system-role name covers
+    # accounts whose nominal-roll grade has not been populated yet.
+    if grade in DIVISION_GRADES or role_name == "general manager":
+        return UserOrgScope(
+            level="division",
+            directorate_id=getattr(user, "directorate_id", None),
+            division_id=division_id,
+            department_id=department_id,
+        )
+    if grade in DEPARTMENT_GRADES or role_name == "assistant general manager":
+        return UserOrgScope(
+            level="department",
+            directorate_id=getattr(user, "directorate_id", None),
+            division_id=division_id,
+            department_id=department_id,
+        )
+    return None
+
+
+def office_within_people_admin_boundary(boundary: UserOrgScope | None, office) -> bool:
+    """Return True when an office sits inside the manager's unit."""
+    if boundary is None:
+        return True
+    if boundary.level == "division" and boundary.division_id:
+        if getattr(office, "division_id", None) == boundary.division_id:
+            return True
+        department = getattr(office, "department", None)
+        return bool(department and department.division_id == boundary.division_id)
+    if boundary.level == "department" and boundary.department_id:
+        return getattr(office, "department_id", None) == boundary.department_id
+    return False
+
+
+def target_within_people_admin_boundary(boundary: UserOrgScope | None, target) -> bool:
+    """Return True when ``target`` belongs to the manager's division or department."""
+    if boundary is None:
+        return True
+    if boundary.level == "division" and boundary.division_id:
+        if getattr(target, "division_id", None) == boundary.division_id:
+            return True
+        department = getattr(target, "department", None)
+        return bool(department and department.division_id == boundary.division_id)
+    if boundary.level == "department" and boundary.department_id:
+        return getattr(target, "department_id", None) == boundary.department_id
+    return False
+
+
 def correspondence_org_boundary_q(scope: UserOrgScope) -> Q | None:
     """Return a Q for correspondence org boundary, or None for unrestricted (all).
 

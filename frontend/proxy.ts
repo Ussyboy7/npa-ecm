@@ -1,27 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { isPublicRoute } from './lib/app-routes';
 import { AUTH_ACCESS_COOKIE_NAME, LEGACY_ACCESS_COOKIE_NAME } from './lib/auth-cookies';
-
-const isPublicPath = (pathname: string) => (
-  pathname === '/'
-  || pathname === '/login'
-  || pathname.startsWith('/login/')
-  || pathname === '/set-password'
-  || pathname.startsWith('/set-password/')
-  || pathname === '/verify'
-  || pathname.startsWith('/verify/')
-  || pathname === '/auth/callback'
-  || pathname.startsWith('/auth/callback/')
-  || pathname === '/foia/public'
-  || pathname.startsWith('/foia/public/')
-);
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', pathname);
 
-  if (isPublicPath(pathname)) {
+  if (isPublicRoute(pathname)) {
     return NextResponse.next({
       request: {
         headers: requestHeaders,

@@ -3,6 +3,8 @@
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { PlatformTabList } from "@/components/admin/PlatformTabList";
+import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
+import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { Database } from "lucide-react";
 
 const CORRESPONDENCE_CSV = `reference_number,subject,status,source,direction,sender_name,sender_organization,received_date,archive_level
@@ -14,6 +16,7 @@ Legacy policy scan,LEG-DOC-001,policy,archived,internal,Imported metadata only,a
 `;
 
 export default function LegacyImportPage() {
+  const visibility = useSidebarVisibility();
   const download = (filename: string, content: string) => {
     const blob = new Blob([content], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -23,6 +26,28 @@ export default function LegacyImportPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  if (!visibility.isVisibilityReady) return null;
+
+  if (!visibility.showLegacyImport) {
+    return (
+      <AdminPageShell
+        title="Platform"
+        subtitle="CSV templates and CLI for migrating historical correspondence and document metadata."
+        icon={Database}
+      >
+        <div className="mt-4 space-y-3">
+          <AdminHubTabList />
+          <PlatformTabList />
+        </div>
+        <PermissionDeniedCard
+          title="Legacy import access required"
+          check={null}
+          fallbackMessage="Your role does not include legacy data import access."
+        />
+      </AdminPageShell>
+    );
+  }
 
   return (
     <AdminPageShell

@@ -512,7 +512,10 @@ class Command(BaseCommand):
             if system_role_name:
                 system_role, _ = Role.objects.get_or_create(
                     name=system_role_name,
-                    defaults={"description": f"System role: {system_role_name}"}
+                    defaults={
+                        "description": f"System role: {system_role_name}",
+                        "is_system": True,
+                    },
                 )
 
             defaults = {
@@ -552,7 +555,10 @@ class Command(BaseCommand):
         # Ensure super admin account
         superadmin_role, _ = Role.objects.get_or_create(
             name="Super Admin",
-            defaults={"description": "Super Administrator with full system access"}
+            defaults={
+                "description": "Super Administrator with full system access",
+                "is_system": True,
+            },
         )
         superadmin_defaults = {
             "first_name": "Super",
@@ -606,7 +612,7 @@ class Command(BaseCommand):
         if pa_username not in created_users and pa_source_key not in created_users:
             pa_role, _ = Role.objects.get_or_create(
                 name="Personal Assistant",
-                defaults={"description": "Personal Assistant role"}
+                defaults={"description": "Personal Assistant role", "is_system": True},
             )
             pamd_defaults = {
                 "first_name": "Grace",

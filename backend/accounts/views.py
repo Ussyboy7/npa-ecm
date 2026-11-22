@@ -23,6 +23,7 @@ from rest_framework.exceptions import MethodNotAllowed, NotFound, PermissionDeni
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from common.grade_utils import MANAGEMENT_GRADES
 from common.pagination import CatalogPageNumberPagination
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -31,6 +32,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from audit.services import AuditService
+from organization.permissions_catalog import role_has_privileged_permissions
 from .login_mfa import (
     create_mfa_challenge,
     get_or_create_login_security,
@@ -151,6 +153,98 @@ class UserViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_superuser:
             raise PermissionDenied("Only super administrators may perform this action.")
 
+    @staticmethod
+    def _target_is_administrative(target) -> bool:
+        return bool(
+            getattr(target, "is_superuser", False)
+            or getattr(target, "is_staff", False)
+            or role_has_privileged_permissions(getattr(target, "system_role", None))
+        )
+
+    def _ensure_can_manage_target(self, target):
+        """Prevent a user manager from taking over an administrative account."""
+        if self.request.user.is_superuser or target.pk == self.request.user.pk:
+            return
+        if self._target_is_administrative(target):
+            raise PermissionDenied(
+                "Only a super administrator may modify another administrative account."
+            )
+        from organization.org_scope import (
+            scoped_people_admin_boundary,
+            target_within_people_admin_boundary,
+        )
+
+        boundary = scoped_people_admin_boundary(self.request.user)
+        if not target_within_people_admin_boundary(boundary, target):
+            raise PermissionDenied(
+                "You can only manage users within your own organisational unit."
+            )
+
+    def _ensure_can_manage_targets(self, targets):
+        if self.request.user.is_superuser:
+            return
+        from organization.org_scope import (
+            scoped_people_admin_boundary,
+            target_within_people_admin_boundary,
+        )
+
+        boundary = scoped_people_admin_boundary(self.request.user)
+        for target in targets:
+            if self._target_is_administrative(target):
+                raise PermissionDenied(
+                    "Only a super administrator may modify administrative accounts in bulk."
+                )
+            if not target_within_people_admin_boundary(boundary, target):
+                raise PermissionDenied(
+                    "You can only manage users within your own organisational unit."
+                )
+
+    def _ensure_can_create_in_scope(self, validated_data):
+        """Scoped people managers may only create users in their own unit."""
+        if self.request.user.is_superuser:
+            return
+        from organization.org_scope import scoped_people_admin_boundary
+
+        boundary = scoped_people_admin_boundary(self.request.user)
+        if boundary is None:
+            return
+        division = validated_data.get("division")
+        department = validated_data.get("department")
+        if boundary.level == "division" and boundary.division_id:
+            in_scope = (
+                division is not None and division.pk == boundary.division_id
+            ) or (
+                division is None
+                and department is not None
+                and department.division_id == boundary.division_id
+            )
+        elif boundary.level == "department" and boundary.department_id:
+            in_scope = department is not None and department.pk == boundary.department_id
+        else:
+            in_scope = False
+        if not in_scope:
+            raise PermissionDenied(
+                "You can only create users within your own organisational unit."
+            )
+
+    @staticmethod
+    def _ensure_active_superuser_remains(targets):
+        """Block removals that would leave no active superuser behind."""
+        active_targets = [
+            target.pk
+            for target in targets
+            if getattr(target, "is_superuser", False) and getattr(target, "is_active", False)
+        ]
+        if not active_targets:
+            return
+        remaining = User.objects.filter(is_superuser=True, is_active=True).exclude(
+            pk__in=active_targets
+        )
+        if not remaining.exists():
+            raise ValidationError(
+                {"detail": "At least one active super administrator must remain."}
+            )
+
     def filter_queryset(self, queryset):
         """Override to add date range and batched ID filtering."""
         queryset = super().filter_queryset(queryset)
@@ -205,9 +299,86 @@ class UserViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    @staticmethod
+    def _user_field_changed(target, field, value) -> bool:
+        """Compare a submitted field with the stored value; password is always sensitive."""
+        if field == "password":
+            return True
+        if field in {"system_role", "directorate", "division", "department"}:
+            current_id = getattr(target, f"{field}_id", None)
+            new_id = getattr(value, "pk", None) if value is not None else None
+            return current_id != new_id
+        return getattr(target, field, None) != value
+
+    def _ensure_can_change_sensitive_identity_fields(self, target, validated_data):
+        """Grade and management status drive org-wide scope, so guard them."""
+        if self.request.user.is_superuser:
+            return
+        from organization.permission_utils import user_has_permission
+
+        if user_has_permission(self.request.user, "can_manage_roles"):
+            return
+        changed = sorted(
+            field
+            for field in ("grade_level", "is_management")
+            if field in validated_data
+            and self._user_field_changed(target, field, validated_data[field])
+        )
+        if changed:
+            raise PermissionDenied(
+                "Only a role administrator can change grade level or management status."
+            )
+
+    def _ensure_can_assign_creation_privileges(self, validated_data):
+        """Apply the same grade/management guard when creating a user.
+
+        A scoped people manager sets the new account's password, so allowing a
+        management grade here would hand them an account with wider org reach
+        than their own. Ordinary staff grades remain available.
+        """
+        if self.request.user.is_superuser:
+            return
+        from organization.permission_utils import user_has_permission
+
+        if user_has_permission(self.request.user, "can_manage_roles"):
+            return
+        grade = str(validated_data.get("grade_level") or "").strip().upper()
+        if grade in MANAGEMENT_GRADES or validated_data.get("is_management"):
+            raise PermissionDenied(
+                "Only a role administrator can create a user with a management "
+                "grade or management status."
+            )
+
     def perform_update(self, serializer):
         self._ensure_can_manage_users()
-        old_instance = self.get_object()
+        target = self.get_object()
+        self._ensure_can_manage_target(target)
+        self._ensure_can_change_sensitive_identity_fields(
+            target, serializer.validated_data
+        )
+        if target.pk == self.request.user.pk and not self.request.user.is_superuser:
+            allowed = {
+                "first_name",
+                "middle_name",
+                "last_name",
+                "email",
+                "phone",
+                "bio",
+                "honorific",
+            }
+            disallowed = {
+                field
+                for field, value in serializer.validated_data.items()
+                if field not in allowed
+                and self._user_field_changed(target, field, value)
+            }
+            if disallowed:
+                raise PermissionDenied(
+                    "You cannot change administrative fields on your own account here. "
+                    "Use your profile settings or ask a super administrator."
+                )
+        if target.is_superuser and not serializer.validated_data.get("is_active", target.is_active):
+            self._ensure_active_superuser_remains([target])
         serializer.save()
         
         # Audit log
@@ -223,6 +394,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         self._ensure_can_manage_users()
+        self._ensure_can_manage_target(instance)
+        self._ensure_active_superuser_remains([instance])
         
         # Audit log
         from audit.models import ActivityLog
@@ -238,6 +411,8 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         self._ensure_can_manage_users()
+        self._ensure_can_create_in_scope(serializer.validated_data)
+        self._ensure_can_assign_creation_privileges(serializer.validated_data)
         instance = serializer.save()
         
         # Audit log
@@ -259,8 +434,10 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user_ids:
             raise ValidationError({"user_ids": "User IDs are required"})
         
-        users = User.objects.filter(id__in=user_ids, is_active=True)
-        updated_count = users.update(is_active=False)
+        targets = list(User.objects.filter(id__in=user_ids, is_active=True))
+        self._ensure_can_manage_targets(targets)
+        self._ensure_active_superuser_remains(targets)
+        updated_count = User.objects.filter(pk__in=[user.pk for user in targets]).update(is_active=False)
         
         # Audit log
         from audit.models import ActivityLog
@@ -287,8 +464,10 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user_ids:
             raise ValidationError({"user_ids": "User IDs are required"})
         
-        users = User.objects.filter(id__in=user_ids)
-        deleted_count = users.count()
+        targets = list(User.objects.filter(id__in=user_ids))
+        self._ensure_can_manage_targets(targets)
+        self._ensure_active_superuser_remains(targets)
+        deleted_count = len(targets)
         
         # Audit log before deletion
         from audit.models import ActivityLog
@@ -301,7 +480,7 @@ class UserViewSet(viewsets.ModelViewSet):
             metadata={"user_ids": user_ids, "count": deleted_count},
         )
         
-        users.delete()
+        User.objects.filter(pk__in=[user.pk for user in targets]).delete()
         
         return Response({
             "message": f"Successfully deleted {deleted_count} user(s)",
@@ -317,8 +496,9 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user_ids:
             raise ValidationError({"user_ids": "User IDs are required"})
         
-        users = User.objects.filter(id__in=user_ids, is_active=False)
-        updated_count = users.update(is_active=True)
+        targets = list(User.objects.filter(id__in=user_ids, is_active=False))
+        self._ensure_can_manage_targets(targets)
+        updated_count = User.objects.filter(pk__in=[user.pk for user in targets]).update(is_active=True)
         
         # Audit log
         from audit.models import ActivityLog
@@ -345,8 +525,10 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user_ids:
             raise ValidationError({"user_ids": "User IDs are required"})
         
-        users = User.objects.filter(id__in=user_ids, is_active=True)
-        updated_count = users.update(is_active=False)
+        targets = list(User.objects.filter(id__in=user_ids, is_active=True))
+        self._ensure_can_manage_targets(targets)
+        self._ensure_active_superuser_remains(targets)
+        updated_count = User.objects.filter(pk__in=[user.pk for user in targets]).update(is_active=False)
         
         # Audit log
         from audit.models import ActivityLog
@@ -1024,6 +1206,16 @@ class InitialPasswordSetView(APIView):
             raise ValidationError({"detail": "This setup link is invalid or has expired."})
 
         if not user.is_active or not default_token_generator.check_token(user, token):
+            raise ValidationError({"detail": "This setup link is invalid or has expired."})
+
+        # A setup link must never become a way to take over an administrative
+        # account. Administrators reset their own password through the
+        # authenticated change-password flow instead.
+        if (
+            getattr(user, "is_superuser", False)
+            or getattr(user, "is_staff", False)
+            or role_has_privileged_permissions(getattr(user, "system_role", None))
+        ):
             raise ValidationError({"detail": "This setup link is invalid or has expired."})
 
         try:

@@ -7,16 +7,41 @@ import { ERPConnectorManager } from "@/components/integrations/ERPConnectorManag
 import { HRMSConnectorManager } from "@/components/integrations/HRMSConnectorManager";
 import { IntegrationLogsViewer } from "@/components/integrations/IntegrationLogsViewer";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { PlatformTabList } from "@/components/admin/PlatformTabList";
 import { Button } from "@/components/ui/button";
+import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
 import { Webhook, Mail, Database, Activity, Users } from "lucide-react";
 
 type ConnectorView = "webhooks" | "email" | "erp" | "hrms" | "logs";
 
 export default function IntegrationHubPage() {
+  const visibility = useSidebarVisibility();
   const [connectorView, setConnectorView] = useState<ConnectorView>("webhooks");
+
+  if (!visibility.isVisibilityReady) return null;
+
+  if (!visibility.showIntegrationHub) {
+    return (
+      <AdminPageShell
+        title="Platform"
+        subtitle="Configure webhooks, email, HRMS, ERP connectors, and view activity logs."
+        icon={Webhook}
+      >
+        <div className="mt-4 space-y-3">
+          <AdminHubTabList />
+          <PlatformTabList />
+        </div>
+        <PermissionDeniedCard
+          title="Integration Hub access required"
+          check={null}
+          fallbackMessage="Your role does not include integration management access."
+        />
+      </AdminPageShell>
+    );
+  }
 
   return (
     <AdminPageShell

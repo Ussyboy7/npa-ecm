@@ -2,11 +2,12 @@
 
 from collections import defaultdict
 
-from django.db.models import Count, OuterRef, Subquery
+from django.db import transaction
+from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -35,6 +36,49 @@ from .serializers import (
 )
 
 
+def _user_can_read_full_org_hierarchy(user):
+    from organization.permission_utils import user_can_read_full_org_hierarchy
+
+    return user_can_read_full_org_hierarchy(user)
+
+
+def _scope_hierarchy_queryset(queryset, user, level):
+    if _user_can_read_full_org_hierarchy(user):
+        return queryset
+    if not user or not getattr(user, "is_authenticated", False):
+        return queryset.none()
+    unit_id = getattr(user, f"{level}_id", None)
+    if not unit_id:
+        return queryset.none()
+    return queryset.filter(pk=unit_id)
+
+
+def _scope_office_queryset(queryset, user):
+    if _user_can_read_full_org_hierarchy(user):
+        return queryset
+    if not user or not getattr(user, "is_authenticated", False):
+        return queryset.none()
+    visible = Q(memberships__user=user, memberships__is_active=True)
+    if getattr(user, "department_id", None):
+        visible |= Q(department_id=user.department_id)
+    if getattr(user, "division_id", None):
+        visible |= Q(division_id=user.division_id)
+    if getattr(user, "directorate_id", None):
+        visible |= Q(directorate_id=user.directorate_id)
+    return queryset.filter(visible).distinct()
+
+
+class OrgHierarchyReadScopeMixin:
+    """Non-administrative users only read the hierarchy units they belong to."""
+
+    hierarchy_level = ""
+
+    def get_queryset(self):
+        return _scope_hierarchy_queryset(
+            super().get_queryset(), self.request.user, self.hierarchy_level
+        )
+
+
 class OrgStructureAdminMixin:
     """Writes to org hierarchy require can_manage_org_structure."""
 
@@ -46,7 +90,8 @@ class OrgStructureAdminMixin:
             require_permission(request.user, "can_manage_org_structure")
 
 
-class DirectorateViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
+class DirectorateViewSet(OrgHierarchyReadScopeMixin, OrgStructureAdminMixin, viewsets.ModelViewSet):
+    hierarchy_level = "directorate"
     queryset = Directorate.objects.all().select_related("executive_director")
     serializer_class = DirectorateSerializer
     permission_classes = [IsAuthenticated]
@@ -99,7 +144,8 @@ class DirectorateViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
         super().perform_destroy(instance)
 
 
-class DivisionViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
+class DivisionViewSet(OrgHierarchyReadScopeMixin, OrgStructureAdminMixin, viewsets.ModelViewSet):
+    hierarchy_level = "division"
     queryset = Division.objects.select_related("directorate", "general_manager")
     serializer_class = DivisionSerializer
     permission_classes = [IsAuthenticated]
@@ -121,7 +167,8 @@ class DivisionViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
         return queryset
 
 
-class DepartmentViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
+class DepartmentViewSet(OrgHierarchyReadScopeMixin, OrgStructureAdminMixin, viewsets.ModelViewSet):
+    hierarchy_level = "department"
     queryset = Department.objects.select_related("division", "division__directorate", "head_of_department")
     serializer_class = DepartmentSerializer
     permission_classes = [IsAuthenticated]
@@ -149,7 +196,10 @@ class DepartmentViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
 
 
 class RoleViewSet(viewsets.ModelViewSet):
-    queryset = Role.objects.annotate(user_count=Count("users")).prefetch_related("users")
+    queryset = Role.objects.annotate(
+        user_count=Count("users"),
+        active_user_count=Count("users", filter=Q(users__is_active=True)),
+    ).prefetch_related("users")
     serializer_class = RoleSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = CatalogPageNumberPagination
@@ -163,8 +213,28 @@ class RoleViewSet(viewsets.ModelViewSet):
 
         require_permission(self.request.user, "can_manage_roles")
 
+    def _ensure_super_admin(self):
+        if not self.request.user.is_superuser:
+            raise PermissionDenied("Only super administrators may perform this action.")
+
+    def _ensure_can_change_privileged_permissions(self, current, updates):
+        """Administrative permission grants and revocations are superuser-only."""
+        from organization.permissions_catalog import privileged_permission_changes
+
+        if self.request.user.is_superuser:
+            return
+        changed = privileged_permission_changes(current, updates)
+        if changed:
+            raise PermissionDenied(
+                "Only a super administrator can change administrative permissions: "
+                + ", ".join(changed)
+            )
+
     def perform_create(self, serializer):
         self._ensure_can_manage_roles()
+        self._ensure_can_change_privileged_permissions(
+            {}, serializer.validated_data.get("permissions")
+        )
         instance = serializer.save()
         
         # Audit log
@@ -182,6 +252,15 @@ class RoleViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._ensure_can_manage_roles()
+        target = self.get_object()
+        if target.is_system:
+            if "name" in serializer.validated_data and serializer.validated_data["name"] != target.name:
+                raise ValidationError({"name": "System roles cannot be renamed."})
+            if "is_active" in serializer.validated_data and not serializer.validated_data["is_active"]:
+                raise ValidationError({"is_active": "System roles cannot be deactivated."})
+        self._ensure_can_change_privileged_permissions(
+            target.permissions, serializer.validated_data.get("permissions")
+        )
         instance = serializer.save()
         
         # Audit log
@@ -200,6 +279,8 @@ class RoleViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         self._ensure_can_manage_roles()
+        if instance.is_system:
+            raise ValidationError({"detail": "System roles cannot be deleted."})
         
         # Audit log
         from audit.models import ActivityLog
@@ -226,7 +307,11 @@ class RoleViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-assign")
     def bulk_assign(self, request):
         """Assign a role to multiple users at once."""
-        self._ensure_can_manage_roles()
+        from organization.permission_utils import require_any_permission
+
+        # Role administration is organisation-wide; people managers may assign
+        # within their own division or department only.
+        require_any_permission(request.user, "can_manage_roles", "can_manage_users")
         
         role_id = request.data.get("role_id")
         user_ids = request.data.get("user_ids", [])
@@ -240,11 +325,40 @@ class RoleViewSet(viewsets.ModelViewSet):
             role = Role.objects.get(id=role_id)
         except Role.DoesNotExist:
             raise ValidationError({"role_id": "Role not found"})
-        
+
         from accounts.models import User
-        users = User.objects.filter(id__in=user_ids)
-        updated_count = users.update(system_role=role)
-        
+        from organization.org_scope import (
+            scoped_people_admin_boundary,
+            target_within_people_admin_boundary,
+        )
+        from organization.permissions_catalog import role_has_privileged_permissions
+
+        if role_has_privileged_permissions(role) and not request.user.is_superuser:
+            raise PermissionDenied("Only a super administrator can assign an administrative role.")
+
+        boundary = scoped_people_admin_boundary(request.user)
+        with transaction.atomic():
+            targets = list(
+                User.objects.select_for_update(of=("self",))
+                .filter(id__in=user_ids)
+                .select_related("department", "system_role")
+            )
+            if not request.user.is_superuser:
+                for target in targets:
+                    if getattr(target, "is_superuser", False) or role_has_privileged_permissions(
+                        getattr(target, "system_role", None)
+                    ):
+                        raise PermissionDenied(
+                            "Only a super administrator can change another administrative account."
+                        )
+                    if not target_within_people_admin_boundary(boundary, target):
+                        raise PermissionDenied(
+                            "You can only assign roles to users within your own organisational unit."
+                        )
+            updated_count = User.objects.filter(pk__in=[user.pk for user in targets]).update(
+                system_role=role
+            )
+
         # Audit log
         from audit.models import ActivityLog
         AuditService.log_activity(
@@ -263,6 +377,89 @@ class RoleViewSet(viewsets.ModelViewSet):
             "message": f"Successfully assigned role '{role.name}' to {updated_count} user(s)",
             "assigned_count": updated_count,
         })
+
+    @action(detail=True, methods=["patch"], url_path=r"permissions/(?P<permission_id>[^/.]+)")
+    def update_permission(self, request, pk=None, permission_id=None):
+        """Toggle one permission atomically so concurrent edits do not clobber peers."""
+        self._ensure_can_manage_roles()
+        from organization.permissions_catalog import PERMISSION_KEYS, normalize_permissions
+
+        if permission_id not in PERMISSION_KEYS:
+            raise ValidationError({"permission": "Unknown permission key."})
+        if "enabled" not in request.data:
+            raise ValidationError({"enabled": "A boolean enabled value is required."})
+
+        enabled = request.data.get("enabled")
+        if not isinstance(enabled, bool):
+            raise ValidationError({"enabled": "A boolean enabled value is required."})
+        with transaction.atomic():
+            try:
+                role = Role.objects.select_for_update().get(pk=pk)
+            except Role.DoesNotExist:
+                raise ValidationError({"role": "Role not found."})
+            permissions = normalize_permissions(role.permissions or {})
+            self._ensure_can_change_privileged_permissions(
+                permissions, {permission_id: enabled}
+            )
+            permissions[permission_id] = enabled
+            role.permissions = permissions
+            role.save(update_fields=["permissions", "updated_at"])
+
+        from audit.models import ActivityLog
+        AuditService.log_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.ROLE_UPDATED,
+            object_type="role",
+            object_id=str(role.id),
+            object_repr=role.name,
+            module="organization",
+            description=f"{'Granted' if enabled else 'Revoked'} {permission_id} for role: {role.name}",
+            request=request,
+            metadata={"permission": permission_id, "enabled": enabled},
+        )
+        response_role = self.get_queryset().get(pk=role.pk)
+        return Response(self.get_serializer(response_role).data)
+
+    @action(detail=True, methods=["patch"], url_path="permissions")
+    def update_permissions(self, request, pk=None):
+        """Merge a batch of permission changes under one row lock."""
+        self._ensure_can_manage_roles()
+        from organization.permissions_catalog import PERMISSION_KEYS, normalize_permissions
+
+        updates = request.data.get("permissions")
+        if not isinstance(updates, dict) or not updates:
+            raise ValidationError({"permissions": "A non-empty permission map is required."})
+        unknown = sorted(set(updates) - set(PERMISSION_KEYS))
+        if unknown:
+            raise ValidationError({"permissions": f"Unknown permission key(s): {', '.join(unknown)}"})
+        if any(not isinstance(value, bool) for value in updates.values()):
+            raise ValidationError({"permissions": "Permission values must be booleans."})
+
+        with transaction.atomic():
+            try:
+                role = Role.objects.select_for_update().get(pk=pk)
+            except Role.DoesNotExist:
+                raise ValidationError({"role": "Role not found."})
+            permissions = normalize_permissions(role.permissions or {})
+            self._ensure_can_change_privileged_permissions(permissions, updates)
+            permissions.update(updates)
+            role.permissions = permissions
+            role.save(update_fields=["permissions", "updated_at"])
+
+        from audit.models import ActivityLog
+        AuditService.log_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.ROLE_UPDATED,
+            object_type="role",
+            object_id=str(role.id),
+            object_repr=role.name,
+            module="organization",
+            description=f"Updated {len(updates)} permission(s) for role: {role.name}",
+            request=request,
+            metadata={"permissions": updates},
+        )
+        response_role = self.get_queryset().get(pk=role.pk)
+        return Response(self.get_serializer(response_role).data)
 
     @action(detail=True, methods=["post"], url_path="clone")
     def clone_role(self, request, pk=None):
@@ -284,6 +481,7 @@ class RoleViewSet(viewsets.ModelViewSet):
             description=request.data.get("description", f"Cloned from {source_role.name}"),
             permissions=source_role.permissions.copy() if source_role.permissions else {},
             is_active=request.data.get("is_active", True),
+            is_system=False,
         )
         
         # Audit log
@@ -401,6 +599,7 @@ class RoleViewSet(viewsets.ModelViewSet):
             description=template["description"],
             permissions=template["permissions"],
             is_active=True,
+            is_system=False,
         )
         
         # Audit log
@@ -464,7 +663,7 @@ class OfficeViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
             )
         ).values("display_name")[:1]
         principal_username = principal_memberships.values("user__username")[:1]
-        return super().get_queryset().annotate(
+        queryset = super().get_queryset().annotate(
             active_member_count=Coalesce(
                 active_memberships.values("office_id")
                 .annotate(total=Count("user_id", distinct=True))
@@ -478,6 +677,7 @@ class OfficeViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
                 output_field=CharField(),
             ),
         )
+        return _scope_office_queryset(queryset, self.request.user)
 
 
 class OfficeMembershipViewSet(viewsets.ModelViewSet):
@@ -489,6 +689,14 @@ class OfficeMembershipViewSet(viewsets.ModelViewSet):
     filterset_fields = ["office", "user", "assignment_role", "is_primary", "is_active"]
     search_fields = ["user__username", "user__first_name", "user__last_name", "office__name", "office__code"]
     ordering_fields = ["created_at", "starts_at", "ends_at"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if _user_can_read_full_org_hierarchy(self.request.user):
+            return queryset
+        if not self.request.user or not self.request.user.is_authenticated:
+            return queryset.none()
+        return queryset.filter(user=self.request.user)
 
     def _ensure_membership_admin(self):
         from organization.permission_utils import require_any_permission
@@ -617,16 +825,45 @@ class OfficeMembershipViewSet(viewsets.ModelViewSet):
             "duplicateOfficeAssignments": duplicate_conflicts,
         })
 
+    def _ensure_membership_in_scope(self, office, user):
+        """Scoped people managers may only seat users inside their own unit."""
+        from organization.org_scope import (
+            office_within_people_admin_boundary,
+            scoped_people_admin_boundary,
+            target_within_people_admin_boundary,
+        )
+
+        boundary = scoped_people_admin_boundary(self.request.user)
+        if boundary is None:
+            return
+        if not target_within_people_admin_boundary(boundary, user):
+            raise PermissionDenied(
+                "You can only manage office access for users within your own organisational unit."
+            )
+        if not office_within_people_admin_boundary(boundary, office):
+            raise PermissionDenied(
+                "You can only manage office access for offices within your own organisational unit."
+            )
+
     def perform_create(self, serializer):
         self._ensure_membership_admin()
+        self._ensure_membership_in_scope(
+            serializer.validated_data.get("office"),
+            serializer.validated_data.get("user"),
+        )
         serializer.save()
 
     def perform_update(self, serializer):
         self._ensure_membership_admin()
+        self._ensure_membership_in_scope(
+            serializer.validated_data.get("office", serializer.instance.office),
+            serializer.validated_data.get("user", serializer.instance.user),
+        )
         serializer.save()
 
     def perform_destroy(self, instance):
         self._ensure_membership_admin()
+        self._ensure_membership_in_scope(instance.office, instance.user)
         super().perform_destroy(instance)
 
 

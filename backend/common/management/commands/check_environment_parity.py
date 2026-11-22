@@ -138,6 +138,12 @@ class Command(BaseCommand):
                 and normalized_preset[key]
                 and not normalized_current.get(key)
             ]
+            extra_keys = [
+                key
+                for key in PERMISSION_KEYS
+                if normalized_current.get(key)
+                and not normalized_preset.get(key)
+            ]
             if missing_keys and not current:
                 issues.append(
                     f"Role '{role.name}' has no permissions seeded "
@@ -147,6 +153,11 @@ class Command(BaseCommand):
                 issues.append(
                     f"Role '{role.name}' is missing preset permissions: {', '.join(missing_keys[:5])}"
                     + ("…" if len(missing_keys) > 5 else "")
+                )
+            if extra_keys:
+                issues.append(
+                    f"Role '{role.name}' has permissions outside its preset: {', '.join(extra_keys[:5])}"
+                    + ("…" if len(extra_keys) > 5 else "")
                 )
 
         return issues

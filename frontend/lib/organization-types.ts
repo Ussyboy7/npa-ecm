@@ -93,8 +93,10 @@ export interface Role {
   name: string;
   description?: string;
   isActive: boolean;
+  isSystem?: boolean;
   permissions?: Record<string, boolean>;
   userCount?: number;
+  activeUserCount?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -117,6 +119,7 @@ export interface OrganizationContextType {
   officeMemberships: OfficeMembership[];
   myOfficeMemberships: OfficeMembership[];
   myOfficeMembershipsLoaded: boolean;
+  officeCatalogLoaded: boolean;
   isOrganizationReady: boolean;
   fetchOfficeMemberships: (filters: {
     user?: string;
@@ -130,6 +133,8 @@ export interface OrganizationContextType {
   roles: Role[];
   addRole: (role: CreateRoleInput) => Promise<Role>;
   updateRole: (id: string, updates: UpdateRoleInput) => Promise<Role>;
+  updateRolePermission: (id: string, permissionId: string, enabled: boolean) => Promise<Role>;
+  updateRolePermissions: (id: string, permissions: Record<string, boolean>) => Promise<Role>;
   deleteRole: (id: string) => Promise<void>;
   addDirectorate: (directorate: CreateDirectorateInput) => Promise<Directorate>;
   updateDirectorate: (id: string, updates: UpdateDirectorateInput) => Promise<Directorate | null>;

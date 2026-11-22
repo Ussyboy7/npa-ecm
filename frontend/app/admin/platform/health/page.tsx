@@ -251,6 +251,7 @@ export default function SystemHealthPage() {
   }, [canDownloadBackup, downloadingBackup, metrics?.backup?.filename]);
 
   useEffect(() => {
+    if (!canAccess) return;
     isMountedRef.current = true;
     void loadData();
     const intervalId = setInterval(() => {
@@ -263,7 +264,7 @@ export default function SystemHealthPage() {
       clearInterval(intervalId);
       clearInterval(tickId);
     };
-  }, [loadData]);
+  }, [canAccess, loadData]);
 
   if (!currentUser) return null;
 

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { getSelectableOffices } from "@/lib/office-choice-utils";
 import { createCase } from "@/lib/api/cases";
 import { PRIORITY_OPTIONS } from "@/lib/constants";
 import type { Case } from "@/lib/npa-structure";
@@ -279,9 +280,12 @@ const NewCasePage = () => {
     : departments;
 
   // Filter offices based on selected department
-  const availableOffices = formData.departmentId
-    ? offices.filter((o) => o.departmentId === formData.departmentId)
-    : offices;
+  const availableOffices = getSelectableOffices(
+    formData.departmentId
+      ? offices.filter((office) => office.departmentId === formData.departmentId)
+      : offices,
+    { selectedOfficeId: formData.owningOfficeId },
+  );
 
   return (
     <ErrorBoundary>

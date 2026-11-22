@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Minute, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { getSelectableOffices } from '@/lib/office-choice-utils';
 import { usePaginatedUserSearch } from '@/hooks/use-paginated-user-search';
 import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
 import { apiFetch } from '@/lib/api-client';
@@ -851,7 +852,7 @@ const CorrespondenceDetailContent = () => {
                 <SelectTrigger><SelectValue placeholder="Select office" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— None —</SelectItem>
-                  {offices.filter((o) => o.isActive).slice(0, 100).map((o) => (
+                  {getSelectableOffices(offices, { selectedOfficeId: reassignOffice }).map((o) => (
                     <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
                   ))}
                 </SelectContent>

@@ -29,6 +29,7 @@ import { StatStrip } from '@/components/shared/StatStrip';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { getSelectableOffices } from '@/lib/office-choice-utils';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
@@ -63,7 +64,7 @@ const DEFAULT_SUMMARY: InboxSummary = {
 const CorrespondenceInboxContent = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const { offices, officeMemberships, myOfficeMembershipsLoaded } = useOrganization();
+  const { offices, officeMemberships, myOfficeMembershipsLoaded, officeCatalogLoaded } = useOrganization();
   const { dataVersion } = useCorrespondence();
   const currentUserId = currentUser?.id;
 
@@ -135,11 +136,13 @@ const CorrespondenceInboxContent = () => {
     return actingAppointments.filter((a) => String(a.office) === String(selectedOfficeId));
   }, [actingAppointments, selectedOfficeId]);
 
-  const selectableOffices = useMemo(() => {
-    if (isSuperuser) return offices;
-    const membershipOfficeIds = new Set(userOfficeIds);
-    return offices.filter((office) => membershipOfficeIds.has(office.id));
-  }, [isSuperuser, offices, userOfficeIds]);
+  const selectableOffices = useMemo(
+    () => getSelectableOffices(offices, {
+      allowedOfficeIds: isSuperuser ? undefined : new Set(userOfficeIds),
+      selectedOfficeId: selectedOfficeId && selectedOfficeId !== 'all' ? selectedOfficeId : undefined,
+    }),
+    [isSuperuser, offices, selectedOfficeId, userOfficeIds],
+  );
 
   // Get user's organizational unit IDs for CC/distribution matching
   const userOrgIds = useMemo(() => {
@@ -188,26 +191,28 @@ const CorrespondenceInboxContent = () => {
       setSelectedOfficeId(null);
       return;
     }
-    if (selectedOfficeId !== null) return;
+    if (!officeCatalogLoaded || selectedOfficeId !== null) return;
 
     let nextOffice = 'all';
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (
-        saved &&
-        (saved === 'all' ||
-          userOfficeIds.includes(saved) ||
-          (isSuperuser && selectableOffices.some((office) => office.id === saved)))
-      ) {
-        nextOffice = saved;
-      } else if (userOfficeIds.length > 0) {
-        nextOffice = userOfficeIds[0];
+      const allowedOfficeIds = isSuperuser ? undefined : new Set(userOfficeIds);
+      const savedOfficeIsSelectable = Boolean(
+        saved && getSelectableOffices(offices, {
+          allowedOfficeIds,
+          selectedOfficeId: saved,
+        }).some((office) => office.id === saved),
+      );
+      if (saved === 'all' || savedOfficeIsSelectable) {
+        nextOffice = saved ?? 'all';
+      } else if (selectableOffices.length > 0) {
+        nextOffice = selectableOffices[0].id;
       }
-    } else if (userOfficeIds.length > 0) {
-      nextOffice = userOfficeIds[0];
+    } else if (selectableOffices.length > 0) {
+      nextOffice = selectableOffices[0].id;
     }
     setSelectedOfficeId(nextOffice);
-  }, [hasCorrespondenceAccess, selectedOfficeId, userOfficeIds, isSuperuser, selectableOffices]);
+  }, [hasCorrespondenceAccess, officeCatalogLoaded, selectedOfficeId, userOfficeIds, isSuperuser, selectableOffices, offices]);
 
   useEffect(() => {
     if (selectedOfficeId === null) return;
@@ -229,7 +234,7 @@ const CorrespondenceInboxContent = () => {
   }, [accessResolved, hasCorrespondenceAccess, router]);
 
   useEffect(() => {
-    if (!hasCorrespondenceAccess || selectedOfficeId === null) return;
+    if (!hasCorrespondenceAccess || !officeCatalogLoaded || selectedOfficeId === null) return;
 
     const controller = new AbortController();
     const fetchInbox = async () => {
@@ -284,7 +289,7 @@ const CorrespondenceInboxContent = () => {
     return () => {
       controller.abort();
     };
-  }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, dataVersion]);
+  }, [hasCorrespondenceAccess, officeCatalogLoaded, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, dataVersion]);
 
   return (
     <>

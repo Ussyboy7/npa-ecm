@@ -13,6 +13,7 @@ import { listOfficeMembershipsForOffice } from "@/lib/office-memberships-client"
 import { appointActing, getEligibleActingCandidates, type ActingCandidate, type ActingRequest } from "@/lib/api/acting-appointments";
 import type { Office, OfficeMembership } from "@/lib/organization-types";
 import type { User } from "@/lib/npa-structure";
+import { getSelectableOffices } from "@/lib/office-choice-utils";
 
 export type ActingMode = "self-service" | "admin";
 
@@ -118,9 +119,6 @@ export function ActingAppointmentDialog({
     return () => { ignore = true; };
   }, [isAdmin, officeId, open, principalId, principalOptions]);
 
-  const officeLabel = (value: string) =>
-    offices.find((office) => String(office.id) === value)?.name || value;
-
   const submit = async () => {
     if (!officeId || !actingUserId || !reason.trim()) {
       toast({ title: "Office, acting officer, and reason are required", variant: "destructive" });
@@ -152,12 +150,12 @@ export function ActingAppointmentDialog({
   };
 
   const today = new Date().toISOString().slice(0, 10);
-  const availableOffices = isAdmin
-    ? offices.filter((office) => office.isActive !== false).map((office) => ({ id: String(office.id), name: office.name }))
-    : principalOffices.map((membership) => ({
-      id: String(membership.officeId),
-      name: membership.officeName || officeLabel(String(membership.officeId)),
-    }));
+  const availableOffices = getSelectableOffices(offices, {
+    allowedOfficeIds: isAdmin
+      ? undefined
+      : new Set(principalOffices.filter((membership) => membership.isActive).map((membership) => String(membership.officeId))),
+    selectedOfficeId: officeId,
+  }).map((office) => ({ id: String(office.id), name: office.name }));
 
   return (
     <Dialog open={open} onOpenChange={(value) => { if (value) onOpenChange(true); else close(); }}>

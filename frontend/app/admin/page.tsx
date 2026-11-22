@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { AdminHubTabList } from "@/components/admin/AdminHubTabList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -150,6 +151,7 @@ export default function AdminPage() {
   }, [visibility.showAdminDashboard, platformHome, router]);
 
   const loadData = useCallback(async () => {
+    if (!visibility.showAdminDashboard) return;
     if (!currentUser) return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
@@ -173,6 +175,7 @@ export default function AdminPage() {
   }, [currentUser, visibility]);
 
   const loadLive = useCallback(async () => {
+    if (!visibility.showAdminDashboard) return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     try {
@@ -185,7 +188,7 @@ export default function AdminPage() {
     } finally {
       inFlightRef.current = false;
     }
-  }, []);
+  }, [visibility.showAdminDashboard]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -275,6 +278,27 @@ export default function AdminPage() {
     metrics?.performance.errorRate != null
       ? `${Number(metrics.performance.errorRate).toFixed(2)}%`
       : null;
+
+  if (!visibility.isVisibilityReady) return null;
+
+  if (!visibility.showAdminDashboard && platformHome) return null;
+
+  if (!visibility.showAdminDashboard) {
+    return (
+      <AdminPageShell
+        title="Administration Dashboard"
+        subtitle="Enterprise system monitoring and user management"
+        icon={LayoutDashboard}
+        tabs={<AdminHubTabList />}
+      >
+        <PermissionDeniedCard
+          title="Administration access required"
+          check={null}
+          fallbackMessage="Your role does not include administration or platform access."
+        />
+      </AdminPageShell>
+    );
+  }
 
   return (
     <AdminPageShell

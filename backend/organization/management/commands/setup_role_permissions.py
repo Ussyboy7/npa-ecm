@@ -30,6 +30,10 @@ class Command(BaseCommand):
                 skipped += 1
                 continue
 
+            if not role.is_system:
+                role.is_system = True
+                role.save(update_fields=["is_system", "updated_at"])
+
             current = role.permissions if isinstance(role.permissions, dict) else {}
             if current and not force and any(current.get(k) for k in preset):
                 self.stdout.write(f"Role '{role.name}' already has permissions — skipped (use --force)")
@@ -41,7 +45,7 @@ class Command(BaseCommand):
                 merged = normalize_permissions(preset)
 
             role.permissions = merged
-            role.save(update_fields=["permissions", "updated_at"])
+            role.save(update_fields=["permissions", "is_system", "updated_at"])
             self.stdout.write(self.style.SUCCESS(f"Updated permissions for role '{role.name}'"))
             updated += 1
 

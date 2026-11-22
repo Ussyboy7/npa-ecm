@@ -89,6 +89,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
 class RoleSerializer(serializers.ModelSerializer):
     user_count = serializers.IntegerField(read_only=True)
+    active_user_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Role
@@ -97,12 +98,20 @@ class RoleSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "is_active",
+            "is_system",
             "permissions",
             "user_count",
+            "active_user_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["created_at", "updated_at", "user_count"]
+        read_only_fields = [
+            "created_at",
+            "updated_at",
+            "is_system",
+            "user_count",
+            "active_user_count",
+        ]
 
 
 class OfficeSerializer(serializers.ModelSerializer):

@@ -19,6 +19,8 @@ echo "Validating docker-compose.prod.yml..."
 export DB_NAME="${DB_NAME:-npa_ecm_prod}"
 export DB_USER="${DB_USER:-npa_ecm_prod}"
 export DB_PASSWORD="${DB_PASSWORD:-ci_password}"
+# Validation-only value; real deployments must supply the confirmed hop count.
+export THROTTLE_NUM_PROXIES="${THROTTLE_NUM_PROXIES:-1}"
 docker compose -f docker-compose.prod.yml config --quiet
 
 echo "Compose files OK."

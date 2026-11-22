@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { usePagination } from '@/hooks/use-pagination';
+import { getFirstActiveOfficeId, getSelectableOffices } from '@/lib/office-choice-utils';
 import {
   Select,
   SelectContent,
@@ -95,21 +96,23 @@ const OfficeSentPage = () => {
   }, [currentUser, officeMemberships]);
 
   const hasOfficeAccess = isSuperAdmin || userOfficeIds.length > 0;
+  const firstActiveMemberOfficeId = getFirstActiveOfficeId(offices, userOfficeIds);
 
-  // Default office filter to holder's primary office (ICT for gmict) — not "All Offices"
+  // Default to the holder's first active office, never an inactive membership.
   useEffect(() => {
-    if (!isSuperAdmin && !hasSetDefaultOffice && userOfficeIds.length > 0 && selectedOfficeId === 'all') {
-      setSelectedOfficeId(userOfficeIds[0]);
+    if (!isSuperAdmin && !hasSetDefaultOffice && firstActiveMemberOfficeId && selectedOfficeId === 'all') {
+      setSelectedOfficeId(firstActiveMemberOfficeId);
       setHasSetDefaultOffice(true);
     }
-  }, [userOfficeIds, isSuperAdmin, selectedOfficeId, hasSetDefaultOffice]);
+  }, [firstActiveMemberOfficeId, isSuperAdmin, selectedOfficeId, hasSetDefaultOffice]);
 
-  const selectableOffices = useMemo(() => {
-    if (isSuperAdmin) return offices;
-    if (!userOfficeIds.length) return [];
-    const idSet = new Set(userOfficeIds);
-    return offices.filter((office) => idSet.has(office.id));
-  }, [offices, userOfficeIds, isSuperAdmin]);
+  const selectableOffices = useMemo(
+    () => getSelectableOffices(offices, {
+      allowedOfficeIds: isSuperAdmin ? undefined : new Set(userOfficeIds),
+      selectedOfficeId: selectedOfficeId === 'all' ? undefined : selectedOfficeId,
+    }),
+    [offices, userOfficeIds, isSuperAdmin, selectedOfficeId],
+  );
 
   const activeFilterCount = useMemo(() => {
     let n = 0;

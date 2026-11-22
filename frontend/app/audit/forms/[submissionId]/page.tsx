@@ -88,6 +88,7 @@ type AuditSection = {
 };
 
 const DEFAULT_TABLE_ROWS = 10;
+const AUDIT_FORM_SUBMISSIONS_URL = "/dms?tab=forms&segment=submissions";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-NG", {
@@ -430,7 +431,7 @@ export default function AuditFormFillPage() {
       } else {
         logError("Failed to load submission", err);
         toast.error("Failed to load submission");
-        router.push("/audit/forms");
+        router.push(AUDIT_FORM_SUBMISSIONS_URL);
       }
     } finally {
       setLoading(false);
@@ -673,7 +674,7 @@ export default function AuditFormFillPage() {
           title="Submission not found"
           message="The submission could not be loaded."
           actionLabel="Back to forms"
-          onAction={() => router.push("/audit/forms")}
+          onAction={() => router.push(AUDIT_FORM_SUBMISSIONS_URL)}
         />
       </div>
     );
@@ -822,7 +823,7 @@ export default function AuditFormFillPage() {
     <div className="container max-w-4xl mx-auto space-y-6 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="compact" onClick={() => router.push("/audit/forms")}>
+          <Button variant="ghost" size="compact" onClick={() => router.push(AUDIT_FORM_SUBMISSIONS_URL)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>

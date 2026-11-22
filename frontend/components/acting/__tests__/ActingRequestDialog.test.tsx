@@ -24,6 +24,7 @@ const offices = [
   { id: "office-1", name: "ICT Office", isActive: true },
   { id: "office-2", name: "Finance Office", isActive: true },
   { id: "office-3", name: "Legal Office", isActive: true },
+  { id: "office-4", name: "Inactive Office", isActive: false },
 ] as Office[];
 
 const memberOffices = [
@@ -44,10 +45,10 @@ const memberOffices = [
     isActive: false,
   },
   {
-    id: "membership-3",
-    officeId: "office-3",
-    officeName: "Legal Office",
-    userId: "user-2",
+    id: "membership-4",
+    officeId: "office-4",
+    officeName: "Inactive Office",
+    userId: "user-1",
     assignmentRole: "staff",
     isActive: true,
   },
@@ -91,6 +92,18 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("ActingRequestDialog", () => {
+  it("offers active offices only within active membership scope", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByRole("combobox", { name: "Office" }));
+
+    expect(await screen.findByRole("option", { name: "ICT Office" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "Finance Office" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Legal Office" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Inactive Office" })).toBeNull();
+  });
+
   it("submits the selected office, optional suggestion, and trimmed reason", async () => {
     const user = userEvent.setup();
     renderDialog();

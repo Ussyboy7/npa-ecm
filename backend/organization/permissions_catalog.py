@@ -51,6 +51,49 @@ PERMISSION_KEYS: tuple[str, ...] = (
     "sidebar_show_integration",
 )
 
+# Permissions that make a role administratively powerful enough that only a
+# superuser may assign it to a user. This prevents a user manager from
+# promoting themselves (or a puppet account) into an administrative role.
+ROLE_ASSIGNMENT_GUARD_PERMISSIONS: frozenset[str] = frozenset(
+    {
+        "can_manage_users",
+        "can_manage_roles",
+        "can_manage_org_structure",
+        "can_access_system_health",
+        "can_manage_drm_policies",
+        # Controls platform connectors, webhooks and outbound email, so it can
+        # move data outside the organisation; treat it as administrative.
+        "can_manage_integration",
+    }
+)
+
+
+def role_has_privileged_permissions(role: Any | None) -> bool:
+    """Return True when assigning this role would grant administrative power."""
+    if role is None:
+        return False
+    if getattr(role, "name", "") == "Super Admin":
+        return True
+    permissions = getattr(role, "permissions", None)
+    if not isinstance(permissions, dict):
+        return False
+    return any(bool(permissions.get(key)) for key in ROLE_ASSIGNMENT_GUARD_PERMISSIONS)
+
+
+def privileged_permission_changes(
+    current: dict[str, Any] | None,
+    updates: dict[str, Any] | None,
+) -> list[str]:
+    """Return administrative permission keys whose value would change."""
+    if not isinstance(updates, dict) or not updates:
+        return []
+    current = current if isinstance(current, dict) else {}
+    return sorted(
+        key
+        for key in ROLE_ASSIGNMENT_GUARD_PERMISSIONS
+        if key in updates and bool(updates[key]) != bool(current.get(key, False))
+    )
+
 PERMISSION_LABELS: dict[str, str] = {
     "can_register_correspondence": "Register Correspondence",
     "can_minute_correspondence": "Minute & Forward",
@@ -227,7 +270,6 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_reject": True,
         "can_access_administration": True,
         "can_manage_users": True,
-        "can_manage_roles": True,
         "can_manage_org_structure": True,
         "can_access_analytics": True,
         "can_access_reports": True,
@@ -257,6 +299,8 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_access_analytics": True,
         "can_access_reports": True,
         "can_access_records_governance": True,
+        "can_access_administration": True,
+        "can_manage_users": True,
     },
     "Principal Manager": {
         "can_access_cases": True,
@@ -277,13 +321,9 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_access_approvals": True,
         "can_reject": True,
         "can_access_administration": True,
-        "can_manage_users": True,
-        "can_manage_roles": True,
-        "can_manage_org_structure": True,
         "can_access_analytics": True,
         "can_access_reports": True,
         "can_access_records_governance": True,
-        "can_manage_integration": True,
     },
     "Senior Manager": {
         "can_access_cases": True,
@@ -304,13 +344,9 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_access_approvals": True,
         "can_reject": True,
         "can_access_administration": True,
-        "can_manage_users": True,
-        "can_manage_roles": True,
-        "can_manage_org_structure": True,
         "can_access_analytics": True,
         "can_access_reports": True,
         "can_access_records_governance": True,
-        "can_manage_integration": True,
     },
     "Manager": {
         "can_access_cases": True,
@@ -331,13 +367,9 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_access_approvals": True,
         "can_reject": True,
         "can_access_administration": True,
-        "can_manage_users": True,
-        "can_manage_roles": True,
-        "can_manage_org_structure": True,
         "can_access_analytics": True,
         "can_access_reports": True,
         "can_access_records_governance": True,
-        "can_manage_integration": True,
     },
     "Assistant Manager": {
         "can_access_cases": True,
@@ -399,6 +431,30 @@ ROLE_PERMISSION_PRESETS: dict[str, dict[str, bool]] = {
         "can_access_document_management": True,
         "can_create_documents": True,
         "can_edit_documents": True,
+    },
+    "Staff": {
+        "can_register_correspondence": True,
+        "can_treat_correspondence": True,
+        "can_access_document_management": True,
+        "can_create_documents": True,
+    },
+    "Staff I": {
+        "can_register_correspondence": True,
+        "can_treat_correspondence": True,
+        "can_access_document_management": True,
+        "can_create_documents": True,
+    },
+    "Staff II": {
+        "can_register_correspondence": True,
+        "can_treat_correspondence": True,
+        "can_access_document_management": True,
+        "can_create_documents": True,
+    },
+    "Staff III": {
+        "can_register_correspondence": True,
+        "can_treat_correspondence": True,
+        "can_access_document_management": True,
+        "can_create_documents": True,
     },
     "Registry Officer": {
         "can_access_cases": True,

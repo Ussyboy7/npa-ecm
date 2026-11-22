@@ -1,4 +1,6 @@
 import React from "react";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SidebarVisibility } from "@/hooks/use-sidebar-visibility";
@@ -51,6 +53,30 @@ describe("Organization Acting navigation", () => {
     expect(acting.getAttribute("href")).toBe("/admin/organization/acting");
     expect(screen.getByRole("tab", { name: "Structure" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Offices" })).toBeTruthy();
+  });
+
+  it("shows External entities alongside Acting when both are available", async () => {
+    navigation.visibility = {
+      showOrganizationActing: true,
+      showExternalEntities: true,
+    };
+
+    render(<OrganizationTabList />);
+
+    const acting = await screen.findByRole("tab", { name: "Acting" });
+    const entities = screen.getByRole("tab", { name: "External entities" });
+    expect(acting.getAttribute("href")).toBe("/admin/organization/acting");
+    expect(entities.getAttribute("href")).toBe("/admin/organization/entities");
+  });
+
+  it("points Organization tabs at pages that exist", () => {
+    for (const route of [
+      "app/admin/organization/page.tsx",
+      "app/admin/organization/acting/page.tsx",
+      "app/admin/organization/entities/page.tsx",
+    ]) {
+      expect(existsSync(resolve(process.cwd(), route)), route).toBe(true);
+    }
   });
 
   it("does not show Acting when the user has no Acting access", () => {

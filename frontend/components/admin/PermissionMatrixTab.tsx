@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -25,12 +32,20 @@ export const MATRIX_CATEGORIES = [
   "analytics",
 ] as const;
 
+const HIGH_RISK_PERMISSIONS = [
+  "can_manage_users",
+  "can_manage_roles",
+  "can_access_system_health",
+] as const;
+
 export function PermissionMatrixTab() {
-  const { roles, updateRole, refreshOrganizationData } = useOrganization();
+  const { roles, updateRolePermission, updateRolePermissions, refreshOrganizationData } = useOrganization();
   const { currentUser } = useCurrentUser();
   const { permissions, loading: catalogLoading } = usePermissionCatalog();
   const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [savingCell, setSavingCell] = useState<string | null>(null);
+  const [bulkSavingRole, setBulkSavingRole] = useState<string | null>(null);
 
   const profile = getPermissionProfile(currentUser ?? undefined);
   const canEdit = profile.canManageRoles || currentUser?.isSuperuser;
@@ -52,18 +67,31 @@ export function PermissionMatrixTab() {
     [roles],
   );
 
+  const visibleRoles = useMemo(
+    () =>
+      roleFilter === "all"
+        ? sortedRoles
+        : sortedRoles.filter((role) => role.id === roleFilter),
+    [sortedRoles, roleFilter],
+  );
+
   const togglePermission = async (roleId: string, permissionId: string, enabled: boolean) => {
     const role = roles.find((r) => r.id === roleId);
     if (!role || !canEdit) return;
 
     const cellKey = `${roleId}:${permissionId}`;
+    if (
+      enabled &&
+      (HIGH_RISK_PERMISSIONS as readonly string[]).includes(permissionId)
+    ) {
+      const confirmed = window.confirm(
+        `Grant ${permissionId.replace(/_/g, " ")} to ${role.name}? This is a high-risk permission.`,
+      );
+      if (!confirmed) return;
+    }
     setSavingCell(cellKey);
     try {
-      const nextPermissions = {
-        ...(role.permissions ?? {}),
-        [permissionId]: enabled,
-      };
-      await updateRole(roleId, { permissions: nextPermissions });
+      await updateRolePermission(roleId, permissionId, enabled);
       await refreshOrganizationData();
       toast.success("Permission updated", {
         description: `${role.name}: ${enabled ? "granted" : "revoked"} ${permissionId.replace(/_/g, " ")}`,
@@ -74,6 +102,38 @@ export function PermissionMatrixTab() {
       });
     } finally {
       setSavingCell(null);
+    }
+  };
+
+  const setAllVisiblePermissions = async (role: (typeof roles)[number], enabled: boolean) => {
+    if (!canEdit || matrixPermissions.length === 0) return;
+    if (
+      enabled &&
+      matrixPermissions.some((permission) =>
+        (HIGH_RISK_PERMISSIONS as readonly string[]).includes(permission.id),
+      )
+    ) {
+      const confirmed = window.confirm(
+        `Grant all visible permissions to ${role.name}? This includes high-risk permissions.`,
+      );
+      if (!confirmed) return;
+    }
+    setBulkSavingRole(role.id);
+    try {
+      const changes = Object.fromEntries(
+        matrixPermissions.map((permission) => [permission.id, enabled]),
+      );
+      await updateRolePermissions(role.id, changes);
+      await refreshOrganizationData();
+      toast.success(`Permissions ${enabled ? "granted" : "cleared"}`, {
+        description: `${role.name}: ${matrixPermissions.length} visible permission(s) updated.`,
+      });
+    } catch (error) {
+      toast.error("Bulk update failed", {
+        description: error instanceof Error ? error.message : "Could not update role permissions",
+      });
+    } finally {
+      setBulkSavingRole(null);
     }
   };
 
@@ -100,7 +160,8 @@ export function PermissionMatrixTab() {
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            Cross-role view of action permissions (sidebar keys are edited per role in the role form).
+            Cross-role view of the 36 action permissions. The 7 sidebar keys are edited per role in
+            the role form. Select a role to grant or clear its visible permissions in bulk.
           </p>
           {!canEdit ? (
             <Badge variant="secondary">Read-only</Badge>
@@ -110,14 +171,29 @@ export function PermissionMatrixTab() {
         </div>
 
         <div className="rounded-xl bg-muted/30 p-2">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Filter permissions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 pl-8 text-xs"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="h-8 w-full max-w-[220px] text-xs" aria-label="Filter by role">
+                <SelectValue placeholder="All roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                {sortedRoles.map((role) => (
+                  <SelectItem key={role.id} value={role.id}>
+                    {role.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative max-w-sm flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Filter permissions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
           </div>
         </div>
 
@@ -135,13 +211,37 @@ export function PermissionMatrixTab() {
                     <th className="sticky left-0 z-10 bg-muted/95 px-3 py-2 text-left font-medium min-w-[220px]">
                       Permission
                     </th>
-                    {sortedRoles.map((role) => (
+                    {visibleRoles.map((role) => (
                       <th
                         key={role.id}
                         className="px-2 py-2 text-center font-medium min-w-[100px] max-w-[120px]"
                         title={role.description ?? role.name}
                       >
                         <span className="line-clamp-2">{role.name}</span>
+                        {canEdit && roleFilter === role.id ? (
+                          <div className="mt-1 flex items-center justify-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-5 px-1.5 text-[10px]"
+                              disabled={bulkSavingRole === role.id || matrixPermissions.length === 0}
+                              onClick={() => void setAllVisiblePermissions(role, true)}
+                            >
+                              Grant all
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-5 px-1.5 text-[10px]"
+                              disabled={bulkSavingRole === role.id || matrixPermissions.length === 0}
+                              onClick={() => void setAllVisiblePermissions(role, false)}
+                            >
+                              Clear
+                            </Button>
+                          </div>
+                        ) : null}
                       </th>
                     ))}
                   </tr>
@@ -155,7 +255,7 @@ export function PermissionMatrixTab() {
                           {permission.category}
                         </div>
                       </td>
-                      {sortedRoles.map((role) => {
+                      {visibleRoles.map((role) => {
                         const enabled = Boolean(role.permissions?.[permission.id]);
                         const cellKey = `${role.id}:${permission.id}`;
                         const busy = savingCell === cellKey;
