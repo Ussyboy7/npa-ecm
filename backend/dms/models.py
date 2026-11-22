@@ -5,7 +5,6 @@ from __future__ import annotations
 from django.conf import settings
 from django.contrib.postgres.search import SearchVectorField
 from django.db import models
-from django.db.models import Q
 
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 

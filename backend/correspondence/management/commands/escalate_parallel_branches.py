@@ -14,7 +14,7 @@ Examples
     # Also force-complete branches older than 3x their SLA deadline
     python manage.py escalate_parallel_branches --auto-force --grace-multiplier 3
 """
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from correspondence.models import Correspondence, Minute, ParallelRoutingGroup

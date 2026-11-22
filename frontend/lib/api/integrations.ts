@@ -25,22 +25,6 @@ export interface Webhook {
   updated_at: string;
 }
 
-export interface WebhookEvent {
-  id: string;
-  webhook: Webhook;
-  event_type: string;
-  payload: Record<string, unknown>;
-  status: 'pending' | 'sent' | 'failed' | 'retrying';
-  response_code?: number;
-  response_body?: string;
-  error_message?: string;
-  attempt_count: number;
-  last_attempt_at?: string;
-  next_retry_at?: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface EmailConnector {
   id: string;
   name: string;
@@ -126,17 +110,6 @@ export const deleteWebhook = async (id: string): Promise<void> =>
 export const testWebhook = async (id: string): Promise<{ status: string; message: string; event_id?: string; error?: string }> =>
   apiFetch(`/integrations/webhooks/${id}/test/`, { method: 'POST' });
 
-export const getWebhookEvents = async (params?: { webhook?: string; status?: string }): Promise<WebhookEvent[]> => {
-  const queryParams = new URLSearchParams();
-  if (params?.webhook) queryParams.append('webhook', params.webhook);
-  if (params?.status) queryParams.append('status', params.status);
-  const query = queryParams.toString();
-  const response = await apiFetch<WebhookEvent[] | { results: WebhookEvent[] }>(
-    `/integrations/webhook-events/${query ? `?${query}` : ''}`
-  );
-  return unwrapList(response);
-};
-
 export const getEmailConnectors = async (): Promise<EmailConnector[]> => {
   const response = await apiFetch<EmailConnector[] | { results: EmailConnector[] }>(
     '/integrations/email-connectors/'
@@ -152,9 +125,6 @@ export const deleteEmailConnector = async (id: string): Promise<void> =>
 
 export const createEmailConnector = async (data: Partial<EmailConnector>): Promise<EmailConnector> =>
   apiFetch<EmailConnector>('/integrations/email-connectors/', { method: 'POST', body: JSON.stringify(data) });
-
-export const sendEmail = async (data: { to: string[]; subject: string; body: string; html_body?: string; connector_id?: string }): Promise<{ status: string; message: string }> =>
-  apiFetch('/integrations/email-connectors/send_email/', { method: 'POST', body: JSON.stringify(data) });
 
 export const getERPConnectors = async (): Promise<ERPConnector[]> => {
   const response = await apiFetch<ERPConnector[] | { results: ERPConnector[] }>('/integrations/erp-connectors/');
@@ -183,13 +153,6 @@ export const getIntegrationLogs = async (params?: { log_type?: string; status?: 
     `/integrations/logs/${query ? `?${query}` : ''}`
   );
   return unwrapList(response);
-};
-
-export const getWebhookEventCatalog = async (): Promise<Array<{ id: string; label: string; module: string }>> => {
-  const response = await apiFetch<{ events: Array<{ id: string; label: string; module: string }> }>(
-    '/integrations/webhooks/event-catalog/'
-  );
-  return response.events ?? [];
 };
 
 export const pollEmailInbox = async (connectorId: string): Promise<{ success: boolean; correspondence_created?: number; messages_processed?: number; error?: string }> =>

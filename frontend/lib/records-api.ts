@@ -90,16 +90,6 @@ export async function createRetentionSchedule(
   });
 }
 
-export async function updateRetentionSchedule(
-  id: string,
-  data: Partial<RetentionSchedule>,
-): Promise<RetentionSchedule> {
-  return apiFetch<RetentionSchedule>(`/records/retention-schedules/${id}/`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-}
-
 export async function fetchLegalHolds(activeOnly = false): Promise<LegalHold[]> {
   const query = activeOnly ? '?active_only=true' : '';
   const response = await apiFetch<LegalHold[] | { results: LegalHold[] }>(
@@ -173,15 +163,5 @@ export async function completeDisposalRequest(id: string): Promise<DisposalReque
 export async function generateDueDisposalRequests(): Promise<{ created: number }> {
   return apiFetch<{ created: number }>('/records/disposal-requests/generate-due/', {
     method: 'POST',
-  });
-}
-
-export async function createDisposalRequest(data: {
-  correspondence: string;
-  reason?: string;
-}): Promise<DisposalRequest> {
-  return apiFetch<DisposalRequest>('/records/disposal-requests/', {
-    method: 'POST',
-    body: JSON.stringify(data),
   });
 }

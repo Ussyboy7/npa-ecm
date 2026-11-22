@@ -50,9 +50,5 @@ def canonical_employee_id(employee_id: str) -> str:
     return _SEED_EMPLOYEE_TAG.sub("", value)
 
 
-def is_seed_shell_username(username: str) -> bool:
-    return (username or "").startswith("user-")
-
-
 def is_seed_email(email: str) -> bool:
     return "+seed-" in (email or "").lower()

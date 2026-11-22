@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase
 from django.test.client import RequestFactory
 from rest_framework.test import APIClient
 

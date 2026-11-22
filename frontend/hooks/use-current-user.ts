@@ -103,14 +103,6 @@ export function getCurrentUserSnapshot(): User | null {
   return globalUserState.user;
 }
 
-export function getHydratedSnapshot(): boolean {
-  return globalUserState.hydrated;
-}
-
-export function getLoadingSnapshot(): boolean {
-  return globalUserState.loading;
-}
-
 export const useCurrentUser = () => {
   const [remoteUser, setRemoteUser] = useState<User | null>(globalUserState.user);
   const [hydrated, setHydrated] = useState(globalUserState.hydrated);

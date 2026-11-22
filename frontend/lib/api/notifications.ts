@@ -54,21 +54,6 @@ export interface NotificationPreferences {
   updatedAt: string;
 }
 
-export interface CreateNotificationPayload {
-  recipient: string;
-  title: string;
-  message: string;
-  notificationType?: Notification['notificationType'];
-  priority?: Notification['priority'];
-  sender?: string;
-  module?: string;
-  relatedObjectType?: string;
-  relatedObjectId?: string;
-  actionUrl?: string;
-  actionRequired?: boolean;
-  expiresInHours?: number;
-}
-
 /**
  * Get all notifications for the current user.
  */
@@ -261,21 +246,6 @@ export const updateNotificationPreferences = async (
   const response = await apiFetch<NotificationPreferences>('/notifications/preferences/', {
     method: 'PUT',
     body: JSON.stringify(preferences),
-  });
-  return response;
-};
-
-/**
- * Create a notification (admin/superuser only typically).
- */
-export const createNotification = async (
-  payload: CreateNotificationPayload
-): Promise<Notification> => {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-
-  const response = await apiFetch<Notification>('/notifications/notifications/', {
-    method: 'POST',
-    body: JSON.stringify(payload),
   });
   return response;
 };

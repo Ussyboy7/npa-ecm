@@ -21,7 +21,7 @@ def get_user_from_token(token_string):
     try:
         # Validate token
         UntypedToken(token_string)
-    except (InvalidToken, TokenError) as e:
+    except (InvalidToken, TokenError):
         return AnonymousUser()
     
     # Decode token to get user ID

@@ -306,20 +306,6 @@ export type Minute = {
   };
 };
 
-export type ParallelRoutingGroup = {
-  id: string;
-  correspondenceId: string;
-  createdById: string;
-  createdByName?: string;
-  mergeStrategy: 'all' | 'independent' | 'any' | 'majority';
-  isComplete: boolean;
-  completedAt?: string;
-  totalBranches: number;
-  completedBranches: number;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
 export type User = {
   id: string;
   name: string;
@@ -378,8 +364,6 @@ export const getGradeLevelByCode = (code?: string | null): GradeLevel | undefine
 };
 
 export const getGradeLabel = (code?: string | null) => getGradeLevelByCode(code)?.name;
-
-export const getApprovalAuthority = (code?: string | null) => getGradeLevelByCode(code)?.approvalAuthority;
 
 // =============================================================================
 // CASE/FILE MANAGEMENT TYPES

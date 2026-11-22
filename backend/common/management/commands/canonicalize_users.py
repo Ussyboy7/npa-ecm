@@ -12,7 +12,6 @@ from common.user_identity import (
     canonical_employee_id,
     canonical_username,
     is_seed_email,
-    is_seed_shell_username,
 )
 
 User = get_user_model()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from common.field_encryption import decrypt_value, encrypt_value
+from common.field_encryption import encrypt_value
 
 from .models import (
     EmailConnector,

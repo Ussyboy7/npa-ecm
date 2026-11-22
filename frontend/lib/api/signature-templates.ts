@@ -87,27 +87,3 @@ export async function getUserSignaturePreferences(signal?: AbortSignal): Promise
   );
   return mapApiPreferencesToFrontend(response);
 }
-
-export async function updateUserSignaturePreferences(
-  preferences: Partial<UserSignaturePreferences>
-): Promise<UserSignaturePreferences> {
-  const apiData: Partial<ApiUserSignaturePreferences> = {};
-  if (preferences.defaultTemplateId !== undefined) {
-    apiData.default_template_id = preferences.defaultTemplateId || null;
-  }
-  if (preferences.templateOverrides !== undefined) {
-    apiData.template_overrides = preferences.templateOverrides;
-  }
-  if (preferences.autoApplyForMinutes !== undefined) {
-    apiData.auto_apply_for_minutes = preferences.autoApplyForMinutes;
-  }
-
-  const response = await apiFetch<ApiUserSignaturePreferences>(
-    '/accounts/signature-preferences/my_preferences/',
-    {
-      method: 'PATCH',
-      body: JSON.stringify(apiData),
-    }
-  );
-  return mapApiPreferencesToFrontend(response);
-}

@@ -28,7 +28,6 @@ from .models import (
 )
 from .serializers import (
     DivisionPerformanceSnapshotSerializer,
-    EscalationAcknowledgeSerializer,
     EscalationResolveSerializer,
     EscalationRuleCreateUpdateSerializer,
     EscalationRuleSerializer,
@@ -359,12 +358,8 @@ class DivisionPerformanceSnapshotViewSet(AnalyticsReadMixin, viewsets.ReadOnlyMo
     @action(detail=False, methods=["get"])
     def latest(self, request):
         """Get the latest snapshot for each division."""
-        from django.db.models import Max, Subquery, OuterRef
-        
-        latest_dates = DivisionPerformanceSnapshot.objects.values("division").annotate(
-            latest_date=Max("snapshot_date")
-        )
-        
+        from django.db.models import Subquery, OuterRef
+
         snapshots = DivisionPerformanceSnapshot.objects.filter(
             snapshot_date__in=Subquery(
                 DivisionPerformanceSnapshot.objects.filter(
@@ -431,7 +426,6 @@ class StaffPerformanceSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
         from organization.permission_utils import require_permission
 
         require_permission(request.user, "can_access_analytics")
-        from django.db.models import F
         
         # Get the most recent week
         latest = StaffPerformanceSnapshot.objects.order_by("-week_start").first()
@@ -582,7 +576,7 @@ class CaseStatisticsView(APIView):
 
         require_permission(request.user, "can_access_analytics")
         from correspondence.models import Case
-        from django.db.models import Count, Q, Avg
+        from django.db.models import Count
         from django.utils import timezone
         from datetime import timedelta
         

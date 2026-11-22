@@ -1,5 +1,4 @@
 import uuid
-from unittest.mock import patch
 
 from django.test import TestCase
 from rest_framework.test import APITestCase
@@ -85,7 +84,7 @@ class CorrespondenceTreatmentResponseTests(TestCase):
         """Verify the annotated queryset returns doc ID without N+1 queries."""
         correspondence = self._create_correspondence()
         from correspondence.models import CorrespondenceDocumentLink
-        from dms.models import Document, DocumentVersion
+        from dms.models import Document
         doc = Document.objects.create(title="Test Doc")
         CorrespondenceDocumentLink.objects.create(
             correspondence=correspondence,

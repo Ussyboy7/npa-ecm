@@ -122,9 +122,3 @@ export const PAGE_ROUTES: Record<PageId, string> = {
   office_inbox: APP_ROUTES.officeInbox,
   admin_overview: APP_ROUTES.admin,
 };
-
-export const isPageId = (value: string): value is PageId =>
-  (PAGE_ACCESS_KEYS as readonly string[]).includes(value);
-
-export const isPermissionKey = (value: string): value is PermissionKey =>
-  (PERMISSION_KEYS as readonly string[]).includes(value);

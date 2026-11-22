@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from accounts.serializers import UserSerializer
 
 User = get_user_model()
-from organization.models import Department, Division, Directorate, Office, OfficeMembership
+from organization.models import Department, Division, Directorate, Office
 
 from .models import (
     Case,
@@ -33,7 +33,6 @@ from .models import (
     Minute,
     ParallelRoutingGroup,
     Location,
-    PhysicalDocument,
 )
 from .physical_serializers import PhysicalDocumentSerializer
 from workflow.models import WorkflowTemplate

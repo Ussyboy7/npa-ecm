@@ -236,20 +236,6 @@ export async function markFormDocumentCompleted(id: string): Promise<FormDocumen
   });
 }
 
-export async function cloneFormDocument(
-  id: string,
-  payload?: {
-    title?: string;
-    description?: string;
-    reference_number?: string;
-  }
-): Promise<FormDocument> {
-  return apiFetch<FormDocument>(`${BASE_PATH}/form-documents/${id}/clone/`, {
-    method: "POST",
-    body: JSON.stringify(payload || {}),
-  });
-}
-
 export type ForwardFormPayload = {
   target_type: "user" | "division" | "department";
   action_type: "review" | "input" | "signature";

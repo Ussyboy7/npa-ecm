@@ -186,14 +186,3 @@ def load_stored_pdf(minute) -> bytes | None:
     if snapshot.pdf_sha256 and digest != snapshot.pdf_sha256:
         return None
     return pdf_bytes
-
-
-def snapshot_for_seal(seal):
-    if not seal:
-        return None
-    return (
-        ApprovalSnapshot.objects.filter(seal=seal)
-        .select_related("minute", "correspondence")
-        .order_by("-created_at")
-        .first()
-    )

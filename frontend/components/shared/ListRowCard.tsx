@@ -8,9 +8,6 @@ import {
   registryQueueRowShellClass,
 } from "@/components/shared/registry-queue-styles";
 
-/** @deprecated Use registryQueueRowShellClass from registry-queue-styles */
-export const listRowCardShellClass = registryQueueRowShellClass;
-
 type ListRowCardProps = {
   leading: ReactNode;
   children: ReactNode;

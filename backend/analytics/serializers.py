@@ -259,11 +259,6 @@ class EscalationSerializer(serializers.ModelSerializer):
         ]
 
 
-class EscalationAcknowledgeSerializer(serializers.Serializer):
-    """Serializer for acknowledging an escalation."""
-    pass  # No input needed, uses request.user
-
-
 class EscalationResolveSerializer(serializers.Serializer):
     """Serializer for resolving an escalation."""
 

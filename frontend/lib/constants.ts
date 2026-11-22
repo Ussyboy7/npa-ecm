@@ -24,39 +24,6 @@ export const PRIORITY_OPTIONS = [
   { value: "low", label: "Low" },
 ] as const;
 
-export const CORRESPONDENCE_STATUS_VALUES = [
-  "all",
-  "pending",
-  "in-progress",
-  "completed",
-  "dispatched",
-  "acknowledged",
-  "archived",
-  "withdrawn",
-] as const;
-
-export const CORRESPONDENCE_STATUS_OPTIONS = [
-  { value: "pending", label: "Pending" },
-  { value: "in-progress", label: "In Progress" },
-  { value: "completed", label: "Completed" },
-  { value: "dispatched", label: "Dispatched" },
-  { value: "acknowledged", label: "Acknowledged" },
-  { value: "archived", label: "Archived" },
-  { value: "withdrawn", label: "Withdrawn" },
-] as const;
-
-export const CASE_STATUS_VALUES = [
-  "in_progress",
-  "completed",
-  "pending",
-] as const;
-
-export const CASE_STATUS_OPTIONS = [
-  { value: "in_progress", label: "In Progress" },
-  { value: "completed", label: "Completed" },
-  { value: "pending", label: "Pending" },
-] as const;
-
 export const SENSITIVITY_VALUES = [
   "public",
   "internal",
@@ -80,4 +47,3 @@ export const SENSITIVITY_DETAILS: Record<
   confidential: { label: "Confidential", description: "MSS2+ (MSS2, MSS3, MSS4, MSS5, MSS1, EDCS, MDCS)" },
   restricted: { label: "Restricted", description: "MSS1, EDCS, MDCS only" },
 };
-

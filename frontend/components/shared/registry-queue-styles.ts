@@ -1,5 +1,3 @@
-import { cn } from "@/lib/utils";
-
 /**
  * Sizing scale for Office Inbox, Office Sent, and case list pages
  * (list rows, legacy stat cards, metadata lines). Prefer StatStrip for new stats.
@@ -9,50 +7,8 @@ export const registryQueueRowShellClass =
 
 export const registryQueueRowInnerGapClass = "gap-3";
 
-export const registryQueueLeadingBoxClass = "rounded-lg p-2.5";
-
-export const registryQueueLeadingIconClass = "h-4 w-4";
-
-export const registryQueueTitleClass =
-  "truncate text-sm font-semibold tracking-tight text-foreground";
-
-export const registryQueueMetaTextClass = "space-y-1 text-xs text-muted-foreground";
-
-export const registryQueueMetaIconClass = "h-3.5 w-3.5 shrink-0";
-
-export const registryQueueStatCardContentClass = "p-3";
-
-export const registryQueueStatIconBoxClass = "rounded-lg p-2";
-
-export const registryQueueStatIconClass = "h-4 w-4";
-
-export const registryQueueStatLabelClass = "text-[11px] text-muted-foreground";
-
-export const registryQueueStatValueClass =
-  "text-base font-semibold tabular-nums tracking-tight";
-
-export const registryQueueBadgeRowClass = "flex flex-wrap items-center gap-2";
-
-/** Vertical gap between list rows on queue pages */
-export const registryQueueListStackClass = "space-y-2";
-
-export const registryQueueDateTextClass = "whitespace-nowrap text-xs text-muted-foreground";
-
-/** Title row: subject/title + date column */
-export const registryQueueTitleRowClass =
-  "mb-1.5 flex items-start justify-between gap-4";
-
 /** Empty-state hero icon on queue list pages */
 export const registryQueueEmptyIconClass = "h-10 w-10 opacity-50";
-
-/** One card grouping search + summary stat grid */
-export const registryQueueSearchStatsShellContentClass = "space-y-4 p-4";
-
-export const registryQueueSearchInputWrapClass = "relative max-w-xl";
-
-export function cnRegistryQueueTitle(className?: string) {
-  return cn(registryQueueTitleClass, className);
-}
 
 /** Office correspondence list rows (inbox / sent): tighter padding and gaps */
 export const correspondenceQueueShellClass =

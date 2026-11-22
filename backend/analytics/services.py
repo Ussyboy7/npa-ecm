@@ -32,20 +32,6 @@ class DivisionMetric:
     backlog: int = 0
 
 
-@dataclass(frozen=True)
-class EnhancedDivisionMetric(DivisionMetric):
-    """Extended division metric with SLA information."""
-    sla_compliant: int = 0
-    sla_breached: int = 0
-    sla_at_risk: int = 0
-    sla_compliance_rate: float = 0.0
-    p50_turnaround: float = 0.0
-    p90_turnaround: float = 0.0
-    throughput: float = 0.0
-    trend: str = "stable"
-    trend_percent: float = 0.0
-
-
 class AnalyticsService:
     """Central place for computing analytics payloads consumed by the dashboards."""
     

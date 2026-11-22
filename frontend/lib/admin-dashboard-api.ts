@@ -118,13 +118,6 @@ export interface DashboardAlerts {
   recent_activity?: ActivityEntry[];
 }
 
-export interface DashboardOverview {
-  status: "healthy" | "degraded";
-  online_users: number;
-  services_degraded: string[];
-  last_updated: string;
-}
-
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
   if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   return apiFetch<DashboardMetrics>("/platform/admin-dashboard/metrics/");
@@ -148,11 +141,6 @@ export async function fetchUsersByRole(): Promise<UsersByRoleResponse> {
 export async function fetchDashboardAlerts(): Promise<DashboardAlerts> {
   if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   return apiFetch<DashboardAlerts>("/platform/admin-dashboard/alerts/");
-}
-
-export async function fetchDashboardOverview(): Promise<DashboardOverview> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  return apiFetch<DashboardOverview>("/platform/admin-dashboard/overview/");
 }
 
 export async function downloadLatestBackup(): Promise<Blob> {

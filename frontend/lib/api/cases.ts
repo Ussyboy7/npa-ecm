@@ -201,26 +201,6 @@ export async function createCase(data: Partial<Case>): Promise<Case> {
 }
 
 /**
- * Update a case
- */
-export async function updateCase(caseId: string, data: Partial<Case>): Promise<Case> {
-  return apiFetch<Case>(`${BASE_PATH}/${caseId}/`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-}
-
-/**
- * Delete a case (soft delete)
- */
-export async function deleteCase(caseId: string): Promise<void> {
-  await apiFetch(`${BASE_PATH}/${caseId}/`, {
-    method: 'DELETE',
-  });
-}
-
-/**
  * Link a correspondence to a case
  */
 export async function linkCorrespondenceToCase(
@@ -397,10 +377,6 @@ export async function getCaseTemplates(): Promise<CaseTemplate[]> {
   return Array.isArray(data.results) ? data.results : [];
 }
 
-export async function getCaseTemplate(id: string): Promise<CaseTemplate> {
-  return apiFetch<CaseTemplate>(`/correspondence/case-templates/${id}/`);
-}
-
 export async function createCaseFromTemplate(
   templateId: string,
   caseData: Partial<Case>
@@ -511,12 +487,6 @@ export interface CaseExportData {
   exported_by: string;
 }
 
-export async function exportCase(caseId: string): Promise<CaseExportData> {
-  return apiFetch<CaseExportData>(`${BASE_PATH}/${caseId}/export/`, {
-    method: 'POST',
-  });
-}
-
 export async function importCases(data: CaseExportData | CaseExportData[]): Promise<{
   imported: number;
   failed: number;
@@ -531,23 +501,6 @@ export async function importCases(data: CaseExportData | CaseExportData[]): Prom
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(Array.isArray(data) ? data : [data]),
   });
-}
-
-// Case SLA
-export interface CaseSLA {
-  id: string;
-  case: Case;
-  target_days: number;
-  target_date: string;
-  warning_threshold_percent: number;
-  critical_threshold_percent: number;
-  warning_sent: boolean;
-  critical_sent: boolean;
-  breached: boolean;
-  breached_at?: string | null;
-  status: 'ok' | 'warning' | 'critical' | 'breach';
-  created_at: string;
-  updated_at: string;
 }
 
 export async function getCaseSLAStatus(caseId: string, signal?: AbortSignal): Promise<{

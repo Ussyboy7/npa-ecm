@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from django.db import models
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
 from django.utils import timezone
 
-from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
+from common.models import TimeStampedModel, UUIDModel
 from organization.models import Office, Department, Division
 
 

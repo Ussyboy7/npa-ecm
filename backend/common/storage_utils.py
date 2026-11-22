@@ -34,14 +34,3 @@ def resolve_media_path(file_url: str) -> str:
 def get_content_type(file_name: str, fallback: str = "application/octet-stream") -> str:
     ctype, _ = mimetypes.guess_type(file_name)
     return ctype or fallback
-
-
-def load_file_bytes(file_url: str) -> bytes | None:
-    """Load file bytes from local path or return None if missing/remote."""
-    path = resolve_media_path(file_url)
-    if not path or path.startswith(("http://", "https://")):
-        return None
-    if not os.path.isfile(path):
-        return None
-    with open(path, "rb") as f:
-        return f.read()

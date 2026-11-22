@@ -1,6 +1,5 @@
 """URL configuration for content capture module."""
 
-from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from capture.views import (

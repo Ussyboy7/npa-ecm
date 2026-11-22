@@ -34,6 +34,7 @@ from .models import (
     CaseTemplate,
     CaseWorkflowRule,
     Correspondence,
+    CorrespondenceDistribution,
     Minute,
 )
 from .serializers import (
@@ -641,7 +642,6 @@ class CaseViewSet(viewsets.ModelViewSet):
         if action == "CERTIFY":
             # Locate workflow for this case
             workflow = None
-            submission = None
             try:
                 from forms.signature_models import FormSignatureWorkflow
 
@@ -653,7 +653,6 @@ class CaseViewSet(viewsets.ModelViewSet):
                         wf = FormSignatureWorkflow.objects.filter(id=fd.signature_workflow_id).select_related("submission").first()
                         if wf:
                             workflow = wf
-                            submission = getattr(wf, "submission", None)
                             break
                     # try via template+correspondence
                     if not workflow and fd and getattr(fd, "correspondence_id", None):
@@ -664,7 +663,6 @@ class CaseViewSet(viewsets.ModelViewSet):
                             wf = FormSignatureWorkflow.objects.filter(submission=sub).first()
                             if wf:
                                 workflow = wf
-                                submission = sub
                                 break
                 # via metadata audit_submission_id
                 if not workflow:
@@ -674,7 +672,6 @@ class CaseViewSet(viewsets.ModelViewSet):
 
                         sub = FS.objects.filter(id=sub_id).first()
                         if sub:
-                            submission = sub
                             workflow = FormSignatureWorkflow.objects.filter(submission=sub).first()
                 # via correspondence links
                 if not workflow:
@@ -686,7 +683,6 @@ class CaseViewSet(viewsets.ModelViewSet):
 
                         sub = FS.objects.filter(correspondence_id__in=corr_ids).first()
                         if sub:
-                            submission = sub
                             workflow = FormSignatureWorkflow.objects.filter(submission=sub).first()
             except Exception:
                 workflow = None
@@ -731,8 +727,6 @@ class CaseViewSet(viewsets.ModelViewSet):
             """Department Head authorization: distinct from GM Audit certification."""
             if getattr(user, "is_superuser", False):
                 return True
-            # Department head_of_department FK
-            dept = getattr(case, "department", None) or getattr(getattr(case, "division", None), "departments", None)
             # Direct FK check
             try:
                 if case.department_id and getattr(case.department, "head_of_department_id", None) == getattr(user, "id", None):
@@ -1402,7 +1396,7 @@ class CaseViewSet(viewsets.ModelViewSet):
 
                 case_serializer = CaseSerializer(data=case_data)
                 case_serializer.is_valid(raise_exception=True)
-                case = case_serializer.save(created_by=request.user)
+                case_serializer.save(created_by=request.user)
 
                 results["imported"] += 1
             except Exception as e:

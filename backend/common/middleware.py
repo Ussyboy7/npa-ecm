@@ -8,9 +8,7 @@ from typing import Callable
 from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse
-from django.core.exceptions import DisallowedHost
 from django.utils import timezone
-from django.db import transaction
 
 
 class InternalHostMiddleware:

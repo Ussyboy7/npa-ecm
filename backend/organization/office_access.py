@@ -29,16 +29,3 @@ def get_office_queue_office_ids(user) -> list:
             assignment_role__in=OFFICE_QUEUE_ROLES,
         ).values_list("office_id", flat=True)
     )
-
-
-def user_has_office_queue_access(user) -> bool:
-    """True if the user can see Office Inbox/Sent for at least one office."""
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
-    if getattr(user, "is_superuser", False):
-        return True
-    return OfficeMembership.objects.filter(
-        user=user,
-        is_active=True,
-        assignment_role__in=OFFICE_QUEUE_ROLES,
-    ).exists()

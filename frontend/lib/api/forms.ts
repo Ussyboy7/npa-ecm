@@ -1,6 +1,6 @@
 /** API client for forms and templates. */
 
-import { apiFetch, getBaseUrl } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import { fetchAllPaginated } from "@/lib/pagination-utils";
 import type { FormTemplate, FormSubmission, FormSubmissionListItem, FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
@@ -10,7 +10,6 @@ export type { FormTemplate, FormSubmission, FormSubmissionListItem };
 const BASE_PATH = "/forms";
 
 const FORM_TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;
-const SIGNATURES_CACHE_TTL_MS = 60 * 1000;
 const formTemplatesCache = new Map<string, { data: FormTemplate[]; timestamp: number }>();
 const formTemplatesPromises = new Map<string, Promise<FormTemplate[]>>();
 const signaturesCache = new Map<string, { data: FormSignature[]; timestamp: number }>();
@@ -26,16 +25,6 @@ const buildFormTemplatesCacheKey = (params?: {
     is_active: params?.is_active ?? null,
     search: params?.search ?? null,
   });
-
-const buildSignaturesCacheKey = (params?: {
-  workflow?: string;
-  status?: string;
-}) => {
-  return JSON.stringify({
-    workflow: params?.workflow ?? null,
-    status: params?.status ?? null,
-  });
-};
 
 export const invalidateFormTemplatesCache = (): void => {
   formTemplatesCache.clear();
@@ -131,95 +120,6 @@ export async function cloneFormTemplate(id: string): Promise<FormTemplate> {
   return cloned;
 }
 
-// Form Submissions
-export async function getFormSubmissions(params?: {
-  template?: string;
-  correspondence?: string;
-  is_draft?: boolean;
-}): Promise<FormSubmissionListItem[]> {
-  const queryParams = new URLSearchParams();
-  if (params?.template) queryParams.append("template", params.template);
-  if (params?.correspondence) queryParams.append("correspondence", params.correspondence);
-  if (params?.is_draft !== undefined) queryParams.append("is_draft", String(params.is_draft));
-
-  const query = queryParams.toString();
-  const response = await apiFetch<FormSubmissionListItem[] | { results: FormSubmissionListItem[] }>(
-    `${BASE_PATH}/submissions/${query ? `?${query}` : ""}`
-  );
-  
-  // Handle paginated response
-  if (response && typeof response === "object" && "results" in response) {
-    return (response as { results: FormSubmissionListItem[] }).results;
-  }
-  
-  // Handle direct array response
-  return Array.isArray(response) ? response : [];
-}
-
-export async function getFormSubmission(id: string): Promise<FormSubmission> {
-  return apiFetch<FormSubmission>(`${BASE_PATH}/submissions/${id}/`);
-}
-
-export async function getFormSubmissionsByCorrespondence(
-  correspondenceId: string
-): Promise<FormSubmission[]> {
-  const response = await apiFetch<FormSubmission[] | { results: FormSubmission[] }>(
-    `${BASE_PATH}/submissions/by_correspondence/?correspondence_id=${correspondenceId}`
-  );
-  
-  // Handle paginated response
-  if (response && typeof response === "object" && "results" in response) {
-    return (response as { results: FormSubmission[] }).results;
-  }
-  
-  // Handle direct array response
-  return Array.isArray(response) ? response : [];
-}
-
-export async function createFormSubmission(data: {
-  template_id: string;
-  correspondence_id?: string;
-  data: Record<string, unknown>;
-  is_draft?: boolean;
-}): Promise<FormSubmission> {
-  return apiFetch<FormSubmission>(`${BASE_PATH}/submissions/`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function updateFormSubmission(
-  id: string,
-  data: Partial<{
-    data: Record<string, unknown>;
-    is_draft: boolean;
-  }>
-): Promise<FormSubmission> {
-  return apiFetch<FormSubmission>(`${BASE_PATH}/submissions/${id}/`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function submitFormSubmission(id: string): Promise<FormSubmission> {
-  return apiFetch<FormSubmission>(`${BASE_PATH}/submissions/${id}/submit/`, {
-    method: "POST",
-  });
-}
-
-export async function deleteFormSubmission(id: string): Promise<void> {
-  return apiFetch<void>(`${BASE_PATH}/submissions/${id}/`, {
-    method: "DELETE",
-  });
-}
-
-/**
- * Get PDF URL for a form submission
- */
-export function getFormSubmissionPdfUrl(submissionId: string): string {
-  return `${getBaseUrl()}${BASE_PATH}/submissions/${submissionId}/generate_pdf/`;
-}
-
 // Signature Workflow APIs
 
 export async function createSignatureWorkflow(data: {
@@ -248,63 +148,6 @@ export async function getSignatureWorkflow(submissionIdOrWorkflowId: string, isW
   } else {
     // Get workflow via submission
     return apiFetch<FormSignatureWorkflow>(`${BASE_PATH}/submissions/${submissionIdOrWorkflowId}/signature_workflow/`);
-  }
-}
-
-export async function getSignatureWorkflows(params?: {
-  submission?: string;
-  status?: string;
-}): Promise<FormSignatureWorkflow[]> {
-  const queryParams = new URLSearchParams();
-  if (params?.submission) queryParams.append("submission", params.submission);
-  if (params?.status) queryParams.append("status", params.status);
-
-  const query = queryParams.toString();
-  const response = await apiFetch<FormSignatureWorkflow[] | { results: FormSignatureWorkflow[] }>(
-    `${BASE_PATH}/signature-workflows/${query ? `?${query}` : ""}`
-  );
-  
-  if (response && typeof response === "object" && "results" in response) {
-    return (response as { results: FormSignatureWorkflow[] }).results;
-  }
-  
-  return Array.isArray(response) ? response : [];
-}
-
-export async function getSignatures(params?: {
-  workflow?: string;
-  status?: string;
-}, force = false): Promise<FormSignature[]> {
-  const cacheKey = buildSignaturesCacheKey(params);
-  const now = Date.now();
-  const cached = signaturesCache.get(cacheKey);
-  if (!force && cached && now - cached.timestamp < SIGNATURES_CACHE_TTL_MS) {
-    return cached.data;
-  }
-
-  const inFlight = signaturesPromises.get(cacheKey);
-  if (!force && inFlight) {
-    return inFlight;
-  }
-
-  const queryParams = new URLSearchParams();
-  if (params?.workflow) queryParams.append("workflow", params.workflow);
-  if (params?.status) queryParams.append("status", params.status);
-
-  const query = queryParams.toString();
-  const request = (async () => {
-    const path = `${BASE_PATH}/signatures/${query ? `?${query}` : ""}`;
-    return fetchAllPaginated<FormSignature>(path);
-  })();
-
-  signaturesPromises.set(cacheKey, request);
-
-  try {
-    const data = await request;
-    signaturesCache.set(cacheKey, { data, timestamp: Date.now() });
-    return data;
-  } finally {
-    signaturesPromises.delete(cacheKey);
   }
 }
 
@@ -337,4 +180,3 @@ export async function signForm(workflowId: string, data: {
   invalidateSignaturesCache();
   return result;
 }
-

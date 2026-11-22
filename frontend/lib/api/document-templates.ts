@@ -143,16 +143,6 @@ export const deleteTemplate = async (id: string): Promise<void> => {
     invalidateTemplatesCache();
 };
 
-export const getTemplatesByScope = async (scope: TemplateScope, scopeId?: string | null, templateType: TemplateType = 'document'): Promise<DocumentTemplate[]> => {
-  const templates = await loadTemplates();
-  return templates.filter((template) => {
-    if (template.scope !== scope) return false;
-    if (template.templateType !== templateType) return false;
-    if (scope === 'organization') return true;
-    return template.scopeId === (scopeId ?? null);
-  });
-};
-
 export const getTemplatesForUser = async (user: User, templateType: TemplateType = 'document'): Promise<DocumentTemplate[]> => {
   const templates = await loadTemplates();
   const matches = templates.filter((template) => {

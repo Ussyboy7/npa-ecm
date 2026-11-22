@@ -106,7 +106,7 @@ class FOIATests(TestCase):
         self.assertEqual(self.foia.status, FOIARequest.Status.CLOSED)
 
     def test_overdue_filter(self):
-        overdue = FOIARequest.objects.create(
+        FOIARequest.objects.create(
             request_number=f"FOIA-{uuid.uuid4().hex[:8].upper()}",
             requester_name="Overdue Requestor",
             description_of_documents="Overdue documents",

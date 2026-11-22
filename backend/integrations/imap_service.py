@@ -143,7 +143,6 @@ class IMAPIngestionService:
                     sender_org = from_header.split("<")[-1].rstrip(">").strip()
 
                 body = _extract_body(msg)
-                received = msg.get("Date")
 
                 if connector.auto_create_correspondence:
                     ref = f"NPA/EMAIL/{timezone.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:6].upper()}"

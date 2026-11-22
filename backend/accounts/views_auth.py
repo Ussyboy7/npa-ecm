@@ -7,7 +7,6 @@ import logging
 from django.conf import settings
 from django.http import HttpResponseRedirect
 import pyotp
-from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -19,13 +18,11 @@ from common.throttles import OTPRateThrottle, PasswordChangeRateThrottle, TotpSe
 from accounts.login_mfa import (
     available_login_mfa_methods,
     clear_mfa_challenge,
-    create_mfa_challenge,
     get_challenge_user,
     get_or_create_login_security,
     record_mfa_failure,
     MFA_MAX_ATTEMPTS,
     send_login_email_otp,
-    user_requires_login_mfa,
     verify_login_mfa_code,
 )
 from accounts.services import (

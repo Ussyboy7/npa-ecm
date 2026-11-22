@@ -88,10 +88,6 @@ def is_valid_audit_transition(from_state: str, to_state: str) -> bool:
     return to_state.upper() in AUDIT_TRANSITIONS.get(from_state.upper(), [])
 
 
-def get_allowed_next_states(state: str) -> list[str]:
-    return AUDIT_TRANSITIONS.get(state.upper(), [])
-
-
 def ensure_audit_workflow_rules() -> int:
     """Seed CaseWorkflowRule entries for each audit state.
 
@@ -427,7 +423,6 @@ def get_case_history(case) -> dict:
     """
     from correspondence.models import CaseCorrespondenceLink, CaseDocumentLink, CaseFormLink
     from forms.models import FormSubmission
-    from dms.models import FormDocument
 
     # Forms
     form_links = CaseFormLink.objects.filter(case=case).select_related("form_document__document", "form_document__template", "form_document__correspondence")

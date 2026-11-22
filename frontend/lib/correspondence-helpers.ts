@@ -8,8 +8,6 @@ export const CORRESPONDENCE_CLOSED_STATUSES = [
   'withdrawn',
 ] as const;
 
-export type CorrespondenceClosedStatus = (typeof CORRESPONDENCE_CLOSED_STATUSES)[number];
-
 /** Workflow finished or cancelled — no further minutes/routing. */
 export const isCorrespondenceClosed = (
   status: string | null | undefined,

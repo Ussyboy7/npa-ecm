@@ -139,12 +139,3 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-
-// Hook version for functional components
-export function useErrorHandler() {
-  return (error: Error, errorInfo?: ErrorInfo) => {
-    logError('Error caught by error handler:', error, errorInfo);
-    // You can extend this to send errors to an error reporting service
-  };
-}
-

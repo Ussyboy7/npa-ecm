@@ -129,14 +129,6 @@ export const processOCR = async (
 export const getCaptureJob = async (jobId: string): Promise<CaptureJob> =>
   apiFetch<CaptureJob>(`/capture/jobs/${jobId}/`);
 
-export const getOCRResult = async (documentId: string): Promise<OCRResult | null> => {
-  const response = await apiFetch<OCRResult[] | { results?: OCRResult[] }>(
-    `/capture/ocr-results/?document=${documentId}`,
-  );
-  const results = unwrapList<OCRResult>(response);
-  return results.length > 0 ? results[0] : null;
-};
-
 export const cancelCaptureJob = async (jobId: string): Promise<void> =>
   apiFetch(`/capture/jobs/${jobId}/cancel/`, { method: 'POST' });
 

@@ -784,7 +784,7 @@ class SealGenerationService:
         fill: tuple[int, int, int, int],
     ) -> None:
         import math
-        from PIL import Image, ImageChops, ImageDraw, ImageOps
+        from PIL import Image, ImageDraw
 
         draw = ImageDraw.Draw(base_img)
         text = (text or "").strip()

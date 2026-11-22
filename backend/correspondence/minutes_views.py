@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-import traceback
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse
 from django.utils import timezone
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -30,7 +28,6 @@ from organization.models import Office, OfficeMembership
 
 from .models import (
     Case,
-    CaseCorrespondenceLink,
     Correspondence,
     CorrespondenceDistribution,
     CorrespondenceDocumentLink,

@@ -55,14 +55,6 @@ export interface BulkOperationResult {
   skipped_count?: number;
 }
 
-export interface UserImportResult {
-  message: string;
-  created_count: number;
-  updated_count: number;
-  errors: string[];
-  total_errors: number;
-}
-
 export interface Role {
   id: string;
   name: string;
@@ -72,12 +64,6 @@ export interface Role {
   user_count: number;
   created_at: string;
   updated_at: string;
-}
-
-export interface RoleTemplate {
-  name: string;
-  description: string;
-  permissions: Record<string, string[]>;
 }
 
 export interface UserQueryParams {
@@ -176,60 +162,6 @@ export async function bulkDeactivateUsers(userIds: string[]): Promise<BulkOperat
 }
 
 /**
- * Export users to CSV
- */
-export async function exportUsers(params: UserQueryParams = {}): Promise<Blob> {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      searchParams.set(key, String(value));
-    }
-  });
-
-  const url = searchParams.toString()
-    ? `/accounts/users/export/?${searchParams.toString()}`
-    : '/accounts/users/export/';
-
-  const response = await apiFetch<Response>(url, { responseType: 'raw' });
-  return response.blob();
-}
-
-/**
- * Import users from CSV
- */
-export async function importUsers(file: File): Promise<UserImportResult> {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  return apiFetch<UserImportResult>('/accounts/users/import/', {
-    method: 'POST',
-    body: formData,
-  });
-}
-
-/**
- * Download user import template
- */
-export async function downloadUserTemplate(): Promise<Blob> {
-  const response = await apiFetch<Response>('/accounts/users/export-template/', {
-    responseType: 'raw',
-  });
-  return response.blob();
-}
-
-// ============================================================================
-// Role Management API
-// ============================================================================
-
-/**
- * Fetch all roles
- */
-export async function fetchRoles(): Promise<Role[]> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  return apiFetch<Role[]>('/organization/roles/');
-}
-
-/**
  * Bulk assign role to multiple users
  */
 export async function bulkAssignRole(roleId: string, userIds: string[]): Promise<BulkOperationResult> {
@@ -238,45 +170,6 @@ export async function bulkAssignRole(roleId: string, userIds: string[]): Promise
   return apiFetch<BulkOperationResult>('/organization/roles/bulk-assign/', {
     method: 'POST',
     body: JSON.stringify({ role_id: roleId, user_ids: userIds }),
-  });
-}
-
-/**
- * Clone an existing role
- */
-export async function cloneRole(roleId: string, newName: string, description?: string, isActive?: boolean): Promise<Role> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  
-  return apiFetch<Role>(`/organization/roles/${roleId}/clone/`, {
-    method: 'POST',
-    body: JSON.stringify({
-      name: newName,
-      description,
-      is_active: isActive,
-    }),
-  });
-}
-
-/**
- * Get role templates
- */
-export async function fetchRoleTemplates(): Promise<{ templates: RoleTemplate[] }> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  return apiFetch<{ templates: RoleTemplate[] }>('/organization/roles/templates/');
-}
-
-/**
- * Create role from template
- */
-export async function createRoleFromTemplate(templateName: string, customName?: string): Promise<Role> {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  
-  return apiFetch<Role>('/organization/roles/create-from-template/', {
-    method: 'POST',
-    body: JSON.stringify({
-      template_name: templateName,
-      name: customName,
-    }),
   });
 }
 
@@ -297,4 +190,3 @@ export function downloadBlob(blob: Blob, filename: string): void {
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 }
-

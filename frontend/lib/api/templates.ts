@@ -90,13 +90,6 @@ export const getTemplates = async (params?: {
   return [];
 };
 
-export const getTemplate = async (id: string): Promise<DocumentTemplate> => {
-  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-
-  const response = await apiFetch<Record<string, unknown>>(`/correspondence/templates/${id}/`);
-  return mapApiTemplate(response);
-};
-
 export const createTemplate = async (data: {
   scope: TemplateScope;
   scopeId?: string | null;

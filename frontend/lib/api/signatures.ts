@@ -169,7 +169,3 @@ export const ensureDefaultSignatureTemplates = async (signal?: AbortSignal): Pro
 export const loadUserSignaturePreferences = async (_userId: string, signal?: AbortSignal): Promise<UserSignaturePreferences | null> => {
   return await signatureTemplateApi.getUserSignaturePreferences(signal);
 };
-
-export const saveUserSignaturePreferences = async (_userId: string, prefs: UserSignaturePreferences): Promise<void> => {
-  await signatureTemplateApi.updateUserSignaturePreferences(prefs);
-};

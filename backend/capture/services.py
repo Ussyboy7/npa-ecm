@@ -5,16 +5,15 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 import pytesseract
 from django.conf import settings
-from django.core.files.storage import default_storage
 from pdf2image import convert_from_path
 from PIL import Image
 from docx import Document as DocxDocument
 
-from dms.models import Document, DocumentVersion
+from dms.models import Document
 from capture.models import CaptureJob
 
 logger = logging.getLogger(__name__)
@@ -338,7 +337,7 @@ class OCRService:
                 f"The document file may have been moved or deleted. "
                 f"Please re-upload the document."
             )
-        except ValueError as e:
+        except ValueError:
             # Re-raise ValueError as-is (already has good error messages)
             raise
         except Exception as e:
@@ -429,70 +428,6 @@ class MetadataExtractionService:
             metadata[key] = list(set(metadata[key]))
 
         return metadata
-
-
-class BatchProcessingService:
-    """Service for batch document processing."""
-
-    @staticmethod
-    def process_batch(file_paths: List[str], process_ocr: bool = False, extract_metadata: bool = False) -> Dict[str, Any]:
-        """
-        Process multiple files in batch.
-
-        Args:
-            file_paths: List of file paths to process
-            process_ocr: Whether to perform OCR
-            extract_metadata: Whether to extract metadata
-
-        Returns:
-            Batch processing results
-        """
-        results = {
-            "total": len(file_paths),
-            "successful": 0,
-            "failed": 0,
-            "errors": [],
-            "results": [],
-        }
-
-        for file_path in file_paths:
-            try:
-                file_result = {"file": os.path.basename(file_path), "status": "success"}
-
-                if process_ocr:
-                    # Determine file type and process
-                    file_extension = os.path.splitext(file_path)[1].lower()
-                    if file_extension == ".pdf":
-                        ocr_result = OCRService.extract_text_from_pdf(file_path)
-                    elif file_extension in [".png", ".jpg", ".jpeg"]:
-                        ocr_result = OCRService.extract_text_from_image(file_path)
-                    elif file_extension == ".docx":
-                        ocr_result = OCRService.extract_text_from_docx(file_path)
-                    else:
-                        ocr_result = None
-
-                    if ocr_result:
-                        file_result["ocr"] = {
-                            "text_length": len(ocr_result.get("extracted_text", "")),
-                            "confidence": ocr_result.get("confidence_score", 0),
-                        }
-
-                        if extract_metadata and ocr_result.get("extracted_text"):
-                            metadata = MetadataExtractionService.extract_metadata(
-                                ocr_result["extracted_text"]
-                            )
-                            file_result["metadata"] = metadata
-
-                results["results"].append(file_result)
-                results["successful"] += 1
-
-            except Exception as e:
-                error_msg = f"Failed to process {file_path}: {str(e)}"
-                results["errors"].append({"file": os.path.basename(file_path), "error": error_msg})
-                results["failed"] += 1
-                logger.error(error_msg)
-
-        return results
 
 
 def queue_ocr_job(

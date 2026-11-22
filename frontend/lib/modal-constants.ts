@@ -59,6 +59,3 @@ export const MODAL_CONSTANTS = {
     ],
   },
 } as const;
-
-export type ModalConstants = typeof MODAL_CONSTANTS;
-

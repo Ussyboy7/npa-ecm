@@ -413,11 +413,6 @@ export const fetchSLAConfigurations = async (params?: {
   return rows.filter(isRecord).map(mapSLAConfiguration);
 };
 
-export const fetchSLAConfiguration = async (id: string): Promise<SLAConfiguration> => {
-  const response = await apiFetch<Record<string, unknown>>(`/analytics/sla-config/${id}/`);
-  return mapSLAConfiguration(response);
-};
-
 export const createSLAConfiguration = async (data: SLAConfigurationInput): Promise<SLAConfiguration> => {
   const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/', {
     method: 'POST',
@@ -594,11 +589,6 @@ export const fetchEscalationRules = async (params?: {
   return rows.filter(isRecord).map(mapEscalationRule);
 };
 
-export const fetchEscalationRule = async (id: string): Promise<EscalationRule> => {
-  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalation-rules/${id}/`);
-  return mapEscalationRule(response);
-};
-
 export const createEscalationRule = async (data: EscalationRuleInput): Promise<EscalationRule> => {
   const response = await apiFetch<Record<string, unknown>>('/analytics/escalation-rules/', {
     method: 'POST',
@@ -702,11 +692,6 @@ export const fetchEscalations = async (params?: {
   return rows.filter(isRecord).map(mapEscalation);
 };
 
-export const fetchEscalation = async (id: string): Promise<Escalation> => {
-  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalations/${id}/`);
-  return mapEscalation(response);
-};
-
 export const acknowledgeEscalation = async (id: string): Promise<Escalation> => {
   const response = await apiFetch<Record<string, unknown>>(`/analytics/escalations/${id}/acknowledge/`, {
     method: 'POST',
@@ -771,4 +756,3 @@ export const fetchEfficiencyAnalysis = async (params?: {
   });
   return apiFetch<EfficiencyAnalysis>(`/analytics/efficiency/?${query}`);
 };
-

@@ -95,71 +95,11 @@ export const Color = Extension.create({
   },
 });
 
-export const LineHeight = Extension.create({
-  name: "lineHeight",
-  addOptions() {
-    return { types: ["paragraph", "heading"] };
-  },
-  addGlobalAttributes() {
-    return [
-      {
-        types: this.options.types,
-        attributes: {
-          lineHeight: {
-            default: null,
-            parseHTML: (element: HTMLElement) => element.style.lineHeight || null,
-            renderHTML: (attributes: { lineHeight?: string | null }) => {
-              if (!attributes.lineHeight) return {};
-              return { style: `line-height: ${attributes.lineHeight}` };
-            },
-          },
-        },
-      },
-    ];
-  },
-  addCommands() {
-    return {
-      setLineHeight:
-        (lineHeight: string) =>
-        ({ commands }) =>
-          this.options.types.every((type: string) =>
-            commands.updateAttributes(type, { lineHeight }),
-          ),
-      unsetLineHeight:
-        () =>
-        ({ commands }) =>
-          this.options.types.every((type: string) =>
-            commands.resetAttributes(type, "lineHeight"),
-          ),
-    };
-  },
-});
-
 export const FONT_FAMILIES = [
   { label: "Verdana", value: "Verdana, Geneva, sans-serif" },
   { label: "Arial", value: "Arial, Helvetica, sans-serif" },
   { label: "Times New Roman", value: '"Times New Roman", Times, serif' },
   { label: "Georgia", value: "Georgia, serif" },
-] as const;
-
-/** Common sizes for optional suggestions (any 1–72pt value is allowed). */
-export const FONT_SIZES = [
-  "1pt",
-  "8pt",
-  "9pt",
-  "10pt",
-  "11pt",
-  "12pt",
-  "14pt",
-  "16pt",
-  "18pt",
-  "20pt",
-  "22pt",
-  "24pt",
-  "28pt",
-  "36pt",
-  "48pt",
-  "72pt",
 ] as const;
 
 export const FONT_SIZE_MIN_PT = 1;

@@ -108,21 +108,6 @@ export const formatFileSize = (bytes: number): string => {
 };
 
 /**
- * Gets file type icon name based on MIME type or extension
- */
-export const getFileTypeIcon = (file: File | { name: string; type?: string }): string => {
-  const extension = file.name.split('.').pop()?.toLowerCase();
-  const mimeType = 'type' in file ? file.type : undefined;
-
-  if (mimeType?.includes('pdf') || extension === 'pdf') return 'FileText';
-  if (mimeType?.includes('word') || extension === 'doc' || extension === 'docx') return 'FileText';
-  if (mimeType?.includes('excel') || extension === 'xls' || extension === 'xlsx') return 'FileSpreadsheet';
-  if (mimeType?.includes('powerpoint') || extension === 'ppt' || extension === 'pptx') return 'FileText';
-  if (mimeType?.includes('text') || extension === 'txt' || extension === 'html') return 'FileText';
-  return 'FileQuestion';
-};
-
-/**
  * Gets human-readable file type label
  */
 export const getFileTypeLabel = (file: File | { name: string; type?: string }): string => {
@@ -151,4 +136,3 @@ export const fileToDataUrl = (file: File): Promise<string> =>
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-

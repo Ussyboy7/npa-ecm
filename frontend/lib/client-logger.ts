@@ -150,8 +150,6 @@ const log = (level: LogLevel, args: unknown[]) => {
 
   logToConsole(level, args);
 };
-
-export const logDebug = (...args: unknown[]) => log('debug', args);
 export const logInfo = (...args: unknown[]) => log('info', args);
 export const logWarn = (...args: unknown[]) => log('warn', args);
 export const logError = (...args: unknown[]) => log('error', args);

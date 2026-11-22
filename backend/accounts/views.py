@@ -624,7 +624,7 @@ class UserViewSet(viewsets.ModelViewSet):
             decoded_file = csv_file.read().decode('utf-8')
             io_string = io.StringIO(decoded_file)
             reader = csv.DictReader(io_string)
-        except Exception as e:
+        except Exception:
             raise ValidationError({"file": "Error reading CSV file. Please check the file format and try again."})
         
         created_count = 0
@@ -1728,7 +1728,7 @@ class ApplySealView(APIView):
                 "seal_data": seal_data,
             }, status=status.HTTP_201_CREATED)
             
-        except ValueError as e:
+        except ValueError:
             raise ValidationError({"detail": "Invalid data format. Please check your input."})
 
 
@@ -1831,7 +1831,7 @@ Electronic Correspondence Management System
                 "expires_in": 300,  # 5 minutes in seconds
             })
             
-        except Exception as e:
+        except Exception:
             # If email fails, delete the OTP
             otp.delete()
             raise ValidationError({"detail": "Failed to send email. Please try again or contact support."})

@@ -37,17 +37,6 @@ const normalizeCounts = (raw: Partial<SidebarCounts> | Record<string, number>): 
   pendingSignatures: Number(raw.pendingSignatures ?? 0),
 });
 
-export const seedSidebarCounts = (
-  counts: Partial<SidebarCounts> | Record<string, number>,
-  options?: { notify?: boolean },
-): void => {
-  cachedCounts = normalizeCounts(counts);
-  cachedAt = Date.now();
-  if (options?.notify !== false) {
-    notifyListeners();
-  }
-};
-
 export const invalidateSidebarCounts = (options?: { notify?: boolean }): void => {
   cachedCounts = null;
   cachedAt = 0;

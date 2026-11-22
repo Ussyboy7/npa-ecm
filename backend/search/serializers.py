@@ -5,8 +5,6 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from correspondence.serializers import CorrespondenceSerializer
-from dms.serializers import DocumentSerializer
 
 from .models import SavedSearch, SearchHistory
 

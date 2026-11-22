@@ -25,7 +25,6 @@ from reportlab.platypus import (
     Spacer,
     Table,
     TableStyle,
-    PageBreak,
 )
 from reportlab.lib import colors
 import logging
@@ -772,7 +771,6 @@ class CompletionPackageService:
         )
 
         # Watermark for completion package — COMPLETED · date, light, diagonal (not sealer's name)
-        from reportlab.lib.enums import TA_CENTER as _TA_CENTER
 
         def _watermark(canvas, _doc):
             canvas.saveState()
@@ -830,15 +828,6 @@ class CompletionPackageService:
             spaceAfter=6,
             leading=22,
         )
-        cover_sub_style = ParagraphStyle(
-            "CoverSub",
-            parent=styles["Normal"],
-            fontSize=8,
-            textColor=teal,
-            fontName="Helvetica-Bold",
-            alignment=TA_CENTER,
-            leading=10,
-        )
         cover_desc_style = ParagraphStyle(
             "CoverDesc",
             parent=styles["Normal"],
@@ -847,15 +836,6 @@ class CompletionPackageService:
             alignment=TA_CENTER,
             leading=12,
             spaceAfter=8,
-        )
-        badge_style = ParagraphStyle(
-            "Badge",
-            parent=styles["Normal"],
-            fontSize=7,
-            textColor=navy,
-            backColor=colors.HexColor("#f1f5f9"),
-            borderPadding=(4, 8, 4),
-            alignment=TA_CENTER,
         )
         section_title_style = ParagraphStyle(
             "SectionTitle",
@@ -3482,10 +3462,7 @@ class MinuteRouterService:
         For approve: hasPerm(can_approve) && org_scope allows correspondence && isCurrentTurn/delegation/CC explicit.
         Maps approval_level/approval_role and enforces MD-only for EXECUTIVE+APPROVAL.
         """
-        from organization.permission_utils import (
-            require_permission,
-            user_has_permission,
-        )
+        from organization.permission_utils import require_permission
 
         permission = cls.ACTION_PERMISSION_MAP.get(action_type)
         if permission:
@@ -4053,7 +4030,7 @@ class ParallelBranchService:
 
         Returns the user or None.
         """
-        from correspondence.models import ParallelRoutingGroup, Minute as MinuteModel
+        from correspondence.models import ParallelRoutingGroup
 
         branch_originator_to_route_to = None
         for parallel_minute in parallel_minutes_to_user:
@@ -4071,7 +4048,7 @@ class ParallelBranchService:
                 if not group_id:
                     continue
                 try:
-                    parallel_group = ParallelRoutingGroup.objects.get(id=group_id)
+                    ParallelRoutingGroup.objects.get(id=group_id)
                     first_recipient_minute = parallel_minutes_to_user.filter(
                         parallel_group_id=group_id
                     ).first()
@@ -4533,7 +4510,7 @@ class MinuteSealService:
             return None
 
         try:
-            signature = ExecutiveSignature.objects.get(user=user, is_active=True)
+            ExecutiveSignature.objects.get(user=user, is_active=True)
 
             seal, seal_data = SealGenerationService.generate_seal(
                 user=user,

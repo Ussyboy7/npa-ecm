@@ -6,9 +6,6 @@ import { getPageDimensions } from "@/components/dms/PageSetupDialog";
 
 const MM_TO_PX = 96 / 25.4;
 
-/** Reserved band height inside the paper for editable header/footer (px). */
-export const HF_BAND_PX = 36;
-
 export function escapePlainTextForHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -55,13 +52,4 @@ export function pageBreakOffsetsPx(
     offsets.push(i * perPage);
   }
   return offsets;
-}
-
-export function estimateCurrentPage(
-  scrollTop: number,
-  settings: PageSettings,
-  withHfBands: boolean,
-): number {
-  const perPage = bodyContentHeightPx(settings, withHfBands);
-  return Math.max(1, Math.floor(scrollTop / perPage) + 1);
 }

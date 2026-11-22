@@ -42,7 +42,6 @@ def process_ocr_job(self, capture_job_id: str):
             if auto_detect_language and not language:
                 try:
                     from langdetect import detect, LangDetectException
-                    from dms.models import DocumentVersion
                     latest_version = capture_job.document.versions.order_by("-version_number").first()
                     if latest_version and latest_version.content_text:
                         detected_lang = detect(latest_version.content_text)
@@ -103,7 +102,6 @@ def process_ocr_job(self, capture_job_id: str):
             )
 
             # Update the latest document version with OCR text
-            from dms.models import DocumentVersion
             latest_version = capture_job.document.versions.order_by("-version_number").first()
             if latest_version:
                 latest_version.ocr_text = ocr_result.extracted_text
@@ -209,7 +207,6 @@ def process_batch_upload(batch_upload_id: str):
 
         # Wait for OCR jobs to complete if any were queued
         if ocr_job_ids and batch_upload.process_ocr:
-            from celery.result import AsyncResult
             import time as time_module
             
             logger.info(f"Waiting for {len(ocr_job_ids)} OCR jobs to complete...")

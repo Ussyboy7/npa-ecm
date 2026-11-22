@@ -9,7 +9,6 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
-from common.grade_utils import get_grade_level
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 from dms.models import Document
 
@@ -906,7 +905,7 @@ class Minute(UUIDModel, TimeStampedModel):
             return False
         # If anyone downstream has acted (non-recalled minute after this one), block regular recall
         if self.correspondence_id and self.timestamp:
-            from django.db.models import Q
+            pass
 
             has_downstream = type(self).objects.filter(
                 correspondence_id=self.correspondence_id,

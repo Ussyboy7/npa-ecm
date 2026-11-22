@@ -126,7 +126,3 @@ def require_document_admin(document, user) -> None:
     if document_access_level(document, user) in ADMIN_ACCESS_LEVELS:
         return
     _deny(document, user, required="admin")
-
-
-def can_write_document(document, user) -> bool:
-    return document_access_level(document, user) in WRITE_ACCESS_LEVELS

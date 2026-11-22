@@ -60,8 +60,6 @@ const mapApiLog = (log: Record<string, unknown>): ActivityLog => ({
   timestamp: asStringOptional(log.timestamp) ?? new Date().toISOString(),
 });
 
-
-
 export interface PaginatedActivityLogs {
   results: ActivityLog[];
   count: number;
@@ -128,28 +126,6 @@ export const getActivityLogs = async (params?: {
   };
 };
 
-/**
- * Get activity logs for a specific object.
- */
-export const getActivityLogsForObject = async (
-  objectType: string,
-  objectId: string
-): Promise<ActivityLog[]> => {
-  const response = await getActivityLogs({ objectType, objectId });
-  return response.results;
-};
-
-/**
- * Get activity logs for the current user.
- */
-export const getMyActivityLogs = async (params?: {
-  action?: string;
-  module?: string;
-}): Promise<ActivityLog[]> => {
-  const response = await getActivityLogs(params);
-  return response.results;
-};
-
 export interface ComplianceExportParams {
   action?: string;
   module?: string;
@@ -192,4 +168,3 @@ export const downloadComplianceExport = async (
     sha256: response.headers.get('X-Audit-SHA256') || undefined,
   };
 };
-

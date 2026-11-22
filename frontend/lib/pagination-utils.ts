@@ -60,10 +60,3 @@ export async function fetchAllPaginatedResults<T>(
 
   return all;
 }
-
-export interface PaginationParams {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  ordering?: string;
-}

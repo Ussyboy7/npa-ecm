@@ -6,7 +6,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import transaction, models
 from django.db.models import Q
-from django.utils import timezone
 
 from forms.signature_models import FormSignatureWorkflow, FormSignature
 from forms.models import FormSubmission
@@ -388,7 +387,6 @@ class FormSignatureWorkflowViewSet(viewsets.ModelViewSet):
                             saved_path = default_storage.save(file_path, ContentFile(pdf_bytes))
                             
                             # Build URL (will be set properly when accessed via API)
-                            from django.conf import settings
                             version.file_url = f"/media/{saved_path}"
                             version.save()
                         except Exception as e:

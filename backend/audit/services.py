@@ -7,7 +7,6 @@ from typing import Any, Optional
 
 from django.contrib.auth import get_user_model
 from django.db.models import Model, QuerySet
-from django.utils import timezone
 
 from .models import ActivityLog
 

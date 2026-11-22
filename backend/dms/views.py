@@ -7,12 +7,10 @@ import os
 from datetime import timedelta
 from datetime import datetime
 
-from django.conf import settings
 from django.db import connection
-from django.db.models import Count, Max, Q
+from django.db.models import Max, Q
 from django.http import FileResponse, HttpResponse
 from django.utils import timezone
-from django.utils.text import slugify
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
@@ -61,7 +59,6 @@ from .drm import (
     resolve_document_rights,
 )
 from .visibility import (
-    document_access_level,
     documents_visible_to,
     require_document_admin,
     require_document_write,
@@ -1016,7 +1013,6 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
             try:
                 from django.utils.html import strip_tags
                 # Extract plain text from HTML or use content_text if available
-                source_text = version.content_html if version.content_html else version.content_text
                 if version.content_html:
                     extracted_text = strip_tags(version.content_html)
                     # Clean up whitespace
@@ -1080,7 +1076,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                 # Check if python-docx is installed for Word documents
                 if version.file_type in OCRService.SUPPORTED_DOCX_TYPES:
                     try:
-                        from docx import Document as DocxDocument
+                        pass
                     except ImportError:
                         return Response({
                             "ocr_text": "",
@@ -1478,7 +1474,7 @@ class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
         if document_id:
             # Check if document exists and is not deleted
             try:
-                document = Document.objects.get(id=document_id, is_deleted=False)
+                Document.objects.get(id=document_id, is_deleted=False)
             except Document.DoesNotExist:
                 # Document doesn't exist or is deleted - return empty queryset
                 return queryset.none()
@@ -1531,7 +1527,7 @@ class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
         
         # Check if document exists and is not deleted
         try:
-            document = Document.objects.get(id=document_id, is_deleted=False)
+            Document.objects.get(id=document_id, is_deleted=False)
         except Document.DoesNotExist:
             # Document doesn't exist or is deleted - return empty list
             return Response([])
@@ -1675,7 +1671,6 @@ class DocumentTemplateViewSet(viewsets.ModelViewSet):
         
         # Get document data from request
         document_data = request.data.get("document", {})
-        file_data = request.data.get("file", {})
         
         # Merge template defaults with provided data
         doc_data = {

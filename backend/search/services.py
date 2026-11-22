@@ -201,7 +201,6 @@ class SearchService:
         # Perform full-text search
         if query:
             from dms.models import DocumentVersion
-            from django.db.models import Max
             
             search_query = SearchQuery(query, config="english")
             

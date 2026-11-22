@@ -1,6 +1,5 @@
 """TDD: Workflow step constraint — fail on mismatch, don't silently bypass."""
 
-import pytest
 from django.test import TestCase
 from rest_framework.exceptions import ValidationError
 

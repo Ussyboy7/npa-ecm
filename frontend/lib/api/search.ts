@@ -4,7 +4,6 @@
 
 import { apiFetch } from '@/lib/api-client';
 
-
 export interface SearchRequest {
   query?: string;
   filters?: {
@@ -89,38 +88,6 @@ export const search = async (request: SearchRequest, signal?: AbortSignal): Prom
   });
 };
 
-/**
- * Search within documents (OCR text, content).
- */
-export const searchWithin = async (
-  query: string,
-  documentIds?: string[]
-): Promise<{
-  results: Array<{
-    document: Record<string, unknown>;
-    version: Record<string, unknown>;
-    snippet: string;
-    rank: number;
-  }>;
-  total_count: number;
-}> => {
-  return await apiFetch<{
-    results: Array<{
-      document: Record<string, unknown>;
-      version: Record<string, unknown>;
-      snippet: string;
-      rank: number;
-    }>;
-    total_count: number;
-  }>('/search/operations/search_within/', {
-    method: 'POST',
-    body: JSON.stringify({
-      query,
-      document_ids: documentIds || [],
-    }),
-  });
-};
-
 export interface RelatedSearchItem {
   type: 'document' | 'correspondence' | 'case';
   id: string;
@@ -192,18 +159,8 @@ export const createSavedSearch = async (
 };
 
 /**
- * Delete a saved search.
- */
-export const deleteSavedSearch = async (id: string): Promise<void> => {
-  await apiFetch(`/search/saved/${id}/`, {
-    method: 'DELETE',
-  });
-};
-
-/**
  * Get search history.
  */
 export const getSearchHistory = async (limit: number = 50): Promise<SearchHistory[]> => {
   return await apiFetch<SearchHistory[]>(`/search/history/?limit=${limit}`);
 };
-

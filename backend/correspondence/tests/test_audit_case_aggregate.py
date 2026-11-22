@@ -91,7 +91,7 @@ class AuditCaseAggregateTests(TestCase):
         return sub, fd
 
     def test_backfill_creates_case_for_existing_submission(self):
-        from correspondence.services.case_audit import backfill_audit_cases, AUDIT_TEMPLATE_SLUG
+        from correspondence.services.case_audit import backfill_audit_cases
         sub, fd = self._make_form_document(pv_no="PV/2025/AUD/BF001")
         # Ensure no prior case
         Case.objects.filter(metadata__audit_submission_id=str(sub.id)).delete()
@@ -135,9 +135,7 @@ class AuditCaseAggregateTests(TestCase):
         non_audit_sub = self._make_submission(pv_no="PV/OTHER/001", template=self.other_template, correspondence=self.corr)
         from correspondence.services.case_audit import backfill_audit_cases
         # Ensure non-audit does not create AUDIT case
-        pre_count_audit = Case.objects.filter(case_type=Case.CaseType.AUDIT).count()
         backfill_audit_cases()
-        post_count_audit = Case.objects.filter(case_type=Case.CaseType.AUDIT).count()
         # Non-audit submission should not affect AUDIT count beyond its own audit submissions
         # Specifically, there should be no Case with audit_submission_id == non_audit_sub.id and case_type AUDIT
         non_audit_case = Case.objects.filter(metadata__audit_submission_id=str(non_audit_sub.id), case_type=Case.CaseType.AUDIT).first()

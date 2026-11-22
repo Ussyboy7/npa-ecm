@@ -49,35 +49,3 @@ export function exportToCSV<T extends Record<string, unknown>>(
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
-
-export function exportToExcel<T extends Record<string, unknown>>(
-  data: T[],
-  columns: { key: keyof T; label: string }[],
-  options: ExportOptions = {}
-): void {
-  // Generates TSV (tab-separated) which Excel can open natively
-  const { filename = 'export.tsv' } = options;
-  
-  const header = columns.map(col => col.label).join('\t');
-  const rows = data.map(item =>
-    columns.map(col => {
-      const value = item[col.key];
-      if (value === null || value === undefined) return '';
-      if (typeof value === 'object') return JSON.stringify(value);
-      return String(value);
-    }).join('\t')
-  );
-  
-  const content = [header, ...rows].join('\n');
-  const blob = new Blob([content], { type: 'text/tab-separated-values' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-

@@ -9,7 +9,7 @@ from organization.models import Department, Directorate, Division, Role
 from organization.permission_utils import get_role_permissions
 from organization.permissions_catalog import role_has_privileged_permissions
 
-from .models import User, ExecutiveSignature, DocumentSeal, SignatureTemplate, UserSignaturePreferences
+from .models import User, ExecutiveSignature, SignatureTemplate, UserSignaturePreferences
 
 
 class UserListSerializer(serializers.ModelSerializer):
@@ -484,9 +484,3 @@ class ExecutiveSignatureUploadSerializer(serializers.Serializer):
             )
         
         return value
-
-
-class SealVerificationSerializer(serializers.Serializer):
-    """Serializer for seal verification requests."""
-    
-    serial_number = serializers.CharField(max_length=50)

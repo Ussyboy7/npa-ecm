@@ -6,7 +6,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from correspondence.models import Case, CaseCorrespondenceLink, Correspondence
+from correspondence.models import Case, CaseCorrespondenceLink, Correspondence, CorrespondenceDistribution
 from dms.models import Document, FormDocument
 from forms.models import FormSubmission, FormTemplate
 from organization.models import Department, Directorate, Division, Office, OfficeMembership
@@ -71,7 +71,7 @@ class AuditHardeningTests(TestCase):
         return sub, fd
 
     def test_aq_reference_is_yearly_sequence(self):
-        from correspondence.services.case_audit import create_audit_case_for_submission, _generate_audit_case_number
+        from correspondence.services.case_audit import create_audit_case_for_submission
         from django.utils import timezone
         year = timezone.now().year
         # Clean prior yearly cases
@@ -88,7 +88,6 @@ class AuditHardeningTests(TestCase):
         self.assertEqual(n2, n1 + 1, "Yearly sequence should increment")
 
     def test_dms_forward_blocks_all_org_targets_for_audit(self):
-        from correspondence.models import CaseFormLink
         sub, fd = self._make_form_document()
         # Link to audit case to mark as governed
         from correspondence.services.case_audit import create_audit_case_for_submission
@@ -180,6 +179,35 @@ class AuditHardeningTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertEqual(resp.data.get("audit_state"), "RESPONSE_RECEIVED")
 
+    def test_refer_creates_cc_distribution_entries(self):
+        sub, fd = self._make_form_document()
+        from correspondence.services.case_audit import create_audit_case_for_submission
+
+        case = create_audit_case_for_submission(sub, form_document=fd)
+        case.metadata["audit_state"] = "CERTIFIED"
+        case.save(update_fields=["metadata"])
+
+        self.client.force_authenticate(user=self.officer)
+        resp = self.client.post(
+            f"/api/v1/correspondence/cases/{case.id}/actions/",
+            {
+                "action": "REFER",
+                "subject": "AQ with CC",
+                "body": "<p>cc</p>",
+                "target_office": self.finance_office.code,
+                "cc": [self.hod_user.username, self.finance_office.code],
+                "action_required": False,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        entries = CorrespondenceDistribution.objects.filter(correspondence_id=resp.data["correspondence_id"])
+        self.assertEqual(entries.count(), 2, "REFER should record both CC recipients")
+        self.assertTrue(entries.filter(recipient_type="user", user=self.hod_user).exists())
+        self.assertTrue(entries.filter(recipient_type="office", office=self.finance_office).exists())
+        self.assertEqual({entry.purpose for entry in entries}, {"information"})
+
     def test_duplicate_refer_blocked(self):
         sub, fd = self._make_form_document()
         from correspondence.services.case_audit import create_audit_case_for_submission, ensure_audit_workflow_rules
@@ -246,7 +274,7 @@ class AuditHardeningTests(TestCase):
         corr_id = resp.data["correspondence_id"]
         self.assertTrue(CaseCorrespondenceLink.objects.filter(case=case, correspondence_id=corr_id).exists())
         # Attention does not change owner
-        resp2 = self.client.post(f"/api/v1/correspondence/cases/{case.id}/actions/", {"action": "RESPOND", "body": "<p>resp</p>"}, format="json")  # need to be in AWAITING_RESPONSE to test attention, but we can check previous corr's attention
+        self.client.post(f"/api/v1/correspondence/cases/{case.id}/actions/", {"action": "RESPOND", "body": "<p>resp</p>"}, format="json")  # need to be in AWAITING_RESPONSE to test attention, but we can check previous corr's attention
         # Check previous corr's current_office still finance, not attention user
         corr = Correspondence.objects.get(id=corr_id)
         self.assertEqual(corr.current_office_id, self.finance_office.id)

@@ -17,7 +17,6 @@ from typing import Any
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import transaction
 from django.template import Context, Template
 from django.utils import timezone
 

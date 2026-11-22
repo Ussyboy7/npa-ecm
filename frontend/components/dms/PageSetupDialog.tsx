@@ -211,31 +211,6 @@ export function buildComposePrintHtml(
 </html>`;
 }
 
-/**
- * Open compose print preview in a new tab (fallback). Prefer the in-app modal.
- */
-export function openComposePrintPreview(
-  html: string,
-  settings: PageSettings,
-  title = "Document",
-): void {
-  const fullHtml = buildComposePrintHtml(
-    html,
-    settings,
-    title,
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
-  );
-  const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const previewWindow = window.open(url, "_blank");
-  if (!previewWindow) {
-    URL.revokeObjectURL(url);
-    throw new Error("Allow pop-ups to open print preview");
-  }
-  previewWindow.focus();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
 interface PageSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

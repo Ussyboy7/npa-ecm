@@ -1,7 +1,6 @@
 """Seed the three NPA Internal Audit Division form templates."""
 
 from django.core.management.base import BaseCommand
-from django.utils.text import slugify
 
 from forms.models import FormTemplate
 

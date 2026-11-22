@@ -143,26 +143,3 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
     allowedArchiveLevels: buildArchiveLevels(user),
   };
 };
-
-/** Map PermissionProfile field to backend permission key */
-export const PERMISSION_KEY_MAP: Record<keyof Omit<PermissionProfile, "allowedArchiveLevels">, string> = {
-  canAccessApprovals: "can_access_approvals",
-  canAccessAnalytics: "can_access_analytics",
-  canAccessExecutiveDashboard: "can_access_executive_dashboard",
-  canAccessAdministration: "can_access_administration",
-  canAccessReports: "can_access_reports",
-  canRegisterCorrespondence: "can_register_correspondence",
-  canAccessDocumentManagement: "can_access_document_management",
-  canAccessAssistantCalendar: "can_access_assistant_calendar",
-  canApprove: "can_approve",
-  canDistribute: "can_distribute",
-  canViewCorrespondenceRegistry: "can_view_registry",
-  canAccessSystemHealth: "can_access_system_health",
-  canManageDrmPolicies: "can_manage_drm_policies",
-  canAccessRecordsGovernance: "can_access_records_governance",
-  canAccessAuditCompliance: "can_access_audit_compliance",
-  canManageIntegration: "can_manage_integration",
-  canManageUsers: "can_manage_users",
-  canManageRoles: "can_manage_roles",
-  canManageOrgStructure: "can_manage_org_structure",
-};

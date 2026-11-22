@@ -33,7 +33,6 @@ from correspondence.models import (
     Location,
     Minute,
     PhysicalDocument,
-    CheckOutEvent,
 )
 from correspondence.foia_models import FOIARequest, FOIANote, FOIARequestDocument
 from dms.models import (
