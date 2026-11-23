@@ -258,7 +258,16 @@ class MinuteViewSet(viewsets.ModelViewSet):
         to_user = serializer.validated_data.get("to_user")
         to_office = serializer.validated_data.get("to_office")
         from_office = serializer.validated_data.get("from_office") or current_office
-        MinuteRouterService.prevent_self_loop(self.request.user, to_user, to_office, from_office)
+        # The first minute on a record is its dispatch: it names the office the
+        # record was created for, which is the office it is currently sitting in.
+        is_dispatch_minute = not Minute.objects.filter(correspondence=correspondence).exists()
+        MinuteRouterService.prevent_self_loop(
+            self.request.user,
+            to_user,
+            to_office,
+            from_office,
+            is_dispatch=is_dispatch_minute,
+        )
 
         # Workflow step constraint — fail on mismatch, don't silently bypass
         # Validate that workflow configuration can satisfy correspondence's required approval level
@@ -334,11 +343,10 @@ class MinuteViewSet(viewsets.ModelViewSet):
             serializer, self.request, correspondence, from_office,
         )
 
-        try:
-            CorrespondenceDocumentService.grant_document_access_for_minute(minute)
-        except Exception as e:
-            logger.error(f"Failed to auto-grant document access for minute {minute.id}: {str(e)}", exc_info=True)
-
+        # No document permission is written for a routing step. A document
+        # carried by a correspondence is reviewable by the seat of every office
+        # on the minute trail, derived in `dms.visibility` — delivery is custody,
+        # not a share.
         correspondence = minute.correspondence
 
         if MinuteRouterService.handle_consultation_response(minute, self.request, correspondence):

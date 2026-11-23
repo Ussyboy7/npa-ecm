@@ -61,6 +61,8 @@ import { sanitizeThemedHtml } from '@/lib/sanitize-html';
 interface DocumentPreviewPanelProps {
   correspondence: Correspondence;
   linkedDocuments: DocumentRecord[];
+  /** Linked documents the API refused — shown as a gap, never hidden. */
+  withheldLinkedDocumentCount?: number;
   selectedLinkedDocVersion: Record<string, number>;
   selectedAttachmentIndex: number | null;
   selectedLinkedDocumentId: string | null;
@@ -182,6 +184,7 @@ function AttachmentImagePreview({
 export const DocumentPreviewPanel = ({
   correspondence,
   linkedDocuments,
+  withheldLinkedDocumentCount = 0,
   selectedLinkedDocVersion,
   selectedAttachmentIndex,
   selectedLinkedDocumentId,
@@ -794,6 +797,14 @@ export const DocumentPreviewPanel = ({
             </Button>
           )}
         </div>
+      )}
+
+      {withheldLinkedDocumentCount > 0 && (
+        <p className="mx-3 mt-3 flex-shrink-0 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400">
+          {withheldLinkedDocumentCount === 1
+            ? '1 document linked to this record cannot be opened with your access.'
+            : `${withheldLinkedDocumentCount} documents linked to this record cannot be opened with your access.`}
+        </p>
       )}
 
       {isManageMode ? (

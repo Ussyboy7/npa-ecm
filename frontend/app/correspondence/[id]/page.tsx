@@ -110,6 +110,7 @@ const CorrespondenceDetailContent = () => {
     detailLoading,
     backendDelegation,
     linkedDocuments,
+    withheldLinkedDocumentCount,
     selectedMinute,
     selectedAttachmentIndex,
     selectedLinkedDocumentId,
@@ -122,7 +123,7 @@ const CorrespondenceDetailContent = () => {
   
   // Stable dispatch helpers (useMemo avoids individual useCallback sprawl)
   const [setMinutes, setRemoteCorrespondence, setDetailLoading, setBackendDelegation,
-    setLinkedDocuments, setSelectedMinute, setSelectedAttachmentIndex,
+    setLinkedDocuments, setWithheldLinkedDocumentCount, setSelectedMinute, setSelectedAttachmentIndex,
     setSelectedLinkedDocumentId,
     setMobileActiveTab, setAttachmentSearchQuery,
     setIsPreviewFullscreen, setDocumentFocus] = useMemo(() => [
@@ -131,6 +132,7 @@ const CorrespondenceDetailContent = () => {
     (l: boolean) => dispatch({ type: 'SET_DETAIL_LOADING', payload: l }),
     (d: typeof backendDelegation) => dispatch({ type: 'SET_BACKEND_DELEGATION', payload: d }),
     (d: DocumentRecord[]) => dispatch({ type: 'SET_LINKED_DOCUMENTS', payload: d }),
+    (count: number) => dispatch({ type: 'SET_WITHHELD_LINKED_DOCUMENT_COUNT', payload: count }),
     (m: Minute | null) => dispatch({ type: 'SET_SELECTED_MINUTE', payload: m }),
     (i: number | null) => dispatch({ type: 'SET_SELECTED_ATTACHMENT_INDEX', payload: i }),
     (id: string | null) => dispatch({ type: 'SET_SELECTED_LINKED_DOCUMENT_ID', payload: id }),
@@ -300,6 +302,7 @@ const CorrespondenceDetailContent = () => {
     setDetailLoading,
     setBackendDelegation,
     setLinkedDocuments,
+    setWithheldLinkedDocumentCount,
     setAccessDenied,
   });
 
@@ -667,6 +670,7 @@ const CorrespondenceDetailContent = () => {
 
   const documentPanelProps = {
     linkedDocuments,
+    withheldLinkedDocumentCount,
     selectedLinkedDocVersion,
     selectedAttachmentIndex,
     selectedLinkedDocumentId,

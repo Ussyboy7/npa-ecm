@@ -192,14 +192,24 @@ def resolve_effective_document_rights(document, user=None) -> dict:
             matches_q |= Q(directorates__divisions=user.division_id)
         if getattr(user, "department_id", None):
             matches_q |= Q(directorates__divisions__departments=user.department_id)
-        matches_q |= Q(offices__memberships__user=user, offices__memberships__is_active=True)
+        # An office grant belongs to the office's seat, never to every member.
+        from organization.office_access import holds_office_seat_q
+
+        matches_q |= holds_office_seat_q(user, "offices")
         if getattr(user, "grade_level", ""):
             matches_q |= Q(grade_levels__contains=[user.grade_level])
         matches = DocumentPermission.objects.filter(document=document).filter(matches_q).values_list("access", flat=True)
         access_levels = set(matches)
 
+    from .visibility import classification_allows
+
     if is_owner or is_superuser:
         access_level = "admin"
+    elif not classification_allows(document, user):
+        # The classification gate is one rule for both channels: a permission
+        # row (the shared path) cannot reach a grade the reader may not, exactly
+        # as correspondence custody cannot.
+        access_level = None
     elif "admin" in access_levels:
         access_level = "admin"
     elif "write" in access_levels:
@@ -208,6 +218,15 @@ def resolve_effective_document_rights(document, user=None) -> dict:
         access_level = "read"
     else:
         access_level = None
+
+    if access_level is None and user and not is_superuser:
+        # A document carried by correspondence is reviewable by the seat the
+        # record was delivered to. That is custody derived from the minute
+        # trail, not a permission row, so it only ever yields read.
+        from .visibility import has_correspondence_custody
+
+        if has_correspondence_custody(document, user):
+            access_level = "read"
 
     can_view = bool(
         is_owner

@@ -11,7 +11,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch } from "@/lib/api/dms";
-import { listOfficeMembershipsForOffice } from "@/lib/office-memberships-client";
+import {
+  findOfficeSeatHolder,
+  listOfficeMembershipsForOffice,
+} from "@/lib/office-memberships-client";
 import { logError } from "@/lib/client-logger";
 import { formatDateForAPI } from "@/lib/datetime";
 import { toast } from "@/components/ui/sonner";
@@ -44,8 +47,14 @@ interface CorrespondenceRoutingViewProps {
 
 /**
  * Route a document through the correspondence registry: correspondence is the
- * official channel, so every send is registered to an office rather than
- * granting document access.
+ * official channel, so a send is addressed to an office, never to a person.
+ *
+ * The office addressed is the audience. The record arrives assigned to that
+ * office's seat (principal, acting head, secretariat) and the registry re-derives
+ * the holder from the office when the dispatch minute is recorded. The receiving
+ * office can open the document while the record is in its custody — custody
+ * derived from the minute trail, so this dialog writes no permission row and
+ * sends no share notification.
  */
 export const CorrespondenceRoutingView = forwardRef<
   CorrespondenceRoutingHandle,
@@ -118,18 +127,23 @@ export const CorrespondenceRoutingView = forwardRef<
       formData.append('document_type', 'letter');
       formData.append('current_office', targetOfficeId);
 
-      // The office registry holder is the accountable recipient of the route.
+      // The office's seat — principal, acting head or secretariat — is the
+      // accountable recipient: it arrives assigned, and the registry re-derives
+      // the holder from the office when the dispatch minute is recorded.
       const targetOfficeMemberships = await listOfficeMembershipsForOffice(targetOfficeId)
         .catch((error: unknown) => {
           logError('Failed to load target office memberships', error);
           return [];
         });
-      const primaryMember = targetOfficeMemberships.find(
-        (membership) => membership.isPrimary && membership.isActive,
-      );
-      if (primaryMember) {
-        formData.append('current_approver_id', primaryMember.userId);
+      const seatHolder = findOfficeSeatHolder(targetOfficeMemberships);
+      if (!seatHolder) {
+        toast.error('Office has no holder', {
+          description:
+            'This office has no principal, acting head or secretariat, so there is nobody to receive the memo.',
+        });
+        return;
       }
+      formData.append('current_approver_id', seatHolder.userId);
 
       const correspondenceResponse = await apiFetch<{ id: string; reference_number?: string }>(
         '/correspondence/items/',
@@ -158,6 +172,9 @@ export const CorrespondenceRoutingView = forwardRef<
           step_number: 1,
           purpose,
           requires_response: purpose !== 'information',
+          // The dispatch step names the receiving office. The registry, not this
+          // dialog, decides which seat holder holds it.
+          to_office_id: targetOfficeId,
         }),
       });
 

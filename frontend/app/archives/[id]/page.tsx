@@ -74,6 +74,7 @@ const ArchiveRecordContent = () => {
     remoteCorrespondence: correspondence,
     detailLoading,
     linkedDocuments,
+    withheldLinkedDocumentCount,
     selectedMinute,
     selectedAttachmentIndex,
     selectedLinkedDocumentId,
@@ -89,12 +90,13 @@ const ArchiveRecordContent = () => {
   );
 
   const [setMinutes, setRemoteCorrespondence, setDetailLoading, setLinkedDocuments,
-    setSelectedMinute, setSelectedAttachmentIndex, setSelectedLinkedDocumentId,
+    setWithheldLinkedDocumentCount, setSelectedMinute, setSelectedAttachmentIndex, setSelectedLinkedDocumentId,
     setAttachmentSearchQuery, setIsPreviewFullscreen] = useMemo(() => [
     (m: Minute[]) => dispatch({ type: "SET_MINUTES", payload: m }),
     (value: typeof correspondence) => dispatch({ type: "SET_REMOTE_CORRESPONDENCE", payload: value }),
     (value: boolean) => dispatch({ type: "SET_DETAIL_LOADING", payload: value }),
     (value: typeof linkedDocuments) => dispatch({ type: "SET_LINKED_DOCUMENTS", payload: value }),
+    (count: number) => dispatch({ type: "SET_WITHHELD_LINKED_DOCUMENT_COUNT", payload: count }),
     (value: Minute | null) => dispatch({ type: "SET_SELECTED_MINUTE", payload: value }),
     (value: number | null) => dispatch({ type: "SET_SELECTED_ATTACHMENT_INDEX", payload: value }),
     (value: string | null) => dispatch({ type: "SET_SELECTED_LINKED_DOCUMENT_ID", payload: value }),
@@ -124,6 +126,7 @@ const ArchiveRecordContent = () => {
     setDetailLoading,
     setBackendDelegation: noop,
     setLinkedDocuments,
+    setWithheldLinkedDocumentCount,
     setAccessDenied,
   });
 
@@ -241,6 +244,7 @@ const ArchiveRecordContent = () => {
 
   const documentPanelProps = {
     linkedDocuments,
+    withheldLinkedDocumentCount,
     selectedLinkedDocVersion,
     selectedAttachmentIndex,
     selectedLinkedDocumentId,

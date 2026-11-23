@@ -32,10 +32,14 @@ class DrmDownloadTests(APITestCase):
             email="drm_author@npa.gov.ng",
             password="pass12345",
         )
+        # The reader must clear the document's classification before DRM can
+        # even be reached: MSS1 covers CONFIDENTIAL and RESTRICTED, so these
+        # tests exercise watermark/download rules rather than the grade gate.
         self.viewer = User.objects.create_user(
             username="drm_viewer",
             email="drm_viewer@npa.gov.ng",
             password="pass12345",
+            grade_level="MSS1",
         )
         self.policy = DocumentRightsPolicy.objects.create(
             name="Confidential — View Only",

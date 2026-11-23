@@ -104,6 +104,25 @@ const listAllInScope = async (filters: Omit<MembershipFilters, 'page'>): Promise
   return results;
 };
 
+/**
+ * Roles that act for an office — mirrors OFFICE_QUEUE_ROLES in
+ * backend/organization/office_access.py. A record addressed to an office
+ * belongs to these, not to every member posted in it.
+ */
+export const OFFICE_QUEUE_ROLES = ['principal', 'acting', 'secretariat'] as const;
+
+/** The person who holds the office today, in seat precedence order. */
+export const findOfficeSeatHolder = (
+  memberships: OfficeMembership[],
+): OfficeMembership | undefined => {
+  const active = memberships.filter((membership) => membership.isActive);
+  for (const role of OFFICE_QUEUE_ROLES) {
+    const holder = active.find((membership) => membership.assignmentRole === role);
+    if (holder) return holder;
+  }
+  return undefined;
+};
+
 export const listOfficeMembershipsForUser = async (userId: string) =>
   listAllInScope({ user: userId, ordering: 'office__name', pageSize: 100 });
 

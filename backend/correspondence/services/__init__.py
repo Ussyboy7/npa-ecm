@@ -527,68 +527,6 @@ class CorrespondenceDocumentService:
 
         return list(minutes)
 
-    @classmethod
-    def grant_document_access_for_minute(cls, minute) -> None:
-        """
-        Automatically grant document access to everyone involved in a routing step.
-
-        Grants READ access to ALL documents linked to the correspondence. The
-        minute author is included because routing does not always populate
-        ``to_user``/``to_office`` (the next seat may only be recorded as
-        ``current_approver``); without the author, the person who actually
-        handled the memo can lose access to its source document.
-        """
-        links = CorrespondenceDocumentLink.objects.filter(
-            correspondence=minute.correspondence
-        ).select_related("document")
-
-        if not links:
-            return
-
-        recipients = []
-        seen_user_ids = set()
-
-        def add_recipient(user) -> None:
-            if user is None or user.id in seen_user_ids:
-                return
-            seen_user_ids.add(user.id)
-            recipients.append(user)
-
-        add_recipient(minute.user)
-        add_recipient(minute.to_user)
-        add_recipient(getattr(minute.correspondence, "current_approver", None))
-
-        if minute.to_office:
-            from organization.models import OfficeMembership
-
-            office_user_ids = OfficeMembership.objects.filter(
-                office=minute.to_office, is_active=True
-            ).values_list("user_id", flat=True)
-            from accounts.models import User
-
-            for user in User.objects.filter(id__in=office_user_ids):
-                add_recipient(user)
-
-        if not recipients:
-            return
-
-        for link in links:
-            document = link.document
-            permission = DocumentPermission.objects.filter(
-                document=document, access=DocumentPermission.AccessLevel.READ
-            ).first()
-
-            if not permission:
-                permission = DocumentPermission.objects.create(
-                    document=document,
-                    access=DocumentPermission.AccessLevel.READ,
-                    note=f"Auto-granted access via minute routing (Step {minute.step_number})",
-                )
-
-            for recipient in recipients:
-                if recipient not in permission.users.all():
-                    permission.users.add(recipient)
-
 
 class CompletionPackageService:
     """Handles generation and distribution of correspondence completion summaries."""
@@ -3158,7 +3096,8 @@ def find_office_recipient(office, preferred_user=None):
     2. preferred_user (if resolvable to an office)
     3. principal
     4. acting head membership
-    5. highest grade staff
+    5. secretariat — the role that runs the office queue
+    6. highest grade staff (only when the office holds no seat at all)
 
     Returns: (user, is_acting) tuple or (None, False) if no one found
     """
@@ -3235,6 +3174,19 @@ def find_office_recipient(office, preferred_user=None):
 
     if acting:
         return (acting.user, True)
+
+    # The office queue is run by the secretariat; a posted staff officer is not
+    # an accountable recipient for the office (see organization.office_access).
+    secretariat = (
+        OfficeMembership.objects.filter(
+            office=office, is_active=True, assignment_role="secretariat"
+        )
+        .select_related("user")
+        .first()
+    )
+
+    if secretariat:
+        return (secretariat.user, False)
 
     memberships = (
         OfficeMembership.objects.filter(office=office, is_active=True)
@@ -3638,13 +3590,24 @@ class MinuteRouterService:
                     )
 
     @classmethod
-    def prevent_self_loop(cls, user, to_user, to_office, from_office):
-        """Raise ValidationError if user routes to themselves or their own office."""
+    def prevent_self_loop(cls, user, to_user, to_office, from_office, *, is_dispatch=False):
+        """Raise ValidationError if user routes to themselves or their own office.
+
+        The dispatch minute — the first minute on a record — is exempt from the
+        office check. A record is created already addressed to its receiving
+        office (``current_office``), so the minute that delivers it necessarily
+        names that same office as its destination; that is arrival, not a loop.
+        """
         if to_user and to_user.id == user.id:
             raise ValidationError(
                 {"detail": "Cannot route correspondence to yourself."}
             )
-        if to_office and from_office and to_office.id == from_office.id:
+        if (
+            not is_dispatch
+            and to_office
+            and from_office
+            and to_office.id == from_office.id
+        ):
             raise ValidationError(
                 {"detail": "Cannot route correspondence to the same office."}
             )

@@ -19,6 +19,8 @@ export interface CorrespondenceDetailState {
     delegatedAt: string;
   } | null;
   linkedDocuments: DocumentRecord[];
+  /** Linked documents the API refused, so the panel can say so instead of hiding them. */
+  withheldLinkedDocumentCount: number;
   selectedMinute: Minute | null;
   selectedAttachmentIndex: number | null;
   selectedLinkedDocumentId: string | null;
@@ -35,6 +37,7 @@ export type CorrespondenceDetailAction =
   | { type: 'SET_DETAIL_LOADING'; payload: boolean }
   | { type: 'SET_BACKEND_DELEGATION'; payload: CorrespondenceDetailState['backendDelegation'] }
   | { type: 'SET_LINKED_DOCUMENTS'; payload: DocumentRecord[] }
+  | { type: 'SET_WITHHELD_LINKED_DOCUMENT_COUNT'; payload: number }
   | { type: 'SET_SELECTED_MINUTE'; payload: Minute | null }
   | { type: 'SET_SELECTED_ATTACHMENT_INDEX'; payload: number | null }
   | { type: 'SET_SELECTED_LINKED_DOCUMENT_ID'; payload: string | null }
@@ -51,6 +54,7 @@ export const initialState: CorrespondenceDetailState = {
   detailLoading: false,
   backendDelegation: null,
   linkedDocuments: [],
+  withheldLinkedDocumentCount: 0,
   selectedMinute: null,
   selectedAttachmentIndex: null,
   selectedLinkedDocumentId: null,
@@ -76,6 +80,8 @@ export const correspondenceDetailReducer = (
       return { ...state, backendDelegation: action.payload };
     case 'SET_LINKED_DOCUMENTS':
       return { ...state, linkedDocuments: action.payload };
+    case 'SET_WITHHELD_LINKED_DOCUMENT_COUNT':
+      return { ...state, withheldLinkedDocumentCount: action.payload };
     case 'SET_SELECTED_MINUTE':
       return { ...state, selectedMinute: action.payload };
     case 'SET_SELECTED_ATTACHMENT_INDEX':

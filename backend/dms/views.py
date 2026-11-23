@@ -61,6 +61,7 @@ from .drm import (
 from organization.office_access import holds_office_seat_q
 
 from .visibility import (
+    classification_q,
     document_acl_q,
     documents_visible_to,
     require_document_admin,
@@ -310,11 +311,15 @@ class DocumentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(pending_signature_filter).distinct()
 
         if shared_with_me:
-            # "Shared with me" is exactly the explicit-access rule: whatever
-            # document_acl_q grants, minus the documents the user authored.
-            # Reusing it keeps the list from drifting away from what the
-            # detail endpoint will let the same user open.
-            qs = qs.filter(document_acl_q(user)).exclude(author=user).distinct()
+            # "Shared with me" is exactly what the user can open through a
+            # grant: document_acl_q, gated by the same classification rule as
+            # the detail endpoint, minus the documents the user authored. A
+            # share above the reader's grade is neither listed nor openable.
+            qs = (
+                qs.filter(document_acl_q(user) & classification_q(user))
+                .exclude(author=user)
+                .distinct()
+            )
 
         if shared_by_me:
             shared_by_me_filter = (

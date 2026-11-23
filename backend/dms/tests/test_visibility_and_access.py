@@ -4,14 +4,24 @@ Also covers ACL level enforcement (read vs write vs admin) and
 directorate-wide sharing.
 """
 
+import uuid
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from correspondence.models import Correspondence, CorrespondenceDocumentLink
 from dms.drm import resolve_effective_document_rights
 from dms.models import Document, DocumentPermission
-from organization.models import Department, Directorate, Division, Role
+from organization.models import (
+    Department,
+    Directorate,
+    Division,
+    Office,
+    OfficeMembership,
+    Role,
+)
 from search.services import SearchService
 
 User = get_user_model()
@@ -189,6 +199,139 @@ class DocumentVisibilityTests(APITestCase):
         )
         self.assertIsNone(
             resolve_effective_document_rights(self.document, self.outsider)["access_level"]
+        )
+
+
+class ClassificationGateParityTests(APITestCase):
+    """A share and a correspondence delivery obey the same classification gate.
+
+    The channel decides *which* documents a user may reach; the document's
+    sensitivity decides whether the user may reach that grade at all. Neither an
+    explicit permission row nor an office's custody lifts the gate.
+    """
+
+    def setUp(self):
+        self.role = Role.objects.create(
+            name="Classification parity role",
+            permissions={"can_access_document_management": True},
+        )
+        self.directorate = Directorate.objects.create(
+            name="Parity Directorate", code="PAR-DIR"
+        )
+        self.division = Division.objects.create(
+            directorate=self.directorate, name="Parity Division", code="PAR-DIV"
+        )
+        self.office = Office.objects.create(
+            name="Parity Office",
+            code="PAR-OFF",
+            office_type=Office.OfficeTier.DIVISION,
+            division=self.division,
+        )
+
+        self.author = self._user("parity_author", grade="MSS4")
+        self.below_grade = self._user("parity_below", grade="SSS3")
+        self.at_grade = self._user("parity_at", grade="MSS3")
+
+        OfficeMembership.objects.create(
+            office=self.office,
+            user=self.below_grade,
+            assignment_role=OfficeMembership.AssignmentRole.SECRETARIAT,
+        )
+        OfficeMembership.objects.create(
+            office=self.office,
+            user=self.at_grade,
+            assignment_role=OfficeMembership.AssignmentRole.PRINCIPAL,
+        )
+
+        self.document = Document.objects.create(
+            title="Parity confidential memo",
+            document_type=Document.DocumentType.MEMO,
+            status=Document.DocumentStatus.DRAFT,
+            sensitivity=Document.Sensitivity.CONFIDENTIAL,
+            author=self.author,
+            division=self.division,
+        )
+
+    def _user(self, username, *, grade):
+        return User.objects.create_user(
+            username=username,
+            email=f"{username}@npa.gov.ng",
+            password="pass12345",
+            grade_level=grade,
+            division=self.division,
+            system_role=self.role,
+        )
+
+    def _share_with(self, user):
+        permission = DocumentPermission.objects.create(
+            document=self.document, access=DocumentPermission.AccessLevel.READ
+        )
+        permission.users.add(user)
+        return permission
+
+    def _deliver_to_office(self):
+        correspondence = Correspondence.objects.create(
+            reference_number=f"NPA/PAR/{uuid.uuid4().hex[:8].upper()}",
+            subject="Parity delivery",
+            sender_name="Sender",
+            created_by=self.author,
+            owning_office=self.office,
+            current_office=self.office,
+        )
+        CorrespondenceDocumentLink.objects.create(
+            correspondence=correspondence, document=self.document
+        )
+        return correspondence
+
+    def _can_open(self, user):
+        self.client.force_authenticate(user=user)
+        response = self.client.get(
+            reverse("api_v1:document-detail", args=[self.document.id])
+        )
+        return response.status_code == status.HTTP_200_OK
+
+    def _shared_ids(self, user):
+        self.client.force_authenticate(user=user)
+        response = self.client.get(reverse("api_v1:document-list"), {"shared_with_me": "1"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("results", response.data)
+        return {str(item["id"]) for item in rows}
+
+    def test_a_share_below_the_grade_is_neither_listed_nor_openable(self):
+        self._share_with(self.below_grade)
+
+        self.assertNotIn(str(self.document.id), self._shared_ids(self.below_grade))
+        self.assertFalse(self._can_open(self.below_grade))
+        self.assertIsNone(
+            resolve_effective_document_rights(self.document, self.below_grade)["access_level"]
+        )
+
+    def test_a_share_at_the_grade_opens(self):
+        self._share_with(self.at_grade)
+
+        self.assertIn(str(self.document.id), self._shared_ids(self.at_grade))
+        self.assertTrue(self._can_open(self.at_grade))
+        self.assertEqual(
+            resolve_effective_document_rights(self.document, self.at_grade)["access_level"],
+            "read",
+        )
+
+    def test_a_delivery_below_the_grade_is_neither_listed_nor_openable(self):
+        self._deliver_to_office()
+
+        self.assertNotIn(str(self.document.id), self._shared_ids(self.below_grade))
+        self.assertFalse(self._can_open(self.below_grade))
+        self.assertIsNone(
+            resolve_effective_document_rights(self.document, self.below_grade)["access_level"]
+        )
+
+    def test_a_delivery_at_the_grade_opens(self):
+        self._deliver_to_office()
+
+        self.assertTrue(self._can_open(self.at_grade))
+        self.assertEqual(
+            resolve_effective_document_rights(self.document, self.at_grade)["access_level"],
+            "read",
         )
 
 

@@ -60,6 +60,7 @@ interface UseCorrespondenceDetailDataOptions {
   setDetailLoading: (loading: boolean) => void;
   setBackendDelegation: (del: BackendDelegation) => void;
   setLinkedDocuments: (docs: DocumentRecord[]) => void;
+  setWithheldLinkedDocumentCount: (count: number) => void;
   setAccessDenied: (denied: boolean) => void;
 }
 
@@ -79,6 +80,7 @@ export function useCorrespondenceDetailData({
   setDetailLoading,
   setBackendDelegation,
   setLinkedDocuments,
+  setWithheldLinkedDocumentCount,
   setAccessDenied,
 }: UseCorrespondenceDetailDataOptions) {
   const markedAsOpenedRef = useRef<Set<string>>(new Set());
@@ -89,6 +91,7 @@ export function useCorrespondenceDetailData({
     const linkedIds = linkedDocIdsKey ? linkedDocIdsKey.split(',') : [];
     if (linkedIds.length === 0) {
       setLinkedDocuments([]);
+      setWithheldLinkedDocumentCount(0);
       return;
     }
 
@@ -96,12 +99,18 @@ export function useCorrespondenceDetailData({
 
     const loadLinkedDocs = async () => {
       try {
+        let withheld = 0;
         const results = await Promise.all(
           linkedIds.map(async (docId) => {
             try {
               return await fetchDocumentById(docId);
             } catch (error: unknown) {
-              logWarn(`Failed to load linked document ${docId}`, error);
+              // A linked document the API refuses is an access gap on this
+              // record, not a document that does not exist. Count it so the
+              // panel can say the record carries something the reader cannot
+              // open, instead of silently showing a shorter list.
+              withheld += 1;
+              logError(`Linked document ${docId} is not readable by this user`, error);
               return null;
             }
           }),
@@ -109,6 +118,7 @@ export function useCorrespondenceDetailData({
 
         if (!ignore) {
           setLinkedDocuments(results.filter((doc): doc is DocumentRecord => Boolean(doc)));
+          setWithheldLinkedDocumentCount(withheld);
         }
       } catch (error: unknown) {
         logError('Failed to load linked documents', error);
@@ -120,7 +130,7 @@ export function useCorrespondenceDetailData({
     return () => {
       ignore = true;
     };
-  }, [linkedDocIdsKey, setLinkedDocuments]);
+  }, [linkedDocIdsKey, setLinkedDocuments, setWithheldLinkedDocumentCount]);
 
   useEffect(() => {
     if (!id) return;
