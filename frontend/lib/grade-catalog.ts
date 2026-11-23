@@ -85,6 +85,45 @@ export const getGradeSeniority = (
   return catalog.grades.length - 1 - info.rank;
 };
 
+/**
+ * The next more senior served grade, used for on-behalf-of choices.
+ *
+ * Returns undefined at the top of the hierarchy and for grades the server did
+ * not send, so callers offer no choices rather than guessing a neighbour.
+ */
+export const getSuperiorGrade = (
+  catalog: GradeCatalog | null | undefined,
+  code: string | null | undefined,
+): GradeInfo | undefined => {
+  const info = getGradeInfo(catalog, code);
+  if (!catalog || !info || info.rank <= 0) return undefined;
+  return catalog.grades.find((grade) => grade.rank === info.rank - 1);
+};
+
+/**
+ * How a served superior relates to the current user, by rank distance.
+ *
+ * The wording and its thresholds are the ones the on-behalf-of picker always
+ * showed; only the distance now comes from the served order instead of a
+ * second grade list with its own numbering.
+ */
+export const getGradeRelationshipLabel = (
+  catalog: GradeCatalog | null | undefined,
+  currentCode: string | null | undefined,
+  superiorCode: string | null | undefined,
+): string => {
+  if (!currentCode || !superiorCode) return "";
+  const current = getGradeInfo(catalog, currentCode);
+  const superior = getGradeInfo(catalog, superiorCode);
+  if (!current || !superior) return "Supervisor";
+
+  const gradeDiff = current.rank - superior.rank;
+  if (gradeDiff === 1) return "Your Direct Supervisor";
+  if (gradeDiff === 2) return "Your Director";
+  if (gradeDiff >= 3) return "Executive Level";
+  return "Supervisor";
+};
+
 /** True when the grade carries the served tier. */
 export const gradeHasTier = (
   catalog: GradeCatalog | null | undefined,

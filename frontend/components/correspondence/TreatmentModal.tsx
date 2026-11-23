@@ -15,8 +15,11 @@ import { generateId, getNextStepNumber } from '@/lib/correspondence-helpers';
 import { formatDateForAPI } from '@/lib/datetime';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
 import type { Correspondence, User } from '@/lib/npa-structure';
-import { GRADE_LEVELS } from '@/lib/npa-structure';
-import { gradeHasTier } from '@/lib/grade-catalog';
+import {
+  getGradeRelationshipLabel,
+  getSuperiorGrade,
+  gradeHasTier,
+} from '@/lib/grade-catalog';
 import { useGradeCatalog } from '@/hooks/use-grade-catalog';
 import {
   Select,
@@ -353,23 +356,21 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const getRelationshipLabel = useCallback(
     (current: typeof currentUser, superior: typeof currentUser) => {
       if (!current || !superior) return '';
-      const currentLevel = GRADE_LEVELS.find(g => g.code === current.gradeLevel)?.level || 0;
-      const superiorLevel = GRADE_LEVELS.find(g => g.code === superior.gradeLevel)?.level || 0;
-      const gradeDiff = superiorLevel - currentLevel;
-      if (gradeDiff === 1) return 'Your Direct Supervisor';
-      if (gradeDiff === 2) return 'Your Director';
-      if (gradeDiff >= 3) return 'Executive Level';
-      return 'Supervisor';
+      return getGradeRelationshipLabel(
+        gradeCatalog,
+        current.gradeLevel,
+        superior.gradeLevel,
+      );
     },
-    [],
+    [gradeCatalog],
   );
 
-  const superiorGrade = useMemo(() => {
-    if (!currentUser?.gradeLevel) return null;
-    const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map((g) => g.code);
-    const currentGradeIndex = gradeOrder.indexOf(currentUser.gradeLevel);
-    return currentGradeIndex > 0 ? gradeOrder[currentGradeIndex - 1] : null;
-  }, [currentUser?.gradeLevel]);
+  // The proposal for whom this user may act for comes from the served order,
+  // so a grade inserted between two known ones is picked up automatically.
+  const superiorGrade = useMemo(
+    () => getSuperiorGrade(gradeCatalog, currentUser?.gradeLevel)?.code ?? null,
+    [gradeCatalog, currentUser?.gradeLevel],
+  );
 
   const [behalfCandidates, setBehalfCandidates] = useState<User[]>([]);
   useEffect(() => {
