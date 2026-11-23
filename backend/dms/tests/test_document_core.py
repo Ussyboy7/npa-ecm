@@ -6,6 +6,7 @@ from audit.models import ActivityLog
 from ..drm import resolve_effective_document_rights
 from ..models import Document, DocumentPermission, DocumentRightsPolicy, DocumentVersion
 from accounts.models import User
+from notifications.models import Notification
 from organization.models import Department, Directorate, Division, Role
 from ..visibility import documents_visible_to
 
@@ -227,6 +228,25 @@ class DocumentPermissionViewSetTests(TestCase):
         )
 
         self.assertIn(response.status_code, {status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND})
+
+    def test_share_notifies_recipient_and_records_recipient_count(self):
+        notification = Notification.objects.filter(
+            recipient=self.other,
+            related_object_type="document",
+            related_object_id=str(self.document.id),
+            title=f"Document Shared: {self.document.title}",
+        ).first()
+
+        self.assertIsNotNone(notification, "A direct share should notify the recipient")
+        self.assertEqual(notification.action_url, f"/dms/{self.document.id}")
+        self.assertEqual(notification.status, Notification.Status.UNREAD)
+
+        log = ActivityLog.objects.filter(
+            object_type="document",
+            object_id=str(self.document.id),
+            action=ActivityLog.ActionType.DOCUMENT_SHARED,
+        ).latest("timestamp")
+        self.assertEqual(log.metadata.get("user_count"), 1)
 
     def test_effective_rights_combine_write_access_with_drm_restrictions(self):
         policy = DocumentRightsPolicy.objects.create(

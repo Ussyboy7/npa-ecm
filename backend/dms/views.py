@@ -1142,44 +1142,39 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         assert_share_allowed(document, request.user)
         access = serializer.validated_data.get("access", "read")
         note = serializer.validated_data.get("note", "")
-        user_ids = serializer.validated_data.get("user_ids", [])
-        division_ids = serializer.validated_data.get("division_ids", [])
-        department_ids = serializer.validated_data.get("department_ids", [])
-        directorate_ids = serializer.validated_data.get("directorate_ids", [])
-        office_ids = serializer.validated_data.get("office_ids", [])
+        # The serializer exposes *_ids as write-only aliases (source="users"
+        # and so on), so validated_data holds the related objects by model
+        # field name. Reading "user_ids" here always came back empty and
+        # silently skipped every share notification.
+        user_recipients = serializer.validated_data.get("users", [])
+        division_recipients = serializer.validated_data.get("divisions", [])
+        department_recipients = serializer.validated_data.get("departments", [])
+        directorate_recipients = serializer.validated_data.get("directorates", [])
+        office_recipients = serializer.validated_data.get("offices", [])
         
         # Create permission
         permission = serializer.save()
         
         # Get all users who should be notified
         from accounts.models import User
-        from organization.models import Division, Department, Office
+        from organization.models import Division
         
-        notified_users = set()
-        
-        # Add direct users
-        if user_ids:
-            users = User.objects.filter(id__in=user_ids)
-            notified_users.update(users)
+        notified_users = set(user_recipients)
         
         # Add users from divisions
-        if division_ids:
-            divisions = Division.objects.filter(id__in=division_ids)
-            for division in divisions:
-                users = User.objects.filter(division=division, is_active=True)
-                notified_users.update(users)
+        for division in division_recipients:
+            users = User.objects.filter(division=division, is_active=True)
+            notified_users.update(users)
         
         # Add users from departments
-        if department_ids:
-            departments = Department.objects.filter(id__in=department_ids)
-            for department in departments:
-                users = User.objects.filter(department=department, is_active=True)
-                notified_users.update(users)
+        for department in department_recipients:
+            users = User.objects.filter(department=department, is_active=True)
+            notified_users.update(users)
 
         # Add everyone whose division sits in the selected directorates.
-        if directorate_ids:
+        if directorate_recipients:
             directorate_division_ids = list(
-                Division.objects.filter(directorate_id__in=directorate_ids).values_list("id", flat=True)
+                Division.objects.filter(directorate__in=directorate_recipients).values_list("id", flat=True)
             )
             if directorate_division_ids:
                 users = User.objects.filter(
@@ -1190,15 +1185,13 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
                 notified_users.update(users)
 
         # Add users belonging to selected offices only.
-        if office_ids:
-            offices = Office.objects.filter(id__in=office_ids)
-            for office in offices:
-                users = User.objects.filter(
-                    office_memberships__office=office,
-                    office_memberships__is_active=True,
-                    is_active=True,
-                )
-                notified_users.update(users)
+        for office in office_recipients:
+            users = User.objects.filter(
+                office_memberships__office=office,
+                office_memberships__is_active=True,
+                is_active=True,
+            )
+            notified_users.update(users)
         
         # Build notification message with note if provided
         base_message = f"{request.user.get_full_name() or request.user.username} has shared a document with you with {access} access."
@@ -1228,11 +1221,11 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         from audit.models import ActivityLog
         metadata = {
             "permission_id": str(permission.id),
-            "user_count": len(user_ids) if user_ids else 0,
-            "division_count": len(division_ids) if division_ids else 0,
-            "department_count": len(department_ids) if department_ids else 0,
-            "directorate_count": len(directorate_ids) if directorate_ids else 0,
-            "office_count": len(office_ids) if office_ids else 0,
+            "user_count": len(user_recipients),
+            "division_count": len(division_recipients),
+            "department_count": len(department_recipients),
+            "directorate_count": len(directorate_recipients),
+            "office_count": len(office_recipients),
             "access_level": access,
         }
         if note:
