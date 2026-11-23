@@ -5,31 +5,24 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 
+from common.grade_utils import DIRECTORATE_GRADES, GRADE_ORDER, GRADE_RANK
 from organization.models import OfficeMembership
 
 from .models import Correspondence, Minute
 
 User = get_user_model()
 
-# Mirrors the frontend routing grade order. Keep unknown grades unranked so
-# the server reproduces the existing client-side behavior exactly.
-GRADE_ORDER = (
-    "MDCS",
-    "EDCS",
-    "MSS1",
-    "MSS2",
-    "MSS3",
-    "MSS4",
-    "MSS5",
-    "SSS1",
-    "SSS2",
-    "SSS3",
-    "SSS4",
-    "JSS1",
-    "JSS2",
-    "JSS3",
+# The MD sits above everyone, so their suggestions are not limited by division
+# or directorate. Derived from the served order instead of naming the code.
+TOP_GRADE_INDEX = 0
+
+# Directorate-level leadership sees an upward request regardless of where the
+# sender sits. DIRECTORATE_GRADES also carries the MD/ED aliases, which are not
+# in the catalogue's order, so only catalogue codes are kept.
+DIRECTORATE_GRADE_CODES = frozenset(
+    grade for grade in GRADE_ORDER if grade in DIRECTORATE_GRADES
 )
-GRADE_RANK = {grade: index for index, grade in enumerate(GRADE_ORDER)}
+
 VALID_DIRECTIONS = {
     Correspondence.Direction.UPWARD,
     Correspondence.Direction.DOWNWARD,
@@ -116,7 +109,7 @@ def get_routing_suggestions(
     if resolved_direction == Correspondence.Direction.DOWNWARD:
         lower_grades = set(GRADE_ORDER[current_grade_index + 1 :])
 
-        if current_grade == "MDCS":
+        if current_grade_index == TOP_GRADE_INDEX:
             md_candidates = list(active_users.filter(grade_level__in=lower_grades))
             return sorted(
                 md_candidates,
@@ -134,7 +127,7 @@ def get_routing_suggestions(
         )
 
     higher_grades = set(GRADE_ORDER[:current_grade_index])
-    higher_scope = Q(grade_level__in={"MDCS", "EDCS"})
+    higher_scope = Q(grade_level__in=DIRECTORATE_GRADE_CODES)
     if current_division_id:
         higher_scope |= Q(division_id=current_division_id)
     if current_directorate_id:
@@ -143,7 +136,5 @@ def get_routing_suggestions(
     filters = Q(grade_level__in=higher_grades) & higher_scope
     if can_route_laterally:
         filters |= Q(grade_level=current_grade)
-        if current_grade == "AGMCS":
-            filters |= Q(grade_level="GMCS")
 
     return list(active_users.filter(filters))

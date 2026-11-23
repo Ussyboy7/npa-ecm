@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
+import { getGradeInfo } from '@/lib/grade-catalog';
 import { useCurrentUser } from './use-current-user';
+import { useGradeCatalog } from './use-grade-catalog';
 
 export interface RoleChecks {
   isMD: boolean;
@@ -22,6 +24,7 @@ export interface RoleChecks {
  */
 export function useRoleChecks(): RoleChecks {
   const { currentUser } = useCurrentUser();
+  const gradeCatalog = useGradeCatalog();
 
   return useMemo(() => {
     if (!currentUser) {
@@ -45,15 +48,16 @@ export function useRoleChecks(): RoleChecks {
     const roleName = (currentUser.systemRole || '').toLowerCase();
     const isSuperuser = currentUser.isSuperuser || false;
 
-    // Grade-based checks
+    // Grade-based checks, read from the served catalogue so a re-tiered grade
+    // reaches this hook without a second list being edited here.
+    const gradeInfo = getGradeInfo(gradeCatalog, grade);
     const isMD = grade === 'MDCS';
-    const isED = grade === 'EDCS';
-    const isGM = grade === 'MSS1';
-    const isAGM = grade === 'MSS2';
+    // The MD heads every directorate too, but is reported on their own line.
+    const isED = Boolean(gradeInfo?.directorateLeadership) && grade !== 'MDCS';
+    const isGM = Boolean(gradeInfo?.divisionLeadership);
+    const isAGM = Boolean(gradeInfo?.departmentLeadership);
     const isPrincipalManager = grade === 'MSS3';
-    
-    // Management grades: MDCS, EDCS, MSS1, MSS2, MSS3
-    const isManagement = ['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3'].includes(grade);
+    const isManagement = Boolean(gradeInfo?.seniorManagement);
 
     // Role-based checks
     const isSecretary = roleName === 'secretary';
@@ -77,6 +81,6 @@ export function useRoleChecks(): RoleChecks {
       isPortManager,
       isChiefPortHRO,
     };
-  }, [currentUser]);
+  }, [currentUser, gradeCatalog]);
 }
 

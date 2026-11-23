@@ -4,6 +4,7 @@ import { logWarn } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isRecord } from "@/lib/type-utils";
 import type { User } from "@/lib/npa-structure";
+import { fetchGradeCatalog } from "@/lib/grade-catalog";
 import { isPublicAppPath } from "@/lib/app-shell-paths";
 import {
   AUTH_BROADCAST_CHANNEL,
@@ -130,7 +131,14 @@ export const useCurrentUser = () => {
       }
 
       try {
-        const response = await apiFetch<unknown>("/accounts/auth/me/");
+        // The catalogue is user-independent reference data, but grade-derived
+        // role checks must never run against a signed-in user before it lands.
+        // Load both together and publish the user only once the catalogue has
+        // settled, so no consumer sees a brief, falsely unprivileged scope.
+        const [response] = await Promise.all([
+          apiFetch<unknown>("/accounts/auth/me/"),
+          fetchGradeCatalog().catch(() => null),
+        ]);
         const user = isRecord(response) ? mapApiUserToUser(response) : null;
         globalUserState.user = user;
         globalUserState.hydrated = true;

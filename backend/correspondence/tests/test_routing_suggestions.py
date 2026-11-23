@@ -144,6 +144,29 @@ class RoutingSuggestionTests(TestCase):
         self.assertNotIn(self.higher_other_directorate.id, suggestions)
         self.assertNotIn(self.lower_same_division.id, suggestions)
 
+    def test_upward_uses_the_shared_catalogue_order(self):
+        # GMCS sat outside the module's old private order, so an MSS3 sender
+        # never reached a GMCS in the same division. The served order ranks it
+        # between the executive director and MSS1.
+        general_manager = self._user(
+            "routing-gmcs", "GMCS", self.division, self.directorate
+        )
+
+        suggestions = self._suggestions(Correspondence.Direction.UPWARD)
+
+        self.assertIn(general_manager.id, suggestions)
+
+    def test_upward_reaches_agmcs_through_the_shared_order(self):
+        # AGMCS was missing from the module's old private order too, so it was
+        # never offered upward to an MSS3 sender in the same division.
+        department_head = self._user(
+            "routing-agmcs", "AGMCS", self.division, self.directorate
+        )
+
+        suggestions = self._suggestions(Correspondence.Direction.UPWARD)
+
+        self.assertIn(department_head.id, suggestions)
+
     def test_lateral_respects_the_office_permission(self):
         self.office.allow_lateral_routing = False
         self.office.save(update_fields=["allow_lateral_routing"])

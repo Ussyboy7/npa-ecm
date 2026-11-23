@@ -1,10 +1,12 @@
 """URL routes for the organization app."""
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
     DepartmentViewSet,
     DirectorateViewSet,
+    GradeCatalogView,
     DivisionViewSet,
     OfficeMembershipViewSet,
     OfficeViewSet,
@@ -32,4 +34,6 @@ router.register(
 )
 
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("grades/", GradeCatalogView.as_view(), name="grade-catalog"),
+] + router.urls

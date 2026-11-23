@@ -25,7 +25,9 @@ import {
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useGradeCatalog } from "@/hooks/use-grade-catalog";
 import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
+import { gradeHasTier } from "@/lib/grade-catalog";
 import type { DistributionRecipient, Office, User } from "@/lib/npa-structure";
 
 interface DistributionSelectorProps {
@@ -48,12 +50,13 @@ export const DistributionSelector = ({
   ccOnly = false,
 }: DistributionSelectorProps) => {
   const { currentUser } = useCurrentUser();
+  const gradeCatalog = useGradeCatalog();
   const { offices, divisions, departments: _departments, directorates } = useOrganization();
 
-  const canCreateParallelRouting = useMemo(() => {
-    if (!currentUser?.gradeLevel) return false;
-    return ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(currentUser.gradeLevel);
-  }, [currentUser?.gradeLevel]);
+  const canCreateParallelRouting = useMemo(
+    () => gradeHasTier(gradeCatalog, currentUser?.gradeLevel, 'seniorManagement'),
+    [gradeCatalog, currentUser?.gradeLevel],
+  );
 
   const [routeType, setRouteType] = useState<"person" | "office">("office");
   const [purpose, setPurpose] = useState<"information" | "action">("information");

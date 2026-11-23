@@ -16,6 +16,8 @@ import { formatDateForAPI } from '@/lib/datetime';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
 import type { Correspondence, User } from '@/lib/npa-structure';
 import { GRADE_LEVELS } from '@/lib/npa-structure';
+import { gradeHasTier } from '@/lib/grade-catalog';
+import { useGradeCatalog } from '@/hooks/use-grade-catalog';
 import {
   Select,
   SelectContent,
@@ -166,11 +168,11 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   });
   
   // Check if user is executive
-  const isExecutive = useMemo(() => {
-    if (!activeUser?.gradeLevel) return false;
-    const executiveGrades = ['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3'];
-    return executiveGrades.includes(activeUser.gradeLevel);
-  }, [activeUser?.gradeLevel]);
+  const gradeCatalog = useGradeCatalog();
+  const isExecutive = useMemo(
+    () => gradeHasTier(gradeCatalog, activeUser?.gradeLevel, 'seniorManagement'),
+    [gradeCatalog, activeUser?.gradeLevel],
+  );
   
   // File upload state - managed locally, FileUploadArea handles UI
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);

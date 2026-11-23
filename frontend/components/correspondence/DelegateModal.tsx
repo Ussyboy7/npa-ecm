@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useOrgUsers } from "@/hooks/use-org-users";
+import { useGradeCatalog } from "@/hooks/use-grade-catalog";
+import { getGradeInfo } from "@/lib/grade-catalog";
 import { toast } from "@/components/ui/sonner";
 import { formatDateShort } from "@/lib/datetime";
 import { 
@@ -104,6 +106,7 @@ export const DelegateModal = ({
 }: DelegateModalProps) => {
   const { assistantAssignments, addAssignment, divisions, departments, refreshOrganizationData, isSyncing } = useOrganization();
   const { users } = useOrgUsers({ enabled: open });
+  const gradeCatalog = useGradeCatalog();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');
@@ -145,41 +148,37 @@ export const DelegateModal = ({
       };
     });
 
-  // Determine the executive's level and scope for hierarchical filtering
-  // Grade codes: MDCS (MD), EDCS (ED), MSS1 (GM), MSS2 (AGM), MSS3 (Principal Manager), etc.
-  // User type uses string names for directorate/division/department, not IDs
+  // Determine the executive's level and scope for hierarchical filtering.
+  // Tiers come from the served catalogue; the role-name fallbacks cover accounts
+  // whose grade has not been filled in. User type uses string names for
+  // directorate/division/department, not IDs.
   const getExecutiveScope = () => {
     if (!executive) return { level: 'unknown', scope: 'all' as const };
-    
-    const gradeLevel = executive.gradeLevel?.toUpperCase() || '';
+
+    const gradeInfo = getGradeInfo(gradeCatalog, executive.gradeLevel);
     const systemRole = executive.systemRole?.toLowerCase() || '';
-    
-    // MD can assign anyone in the organization (code: MDCS)
-    if (gradeLevel === 'MDCS' || systemRole.includes('managing director')) {
+
+    // The top grade (MD) can assign anyone in the organization.
+    if (gradeInfo?.rank === 0 || systemRole.includes('managing director')) {
       return { level: 'md', scope: 'all' as const };
     }
-    
-    // ED can assign anyone in their directorate (code: EDCS)
-    if (gradeLevel === 'EDCS' || systemRole.includes('executive director')) {
+
+    // Directorate leadership can assign anyone in their directorate.
+    if (gradeInfo?.directorateLeadership || systemRole.includes('executive director')) {
       return { level: 'ed', scope: 'directorate' as const, directorate: executive.directorate };
     }
-    
-    // GM can assign anyone in their division (code: MSS1)
-    if (gradeLevel === 'MSS1' || systemRole.includes('general manager')) {
+
+    // Division leadership can assign anyone in their division.
+    if (gradeInfo?.divisionLeadership || systemRole.includes('general manager')) {
       return { level: 'gm', scope: 'division' as const, division: executive.division };
     }
-    
-    // AGM can assign anyone in their department (code: MSS2)
-    if (gradeLevel === 'MSS2' || systemRole.includes('assistant general manager')) {
+
+    // Department leadership can assign anyone in their department.
+    if (gradeInfo?.departmentLeadership || systemRole.includes('assistant general manager')) {
       return { level: 'agm', scope: 'department' as const, department: executive.department };
     }
-    
-    // Principal Manager and below - department scope (codes: MSS3, MSS4, MSS5, SSS*, JSS*)
-    if (gradeLevel.startsWith('MSS') || gradeLevel.startsWith('SSS') || gradeLevel.startsWith('JSS')) {
-      return { level: 'staff', scope: 'department' as const, department: executive.department };
-    }
-    
-    // Default: only same department for safety
+
+    // Every other grade assigns within its own department.
     return { level: 'staff', scope: 'department' as const, department: executive.department };
   };
 

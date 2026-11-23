@@ -67,6 +67,8 @@ import { useOrganization, type AssistantAssignment } from '@/contexts/Organizati
 import { useScopedOfficeMemberships } from '@/hooks/use-scoped-office-memberships';
 import { useUserLookup } from '@/hooks/use-user-lookup';
 import { useRoutingSuggestions } from '@/hooks/use-routing-suggestions';
+import { useGradeCatalog } from '@/hooks/use-grade-catalog';
+import { getGradeSeniority, gradeHasTier } from '@/lib/grade-catalog';
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
@@ -133,6 +135,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
 const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
   const { currentUser: activeUser } = useCurrentUser();
+  const gradeCatalog = useGradeCatalog();
   const {
     assistantAssignments,
     offices,
@@ -391,9 +394,13 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     }
   }, [canApprove, actionType]);
 
-  // Check if user is an executive (for seal preview)
-  const executiveGrades = ['MDCS', 'EDCS']; // Managing Director, Executive Director
-  const isExecutive = currentUser && executiveGrades.includes(currentUser.gradeLevel);
+  // Check if user leads a directorate (for seal preview). The served tier
+  // covers the Managing Director and Executive Director.
+  const isExecutive = gradeHasTier(
+    gradeCatalog,
+    currentUser?.gradeLevel,
+    'directorateLeadership',
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -636,16 +643,29 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
   const previousUser = previousMinute ? findUserById(previousMinute.userId) : null;
 
-  // Auto-compute Direction from sender vs recipient rank (tied to Route To)
-  const GRADE_RANK: Record<string, number> = { 'MDCS': 11, 'EDCS': 10, 'MSS1': 9, 'MSS2': 8, 'MSS3': 7, 'MSS4': 6, 'MSS5': 5, 'SSS1': 4, 'SSS2': 3, 'SSS3': 2, 'SSS4': 1, 'JSS1': 0, 'JSS2': 0, 'JSS3': 0 };
-  const OFFICE_RANK: Record<string, number> = { 'md': 11, 'ed': 10, 'gm': 9, 'agm': 8, 'directorate': 10, 'division': 9, 'department': 8 };
+  // Auto-compute Direction from sender vs recipient rank (tied to Route To).
+  // The hierarchy comes from the served catalogue: rank 0 is most senior, so
+  // the seniority score inverts it. Unknown grades keep the old default of 5.
+  const rankOf = (code?: string | null): number => {
+    const seniority = getGradeSeniority(gradeCatalog, code);
+    return seniority >= 0 ? seniority : 5;
+  };
+  const OFFICE_RANK: Record<string, number> = {
+    md: rankOf('MDCS'),
+    ed: rankOf('EDCS'),
+    gm: rankOf('MSS1'),
+    agm: rankOf('MSS2'),
+    directorate: rankOf('EDCS'),
+    division: rankOf('MSS1'),
+    department: rankOf('MSS2'),
+  };
   const getComputedDirection = (sender: typeof currentUser, targetId: string, type: 'person' | 'office'): 'upward' | 'downward' | 'lateral' | null => {
     if (!sender) return null;
     if (type === 'person' && targetId) {
       const target = findUserById(targetId);
       if (target) {
-        const s = GRADE_RANK[sender.gradeLevel] ?? 5;
-        const t = GRADE_RANK[(target as unknown as { gradeLevel: string }).gradeLevel] ?? 5;
+        const s = rankOf(sender.gradeLevel);
+        const t = rankOf((target as unknown as { gradeLevel: string }).gradeLevel);
         if (s < t) return 'upward';
         if (s > t) return 'downward';
         return 'lateral';
@@ -654,7 +674,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     if (type === 'office' && targetId) {
       const office = offices.find((o) => String(o.id) === String(targetId));
       if (office) {
-        const s = sender.gradeLevel === 'MDCS' ? 11 : sender.gradeLevel === 'EDCS' ? 10 : sender.gradeLevel === 'MSS1' ? 9 : sender.gradeLevel === 'MSS2' ? 8 : 5;
+        const s = rankOf(sender.gradeLevel);
         const t = OFFICE_RANK[String((office as unknown as { officeType: string }).officeType || '').toLowerCase()] ?? 5;
         if (s < t) return 'upward';
         if (s > t) return 'downward';

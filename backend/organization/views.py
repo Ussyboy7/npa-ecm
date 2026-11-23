@@ -10,8 +10,10 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from audit.services import AuditService
+from common.grade_utils import grade_catalog
 from common.pagination import CatalogPageNumberPagination
 from common.permissions import CanAccessAdministration
 from .models import (
@@ -88,6 +90,20 @@ class OrgStructureAdminMixin:
             from organization.permission_utils import require_permission
 
             require_permission(request.user, "can_manage_org_structure")
+
+
+class GradeCatalogView(APIView):
+    """The grade hierarchy and the leadership tiers each grade carries.
+
+    Routing suggestions, delegation scope and the role checks all read this one
+    catalogue, so a grade added or re-tiered in `common.grade_utils` reaches the
+    client without a second list being edited there.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"grades": list(grade_catalog())})
 
 
 class DirectorateViewSet(OrgHierarchyReadScopeMixin, OrgStructureAdminMixin, viewsets.ModelViewSet):
