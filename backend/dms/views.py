@@ -58,7 +58,10 @@ from .drm import (
     assert_view_allowed,
     resolve_document_rights,
 )
+from organization.office_access import holds_office_seat_q
+
 from .visibility import (
+    document_acl_q,
     documents_visible_to,
     require_document_admin,
     require_document_write,
@@ -307,14 +310,11 @@ class DocumentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(pending_signature_filter).distinct()
 
         if shared_with_me:
-            shared_filter = Q(permissions__users=user)
-            if user.division_id:
-                shared_filter |= Q(permissions__divisions=user.division_id)
-            if user.department_id:
-                shared_filter |= Q(permissions__departments=user.department_id)
-            if user.grade_level:
-                shared_filter |= Q(permissions__grade_levels__contains=[user.grade_level])
-            qs = qs.filter(shared_filter).exclude(author=user).distinct()
+            # "Shared with me" is exactly the explicit-access rule: whatever
+            # document_acl_q grants, minus the documents the user authored.
+            # Reusing it keeps the list from drifting away from what the
+            # detail endpoint will let the same user open.
+            qs = qs.filter(document_acl_q(user)).exclude(author=user).distinct()
 
         if shared_by_me:
             shared_by_me_filter = (
@@ -1117,10 +1117,9 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         return queryset.filter(
             Q(document__author=user)
             | Q(document__permissions__users=user, document__permissions__access=DocumentPermission.AccessLevel.ADMIN)
-            | Q(
-                document__permissions__offices__memberships__user=user,
-                document__permissions__offices__memberships__is_active=True,
-                document__permissions__access=DocumentPermission.AccessLevel.ADMIN,
+            | (
+                holds_office_seat_q(user, "document__permissions__offices")
+                & Q(document__permissions__access=DocumentPermission.AccessLevel.ADMIN)
             )
         ).distinct()
 
@@ -1151,6 +1150,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         department_recipients = serializer.validated_data.get("departments", [])
         directorate_recipients = serializer.validated_data.get("directorates", [])
         office_recipients = serializer.validated_data.get("offices", [])
+        grade_recipients = serializer.validated_data.get("grade_levels", []) or []
         
         # Create permission
         permission = serializer.save()
@@ -1158,12 +1158,17 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         # Get all users who should be notified
         from accounts.models import User
         from organization.models import Division
+        from organization.office_access import seat_holder_users
         
         notified_users = set(user_recipients)
         
-        # Add users from divisions
+        # Add users from divisions, including the departments inside them:
+        # document_acl_q grants that same population access.
         for division in division_recipients:
-            users = User.objects.filter(division=division, is_active=True)
+            users = User.objects.filter(
+                Q(division=division) | Q(department__division=division),
+                is_active=True,
+            )
             notified_users.update(users)
         
         # Add users from departments
@@ -1184,13 +1189,14 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
                 )
                 notified_users.update(users)
 
-        # Add users belonging to selected offices only.
+        # An office grant belongs to the office seat, not to everyone posted in
+        # it: notify the principal, acting head and secretariat only.
         for office in office_recipients:
-            users = User.objects.filter(
-                office_memberships__office=office,
-                office_memberships__is_active=True,
-                is_active=True,
-            )
+            notified_users.update(seat_holder_users([office.id]))
+
+        # Grade-level grants are broadcast to that grade.
+        if grade_recipients:
+            users = User.objects.filter(grade_level__in=list(grade_recipients), is_active=True)
             notified_users.update(users)
         
         # Build notification message with note if provided
@@ -1226,6 +1232,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
             "department_count": len(department_recipients),
             "directorate_count": len(directorate_recipients),
             "office_count": len(office_recipients),
+            "grade_level_count": len(grade_recipients),
             "access_level": access,
         }
         if note:

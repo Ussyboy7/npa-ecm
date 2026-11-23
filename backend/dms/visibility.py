@@ -9,6 +9,9 @@ Rules:
 - Author and superuser always see their own/any document.
 - An explicit `DocumentPermission` grants access to its users, offices,
   divisions, departments, directorates and grade levels.
+- An office grant reaches the office's seat holders only (principal, acting,
+  secretariat) — a record addressed to an office is the office's, not every
+  member's. See `organization.office_access`.
 - Public documents are visible to every authenticated user once published.
 - Internal: only through an explicit permission above.
 - Confidential: an explicit permission *and* a management grade.
@@ -24,6 +27,7 @@ from common.grade_utils import (
     SENSITIVITY_HIGH_CONFIDENTIAL_GRADES,
     SENSITIVITY_HIGH_RESTRICTED_GRADES,
 )
+from organization.office_access import holds_office_seat_q
 
 from .models import Document, DocumentPermission
 
@@ -37,10 +41,7 @@ def _user_grade(user) -> str:
 
 def document_acl_q(user) -> Q:
     """Q matching the user against any explicit permission row for a document."""
-    acl = Q(permissions__users=user) | Q(
-        permissions__offices__memberships__user=user,
-        permissions__offices__memberships__is_active=True,
-    )
+    acl = Q(permissions__users=user) | holds_office_seat_q(user, "permissions__offices")
     if getattr(user, "division_id", None):
         acl |= Q(permissions__divisions=user.division_id)
     if getattr(user, "department_id", None):
