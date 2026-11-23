@@ -34,6 +34,7 @@ from django.db.models import Q, Subquery
 from rest_framework.exceptions import PermissionDenied
 
 from common.grade_utils import (
+    GRADE_ORDER,
     SENSITIVITY_HIGH_CONFIDENTIAL_GRADES,
     SENSITIVITY_HIGH_RESTRICTED_GRADES,
 )
@@ -84,6 +85,27 @@ def visible_sensitivities(user) -> set[str]:
     if grade in SENSITIVITY_HIGH_RESTRICTED_GRADES:
         allowed.add(Document.Sensitivity.RESTRICTED)
     return allowed
+
+
+def sensitivity_grade_requirements() -> dict[str, tuple[str, ...]]:
+    """Grades that may reach each classification, highest grade first.
+
+    Derived from the same constants :func:`visible_sensitivities` gates on, so
+    the policy served to the client and the enforcement here cannot disagree.
+    An empty tuple means every authenticated user may reach that sensitivity —
+    the client reads that as `unrestricted` rather than as "no one".
+    """
+    def by_rank(grades: frozenset[str]) -> tuple[str, ...]:
+        return tuple(grade for grade in GRADE_ORDER if grade in grades)
+
+    return {
+        Document.Sensitivity.PUBLIC: (),
+        Document.Sensitivity.INTERNAL: (),
+        Document.Sensitivity.CONFIDENTIAL: by_rank(
+            SENSITIVITY_HIGH_CONFIDENTIAL_GRADES
+        ),
+        Document.Sensitivity.RESTRICTED: by_rank(SENSITIVITY_HIGH_RESTRICTED_GRADES),
+    }
 
 
 def correspondence_custody_q(user) -> Q:

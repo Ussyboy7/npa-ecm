@@ -28,6 +28,11 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/api/dms";
 import { shareDocument, apiFetch, hasTokens, canShareDocument } from "@/lib/api/dms";
+import {
+  describeClassification,
+  gradeReachesSensitivity,
+} from "@/lib/classification-policy";
+import { useClassificationPolicy } from "@/hooks/use-classification-policy";
 import { toast } from "@/components/ui/sonner";
 import { Input } from "@/components/ui/input";
 import { Search, Users, AlertTriangle, Loader2, FileText, CheckCircle2, Shield, Send } from "lucide-react";
@@ -337,6 +342,35 @@ const ShareDocumentDialogContent = ({
     return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
   }, [selectedUserIds, personSelectionLookup]);
 
+  // A grant never lifts the classification, so a recipient below the grade
+  // would be given a permission that opens nothing. Name them before sending
+  // instead of letting the share silently achieve nothing. The clearance rule
+  // is the served policy, not a client copy of the grade lists.
+  const classificationPolicy = useClassificationPolicy();
+  const classificationRule = document && classificationPolicy
+    ? classificationPolicy[document.sensitivity]
+    : null;
+
+  const sensitivityBlockedRecipients = useMemo(() => {
+    if (!classificationRule) return [];
+    const blocked: { id: string; name: string; grade: string }[] = [];
+    selectedUserIds.forEach((id) => {
+      const person = personSelectionLookup.get(id);
+      if (person && !gradeReachesSensitivity(classificationRule, person.gradeLevel)) {
+        blocked.push({ id, name: person.name, grade: person.gradeLevel });
+      }
+    });
+    return blocked;
+  }, [classificationRule, personSelectionLookup, selectedUserIds]);
+
+  const blockedRecipientLabel = useMemo(() => {
+    const names = sensitivityBlockedRecipients.map((person) =>
+      person.grade ? `${person.name} (${person.grade})` : person.name,
+    );
+    if (names.length <= 3) return names.join(', ');
+    return `${names.slice(0, 3).join(', ')} +${names.length - 3} more`;
+  }, [sensitivityBlockedRecipients]);
+
   // Keyboard shortcuts
   useEffect(() => {
     if (!open) return;
@@ -625,6 +659,21 @@ const ShareDocumentDialogContent = ({
                                   </div>
                                 </ScrollArea>
                               </div>
+                              {sensitivityBlockedRecipients.length > 0 && (
+                                <Alert variant="destructive">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <AlertDescription className="text-xs">
+                                    {sensitivityBlockedRecipients.length === 1
+                                      ? '1 selected person cannot open this document: '
+                                      : `${sensitivityBlockedRecipients.length} selected people cannot open this document: `}
+                                    <span className="font-medium">{blockedRecipientLabel}</span>.
+                                    {' '}
+                                    {classificationRule?.label ?? document.sensitivity} documents:{' '}
+                                    {classificationRule ? describeClassification(classificationRule) : ''}.
+                                    Sharing with them would grant no access.
+                                  </AlertDescription>
+                                </Alert>
+                              )}
 </div>
                       </div>
                     </div>
@@ -770,6 +819,16 @@ const ShareDocumentDialogContent = ({
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription className="text-xs">
                 This action will be logged for security and compliance purposes.
+              </AlertDescription>
+            </Alert>
+          )}
+          {sensitivityBlockedRecipients.length > 0 && document && (
+            <Alert variant="destructive" className="mt-3">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <span className="font-medium">{blockedRecipientLabel}</span> cannot reach{' '}
+                {(classificationRule?.label ?? document.sensitivity).toLowerCase()} documents, so
+                this share will open nothing for them.
               </AlertDescription>
             </Alert>
           )}

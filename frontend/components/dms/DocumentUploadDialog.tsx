@@ -1,5 +1,5 @@
 "use client";
-import { SENSITIVITY_DETAILS, SENSITIVITY_OPTIONS } from '@/lib/constants';
+import { SENSITIVITY_OPTIONS } from '@/lib/constants';
 
 import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
@@ -1018,7 +1018,7 @@ export const DocumentUploadDialog = ({
                 >
                   <SelectTrigger id="doc-drm-policy" className="h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="inherit">Inherit from {SENSITIVITY_DETAILS[sensitivity as keyof typeof SENSITIVITY_DETAILS]?.label ?? sensitivity} (Default)</SelectItem>
+                    <SelectItem value="inherit">Inherit from {SENSITIVITY_OPTIONS.find((option) => option.value === sensitivity)?.label ?? sensitivity} (Default)</SelectItem>
                     {drmPolicies.map((policy) => (
                       <SelectItem key={policy.id} value={policy.id}>{policy.name}</SelectItem>
                     ))}

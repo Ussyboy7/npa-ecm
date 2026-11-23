@@ -23,7 +23,9 @@ import { FileText, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
-import { SENSITIVITY_DETAILS, SENSITIVITY_VALUES } from '@/lib/constants';
+import { SENSITIVITY_VALUES } from '@/lib/constants';
+import { describeClassification } from '@/lib/classification-policy';
+import { useClassificationPolicy } from '@/hooks/use-classification-policy';
 import { updateDocumentMetadata, queryDocuments, type DocumentRecord, type DocumentType } from '@/lib/api/dms';
 import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
 import type { Division, Department } from '@/lib/npa-structure';
@@ -85,6 +87,17 @@ export const DocumentMetadataEditDialog = ({
     sensitivity: 'internal',
     drmPolicyId: null,
   });
+  // Clearance comes from the served classification policy, so the picker and
+  // the badges below cannot drift from the gate the server enforces.
+  const classificationPolicy = useClassificationPolicy();
+  const confidentialGrades = classificationPolicy?.confidential.grades ?? [];
+  const restrictedGrades = classificationPolicy?.restricted.grades ?? [];
+  const sensitivityDescription = (value: (typeof SENSITIVITY_VALUES)[number]) => {
+    const rule = classificationPolicy?.[value];
+    if (!rule) return '';
+    const text = describeClassification(rule);
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataErrors, setMetadataErrors] = useState<Record<string, string>>({});
@@ -447,12 +460,14 @@ export const DocumentMetadataEditDialog = ({
                     </SelectTrigger>
                     <SelectContent>
                       {SENSITIVITY_VALUES.map((value) => {
-                        const details = SENSITIVITY_DETAILS[value];
+                        const description = sensitivityDescription(value);
                         return (
                           <SelectItem key={value} value={value}>
                             <div className="flex flex-col">
-                              <span>{details.label}</span>
-                              <span className="text-xs text-muted-foreground">{details.description}</span>
+                              <span>{classificationPolicy?.[value]?.label ?? value}</span>
+                              {description && (
+                                <span className="text-xs text-muted-foreground">{description}</span>
+                              )}
                             </div>
                           </SelectItem>
                         );
@@ -497,18 +512,20 @@ export const DocumentMetadataEditDialog = ({
                     <div className="flex-1">
                       <p className="font-medium text-warning mb-1">Confidential Access</p>
                       <p className="text-warning/90 mb-2">
-                        Requires MSS2 or higher grade level access.
+                        Requires a management grade.
                       </p>
-                      <div className="mt-1.5 pt-1.5 border-t border-warning/20">
-                        <p className="text-warning/80 text-[10px] font-medium mb-1">Accessible to:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {['MSS2', 'MSS3', 'MSS4', 'MSS5', 'MSS1', 'EDCS', 'MDCS'].map((grade) => (
-                            <Badge key={grade} variant="outline" className="text-[10px] h-5 px-1.5 border-warning/30 text-warning">
-                              {grade}
-                            </Badge>
-                          ))}
+                      {confidentialGrades.length > 0 && (
+                        <div className="mt-1.5 pt-1.5 border-t border-warning/20">
+                          <p className="text-warning/80 text-[10px] font-medium mb-1">Accessible to:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {confidentialGrades.map((grade) => (
+                              <Badge key={grade} variant="outline" className="text-[10px] h-5 px-1.5 border-warning/30 text-warning">
+                                {grade}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                   )}
@@ -520,16 +537,18 @@ export const DocumentMetadataEditDialog = ({
                       <p className="text-destructive/90 mb-2">
                         Highest security level. Only accessible to top management.
                       </p>
-                      <div className="mt-1.5 pt-1.5 border-t border-destructive/20">
-                        <p className="text-destructive/80 text-[10px] font-medium mb-1">Accessible to:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {['MSS1', 'EDCS', 'MDCS'].map((grade) => (
-                            <Badge key={grade} variant="outline" className="text-[10px] h-5 px-1.5 border-destructive/30 text-destructive">
-                              {grade}
-                            </Badge>
-                          ))}
+                      {restrictedGrades.length > 0 && (
+                        <div className="mt-1.5 pt-1.5 border-t border-destructive/20">
+                          <p className="text-destructive/80 text-[10px] font-medium mb-1">Accessible to:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {restrictedGrades.map((grade) => (
+                              <Badge key={grade} variant="outline" className="text-[10px] h-5 px-1.5 border-destructive/30 text-destructive">
+                                {grade}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                   )}
@@ -551,7 +570,7 @@ export const DocumentMetadataEditDialog = ({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="inherit">Inherit from {SENSITIVITY_DETAILS[metadataDraft.sensitivity]?.label ?? metadataDraft.sensitivity} (Default)</SelectItem>
+                      <SelectItem value="inherit">Inherit from {classificationPolicy?.[metadataDraft.sensitivity]?.label ?? metadataDraft.sensitivity} (Default)</SelectItem>
                       {drmPolicies.map((policy) => (
                         <SelectItem key={policy.id} value={policy.id}>
                           {policy.name}

@@ -13,6 +13,7 @@ from django.http import FileResponse, HttpResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, mixins, status, viewsets
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from common.pagination import StandardPageNumberPagination
@@ -66,6 +67,7 @@ from .visibility import (
     documents_visible_to,
     require_document_admin,
     require_document_write,
+    sensitivity_grade_requirements,
 )
 from .watermark import apply_pdf_access_restrictions, apply_text_watermark, is_pdf_bytes
 
@@ -1759,3 +1761,30 @@ class DocumentRightsPolicyViewSet(viewsets.ModelViewSet):
         self._ensure_admin()
         instance.is_active = False
         instance.save(update_fields=["is_active", "updated_at"])
+
+
+class ClassificationPolicyView(APIView):
+    """Grades each document classification admits.
+
+    The share warning, the sensitivity picker and its clearance badges all read
+    this, so the client shows the clearance story the server enforces rather
+    than keeping its own copy of the grade lists.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        requirements = sensitivity_grade_requirements()
+        return Response(
+            {
+                "sensitivities": [
+                    {
+                        "value": value,
+                        "label": label,
+                        "grades": list(requirements.get(value, ())),
+                        "unrestricted": not requirements.get(value),
+                    }
+                    for value, label in Document.Sensitivity.choices
+                ]
+            }
+        )

@@ -38,12 +38,5 @@ export const SENSITIVITY_OPTIONS = [
   { value: "restricted", label: "Restricted" },
 ] as const;
 
-export const SENSITIVITY_DETAILS: Record<
-  (typeof SENSITIVITY_OPTIONS)[number]["value"],
-  { label: string; description: string }
-> = {
-  public: { label: "Public", description: "All authenticated users • May be shareable externally" },
-  internal: { label: "Internal", description: "Shared with specific departments/divisions/units" },
-  confidential: { label: "Confidential", description: "MSS2+ (MSS2, MSS3, MSS4, MSS5, MSS1, EDCS, MDCS)" },
-  restricted: { label: "Restricted", description: "MSS1, EDCS, MDCS only" },
-};
+// Clearance per classification is served by the backend (see
+// `lib/classification-policy.ts`); the labels below are only picker copy.

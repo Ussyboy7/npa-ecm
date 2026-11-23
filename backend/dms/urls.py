@@ -1,8 +1,10 @@
 """URL routes for the document management system app."""
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    ClassificationPolicyView,
     DocumentAccessLogViewSet,
     DocumentCollectionViewSet,
     DocumentCommentViewSet,
@@ -31,5 +33,11 @@ router.register(r"templates", DocumentTemplateViewSet, basename="document-templa
 router.register(r"drm-policies", DocumentRightsPolicyViewSet, basename="document-rights-policy")
 
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path(
+        "classification-policy/",
+        ClassificationPolicyView.as_view(),
+        name="classification-policy",
+    ),
+]
 

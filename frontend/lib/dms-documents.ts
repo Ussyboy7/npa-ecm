@@ -17,6 +17,10 @@ import type {
   CreateDocumentVersionInput,
 } from './dms-types';
 import { mapDocument } from './dms-types';
+import {
+  getCachedClassificationPolicy,
+  gradeReachesSensitivity,
+} from './classification-policy';
 
 // ============ HELPERS ============
 
@@ -492,12 +496,11 @@ export const userHasPermission = (user: User, document: DocumentRecord): boolean
   if (document.sensitivity === 'public') return true;
   if (document.sensitivity === 'internal') return true;
 
-  if (document.sensitivity === 'confidential') {
-    return ['MSS5', 'MSS4', 'MSS3', 'MSS2', 'MSS1', 'EDCS', 'MDCS'].includes(user.gradeLevel);
-  }
-
-  if (document.sensitivity === 'restricted') {
-    return document.authorId === user.id || ['MSS1', 'EDCS', 'MDCS'].includes(user.gradeLevel);
+  if (document.sensitivity === 'confidential' || document.sensitivity === 'restricted') {
+    // The author already returned above, so the served classification rule
+    // alone decides here. Before it loads, deny rather than guess a clearance.
+    const rule = getCachedClassificationPolicy()?.[document.sensitivity];
+    return rule ? gradeReachesSensitivity(rule, user.gradeLevel) : false;
   }
 
   return false;
