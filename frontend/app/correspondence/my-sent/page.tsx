@@ -369,7 +369,7 @@ const MySentPageContent = () => {
           <TabsList>
             <TabsTrigger value="sent" className="text-xs px-2.5 py-1">Sent</TabsTrigger>
             <TabsTrigger value="documents" className="text-xs px-2.5 py-1 gap-1.5">
-              Shared documents
+              Shared by me
               {documentCount > 0 && (
                 <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
                   {documentCount}
@@ -459,7 +459,7 @@ const MySentPageContent = () => {
             <div className="relative max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search shared documents..."
+                placeholder="Search documents you shared..."
                 value={documentQuery}
                 onChange={(e) => setDocumentQuery(e.target.value)}
                 className="h-8 pl-8 text-xs"
@@ -474,7 +474,7 @@ const MySentPageContent = () => {
               documentsError ? null : (
                 <EmptyState
                   icon="file"
-                  title={debouncedDocumentQuery ? 'No documents match your search' : 'No shared documents'}
+                  title={debouncedDocumentQuery ? 'No documents match your search' : 'You have not shared any documents'}
                   message={debouncedDocumentQuery ? 'Try a different search term.' : 'Documents you share with others will appear here.'}
                   actionLabel={debouncedDocumentQuery ? 'Clear Search' : undefined}
                   onAction={debouncedDocumentQuery ? () => setDocumentQuery('') : undefined}
