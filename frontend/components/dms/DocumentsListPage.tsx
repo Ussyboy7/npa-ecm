@@ -381,82 +381,6 @@ function MyDocumentsForm() {
             )
           }
         >
-        {activeTab === 'forms' ? null : (
-        <>
-        <Tabs value={documentScope} onValueChange={(value) => handleScopeChange(value as DocumentScope)}>
-          <TabsList aria-label="Document scope">
-            <TabsTrigger value="mine" className="text-xs px-2.5 py-1 gap-1.5">
-              Mine
-              <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
-                {scopeCounts.mine}
-              </Badge>
-            </TabsTrigger>
-            <TabsTrigger value="shared" className="text-xs px-2.5 py-1 gap-1.5">
-              Shared with me
-              <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
-                {scopeCounts.shared}
-              </Badge>
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="rounded-xl bg-muted/30 p-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search title, reference, or content"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 pl-8 text-xs"
-                aria-label="Search documents"
-              />
-            </div>
-            <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedType || 'all'} onValueChange={(v) => { setSelectedType(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="letter">Letter</SelectItem>
-                <SelectItem value="memo">Memo</SelectItem>
-                <SelectItem value="circular">Circular</SelectItem>
-                <SelectItem value="policy">Policy</SelectItem>
-                <SelectItem value="report">Report</SelectItem>
-                <SelectItem value="form">Form</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-            <DateRangePicker
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              onDateFromChange={(v) => { setDateFrom(v); pagination.goToFirstPage(); }}
-              onDateToChange={(v) => { setDateTo(v); pagination.goToFirstPage(); }}
-            />
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated-desc">Last Updated</SelectItem>
-                <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
-                <SelectItem value="created-desc">Created</SelectItem>
-                <SelectItem value="created-asc">Created (Oldest)</SelectItem>
-                <SelectItem value="title-asc">Title A-Z</SelectItem>
-                <SelectItem value="title-desc">Title Z-A</SelectItem>
-              </SelectContent>
-            </Select>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>
-            )}
-          </div>
-        </div>
-        </>
-        )}
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
@@ -472,7 +396,80 @@ function MyDocumentsForm() {
               </TabsTrigger>
             ) : null}
           </TabsList>
-          <TabsContent value="documents" className="mt-6">
+          <TabsContent value="documents" className="mt-6 space-y-3">
+            <Tabs value={documentScope} onValueChange={(value) => handleScopeChange(value as DocumentScope)}>
+              <TabsList aria-label="Document scope">
+                <TabsTrigger value="mine" className="text-xs px-2.5 py-1 gap-1.5">
+                  Mine
+                  <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
+                    {scopeCounts.mine}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="shared" className="text-xs px-2.5 py-1 gap-1.5">
+                  Shared with me
+                  <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
+                    {scopeCounts.shared}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <div className="rounded-xl bg-muted/30 p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[200px] flex-1 max-w-sm">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search title, reference, or content"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8 pl-8 text-xs"
+                    aria-label="Search documents"
+                  />
+                </div>
+                <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+                  <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="published">Published</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={selectedType || 'all'} onValueChange={(v) => { setSelectedType(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+                  <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="letter">Letter</SelectItem>
+                    <SelectItem value="memo">Memo</SelectItem>
+                    <SelectItem value="circular">Circular</SelectItem>
+                    <SelectItem value="policy">Policy</SelectItem>
+                    <SelectItem value="report">Report</SelectItem>
+                    <SelectItem value="form">Form</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <DateRangePicker
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  onDateFromChange={(v) => { setDateFrom(v); pagination.goToFirstPage(); }}
+                  onDateToChange={(v) => { setDateTo(v); pagination.goToFirstPage(); }}
+                />
+                <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+                  <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="updated-desc">Last Updated</SelectItem>
+                    <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+                    <SelectItem value="created-desc">Created</SelectItem>
+                    <SelectItem value="created-asc">Created (Oldest)</SelectItem>
+                    <SelectItem value="title-asc">Title A-Z</SelectItem>
+                    <SelectItem value="title-desc">Title Z-A</SelectItem>
+                  </SelectContent>
+                </Select>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>
+                )}
+              </div>
+            </div>
+
             <DocumentList
               documents={documents}
               loading={loading}
