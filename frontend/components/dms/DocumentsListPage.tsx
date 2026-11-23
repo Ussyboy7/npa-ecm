@@ -91,6 +91,7 @@ function MyDocumentsForm() {
 
   // Stats
   const [stats, setStats] = useState({ total: 0, draft: 0, published: 0, archived: 0 });
+  const [scopeCounts, setScopeCounts] = useState<{ mine: number; shared: number }>({ mine: 0, shared: 0 });
 
   const [createFormOpen, setCreateFormOpen] = useState(false);
 
@@ -253,6 +254,29 @@ function MyDocumentsForm() {
     loadStats();
   }, [currentUser?.id, activeTab, documentScope, debouncedSearch, refreshKey]);
 
+  // Scope sizes for the Mine / Shared with me sub-tabs (unfiltered, like the Forms badge)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let cancelled = false;
+    const loadScopeCounts = async () => {
+      try {
+        const [mine, shared] = await Promise.all([
+          queryDocumentsExtended({ authorId: currentUser.id, page: 1, pageSize: 1 }),
+          queryDocumentsExtended({ sharedWithMe: true, page: 1, pageSize: 1 }),
+        ]);
+        if (!cancelled) {
+          setScopeCounts({ mine: mine.count || 0, shared: shared.count || 0 });
+        }
+      } catch (err: unknown) {
+        if (!cancelled) logError('Failed to load document scope counts', err);
+      }
+    };
+    void loadScopeCounts();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, refreshKey]);
+
   // Badge the Forms tab with work waiting on this user
   useEffect(() => {
     if (!currentUser?.id || !visibility.showFormsLibrary) return;
@@ -358,32 +382,25 @@ function MyDocumentsForm() {
           }
         >
         {activeTab === 'forms' ? null : (
+        <>
+        <Tabs value={documentScope} onValueChange={(value) => handleScopeChange(value as DocumentScope)}>
+          <TabsList aria-label="Document scope">
+            <TabsTrigger value="mine" className="text-xs px-2.5 py-1 gap-1.5">
+              Mine
+              <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
+                {scopeCounts.mine}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="shared" className="text-xs px-2.5 py-1 gap-1.5">
+              Shared with me
+              <Badge variant="secondary" className="h-4 min-w-[1rem] px-1 text-[10px]">
+                {scopeCounts.shared}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="rounded-xl bg-muted/30 p-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div
-              className="flex items-center gap-0.5 rounded-lg border border-border/60 bg-background/60 p-0.5"
-              role="group"
-              aria-label="Document scope"
-            >
-              <Button
-                size="compact"
-                variant={documentScope === 'mine' ? 'default' : 'ghost'}
-                className="h-7"
-                aria-pressed={documentScope === 'mine'}
-                onClick={() => handleScopeChange('mine')}
-              >
-                Mine
-              </Button>
-              <Button
-                size="compact"
-                variant={documentScope === 'shared' ? 'default' : 'ghost'}
-                className="h-7"
-                aria-pressed={documentScope === 'shared'}
-                onClick={() => handleScopeChange('shared')}
-              >
-                Shared with me
-              </Button>
-            </div>
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -438,6 +455,7 @@ function MyDocumentsForm() {
             )}
           </div>
         </div>
+        </>
         )}
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
