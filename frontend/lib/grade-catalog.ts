@@ -124,6 +124,23 @@ export const getGradeRelationshipLabel = (
   return "Supervisor";
 };
 
+/**
+ * True when ``code`` is the same grade as ``minimumCode`` or more senior.
+ *
+ * Use this for a cut-off such as "Principal Manager and above"; the named tier
+ * flags describe the management bands, not every feature's threshold.
+ */
+export const gradeIsAtLeast = (
+  catalog: GradeCatalog | null | undefined,
+  code: string | null | undefined,
+  minimumCode: string | null | undefined,
+): boolean => {
+  const info = getGradeInfo(catalog, code);
+  const minimum = getGradeInfo(catalog, minimumCode);
+  if (!info || !minimum) return false;
+  return info.rank <= minimum.rank;
+};
+
 /** True when the grade carries the served tier. */
 export const gradeHasTier = (
   catalog: GradeCatalog | null | undefined,

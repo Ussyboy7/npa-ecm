@@ -27,7 +27,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useGradeCatalog } from "@/hooks/use-grade-catalog";
 import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
-import { gradeHasTier } from "@/lib/grade-catalog";
+import { gradeIsAtLeast } from "@/lib/grade-catalog";
 import type { DistributionRecipient, Office, User } from "@/lib/npa-structure";
 
 interface DistributionSelectorProps {
@@ -53,8 +53,9 @@ export const DistributionSelector = ({
   const gradeCatalog = useGradeCatalog();
   const { offices, divisions, departments: _departments, directorates } = useOrganization();
 
+  // Parallel routing starts at Principal Manager, not at every senior manager.
   const canCreateParallelRouting = useMemo(
-    () => gradeHasTier(gradeCatalog, currentUser?.gradeLevel, 'seniorManagement'),
+    () => gradeIsAtLeast(gradeCatalog, currentUser?.gradeLevel, 'MSS3'),
     [gradeCatalog, currentUser?.gradeLevel],
   );
 

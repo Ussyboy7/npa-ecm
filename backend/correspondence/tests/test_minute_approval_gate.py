@@ -53,10 +53,10 @@ class MinuteApprovalGateTests(TestCase):
         OfficeMembership.objects.create(user=self.md, office=self.office_md, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
         OfficeMembership.objects.create(user=self.md, office=self.office_fin, assignment_role="principal", is_primary=False, is_active=True)
 
-        self.gm_fin = User.objects.create_user(username="gm_fin_gate", password="x", grade_level="GMCS", system_role=gm_role, directorate=self.directorate, division=self.div_finance, department=self.dept_finance)
+        self.gm_fin = User.objects.create_user(username="gm_fin_gate", password="x", grade_level="MSS1", system_role=gm_role, directorate=self.directorate, division=self.div_finance, department=self.dept_finance)
         OfficeMembership.objects.create(user=self.gm_fin, office=self.office_fin, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
 
-        self.gm_legal = User.objects.create_user(username="gm_legal_gate", password="x", grade_level="GMCS", system_role=gm_role, directorate=self.directorate, division=self.div_legal, department=self.dept_legal)
+        self.gm_legal = User.objects.create_user(username="gm_legal_gate", password="x", grade_level="MSS1", system_role=gm_role, directorate=self.directorate, division=self.div_legal, department=self.dept_legal)
         OfficeMembership.objects.create(user=self.gm_legal, office=self.office_legal, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
 
         self.clerk = User.objects.create_user(username="clerk_gate_test", password="x", grade_level="SSS1", system_role=clerk_role, division=self.div_finance, department=self.dept_finance, directorate=self.directorate)

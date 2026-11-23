@@ -7,6 +7,7 @@ import {
   getGradeSeniority,
   getSuperiorGrade,
   gradeHasTier,
+  gradeIsAtLeast,
 } from '@/lib/grade-catalog';
 
 const servedPayload = {
@@ -38,7 +39,7 @@ const servedPayload = {
       rank: 2,
       management: true,
       senior_management: true,
-      executive: true,
+      executive: false,
       leadership: true,
       directorate_leadership: false,
       division_leadership: true,
@@ -106,10 +107,10 @@ const onBehalfPayload = {
   grades: [
     { code: 'MDCS', rank: 0 },
     { code: 'EDCS', rank: 1 },
-    { code: 'GMCS', rank: 2 },
-    { code: 'AGMCS', rank: 3 },
-    { code: 'MSS1', rank: 4 },
-    { code: 'MSS2', rank: 5 },
+    { code: 'MSS1', rank: 2 },
+    { code: 'MSS2', rank: 3 },
+    { code: 'MSS3', rank: 4 },
+    { code: 'MSS4', rank: 5 },
   ],
 };
 
@@ -117,8 +118,8 @@ describe('on-behalf-of grades', () => {
   const catalog = buildGradeCatalog(onBehalfPayload);
 
   it('takes the next more senior served grade', () => {
-    expect(getSuperiorGrade(catalog, 'MSS1')?.code).toBe('AGMCS');
-    expect(getSuperiorGrade(catalog, 'AGMCS')?.code).toBe('GMCS');
+    expect(getSuperiorGrade(catalog, 'MSS2')?.code).toBe('MSS1');
+    expect(getSuperiorGrade(catalog, 'MSS1')?.code).toBe('EDCS');
     expect(getSuperiorGrade(catalog, 'EDCS')?.code).toBe('MDCS');
     expect(getSuperiorGrade(catalog, 'MDCS')).toBeUndefined();
     expect(getSuperiorGrade(catalog, 'UNKNOWN')).toBeUndefined();
@@ -126,13 +127,13 @@ describe('on-behalf-of grades', () => {
   });
 
   it('keeps the existing relationship wording for served rank distances', () => {
-    expect(getGradeRelationshipLabel(catalog, 'MSS1', 'AGMCS')).toBe(
+    expect(getGradeRelationshipLabel(catalog, 'MSS2', 'MSS1')).toBe(
       'Your Direct Supervisor',
     );
-    expect(getGradeRelationshipLabel(catalog, 'MSS1', 'GMCS')).toBe(
+    expect(getGradeRelationshipLabel(catalog, 'MSS2', 'EDCS')).toBe(
       'Your Director',
     );
-    expect(getGradeRelationshipLabel(catalog, 'MSS2', 'MDCS')).toBe(
+    expect(getGradeRelationshipLabel(catalog, 'MSS3', 'MDCS')).toBe(
       'Executive Level',
     );
     expect(getGradeRelationshipLabel(catalog, 'MDCS', 'MSS1')).toBe(
@@ -163,7 +164,22 @@ describe('getGradeSeniority', () => {
   });
 
   it('does not rank a grade the server did not send', () => {
-    expect(getGradeSeniority(catalog, 'GMCS')).toBe(-1);
+    expect(getGradeSeniority(catalog, 'ZZZZ')).toBe(-1);
     expect(getGradeSeniority(catalog, null)).toBe(-1);
+  });
+});
+
+describe('gradeIsAtLeast', () => {
+  const catalog = buildGradeCatalog(onBehalfPayload);
+
+  it('includes the cut-off grade and everything above it', () => {
+    expect(gradeIsAtLeast(catalog, 'MSS2', 'MSS3')).toBe(true);
+    expect(gradeIsAtLeast(catalog, 'MSS3', 'MSS3')).toBe(true);
+    expect(gradeIsAtLeast(catalog, 'MSS4', 'MSS3')).toBe(false);
+  });
+
+  it('answers false when either grade is not served', () => {
+    expect(gradeIsAtLeast(catalog, 'MSS3', 'UNKNOWN')).toBe(false);
+    expect(gradeIsAtLeast(null, 'MSS3', 'MSS3')).toBe(false);
   });
 });

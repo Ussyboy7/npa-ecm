@@ -108,7 +108,7 @@ const gmUser = {
   name: 'GM User',
   email: 'gm@npa.gov',
   employeeId: 'GM001',
-  gradeLevel: 'GMCS',
+  gradeLevel: 'MSS1',
   systemRole: 'General Manager',
   active: true,
   rolePermissions: { can_approve: true, can_minute_correspondence: true },

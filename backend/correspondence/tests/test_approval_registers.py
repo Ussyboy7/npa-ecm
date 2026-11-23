@@ -47,10 +47,10 @@ class ApprovalRegistersTests(TestCase):
         self.md = User.objects.create_user(username="md_reg_test", password="x", grade_level="MDCS", system_role=md_role, directorate=self.directorate, division=self.div_fin, department=self.dept_fin)
         OfficeMembership.objects.create(user=self.md, office=self.office_md, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
 
-        self.gm_fin = User.objects.create_user(username="gm_fin_reg", password="x", grade_level="GMCS", system_role=gm_role, directorate=self.directorate, division=self.div_fin, department=self.dept_fin)
+        self.gm_fin = User.objects.create_user(username="gm_fin_reg", password="x", grade_level="MSS1", system_role=gm_role, directorate=self.directorate, division=self.div_fin, department=self.dept_fin)
         OfficeMembership.objects.create(user=self.gm_fin, office=self.office_fin, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
 
-        self.gm_leg = User.objects.create_user(username="gm_leg_reg", password="x", grade_level="GMCS", system_role=gm_role, directorate=self.directorate, division=self.div_leg, department=self.dept_leg)
+        self.gm_leg = User.objects.create_user(username="gm_leg_reg", password="x", grade_level="MSS1", system_role=gm_role, directorate=self.directorate, division=self.div_leg, department=self.dept_leg)
         OfficeMembership.objects.create(user=self.gm_leg, office=self.office_leg, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
 
         # Correspondence base for minutes

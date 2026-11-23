@@ -88,7 +88,7 @@ class ArchiveLevelTests(TestCase):
         self.department_user = User.objects.create_user(
             username=f"archive-dept-{uuid.uuid4().hex[:8]}",
             password="x",
-            grade_level="AGMCS",
+            grade_level="MSS2",
             system_role=self.department_role,
             directorate=self.directorate,
             division=self.division,
@@ -97,7 +97,7 @@ class ArchiveLevelTests(TestCase):
         self.division_user = User.objects.create_user(
             username=f"archive-div-{uuid.uuid4().hex[:8]}",
             password="x",
-            grade_level="GMCS",
+            grade_level="MSS1",
             system_role=self.division_role,
             directorate=self.directorate,
             division=self.division,
@@ -124,7 +124,7 @@ class ArchiveLevelTests(TestCase):
         self.outsider = User.objects.create_user(
             username=f"archive-outsider-{uuid.uuid4().hex[:8]}",
             password="x",
-            grade_level="AGMCS",
+            grade_level="MSS2",
             system_role=self.department_role,
             directorate=self.other_directorate,
             division=self.other_division,
@@ -609,7 +609,7 @@ class ArchiveLevelTests(TestCase):
         other_department_user = User.objects.create_user(
             username=f"archive-other-dept-{uuid.uuid4().hex[:8]}",
             password="x",
-            grade_level="AGMCS",
+            grade_level="MSS2",
             system_role=other_role,
             directorate=self.other_directorate,
             division=self.other_division,

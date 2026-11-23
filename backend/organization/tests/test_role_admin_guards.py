@@ -334,7 +334,7 @@ class ScopedRoleAssignmentTests(APITestCase):
             username="scoped-gm",
             password="testpass123",
             system_role=self.gm_role,
-            grade_level="GMCS",
+            grade_level="MSS1",
             directorate=self.directorate,
             division=self.division,
         )
@@ -342,7 +342,7 @@ class ScopedRoleAssignmentTests(APITestCase):
             username="scoped-agm",
             password="testpass123",
             system_role=self.agm_role,
-            grade_level="AGMCS",
+            grade_level="MSS2",
             directorate=self.directorate,
             division=self.division,
             department=self.department,

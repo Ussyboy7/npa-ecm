@@ -91,7 +91,7 @@ class ApprovalPDFSealTests(TestCase):
         permission = DocumentPermission.objects.create(
             document=source,
             access=DocumentPermission.AccessLevel.READ,
-            grade_levels=["GMCS"],
+            grade_levels=["MSS1"],
         )
         permission.users.add(self.approver)
 
@@ -99,7 +99,7 @@ class ApprovalPDFSealTests(TestCase):
 
         inherited = approved.permissions.get(access=DocumentPermission.AccessLevel.READ)
         self.assertIn(self.approver, inherited.users.all())
-        self.assertEqual(inherited.grade_levels, ["GMCS"])
+        self.assertEqual(inherited.grade_levels, ["MSS1"])
 
     def _attach_scan(
         self,

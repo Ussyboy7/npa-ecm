@@ -57,7 +57,7 @@ export function useRoleChecks(): RoleChecks {
     const isGM = Boolean(gradeInfo?.divisionLeadership);
     const isAGM = Boolean(gradeInfo?.departmentLeadership);
     const isPrincipalManager = grade === 'MSS3';
-    const isManagement = Boolean(gradeInfo?.seniorManagement);
+    const isManagement = Boolean(gradeInfo?.management);
 
     // Role-based checks
     const isSecretary = roleName === 'secretary';

@@ -139,8 +139,8 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
                         gl = str(author.grade_level).upper()
                         if gl == "MDCS": tier = "MD"
                         elif gl == "EDCS": tier = "ED"
-                        elif gl == "GMCS": tier = "GM"
-                        elif gl == "AGMCS": tier = "AGM"
+                        elif gl == "MSS1": tier = "GM"
+                        elif gl == "MSS2": tier = "AGM"
             except:
                 pass
             div = seg(self.division, "DIV")

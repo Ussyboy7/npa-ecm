@@ -40,9 +40,12 @@ class CanAccessAdministration(permissions.BasePermission):
 class IsExecutiveGrade(permissions.BasePermission):
     """Allow read access to all authenticated users, but write access only to
     users whose ``grade_level`` is MDCS, EDCS, or MSS1.
+
+    The General Manager keeps workflow-template write access even though the
+    catalogue reports GM as senior management rather than executive.
     """
 
-    ADMIN_GRADES = EXECUTIVE_GRADES
+    ADMIN_GRADES = EXECUTIVE_GRADES | frozenset({"MSS1"})
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:

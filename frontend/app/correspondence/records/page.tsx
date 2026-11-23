@@ -48,9 +48,9 @@ import {
 // Grade levels that can see directorate-wide records
 const DIRECTORATE_GRADES = new Set(['MDCS', 'EDCS', 'MD', 'ED']);
 // Grade levels that can see division-wide records
-const DIVISION_GRADES = new Set(['MSS1', 'GM', 'GMCS']);
+const DIVISION_GRADES = new Set(['MSS1', 'GM']);
 // Grade levels that can see department-wide records
-const DEPARTMENT_GRADES = new Set(['MSS2', 'AGM', 'AGMCS']);
+const DEPARTMENT_GRADES = new Set(['MSS2', 'AGM']);
 
 type UserScope = {
   level: 'directorate' | 'division' | 'department' | 'office';

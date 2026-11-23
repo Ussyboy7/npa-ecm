@@ -61,7 +61,7 @@ class PageAccessTests(TestCase):
         scoped_user = User.objects.create_user(
             username="page-access-scoped",
             password="x",
-            grade_level="GMCS",
+            grade_level="MSS1",
             system_role=self.role,
             directorate=directorate,
             division=division,
@@ -124,7 +124,7 @@ class PageAccessTests(TestCase):
         user = User.objects.create_user(
             username="approver-only-all-surfaces",
             password="x",
-            grade_level="GMCS",
+            grade_level="MSS1",
             system_role=role,
             directorate=directorate,
             division=division,
@@ -160,7 +160,7 @@ class PageAccessTests(TestCase):
         user = User.objects.create_user(
             username="approver-only-queue-access",
             password="x",
-            grade_level="GMCS",
+            grade_level="MSS1",
             system_role=role,
             directorate=directorate,
             division=division,

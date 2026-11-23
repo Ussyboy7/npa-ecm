@@ -1,8 +1,16 @@
 """Grade level utilities and constants shared across apps.
 
-NPA grade hierarchy (highest to lowest):
-MDCS > EDCS > GMCS > AGMCS > MSS1 > MSS2 > MSS3 > MSS4 > MSS5 >
-SSS1 > SSS2 > SSS3 > SSS4 > JSS1 > JSS2 > JSS3
+NPA grade hierarchy (highest to lowest), with the served level number:
+
+MDCS (19) > EDCS (18) > MSS1 (17) > MSS2 (16) > MSS3 (15) > MSS4 (14) >
+MSS5 (13) > SSS1 (12) > SSS2 (10) > SSS3 (9) > SSS4 (8) > JSS1 (6) >
+JSS2 (5) > JSS3 (4)
+
+The Managing Director and Executive Directors are executive management; the
+General Manager (MSS1) and Assistant General Manager (MSS2) are senior
+management; Assistant Manager (SSS1) through Principal Manager (MSS3) are
+management; Officer II through Senior Officer are officers; and Staff III
+through Staff I are staff.
 """
 
 from __future__ import annotations
@@ -12,8 +20,6 @@ from typing import Final
 GRADE_ORDER: Final[tuple[str, ...]] = (
     "MDCS",
     "EDCS",
-    "GMCS",
-    "AGMCS",
     "MSS1",
     "MSS2",
     "MSS3",
@@ -41,27 +47,28 @@ SENSITIVITY_HIGH_RESTRICTED_GRADES: frozenset[str] = frozenset(
     {"MSS1", "EDCS", "MDCS"}
 )
 
-# Directorate-level leadership grades
+# Directorate-level leadership: the MD and the Executive Directors.
 DIRECTORATE_GRADES: frozenset[str] = frozenset({"MDCS", "EDCS", "MD", "ED"})
 
-# Division-level leadership grades
-DIVISION_GRADES: frozenset[str] = frozenset({"MSS1", "GM", "GMCS"})
+# Division-level leadership: the General Manager.
+DIVISION_GRADES: frozenset[str] = frozenset({"MSS1", "GM"})
 
-# Department-level leadership grades
-DEPARTMENT_GRADES: frozenset[str] = frozenset({"MSS2", "AGM", "AGMCS"})
+# Department-level leadership: the Assistant General Manager.
+DEPARTMENT_GRADES: frozenset[str] = frozenset({"MSS2", "AGM"})
 
-# Management grades (MSS1 through MSS5 plus executive directors)
+# Management and above: Assistant Manager (SSS1) upward.
 MANAGEMENT_GRADES: frozenset[str] = frozenset(
-    {"MSS1", "MSS2", "MSS3", "MSS4", "MSS5", "EDCS", "MDCS"}
+    {"SSS1", "MSS5", "MSS4", "MSS3", "MSS2", "MSS1", "EDCS", "MDCS"}
 )
 
-# Senior management grades (MSS1 through MSS3 plus executive directors)
+# Senior management and above: the General Manager / Assistant General Manager
+# band, plus executive management.
 SENIOR_MANAGEMENT_GRADES: frozenset[str] = frozenset(
-    {"MSS1", "MSS2", "MSS3", "EDCS", "MDCS"}
+    {"MSS1", "MSS2", "EDCS", "MDCS"}
 )
 
-# Executive / top leadership grades
-EXECUTIVE_GRADES: frozenset[str] = frozenset({"MDCS", "EDCS", "MSS1"})
+# Executive management: the MD and the Executive Directors.
+EXECUTIVE_GRADES: frozenset[str] = frozenset({"MDCS", "EDCS"})
 
 # Leadership grades used for analytics/reporting
 LEADERSHIP_GRADES: frozenset[str] = frozenset({"MDCS", "EDCS", "MSS1", "MSS2"})

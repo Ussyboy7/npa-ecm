@@ -17,7 +17,7 @@ class ApprovalLevelResolutionTests(TestCase):
         self.gm = User.objects.create_user(
             username="gm-levels",
             password="testpass123",
-            grade_level="GMCS",
+            grade_level="MSS1",
         )
 
     def _correspondence(self, required_level):

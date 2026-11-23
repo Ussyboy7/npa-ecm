@@ -120,7 +120,7 @@ class WorkflowRequirementValidationTests(TestCase):
         role, _ = Role.objects.get_or_create(name="GMValid", defaults={"permissions": {"can_approve": True, "can_minute_correspondence": True, "can_access_approvals": True}})
         role.permissions = {"can_approve": True, "can_minute_correspondence": True, "can_access_approvals": True, "can_view_all_correspondence": True}
         role.save()
-        gm = User.objects.create_user(username="gm_valid_test", password="x", grade_level="GMCS", system_role=role, directorate=directorate, division=div, department=dept)
+        gm = User.objects.create_user(username="gm_valid_test", password="x", grade_level="MSS1", system_role=role, directorate=directorate, division=div, department=dept)
         OfficeMembership.objects.create(user=gm, office=office, assignment_role="principal", is_primary=True, is_active=True, can_approve=True)
 
         # Create executive correspondence

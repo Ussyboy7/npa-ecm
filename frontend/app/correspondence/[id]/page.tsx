@@ -390,7 +390,7 @@ const CorrespondenceDetailContent = () => {
     }
   };
 
-  // Check if user is executive (MDCS, EDCS, GMCS, AGMCS)
+  // Check if user is executive (MDCS, EDCS)
   // Check if current user received a minute with "For Information" purpose
   // Must be called before early returns to maintain hook order
   const isForInformationOnly = useMemo(() => {

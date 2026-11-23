@@ -9,7 +9,7 @@ const users = [
     name: 'Grace Manager',
     email: 'gm@example.com',
     employeeId: 'GM-1',
-    gradeLevel: 'GMCS',
+    gradeLevel: 'MSS1',
     systemRole: 'General Manager',
     directorate: 'dir-1',
     division: 'div-1',
@@ -67,11 +67,11 @@ vi.mock('@/hooks/use-grade-catalog', () => ({
   useGradeCatalog: () => ({
     grades: [],
     byCode: {
-      GMCS: {
-        code: 'GMCS',
+      MSS1: {
+        code: 'MSS1',
         rank: 2,
         management: true,
-        seniorManagement: false,
+        seniorManagement: true,
         executive: false,
         leadership: true,
         directorateLeadership: false,
@@ -109,7 +109,7 @@ afterEach(() => {
 });
 
 describe('DelegateModal hierarchy', () => {
-  it('offers a GMCS executive staff from its whole division, not another division', async () => {
+  it('offers a General Manager staff from its whole division, not another division', async () => {
     const user = userEvent.setup();
     render(
       <DelegateModal
