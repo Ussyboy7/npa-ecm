@@ -5,11 +5,22 @@ commands, not only from the nominal roll. Deriving the flag in the model keeps
 all of them consistent with the served catalogue.
 """
 
+from django.db import connection
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import User
+
+
+def force_stored_values(user, **values):
+    """Write columns directly, as a pre-derivation release or raw SQL would."""
+    assignments = ", ".join(f"{field} = %s" for field in values)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"UPDATE accounts_user SET {assignments} WHERE id = %s",
+            [*values.values(), user.pk],
+        )
 
 
 class DerivedManagementFlagTests(TestCase):
@@ -61,13 +72,13 @@ class DerivedManagementFlagTests(TestCase):
         self.assertFalse(user.is_management)
 
     def test_saving_an_unrelated_field_repairs_a_stale_flag(self):
-        # A legacy row written with queryset.update() bypasses save().
+        # A row written before the rule existed bypasses save().
         user = User.objects.create_user(
             username="stale-flag",
             password="x",
             grade_level="SSS1",
         )
-        User.objects.filter(pk=user.pk).update(is_management=False)
+        force_stored_values(user, is_management=False)
 
         user.refresh_from_db()
         user.first_name = "Repaired"
@@ -85,6 +96,66 @@ class DerivedManagementFlagTests(TestCase):
 
         user.refresh_from_db()
         self.assertEqual(user.grade_level, "SSS1")
+        self.assertTrue(user.is_management)
+
+
+class QuerysetWriteDerivationTests(TestCase):
+    """Writes that bypass save() must keep the same invariant."""
+
+    def test_queryset_update_of_grade_derives_the_flag(self):
+        user = User.objects.create_user(
+            username="bulk-demoted", password="x", grade_level="MSS1"
+        )
+        self.assertTrue(user.is_management)
+
+        User.objects.filter(pk=user.pk).update(grade_level="SSS3")
+        user.refresh_from_db()
+        self.assertFalse(user.is_management)
+
+        User.objects.filter(pk=user.pk).update(grade_level="MSS2")
+        user.refresh_from_db()
+        self.assertTrue(user.is_management)
+
+    def test_queryset_update_cannot_set_a_contradictory_flag(self):
+        officer = User.objects.create_user(
+            username="bulk-officer", password="x", grade_level="SSS3"
+        )
+        manager = User.objects.create_user(
+            username="bulk-manager", password="x", grade_level="MSS2"
+        )
+
+        User.objects.filter(pk=officer.pk).update(is_management=True)
+        User.objects.filter(pk=manager.pk).update(is_management=False)
+
+        officer.refresh_from_db()
+        manager.refresh_from_db()
+        self.assertFalse(officer.is_management)
+        self.assertTrue(manager.is_management)
+
+    def test_bulk_create_derives_the_flag(self):
+        User.objects.bulk_create(
+            [
+                User(username="bulk-created-manager", grade_level="MSS1"),
+                User(username="bulk-created-officer", grade_level="SSS2"),
+            ]
+        )
+
+        self.assertTrue(
+            User.objects.get(username="bulk-created-manager").is_management
+        )
+        self.assertFalse(
+            User.objects.get(username="bulk-created-officer").is_management
+        )
+
+    def test_bulk_update_of_grade_derives_the_flag(self):
+        user = User.objects.create_user(
+            username="bulk-promoted", password="x", grade_level="SSS4"
+        )
+        user.grade_level = "MSS3"
+
+        User.objects.bulk_update([user], ["grade_level"])
+
+        user.refresh_from_db()
         self.assertTrue(user.is_management)
 
 

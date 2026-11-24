@@ -13,9 +13,20 @@ from io import StringIO
 from pathlib import Path
 
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase
 
 from accounts.models import User
+
+
+def force_stored_values(user, **values):
+    """Write columns directly, as a pre-derivation release would have."""
+    assignments = ", ".join(f"{field} = %s" for field in values)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"UPDATE accounts_user SET {assignments} WHERE id = %s",
+            [*values.values(), user.pk],
+        )
 
 ROLL_HEADERS = [
     "Employee Number",
@@ -97,7 +108,7 @@ class NominalRollManagementFlagTests(TestCase):
             grade_level="SSS1",
         )
         # Simulate a row seeded before the flag was derived.
-        User.objects.filter(pk=existing.pk).update(is_management=False)
+        force_stored_values(existing, is_management=False)
         existing.refresh_from_db()
         self.assertFalse(existing.is_management)
 
@@ -114,7 +125,7 @@ class NominalRollManagementFlagTests(TestCase):
             grade_level="SSS3",
         )
         # Simulate a legacy manual grant that contradicts the grade.
-        User.objects.filter(pk=existing.pk).update(is_management=True)
+        force_stored_values(existing, is_management=True)
         existing.refresh_from_db()
         self.assertTrue(existing.is_management)
 
