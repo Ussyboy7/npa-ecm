@@ -24,7 +24,7 @@ from django.db import transaction
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-from common.grade_utils import canonical_grade_code, grade_is_management
+from common.grade_utils import grade_is_management, normalise_grade_code
 
 from accounts.models import User
 
@@ -283,9 +283,8 @@ class Command(BaseCommand):
                     field: _text(row[index]) if index < len(row) else ""
                     for field, index in column_map.items()
                 }
-                # Store the canonical code so the roll cannot reintroduce a
-                # retired grade, and derive the stored management flag from it.
-                grade_level = canonical_grade_code(values.get("grade_level", ""))
+                # Store the normalised code and derive the management flag from it.
+                grade_level = normalise_grade_code(values.get("grade_level", ""))
                 employee_number = values.get("employee_number", "")
                 first_name = values.get("first_name", "")
                 last_name = values.get("last_name", "")

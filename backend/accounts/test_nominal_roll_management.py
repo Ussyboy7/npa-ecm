@@ -89,22 +89,6 @@ class NominalRollManagementFlagTests(TestCase):
         self.assertFalse(users["9103"].is_management)
         self.assertFalse(users["9104"].is_management)
 
-    def test_retired_codes_are_stored_canonically_from_the_roll(self):
-        self._import(
-            [
-                self._row("9201", "LEGACYGM", "GMCS", "GENERAL MANAGER"),
-                self._row("9202", "LEGACYAGM", "AGMCS", "ASST. GENERAL MANAGER"),
-            ]
-        )
-
-        gm = User.objects.get(employee_id="9201")
-        agm = User.objects.get(employee_id="9202")
-
-        self.assertEqual(gm.grade_level, "MSS1")
-        self.assertEqual(agm.grade_level, "MSS2")
-        self.assertTrue(gm.is_management)
-        self.assertTrue(agm.is_management)
-
     def test_reimport_sets_management_for_an_existing_assistant_manager(self):
         existing = User.objects.create_user(
             username="existing-assistant-manager",

@@ -10,7 +10,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from common.fields import EncryptedCharField
-from common.grade_utils import canonical_grade_code, grade_is_management
+from common.grade_utils import grade_is_management, normalise_grade_code
 from common.models import UUIDModel, TimeStampedModel
 from .storage import signature_storage
 
@@ -116,7 +116,7 @@ class User(AbstractUser):
         when the caller saves unrelated fields.
         """
         raw_grade = self.grade_level
-        self.grade_level = canonical_grade_code(raw_grade)
+        self.grade_level = normalise_grade_code(raw_grade)
         derived = grade_is_management(self.grade_level)
 
         update_fields = kwargs.get("update_fields")

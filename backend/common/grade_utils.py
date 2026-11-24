@@ -37,12 +37,6 @@ GRADE_ORDER: Final[tuple[str, ...]] = (
 # O(1) rank lookup; unknown grades rank last.
 GRADE_RANK: Final[dict[str, int]] = {grade: idx for idx, grade in enumerate(GRADE_ORDER)}
 
-# Retired codes that still appear in older nominal-roll workbooks.
-RETIRED_GRADE_CODES: Final[dict[str, str]] = {
-    "GMCS": "MSS1",
-    "AGMCS": "MSS2",
-}
-
 # Grade levels that can access CONFIDENTIAL documents
 SENSITIVITY_HIGH_CONFIDENTIAL_GRADES: frozenset[str] = frozenset(
     {"MSS5", "MSS4", "MSS3", "MSS2", "MSS1", "EDCS", "MDCS"}
@@ -115,15 +109,14 @@ def grade_catalog() -> tuple[dict[str, object], ...]:
     )
 
 
-def canonical_grade_code(grade: str | None) -> str:
-    """Return the stored form of a grade, mapping retired codes forward."""
-    code = (grade or "").strip().upper()
-    return RETIRED_GRADE_CODES.get(code, code)
+def normalise_grade_code(grade: str | None) -> str:
+    """Return the stored form of a grade: trimmed and upper-cased."""
+    return (grade or "").strip().upper()
 
 
 def grade_is_management(grade: str | None) -> bool:
-    """Whether a grade (including a retired code) is in the management band."""
-    return canonical_grade_code(grade) in MANAGEMENT_GRADES
+    """Whether a grade is in the management band."""
+    return normalise_grade_code(grade) in MANAGEMENT_GRADES
 
 
 def get_grade_level(grade: str | None) -> int:

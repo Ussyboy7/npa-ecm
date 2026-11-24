@@ -76,15 +76,15 @@ class DerivedManagementFlagTests(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.is_management)
 
-    def test_legacy_grade_text_is_stored_canonically(self):
+    def test_grade_text_is_stored_normalised(self):
         user = User.objects.create_user(
-            username="legacy-text",
+            username="normalised-text",
             password="x",
-            grade_level="  gmcs ",
+            grade_level="  sss1 ",
         )
 
         user.refresh_from_db()
-        self.assertEqual(user.grade_level, "MSS1")
+        self.assertEqual(user.grade_level, "SSS1")
         self.assertTrue(user.is_management)
 
 
