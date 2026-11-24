@@ -126,7 +126,7 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["is_active", "is_management", "grade_level", "system_role", "division", "department"]
+    filterset_fields = ["is_active", "grade_level", "system_role", "division", "department"]
     search_fields = [
         "username",
         "email",
@@ -320,7 +320,7 @@ class UserViewSet(viewsets.ModelViewSet):
             return
         changed = sorted(
             field
-            for field in ("grade_level", "is_management")
+            for field in ("grade_level",)
             if field in validated_data
             and self._user_field_changed(target, field, validated_data[field])
         )
@@ -343,10 +343,10 @@ class UserViewSet(viewsets.ModelViewSet):
         if user_has_permission(self.request.user, "can_manage_roles"):
             return
         grade = str(validated_data.get("grade_level") or "").strip().upper()
-        if grade in MANAGEMENT_GRADES or validated_data.get("is_management"):
+        if grade in MANAGEMENT_GRADES:
             raise PermissionDenied(
                 "Only a role administrator can create a user with a management "
-                "grade or management status."
+                "grade."
             )
 
     def perform_update(self, serializer):
@@ -565,7 +565,7 @@ class UserViewSet(viewsets.ModelViewSet):
             'Middle Name', 'Honorific', 'Employee ID', 'Person No.', 'Designation',
             'Grade Level', 'System Role',
             'Directorate', 'Division', 'Department',
-            'Is Active', 'Is Management', 'Is Superuser',
+            'Is Active', 'Is Superuser',
             'Date Joined', 'Last Login', 'Last Activity'
         ])
         
@@ -588,7 +588,6 @@ class UserViewSet(viewsets.ModelViewSet):
                 user.division.name if user.division else '',
                 user.department.name if user.department else '',
                 'Yes' if user.is_active else 'No',
-                'Yes' if user.is_management else 'No',
                 'Yes' if user.is_superuser else 'No',
                 user.date_joined.strftime('%Y-%m-%d %H:%M:%S') if user.date_joined else '',
                 user.last_login.strftime('%Y-%m-%d %H:%M:%S') if user.last_login else '',
@@ -656,7 +655,6 @@ class UserViewSet(viewsets.ModelViewSet):
                         'designation': row.get('Designation', '').strip(),
                         'grade_level': row.get('Grade Level', '').strip(),
                         'is_active': row.get('Is Active', 'Yes').strip().lower() in ['yes', 'true', '1'],
-                        'is_management': row.get('Is Management', 'No').strip().lower() in ['yes', 'true', '1'],
                     }
                 )
                 
@@ -672,7 +670,6 @@ class UserViewSet(viewsets.ModelViewSet):
                     user.designation = row.get('Designation', '').strip()
                     user.grade_level = row.get('Grade Level', '').strip()
                     user.is_active = row.get('Is Active', 'Yes').strip().lower() in ['yes', 'true', '1']
-                    user.is_management = row.get('Is Management', 'No').strip().lower() in ['yes', 'true', '1']
                 
                 # Set role
                 role_name = row.get('System Role', '').strip()
@@ -762,14 +759,14 @@ class UserViewSet(viewsets.ModelViewSet):
             'Username', 'Email', 'Title', 'First Name', 'Middle Name', 'Last Name',
             'Employee ID', 'Person No.', 'Designation', 'Grade Level', 'System Role',
             'Directorate', 'Division', 'Department',
-            'Is Active', 'Is Management', 'Password'
+            'Is Active', 'Password'
         ])
         # Add example row
         writer.writerow([
             'jdoe', 'jdoe@npa.gov.ng', 'Mr.', 'John', 'Michael', 'Doe',
             'EMP001', 'A0001', 'STAFF OFFICER', 'MSS1', 'Staff Officer',
             'Operations', 'Marine Operations', 'Port Operations',
-            'Yes', 'No', 'ChangeMe123!'
+            'Yes', 'ChangeMe123!'
         ])
         
         return response

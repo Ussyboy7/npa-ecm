@@ -148,14 +148,13 @@ class UserPrivilegeGuardTests(APITestCase):
     def test_non_superuser_cannot_raise_their_own_grade_through_the_user_endpoint(self):
         response = self.client.patch(
             self.admin_url,
-            {"grade_level": "MDCS", "is_management": True},
+            {"grade_level": "MDCS"},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.admin.refresh_from_db()
         self.assertNotEqual(self.admin.grade_level, "MDCS")
-        self.assertFalse(self.admin.is_management)
 
     def test_non_superuser_can_update_their_own_profile_with_unchanged_admin_fields(self):
         response = self.client.patch(
@@ -163,7 +162,6 @@ class UserPrivilegeGuardTests(APITestCase):
             {
                 "first_name": "Manager",
                 "grade_level": self.admin.grade_level,
-                "is_management": self.admin.is_management,
                 "is_active": self.admin.is_active,
                 "system_role": str(self.admin_role.id),
             },
@@ -280,16 +278,6 @@ class UserPrivilegeGuardTests(APITestCase):
         response = self.client.post(
             reverse("api_v1:user-list"),
             self._create_payload(grade_level="MDCS"),
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertFalse(User.objects.filter(username="created-officer").exists())
-
-    def test_non_superuser_cannot_create_a_management_account(self):
-        response = self.client.post(
-            reverse("api_v1:user-list"),
-            self._create_payload(grade_level="SSS3", is_management=True),
             format="json",
         )
 

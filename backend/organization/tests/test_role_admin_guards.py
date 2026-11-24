@@ -630,18 +630,6 @@ class ScopedRoleAssignmentTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertFalse(User.objects.filter(username="created-officer").exists())
 
-    def test_general_manager_cannot_create_a_management_account_with_a_staff_grade(self):
-        self.client.force_authenticate(self.gm)
-
-        response = self.client.post(
-            self.create_url,
-            self._create_payload(grade_level="SSS3", is_management=True),
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertFalse(User.objects.filter(username="created-officer").exists())
-
     def test_general_manager_can_create_an_ordinary_staff_user_in_their_division(self):
         self.client.force_authenticate(self.gm)
 
@@ -654,7 +642,6 @@ class ScopedRoleAssignmentTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         created = User.objects.get(username="created-officer")
         self.assertEqual(created.grade_level, "SSS3")
-        self.assertFalse(created.is_management)
 
     def test_assistant_general_manager_cannot_create_a_user_with_an_executive_grade(self):
         self.client.force_authenticate(self.agm)

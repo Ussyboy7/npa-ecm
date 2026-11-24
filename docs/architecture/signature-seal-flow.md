@@ -50,7 +50,7 @@ Critical review of the end-to-end flow: **Settings (Signature & Seal)**, **Minut
 - **Submit**: Minute is created with `signature_payload` only if `applySignature && userSignature`; for executives the backend also runs the **seal path**.
 - **Backend (seal)**: In `MinuteViewSet.create` (or equivalent), after saving the minute:
   - `action_type == APPROVE`
-  - `is_executive`: grade in `['MDCS','EDCS','MSS1','MSS2','MSS3']`, or role contains `MANAGING DIRECTOR`/`EXECUTIVE DIRECTOR`/`GENERAL MANAGER`/`PRINCIPAL MANAGER`, or `user.is_management=True`.
+  - `is_executive`: grade in `['MDCS','EDCS','MSS1','MSS2','MSS3']`, or role contains `MANAGING DIRECTOR`/`EXECUTIVE DIRECTOR`/`GENERAL MANAGER`/`PRINCIPAL MANAGER`.
   - `ExecutiveSignature.objects.get(user=request.user, is_active=True)` → if exists, `SealGenerationService.generate_seal(user=request.user, correspondence=correspondence, request=request)` → `DocumentSeal` created, `minute.seal_applied = seal`, `minute.save(update_fields=['seal_applied'])`.
   - If `ExecutiveSignature.DoesNotExist` or `generate_seal` raises: seal is **not** applied; approval still succeeds. No `seal_applied` → minute won’t appear in Executive Approvals and Minute Details will use **signature_payload** (and the signature-image endpoint) instead of the seal.
 
@@ -93,13 +93,13 @@ Critical review of the end-to-end flow: **Settings (Signature & Seal)**, **Minut
 ### Why “Approvals (0)”?
 - Only minutes with `action_type=approve` **and** `seal_applied` (valid) are included.
 - `seal_applied` is set only when:
-  1. **`is_executive`**: grade in `['MDCS','EDCS','MSS1','MSS2','MSS3']` (MD, ED, GM, AGM, Principal Manager), or role contains "Managing Director"/"Executive Director"/"General Manager"/"Principal Manager", or `user.is_management=True`. This aligns with who can see the Executive Approvals page.
+  1. **`is_executive`**: grade in `['MDCS','EDCS','MSS1','MSS2','MSS3']` (MD, ED, GM, AGM, Principal Manager), or role contains "Managing Director"/"Executive Director"/"General Manager"/"Principal Manager". This aligns with who can see the Executive Approvals page.
   2. **`ExecutiveSignature`** exists and `is_active=True` for the approver (Settings → Signature must be configured **before** approving).
   3. **`SealGenerationService.generate_seal()`** runs without raising.
 
 If the approver had no `ExecutiveSignature` at approve time (or it was inactive), or `generate_seal` failed, the minute is stored **without** `seal_applied` and does **not** appear on Executive Approvals. It can still have `signature_payload` and show in Minute Details with the "Digital Signature" block and the signature-image endpoint.
 
-**Note:** Approvals created by GM/AGM/Principal Manager (MSS1/MSS2/MSS3) *before* the `is_executive` widen did not get `seal_applied` and will not appear. Only **new** approvals from those grades (and from users with `is_management=True`) will get seals and show in the list.
+**Note:** Approvals created by GM/AGM/Principal Manager (MSS1/MSS2/MSS3) *before* the `is_executive` widen did not get `seal_applied` and will not appear. Only **new** approvals from those grades will get seals and show in the list.
 
 ---
 
@@ -128,7 +128,7 @@ If the approver had no `ExecutiveSignature` at approve time (or it was inactive)
 | Seal applied only for APPROVE + is_executive + ExecutiveSignature | ✅ in `MinuteViewSet.create` |
 | `CorrespondenceContext`: `imageData` from `image_url` / `signature_url` | ✅ fallbacks |
 | `signature-image`: resolve `http(s)://.../media/...` via storage | ✅ avoid self-fetch/auth |
-| `is_executive`: grades MDCS, EDCS, MSS1, MSS2, MSS3 + roles + `is_management` | ✅ aligned with Executive Approvals visibility |
+| `is_executive`: grades MDCS, EDCS, MSS1, MSS2, MSS3 + roles | ✅ aligned with Executive Approvals visibility |
 
 ---
 
@@ -144,7 +144,7 @@ If the approver had no `ExecutiveSignature` at approve time (or it was inactive)
   The logo is served by `GET /correspondence/minutes/:id/signature-image/`. The frontend uses it when `minute.signature.imageData` is not a `data:` URL. Ensuring the backend resolves `signature_url`-style and `/media/`-style `imageData` makes the image load correctly.
 
 - **Executive Approvals (0)**  
-  Approvals only include minutes with `seal_applied`. `seal_applied` is set when: `action_type=APPROVE`, `is_executive` (grade MDCS/EDCS/MSS1/MSS2/MSS3, or role, or `is_management`), and `ExecutiveSignature` exists and `SealGenerationService.generate_seal()` succeeds. The approver must have an active signature in Settings → Signature **before** approving. Existing approve minutes created by GM/AGM/PM before the `is_executive` widen do not have `seal_applied` and will not appear; only new approvals will.
+  Approvals only include minutes with `seal_applied`. `seal_applied` is set when: `action_type=APPROVE`, `is_executive` (grade MDCS/EDCS/MSS1/MSS2/MSS3, or role), and `ExecutiveSignature` exists and `SealGenerationService.generate_seal()` succeeds. The approver must have an active signature in Settings → Signature **before** approving. Existing approve minutes created by GM/AGM/PM before the `is_executive` widen do not have `seal_applied` and will not appear; only new approvals will.
 
 ---
 

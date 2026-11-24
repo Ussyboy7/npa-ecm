@@ -4,18 +4,13 @@ import hashlib
 import secrets
 import uuid
 
-from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
+from django.contrib.auth.models import AbstractUser
 from django.db import models
-from django.db.models.expressions import BaseExpression
 from django.utils import timezone
 from datetime import timedelta
 
 from common.fields import EncryptedCharField
-from common.grade_utils import (
-    MANAGEMENT_GRADES,
-    grade_is_management,
-    normalise_grade_code,
-)
+from common.grade_utils import normalise_grade_code
 from common.models import UUIDModel, TimeStampedModel
 from .storage import signature_storage
 
@@ -26,66 +21,8 @@ def profile_photo_upload_path(instance, filename):
     return f"accounts/profiles/{instance.id}/{uuid.uuid4().hex[:12]}.{extension}"
 
 
-class UserQuerySet(models.QuerySet):
-    """Keep ``is_management`` derived even when callers bypass ``save()``."""
-
-    @staticmethod
-    def _derive(user) -> None:
-        user.grade_level = normalise_grade_code(user.grade_level)
-        user.is_management = grade_is_management(user.grade_level)
-
-    def update(self, **kwargs):
-        if isinstance(kwargs.get("grade_level"), BaseExpression):
-            # bulk_update() re-enters here with per-object CASE expressions and
-            # has already derived both values itself.
-            return super().update(**kwargs)
-        if "grade_level" in kwargs:
-            grade = kwargs["grade_level"]
-            if not isinstance(grade, (str, type(None))):
-                raise ValueError(
-                    "Update grade_level with a literal code so is_management "
-                    "can be derived."
-                )
-            kwargs["grade_level"] = normalise_grade_code(grade)
-            kwargs["is_management"] = grade_is_management(kwargs["grade_level"])
-        elif "is_management" in kwargs:
-            # Per-row derivation without loading every user.
-            kwargs["is_management"] = models.Case(
-                models.When(
-                    grade_level__in=sorted(MANAGEMENT_GRADES),
-                    then=models.Value(True),
-                ),
-                default=models.Value(False),
-                output_field=models.BooleanField(),
-            )
-        return super().update(**kwargs)
-
-    def bulk_create(self, objs, *args, **kwargs):
-        objs = list(objs)
-        for user in objs:
-            self._derive(user)
-        return super().bulk_create(objs, *args, **kwargs)
-
-    def bulk_update(self, objs, fields, *args, **kwargs):
-        objs = list(objs)
-        fields = list(fields)
-        if "grade_level" in fields or "is_management" in fields:
-            for user in objs:
-                self._derive(user)
-            for field in ("grade_level", "is_management"):
-                if field not in fields:
-                    fields.append(field)
-        return super().bulk_update(objs, fields, *args, **kwargs)
-
-
-class UserManager(DjangoUserManager.from_queryset(UserQuerySet)):
-    """User manager whose queryset keeps management status derived."""
-
-
 class User(AbstractUser):
     """User model augmented with NPA-specific metadata."""
-
-    objects = UserManager()
 
     grade_level = models.CharField(max_length=50, blank=True)
     system_role = models.ForeignKey(
@@ -116,7 +53,6 @@ class User(AbstractUser):
         blank=True,
         related_name="users",
     )
-    is_management = models.BooleanField(default=False)
     employee_id = models.CharField(max_length=50, blank=True)
     personnel_number = models.CharField(
         max_length=50,
@@ -171,27 +107,14 @@ class User(AbstractUser):
         ]
 
     def save(self, *args, **kwargs):
-        """Store the canonical grade and derive management status from it.
-
-        ``is_management`` duplicates the catalogue's management band, so it must
-        never be set independently. Every write path (API, admin, CSV import,
-        management commands) lands here, and a stale value is corrected even
-        when the caller saves unrelated fields.
-        """
+        """Store the canonical grade code on every write path."""
         raw_grade = self.grade_level
         self.grade_level = normalise_grade_code(raw_grade)
-        derived = grade_is_management(self.grade_level)
 
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None:
-            update_fields = set(update_fields)
-            if self.grade_level != raw_grade:
-                update_fields.add("grade_level")
-            if self.is_management != derived:
-                update_fields.add("is_management")
-            kwargs["update_fields"] = update_fields
+        if update_fields is not None and self.grade_level != raw_grade:
+            kwargs["update_fields"] = {*update_fields, "grade_level"}
 
-        self.is_management = derived
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

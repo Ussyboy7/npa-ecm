@@ -387,7 +387,6 @@ class Command(BaseCommand):
                         personnel_number=values.get("personnel_number", ""),
                         grade_level=grade_level,
                         designation=values.get("designation", ""),
-                        is_management=grade_is_management(grade_level),
                         is_active=True,
                     )
                     if password:
@@ -448,7 +447,6 @@ class Command(BaseCommand):
                         "designation",
                         "email",
                     ]
-                    # User.save() derives is_management from grade_level.
                     if password and not user.has_usable_password():
                         user.set_password(password)
                         update_fields.append("password")

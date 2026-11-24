@@ -69,7 +69,7 @@ cannot establish from system data, so it is the first confirmation gate.
 | Email | `superadmin@npa.gov.ng` (placeholder-style address, same family as seed mailboxes) |
 | Auth provider | `local`; `external_auth_subject` empty |
 | Flags | `is_active=True`, `is_staff=True`, `is_superuser=True` |
-| Grade / role | `MDCS` / *Super Admin*; `is_management=True` |
+| Grade / role | `MDCS` / *Super Admin* |
 | Employee data | `employee_id` empty, `personnel_number` empty, `designation` empty |
 | Office memberships | **none** (no inbox, no routing, no approval authority) |
 | Password | usable; **`ChangeMe123!` still valid** |
