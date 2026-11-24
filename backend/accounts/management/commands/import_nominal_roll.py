@@ -24,7 +24,7 @@ from django.db import transaction
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-from common.grade_utils import MANAGEMENT_GRADES
+from common.grade_utils import canonical_grade_code, grade_is_management
 
 from accounts.models import User
 
@@ -283,6 +283,9 @@ class Command(BaseCommand):
                     field: _text(row[index]) if index < len(row) else ""
                     for field, index in column_map.items()
                 }
+                # Store the canonical code so the roll cannot reintroduce a
+                # retired grade, and derive the stored management flag from it.
+                grade_level = canonical_grade_code(values.get("grade_level", ""))
                 employee_number = values.get("employee_number", "")
                 first_name = values.get("first_name", "")
                 last_name = values.get("last_name", "")
@@ -334,7 +337,7 @@ class Command(BaseCommand):
                         user = User.objects.filter(username=known_username).first()
                         match_reason = f"known admin username {known_username}"
 
-                if user is None and values.get("grade_level", "").upper() in MANAGEMENT_GRADES:
+                if user is None and grade_is_management(grade_level):
                     name_matches = _admin_name_matches(
                         management_candidates, values, matched_user_ids
                     )
@@ -383,8 +386,9 @@ class Command(BaseCommand):
                         last_name=last_name,
                         honorific=values.get("honorific", ""),
                         personnel_number=values.get("personnel_number", ""),
-                        grade_level=values.get("grade_level", ""),
+                        grade_level=grade_level,
                         designation=values.get("designation", ""),
+                        is_management=grade_is_management(grade_level),
                         is_active=True,
                     )
                     if password:
@@ -429,7 +433,7 @@ class Command(BaseCommand):
                 user.last_name = last_name
                 user.honorific = values.get("honorific", "")
                 user.personnel_number = values.get("personnel_number", "")
-                user.grade_level = values.get("grade_level", "")
+                user.grade_level = grade_level
                 user.designation = values.get("designation", "")
                 if email:
                     user.email = email
@@ -445,6 +449,11 @@ class Command(BaseCommand):
                         "designation",
                         "email",
                     ]
+                    # Management status is derived state. Set it for the band but
+                    # never clear a manual grant for a lower grade.
+                    if grade_is_management(grade_level) and not user.is_management:
+                        user.is_management = True
+                        update_fields.append("is_management")
                     if password and not user.has_usable_password():
                         user.set_password(password)
                         update_fields.append("password")
