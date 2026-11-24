@@ -28,7 +28,7 @@ import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import { StatStrip } from '@/components/shared/StatStrip';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { getSelectableOffices } from '@/lib/office-choice-utils';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
@@ -63,7 +63,7 @@ const DEFAULT_SUMMARY: InboxSummary = {
 const CorrespondenceInboxContent = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const { offices, officeMemberships, myOfficeMembershipsLoaded, officeCatalogLoaded } = useOrganization();
+  const { offices, officeMemberships, myOfficeMembershipsLoaded, officeCatalogLoaded } = useOrganizationCatalogs('offices');
   const currentUserId = currentUser?.id;
 
   const [filtersOpen, setFiltersOpen] = useState(false);

@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useUserLookup } from "@/hooks/use-user-lookup";
 import { apiFetch } from "@/lib/api/dms";
 import { logError } from "@/lib/client-logger";
@@ -107,7 +107,7 @@ export function DocumentAccessCard({
   onAddPeople,
   onChanged,
 }: DocumentAccessCardProps) {
-  const { offices, divisions, departments, directorates } = useOrganization();
+  const { offices, divisions, departments, directorates } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   const accessUserIds = useMemo(
     () => [
       ...(document.permissions ?? []).flatMap((permission) => permission.userIds),

@@ -21,7 +21,7 @@ import {
 } from '@/lib/api/dms';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { FileText, Hash, Layers, Filter, Calendar } from 'lucide-react';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 
 interface LinkDocumentDialogProps {
   open: boolean;
@@ -46,7 +46,7 @@ export const LinkDocumentDialog = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(linkedDocumentIds ?? []);
   const [loading, setLoading] = useState(false);
-  const { divisions, departments } = useOrganization();
+  const { divisions, departments } = useOrganizationCatalogs('divisions', 'departments');
 
   const loadDocuments = useCallback(
     async (queryValue: string) => {

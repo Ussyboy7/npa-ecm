@@ -15,7 +15,7 @@ import { queryDocuments } from "@/lib/api/dms";
 import { toast } from "@/components/ui/sonner";
 import { FileText, Loader2, FileCheck } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import type { FormTemplate } from "@/lib/types/forms";
 
 interface CreateFormDocumentDialogProps {
@@ -32,7 +32,7 @@ export function CreateFormDocumentDialog({
   initialTemplate,
 }: CreateFormDocumentDialogProps) {
   const { currentUser } = useCurrentUser();
-  const { divisions, departments } = useOrganization();
+  const { divisions, departments } = useOrganizationCatalogs('divisions', 'departments');
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);

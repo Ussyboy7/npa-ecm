@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOrganization, Division } from '@/contexts/OrganizationContext';
+import { Division } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 
@@ -16,7 +17,7 @@ interface DivisionFormModalProps {
 }
 
 export const DivisionFormModal = ({ open, onOpenChange, division, defaultDirectorateId }: DivisionFormModalProps) => {
-  const { addDivision, updateDivision, directorates } = useOrganization();
+  const { addDivision, updateDivision, directorates } = useOrganizationCatalogs('directorates');
   const { users } = useOrgUsers({ enabled: open });
   const [formData, setFormData] = useState({
     name: '',

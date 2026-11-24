@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
+import { useState, useMemo, forwardRef, useImperativeHandle, useCallback, useEffect } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -42,8 +42,8 @@ import {
 } from "lucide-react";
 import { useOrganization, type AssistantAssignment } from "@/contexts/OrganizationContext";
 import { useOrgUsers } from "@/hooks/use-org-users";
-import { AssistantAssignmentModal } from "@/components/admin/AssistantAssignmentModal";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { AssistantAssignmentModal } from "@/components/admin/AssistantAssignmentModal";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import {
   AlertDialog,
@@ -94,9 +94,13 @@ export const AssistantsManagementTab = forwardRef<
   },
   ref,
 ) {
-  const { assistantAssignments, deleteAssignment } = useOrganization();
+  const { assistantAssignments, deleteAssignment, ensureAssistantAssignments } = useOrganization();
   const { users } = useOrgUsers();
   const { currentUser } = useCurrentUser();
+
+  useEffect(() => {
+    void ensureAssistantAssignments('all');
+  }, [ensureAssistantAssignments]);
   
   // View & filter state
   const [internalViewMode, setInternalViewMode] = useState<ViewMode>("executives");

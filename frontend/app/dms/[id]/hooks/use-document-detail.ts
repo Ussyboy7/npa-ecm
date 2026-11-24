@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { logError, logWarn } from '@/lib/client-logger';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -28,6 +28,7 @@ export function useDocumentDetail(documentId: string | undefined) {
   const [comments, setComments] = useState<DocumentComment[]>([]);
   const [accessLogs, setAccessLogs] = useState<DocumentAccessLog[]>([]);
   const [relatedCorrespondence, setRelatedCorrespondence] = useState<DocumentRelatedCorrespondenceItem[]>([]);
+  const loadKeyRef = useRef<string | null>(null);
 
   const refreshDocument = useCallback(async () => {
     if (!documentId) return null;
@@ -47,7 +48,12 @@ export function useDocumentDetail(documentId: string | undefined) {
       return;
     }
 
-    let ignore = false;
+    // Load once per document+user. StrictMode's double effect run and the
+    // currentUser hydration re-render must not re-fetch the detail bundle.
+    const loadKey = `${documentId}:${currentUser.id}`;
+    if (loadKeyRef.current === loadKey) return;
+    loadKeyRef.current = loadKey;
+    const isCurrent = () => loadKeyRef.current === loadKey;
 
     const load = async () => {
       setLoading(true);
@@ -57,7 +63,7 @@ export function useDocumentDetail(documentId: string | undefined) {
 
       try {
         const doc = await fetchDocumentById(documentId);
-        if (ignore) return;
+        if (!isCurrent()) return;
         setDocument(doc);
 
         if (doc.documentType === 'form') {
@@ -68,7 +74,7 @@ export function useDocumentDetail(documentId: string | undefined) {
               const formDocs = await apiFetch<Array<{ id: string }>>(
                 `/dms/form-documents/?document=${documentId}`,
               );
-              if (!ignore && formDocs.length > 0) {
+              if (isCurrent() && formDocs.length > 0) {
                 setFormDocumentId(formDocs[0].id);
               }
             } catch (formError: unknown) {
@@ -91,7 +97,7 @@ export function useDocumentDetail(documentId: string | undefined) {
             return [] as DocumentRelatedCorrespondenceItem[];
           }),
         ]);
-        if (ignore) return;
+        if (!isCurrent()) return;
 
         setComments(cmts);
         setAccessLogs(logs);
@@ -106,7 +112,7 @@ export function useDocumentDetail(documentId: string | undefined) {
           logError('Failed to log document access', accessError);
         });
       } catch (loadError: unknown) {
-        if (ignore) return;
+        if (!isCurrent()) return;
         if (isAccessDeniedError(loadError)) {
           setAccessDenied(true);
           setError(null);
@@ -117,15 +123,11 @@ export function useDocumentDetail(documentId: string | undefined) {
         }
         setDocument(null);
       } finally {
-        if (!ignore) setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     };
 
     void load();
-
-    return () => {
-      ignore = true;
-    };
   }, [documentId, currentUser?.id]);
 
   return {

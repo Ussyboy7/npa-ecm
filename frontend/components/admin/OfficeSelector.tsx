@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 
 interface OfficeSelectorProps {
   officeId?: string | null;
@@ -20,7 +20,7 @@ export function OfficeSelector({
   disabled = false,
   filterByOfficeType,
 }: OfficeSelectorProps) {
-  const { offices, directorates, divisions, departments } = useOrganization();
+  const { offices, directorates, divisions, departments } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   const [searchQuery, setSearchQuery] = useState("");
   const [officeTypeFilter, setOfficeTypeFilter] = useState<string>("");
 

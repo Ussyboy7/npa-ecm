@@ -148,6 +148,7 @@ function setupMocks(activeUser: typeof mdUser) {
       { id: 'div-legal', name: 'Legal', directorateId: 'dir-1', isActive: true },
     ],
     assistantAssignments: [],
+    ensureAssistantAssignments: vi.fn(async () => {}),
     users: [activeUser as unknown],
   });
   mockUseOrgUsers.mockReturnValue({ users: [activeUser as unknown, gmUser as unknown, mdUser as unknown] });

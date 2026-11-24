@@ -63,7 +63,8 @@ import {
 } from '@/lib/api/document-templates';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
-import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
+import { type AssistantAssignment } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { useScopedOfficeMemberships } from '@/hooks/use-scoped-office-memberships';
 import { useUserLookup } from '@/hooks/use-user-lookup';
 import { useRoutingSuggestions } from '@/hooks/use-routing-suggestions';
@@ -138,11 +139,17 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const gradeCatalog = useGradeCatalog();
   const {
     assistantAssignments,
+    ensureAssistantAssignments,
     offices,
     officeMemberships: signedInOfficeMemberships,
     directorates,
     divisions,
-  } = useOrganization();
+  } = useOrganizationCatalogs('offices', 'directorates', 'divisions');
+
+  useEffect(() => {
+    if (isOpen) void ensureAssistantAssignments('principal');
+  }, [isOpen, ensureAssistantAssignments]);
+
   const officeMemberships = useScopedOfficeMemberships({
     enabled: isOpen,
     baseMemberships: signedInOfficeMemberships,

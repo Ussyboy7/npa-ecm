@@ -28,7 +28,7 @@ import {
 import { logError } from '@/lib/client-logger';
 import { SENSITIVITY_OPTIONS } from '@/lib/constants';
 import { useDebounce } from '@/hooks/use-debounce';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { usePaginatedUserSearch } from '@/hooks/use-paginated-user-search';
 import { useUserLookup } from '@/hooks/use-user-lookup';
 import { formatDate } from '@/lib/correspondence-helpers';
@@ -46,7 +46,7 @@ const isUnifiedSearchResult = (value: unknown): value is UnifiedSearchResult =>
   isRecord(value) && ('documents' in value || 'correspondence' in value || 'cases' in value);
 
 export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps) => {
-  const { divisions, departments } = useOrganization();
+  const { divisions, departments } = useOrganizationCatalogs('divisions', 'departments');
   const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<NonNullable<SearchRequest['filters']>>({});

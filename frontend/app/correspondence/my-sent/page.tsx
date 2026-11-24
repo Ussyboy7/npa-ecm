@@ -18,7 +18,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch, isAbortError } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/lib/api/correspondence-mappers';
@@ -53,7 +53,7 @@ import { ErrorState } from '@/components/shared/ErrorState';
 const MySentPageContent = () => {
   const router = useRouter();
   const {currentUser} = useCurrentUser();
-  const { divisions } = useOrganization();
+  const { divisions } = useOrganizationCatalogs('divisions');
 
   const [activeTab, setActiveTab] = useState<'sent' | 'documents'>('sent');
   const [query, setQuery] = useState('');

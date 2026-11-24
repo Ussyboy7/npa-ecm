@@ -29,7 +29,7 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
@@ -66,7 +66,7 @@ const getStatusBadgeVariant = (status: string): 'destructive' | 'secondary' | 'd
 const OfficeSentPage = () => {
   const { currentUser } = useCurrentUser();
   const systemRole = typeof currentUser?.systemRole === 'string' ? currentUser.systemRole.toLowerCase() : '';
-  const { officeMemberships, offices, divisions } = useOrganization();
+  const { officeMemberships, offices, divisions } = useOrganizationCatalogs('offices', 'divisions');
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');

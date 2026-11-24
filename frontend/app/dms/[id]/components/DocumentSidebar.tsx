@@ -67,7 +67,6 @@ export interface DocumentSidebarProps {
   canManageAccess?: boolean;
   onEditMetadata?: () => void;
   onLinkCase?: () => void;
-  unreadComments?: number;
   onViewActivityDetails: (log: DocumentAccessLog) => void;
   onRefreshAccessLogs: () => Promise<void>;
   onPreviewVersion: (version: DocumentVersion) => void;
@@ -96,7 +95,6 @@ export function DocumentSidebar({
   canManageAccess = false,
   onEditMetadata,
   onLinkCase,
-  unreadComments = 0,
   onViewActivityDetails,
   onRefreshAccessLogs,
   onPreviewVersion,
@@ -225,14 +223,7 @@ export function DocumentSidebar({
                 <Icon className="h-3 w-3 flex-shrink-0 opacity-80" />
                 <span className="truncate">{tab.label}</span>
                 {tab.count != null && tab.count > 0 ? (
-                  <span
-                    className={cn(
-                      "tabular-nums flex-shrink-0 text-[10px]",
-                      tab.id === "comments" && unreadComments > 0
-                        ? "px-1 py-0 rounded-full bg-primary text-primary-foreground font-semibold"
-                        : "opacity-70",
-                    )}
-                  >
+                  <span className="tabular-nums flex-shrink-0 text-[10px] opacity-70">
                     {tab.count}
                   </span>
                 ) : null}

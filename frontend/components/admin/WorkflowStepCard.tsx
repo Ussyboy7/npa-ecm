@@ -3,7 +3,7 @@
 import { GripVertical, Edit, Trash2, Building2, Network, Users, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import type { WorkflowStep } from "@/lib/types/workflow";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +22,7 @@ export function WorkflowStepCard({
   isDragging = false,
   dragHandleProps,
 }: WorkflowStepCardProps) {
-  const { directorates, divisions, departments, offices } = useOrganization();
+  const { directorates, divisions, departments, offices } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
 
   const getSelectionDisplay = () => {
     if (step.office) {

@@ -23,7 +23,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useGradeCatalog } from "@/hooks/use-grade-catalog";
 import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
@@ -51,7 +51,7 @@ export const DistributionSelector = ({
 }: DistributionSelectorProps) => {
   const { currentUser } = useCurrentUser();
   const gradeCatalog = useGradeCatalog();
-  const { offices, divisions, departments: _departments, directorates } = useOrganization();
+  const { offices, divisions, departments: _departments, directorates } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
 
   // Parallel routing starts at Principal Manager, not at every senior manager.
   const canCreateParallelRouting = useMemo(

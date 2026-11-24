@@ -67,6 +67,7 @@ beforeEach(() => {
       },
     ],
     deleteAssignment: vi.fn(),
+    ensureAssistantAssignments: vi.fn(async () => {}),
   });
 });
 

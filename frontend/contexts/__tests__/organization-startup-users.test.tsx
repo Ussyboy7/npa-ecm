@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrganizationContextType } from '@/lib/organization-types';
 
@@ -33,6 +33,11 @@ vi.mock('@/lib/office-memberships-client', () => ({
 
 import { OrganizationProvider, useOrganization } from '../OrganizationContext';
 
+const OFFICES_PATH = '/organization/offices/?ordering=name';
+
+const catalogPaths = (paths: string[], path: string) =>
+  paths.filter((candidate) => candidate === path);
+
 describe('OrganizationProvider startup', () => {
   beforeEach(() => {
     mocks.fetchActiveUsers.mockClear();
@@ -44,90 +49,103 @@ describe('OrganizationProvider startup', () => {
     cleanup();
   });
 
-  it.each(['slow', 'failed'] as const)(
-    'publishes offices before an unrelated catalog is %s',
-    async (unrelatedCatalogState) => {
-      const slowCatalog = new Promise<Record<string, unknown>[]>(() => {});
-      let resolveOffices!: (rows: Record<string, unknown>[]) => void;
-      const officesRequest = new Promise<Record<string, unknown>[]>((resolve) => {
-        resolveOffices = resolve;
-      });
-      mocks.fetchAllCatalogPaginated.mockImplementation(async (path) => {
-        if (path === '/organization/directorates/?ordering=name') {
-          if (unrelatedCatalogState === 'failed') throw new Error('Directorates unavailable');
-          return slowCatalog;
-        }
-        if (path === '/organization/offices/?ordering=name') return officesRequest;
-        return [];
-      });
+  const renderProvider = () => {
+    let organization: OrganizationContextType | undefined;
+    const Harness = () => {
+      organization = useOrganization();
+      return null;
+    };
 
-      let organization: OrganizationContextType | undefined;
-      const Harness = () => {
-        organization = useOrganization();
-        return null;
-      };
+    render(
+      <OrganizationProvider>
+        <Harness />
+      </OrganizationProvider>,
+    );
 
-      render(
-        <OrganizationProvider>
-          <Harness />
-        </OrganizationProvider>,
-      );
+    return () => organization;
+  };
 
-      if (unrelatedCatalogState === 'failed') {
-        await waitFor(() => expect(organization?.isOrganizationReady).toBe(true));
-        expect(organization?.offices).toEqual([]);
-        expect(organization?.officeCatalogLoaded).toBe(false);
-      }
+  it('loads access data at startup and leaves organization catalogs unfetched', async () => {
+    const getOrganization = renderProvider();
 
-      resolveOffices([{ id: 'office-1', name: 'Active Office', is_active: true }]);
-      await waitFor(() => expect(organization?.offices).toEqual([
-        expect.objectContaining({ id: 'office-1', name: 'Active Office', isActive: true }),
-      ]));
-      expect(organization?.officeCatalogLoaded).toBe(true);
-      if (unrelatedCatalogState === 'slow') {
-        expect(organization?.isOrganizationReady).toBe(false);
-      }
-    },
-  );
+    await waitFor(() => expect(getOrganization()?.isOrganizationReady).toBe(true));
 
-  it('marks the office catalog settled when the office request fails', async () => {
+    const requestedPaths = mocks.fetchAllCatalogPaginated.mock.calls.map(([path]) => path);
+    expect(requestedPaths).toContain('/organization/roles/?ordering=name');
+    expect(requestedPaths).toContain('/correspondence/delegations/?assistant=user-a&active=true');
+    expect(catalogPaths(requestedPaths, OFFICES_PATH)).toHaveLength(0);
+    expect(catalogPaths(requestedPaths, '/organization/directorates/?ordering=name')).toHaveLength(0);
+    expect(catalogPaths(requestedPaths, '/organization/divisions/?ordering=name')).toHaveLength(0);
+    expect(catalogPaths(requestedPaths, '/organization/departments/?ordering=name')).toHaveLength(0);
+    expect(getOrganization()?.officeCatalogLoaded).toBe(false);
+    expect(mocks.fetchActiveUsers).not.toHaveBeenCalled();
+  });
+
+  it('loads principal and full assignment scopes only when requested', async () => {
+    const getOrganization = renderProvider();
+    await waitFor(() => expect(getOrganization()?.isOrganizationReady).toBe(true));
+    mocks.fetchAllCatalogPaginated.mockClear();
+
+    await act(async () => {
+      await getOrganization()?.ensureAssistantAssignments('principal');
+    });
+    await act(async () => {
+      await getOrganization()?.ensureAssistantAssignments('all');
+    });
+
+    expect(mocks.fetchAllCatalogPaginated.mock.calls.map(([path]) => path)).toEqual([
+      '/correspondence/delegations/?principal=user-a',
+      '/correspondence/delegations/',
+    ]);
+  });
+
+  it('fetches only the requested catalog, once per user', async () => {
+    const getOrganization = renderProvider();
+    await waitFor(() => expect(getOrganization()?.isOrganizationReady).toBe(true));
+    mocks.fetchAllCatalogPaginated.mockClear();
+
     mocks.fetchAllCatalogPaginated.mockImplementation(async (path) => {
-      if (path === '/organization/offices/?ordering=name') throw new Error('Offices unavailable');
+      if (path === OFFICES_PATH) {
+        return [{ id: 'office-1', name: 'Active Office', is_active: true }];
+      }
       return [];
     });
 
-    let organization: OrganizationContextType | undefined;
-    const Harness = () => {
-      organization = useOrganization();
-      return null;
-    };
+    await act(async () => {
+      await getOrganization()?.ensureCatalogs('offices');
+    });
+    await waitFor(() => expect(getOrganization()?.officeCatalogLoaded).toBe(true));
 
-    render(
-      <OrganizationProvider>
-        <Harness />
-      </OrganizationProvider>,
+    expect(getOrganization()?.offices).toEqual([
+      expect.objectContaining({ id: 'office-1', name: 'Active Office', isActive: true }),
+    ]);
+    expect(catalogPaths(mocks.fetchAllCatalogPaginated.mock.calls.map(([path]) => path), OFFICES_PATH))
+      .toHaveLength(1);
+    expect(mocks.fetchAllCatalogPaginated.mock.calls.map(([path]) => path)).not.toContain(
+      '/organization/directorates/?ordering=name',
     );
 
-    await waitFor(() => expect(organization?.officeCatalogLoaded).toBe(true));
-    expect(organization?.offices).toEqual([]);
+    await act(async () => {
+      await getOrganization()?.ensureCatalogs('offices');
+    });
+    expect(catalogPaths(mocks.fetchAllCatalogPaginated.mock.calls.map(([path]) => path), OFFICES_PATH))
+      .toHaveLength(1);
   });
 
-  it('loads organization data without fetching every active user', async () => {
-    let organization: OrganizationContextType | undefined;
-    const Harness = () => {
-      organization = useOrganization();
-      return null;
-    };
+  it('marks the office catalog settled when the office request fails', async () => {
+    mocks.fetchAllCatalogPaginated.mockImplementation(async (path) => {
+      if (path === OFFICES_PATH) throw new Error('Offices unavailable');
+      return [];
+    });
 
-    render(
-      <OrganizationProvider>
-        <Harness />
-      </OrganizationProvider>,
-    );
+    const getOrganization = renderProvider();
+    await waitFor(() => expect(getOrganization()?.isOrganizationReady).toBe(true));
 
-    await waitFor(() => expect(organization?.isOrganizationReady).toBe(true));
+    await act(async () => {
+      await getOrganization()?.ensureCatalogs('offices');
+    });
 
-    expect(mocks.fetchAllCatalogPaginated).toHaveBeenCalled();
-    expect(mocks.fetchActiveUsers).not.toHaveBeenCalled();
+    await waitFor(() => expect(getOrganization()?.officeCatalogLoaded).toBe(true));
+    expect(getOrganization()?.offices).toEqual([]);
   });
 });

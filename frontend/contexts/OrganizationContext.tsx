@@ -11,7 +11,7 @@ import { invalidatePagePermissionsCache } from '@/lib/page-permissions-cache';
 import { clearIdentityCaches } from '@/lib/identity-cache';
 import type {
   Directorate, Division, Department, Office, OfficeMembership,
-  AssistantAssignment, Role, OrganizationContextType,
+  AssistantAssignment, Role, OrganizationContextType, OrganizationCatalogKey, AssistantAssignmentScope,
   CreateRoleInput, UpdateRoleInput,
   CreateDirectorateInput, UpdateDirectorateInput,
   CreateDivisionInput, UpdateDivisionInput,
@@ -31,6 +31,13 @@ export type {
   AssistantAssignment, Role,
 } from '@/lib/organization-types';
 
+export const ALL_ORGANIZATION_CATALOGS: OrganizationCatalogKey[] = [
+  'offices',
+  'directorates',
+  'divisions',
+  'departments',
+];
+
 export const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
 export const OrganizationProvider: React.FC<{
@@ -47,6 +54,10 @@ export const OrganizationProvider: React.FC<{
   const [isSyncing, setIsSyncing] = useState(false);
   const [officeMembershipsLoadedFor, setOfficeMembershipsLoadedFor] = useState<string | null>(null);
   const [organizationReadyFor, setOrganizationReadyFor] = useState<string | null>(null);
+  const [catalogsLoading, setCatalogsLoading] = useState(false);
+  const catalogPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
+  const assignmentPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
+  const allAssignmentsLoadedForRef = useRef<string | null>(null);
   const currentUser = useSyncExternalStore(subscribeToStore, getCurrentUserSnapshot, getCurrentUserSnapshot);
   const organizationRefreshPromiseRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
   const currentUserIdRef = useRef<string | null>(currentUser?.id ?? null);
@@ -64,6 +75,10 @@ export const OrganizationProvider: React.FC<{
     setRoles([]);
     setOfficeMembershipsLoadedFor(null);
     setOrganizationReadyFor(null);
+    setCatalogsLoading(false);
+    catalogPromisesRef.current.clear();
+    assignmentPromisesRef.current.clear();
+    allAssignmentsLoadedForRef.current = null;
   }, [currentUser?.id]);
 
   const applyDirectorateUpdate = useCallback(
@@ -120,7 +135,45 @@ export const OrganizationProvider: React.FC<{
     []
   );
 
-  const fetchAllOrgData = async () => {
+  const ensureAssistantAssignments = useCallback(async (scope: AssistantAssignmentScope = 'mine'): Promise<void> => {
+    const userId = currentUser?.id;
+    if (!userId || !hasTokens()) return;
+    if (scope !== 'all' && allAssignmentsLoadedForRef.current === userId) return;
+
+    const key = `${userId}:${scope}`;
+    const existing = assignmentPromisesRef.current.get(key);
+    if (existing) return existing;
+
+    const path = scope === 'all'
+      ? '/correspondence/delegations/'
+      : `/correspondence/delegations/?${scope === 'mine' ? 'assistant' : 'principal'}=${encodeURIComponent(userId)}${scope === 'mine' ? '&active=true' : ''}`;
+    const promise = fetchFirstPage(path)
+      .then((rows) => {
+        if (currentUserIdRef.current !== userId) return;
+        if (scope !== 'all' && allAssignmentsLoadedForRef.current === userId) return;
+        const assignments = rows.filter(isRecord).map(mapApiDelegation);
+        if (scope === 'all') {
+          allAssignmentsLoadedForRef.current = userId;
+          setAssistantAssignments(assignments);
+        } else {
+          setAssistantAssignments((current) => [
+            ...current.filter((assignment) => scope === 'mine'
+              ? assignment.assistantId !== userId
+              : assignment.executiveId !== userId),
+            ...assignments,
+          ]);
+        }
+      })
+      .catch((error: unknown) => {
+        logError(`Failed to load ${scope === 'all' ? 'all' : scope === 'mine' ? 'assistant' : 'principal'} delegations`, error);
+        assignmentPromisesRef.current.delete(key);
+      });
+
+    assignmentPromisesRef.current.set(key, promise);
+    return promise;
+  }, [currentUser?.id, fetchFirstPage]);
+
+  const fetchAllOrgData = useCallback(async () => {
     const membershipUserId = currentUser?.id ?? null;
 
     // Sidebar access depends on this request. Publish it as soon as it resolves
@@ -144,20 +197,6 @@ export const OrganizationProvider: React.FC<{
       });
 
     const rolesRequest = fetchFirstPage('/organization/roles/?ordering=name');
-    void fetchFirstPage('/organization/offices/?ordering=name', MAX_CATALOG_PAGE_SIZE)
-      .then((rows) => {
-        if (!membershipUserId || currentUserIdRef.current !== membershipUserId) return;
-        const sortedOffices = sortByName(rows.map(mapApiOffice));
-        setOffices(sortedOffices);
-        setOfficeCatalogLoadedFor(membershipUserId);
-        updateOrganizationCache({ offices: sortedOffices });
-      })
-      .catch((error: unknown) => {
-        logError('Failed to load offices', error);
-        if (membershipUserId && currentUserIdRef.current === membershipUserId) {
-          setOfficeCatalogLoadedFor(membershipUserId);
-        }
-      });
 
     void Promise.allSettled([rolesRequest, officeMembershipsRequest])
       .then(([rolesResult, officeMembershipsResult]) => {
@@ -175,23 +214,11 @@ export const OrganizationProvider: React.FC<{
       });
 
     try {
-      const [
-        directoratesRows,
-        divisionsRows,
-        departmentsRows,
-        rolesRows,
-        officeMembershipsRows,
-      ] = await Promise.all([
-        fetchFirstPage('/organization/directorates/?ordering=name'),
-        fetchFirstPage('/organization/divisions/?ordering=name'),
-        fetchFirstPage('/organization/departments/?ordering=name'),
+      const [rolesRows, officeMembershipsRows] = await Promise.all([
         rolesRequest,
         officeMembershipsRequest,
       ]);
 
-      const apiDirectorates = directoratesRows.map(mapApiDirectorate);
-      const apiDivisions = divisionsRows.map(mapApiDivision);
-      const apiDepartments = departmentsRows.map(mapApiDepartment);
       const apiRoles = rolesRows.map(mapApiRole);
       const apiOfficeMemberships = officeMembershipsRows;
 
@@ -200,36 +227,20 @@ export const OrganizationProvider: React.FC<{
       // another identity.
       if (!membershipUserId || currentUserIdRef.current !== membershipUserId) return;
 
-      const sortedDirectorates = sortByName(apiDirectorates);
-      const sortedDivisions = sortByName(apiDivisions);
-      const sortedDepartments = sortByName(apiDepartments);
       const sortedRoles = sortByName(apiRoles);
 
-      setDirectorates(sortedDirectorates);
-      setDivisions(sortedDivisions);
-      setDepartments(sortedDepartments);
       setOfficeMemberships(apiOfficeMemberships);
       setRoles(sortedRoles);
 
-      updateOrganizationCache({
-        directorates: sortedDirectorates,
-        divisions: sortedDivisions,
-        departments: sortedDepartments,
-        officeMemberships: apiOfficeMemberships,
+      updateOrganizationCache({ officeMemberships: apiOfficeMemberships });
+
+      logInfo('Organization access data loaded successfully:', {
+        roles: sortedRoles.length,
       });
 
-      logInfo('Organization data loaded successfully:', {
-        directorates: sortedDirectorates.length,
-        divisions: sortedDivisions.length,
-        departments: sortedDepartments.length,
-      });
-
-      // Defer delegations fetch — only 6 pages need this
-      fetchFirstPage('/correspondence/delegations/').then((rows) => {
-        if (!membershipUserId || currentUserIdRef.current !== membershipUserId) return;
-        const apiDelegations = rows.filter(isRecord).map(mapApiDelegation);
-        setAssistantAssignments(apiDelegations);
-      }).catch((err) => logError('Failed to load delegations', err));
+      // Defer delegations fetch — they feed delegated permissions, not page
+      // content, so the sidebar can paint first.
+      void ensureAssistantAssignments('mine');
     } catch (error: unknown) {
       logError('Failed to load organization data from API', error);
       if (error instanceof Error) {
@@ -240,7 +251,78 @@ export const OrganizationProvider: React.FC<{
         setOrganizationReadyFor(membershipUserId);
       }
     }
-  };
+  }, [currentUser?.id, fetchFirstPage, ensureAssistantAssignments]);
+
+  /**
+   * Load organization catalogs on first use. Routes that never render a catalog
+   * (for example a document detail) no longer pay for the office/directorate
+   * catalogs at startup. Each catalog is fetched once per signed-in user.
+   */
+  const loadCatalogs = useCallback(async (...catalogs: OrganizationCatalogKey[]): Promise<void> => {
+    const userId = currentUser?.id;
+    if (!userId || !hasTokens()) return;
+
+    const requested = catalogs.length > 0 ? catalogs : ALL_ORGANIZATION_CATALOGS;
+    const pending: Promise<void>[] = [];
+    setCatalogsLoading(true);
+
+    for (const catalog of requested) {
+      const key = `${userId}:${catalog}`;
+      const inFlight = catalogPromisesRef.current.get(key);
+      if (inFlight) {
+        pending.push(inFlight);
+        continue;
+      }
+
+      const promise = (async () => {
+        try {
+          if (catalog === 'offices') {
+            const rows = await fetchFirstPage('/organization/offices/?ordering=name', MAX_CATALOG_PAGE_SIZE);
+            if (currentUserIdRef.current !== userId) return;
+            const sorted = sortByName(rows.map(mapApiOffice));
+            setOffices(sorted);
+            setOfficeCatalogLoadedFor(userId);
+            updateOrganizationCache({ offices: sorted });
+            return;
+          }
+          if (catalog === 'directorates') {
+            const rows = await fetchFirstPage('/organization/directorates/?ordering=name');
+            if (currentUserIdRef.current !== userId) return;
+            const sorted = sortByName(rows.map(mapApiDirectorate));
+            setDirectorates(sorted);
+            updateOrganizationCache({ directorates: sorted });
+            return;
+          }
+          if (catalog === 'divisions') {
+            const rows = await fetchFirstPage('/organization/divisions/?ordering=name');
+            if (currentUserIdRef.current !== userId) return;
+            const sorted = sortByName(rows.map(mapApiDivision));
+            setDivisions(sorted);
+            updateOrganizationCache({ divisions: sorted });
+            return;
+          }
+          const rows = await fetchFirstPage('/organization/departments/?ordering=name');
+          if (currentUserIdRef.current !== userId) return;
+          const sorted = sortByName(rows.map(mapApiDepartment));
+          setDepartments(sorted);
+          updateOrganizationCache({ departments: sorted });
+        } catch (error: unknown) {
+          logError(`Failed to load ${catalog} catalog`, error);
+          // Let a later render retry instead of caching the failure forever.
+          catalogPromisesRef.current.delete(key);
+          if (catalog === 'offices' && currentUserIdRef.current === userId) {
+            setOfficeCatalogLoadedFor(userId);
+          }
+        }
+      })();
+
+      catalogPromisesRef.current.set(key, promise);
+      pending.push(promise);
+    }
+
+    await Promise.all(pending);
+    if (currentUserIdRef.current === userId) setCatalogsLoading(false);
+  }, [currentUser?.id, fetchFirstPage]);
 
   const refreshOrganizationData = useCallback(async () => {
     if (!currentUser?.id || !hasTokens()) {
@@ -255,8 +337,19 @@ export const OrganizationProvider: React.FC<{
     logInfo('Refreshing organization data...');
     setIsSyncing(true);
 
-    const promise = fetchAllOrgData();
-    const entry = { userId: currentUser.id, promise };
+    const userId = currentUser.id;
+    const promise = (async () => {
+      await fetchAllOrgData();
+      // Refresh only the catalogs a page already asked for.
+      const prefix = `${userId}:`;
+      const loaded = [...catalogPromisesRef.current.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .map((key) => key.slice(prefix.length) as OrganizationCatalogKey);
+      if (loaded.length === 0) return;
+      for (const catalog of loaded) catalogPromisesRef.current.delete(`${prefix}${catalog}`);
+      await loadCatalogs(...loaded);
+    })();
+    const entry = { userId, promise };
     promise.finally(() => {
       if (organizationRefreshPromiseRef.current === entry) {
         setIsSyncing(false);
@@ -266,7 +359,7 @@ export const OrganizationProvider: React.FC<{
 
     organizationRefreshPromiseRef.current = entry;
     return promise;
-  }, [currentUser?.id, fetchFirstPage]);
+  }, [currentUser?.id, fetchAllOrgData, loadCatalogs]);
 
   useEffect(() => {
     if (!currentUser?.id || !hasTokens()) return;
@@ -698,6 +791,9 @@ export const OrganizationProvider: React.FC<{
     setOrganizationReadyFor(null);
     currentUserIdRef.current = null;
     setRoles([]);
+    catalogPromisesRef.current.clear();
+    assignmentPromisesRef.current.clear();
+    allAssignmentsLoadedForRef.current = null;
     resetOrgCache();
   }, []);
 
@@ -752,6 +848,9 @@ export const OrganizationProvider: React.FC<{
     deleteOfficeMembership,
     resetOrganizationData,
     refreshOrganizationData,
+    ensureCatalogs: loadCatalogs,
+    catalogsLoading,
+    ensureAssistantAssignments,
     isSyncing,
     updateUser,
     addUser,
@@ -790,6 +889,9 @@ export const OrganizationProvider: React.FC<{
     deleteOfficeMembership,
     resetOrganizationData,
     refreshOrganizationData,
+    loadCatalogs,
+    catalogsLoading,
+    ensureAssistantAssignments,
     isSyncing,
     updateUser,
     addUser,

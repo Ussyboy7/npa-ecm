@@ -37,7 +37,7 @@ import { toast } from "@/components/ui/sonner";
 import { logError } from "@/lib/client-logger";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { cn } from "@/lib/utils";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
@@ -314,7 +314,7 @@ export default function AuditFormFillPage() {
   const [caseMetadata, setCaseMetadata] = useState<Record<string, unknown> | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   // Office-centric routing state per spec
-  const { directorates, divisions, offices, officeMemberships } = useOrganization();
+  const { directorates, divisions, offices, officeMemberships } = useOrganizationCatalogs('offices', 'directorates', 'divisions');
   const { users: orgUsers } = useOrgUsers({ enabled: forwardDialogOpen });
   const { currentUser } = useCurrentUser();
 

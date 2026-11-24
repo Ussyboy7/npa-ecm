@@ -46,7 +46,7 @@ import {
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
 } from "@/components/shared/registry-queue-styles";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { logError } from "@/lib/client-logger";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/sonner";
@@ -124,7 +124,7 @@ export function ReferenceSchemesPanel({
 }: {
   onStatsChange?: (stats: { total: number; active: number; classifications: number }) => void;
 }) {
-  const { directorates, divisions, departments } = useOrganization();
+  const { directorates, divisions, departments } = useOrganizationCatalogs('directorates', 'divisions', 'departments');
   const [schemes, setSchemes] = useState<ReferenceScheme[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

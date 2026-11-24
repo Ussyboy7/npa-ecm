@@ -45,7 +45,7 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
 } from "@/components/shared/registry-queue-styles";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import type { Correspondence } from "@/lib/npa-structure";
 import { toast } from "@/components/ui/sonner";
 
@@ -65,7 +65,7 @@ type RecordCardProps = {
 
 function RecordCardContent({ corr }: RecordCardProps) {
   const router = useRouter();
-  const { divisions, departments, directorates } = useOrganization();
+  const { divisions, departments, directorates } = useOrganizationCatalogs('directorates', 'divisions', 'departments');
 
   const division = useMemo(
     () => corr.divisionId ? divisions.find((item) => item.id === corr.divisionId) : null,

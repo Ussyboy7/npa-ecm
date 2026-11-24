@@ -12,7 +12,7 @@ import { toast } from "@/components/ui/sonner";
 import { apiFetch } from '@/lib/api-client';
 import { toDateInputValue } from '@/lib/datetime';
 import { AlertCircle, ArrowLeft, FileText, Users, FolderOpen, Loader2, RefreshCw, Edit3 } from 'lucide-react';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
 import { useCorrespondence, CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -66,7 +66,7 @@ const CorrespondenceRegisterForm = () => {
     departments,
     offices,
     officeMemberships,
-  } = useOrganization();
+  } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   const { syncFromApi } = useCorrespondence();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser);

@@ -39,7 +39,7 @@ import {
 } from '@/lib/api/dms';
 import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
 import type { User } from '@/lib/npa-structure';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { useSignature } from '@/hooks/use-signature';
 import { RichTextEditor } from './RichTextEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -109,7 +109,7 @@ export const DocumentUploadDialog = ({
   initialComposeMode,
   asPage = false,
 }: DocumentUploadDialogProps) => {
-  const { divisions, departments, directorates } = useOrganization();
+  const { divisions, departments, directorates } = useOrganizationCatalogs('directorates', 'divisions', 'departments');
   const activeDivisions = useMemo(() => divisions.filter((division) => division.isActive !== false), [divisions]);
   const activeDepartments = useMemo(() => departments.filter((department) => department.isActive !== false), [departments]);
   const [title, setTitle] = useState('');

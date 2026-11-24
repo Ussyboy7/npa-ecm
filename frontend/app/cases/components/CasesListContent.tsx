@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { getCases, type CaseQueryParams } from "@/lib/api/cases";
 import { PRIORITY_OPTIONS } from "@/lib/constants";
 import type { Case } from "@/lib/npa-structure";
@@ -122,7 +122,7 @@ export function CasesListContent({ scope, title, description, tabs }: CasesListC
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const currentUserId = currentUser?.id;
-  const {divisions, departments: _departments, offices } = useOrganization();
+  const {divisions, departments: _departments, offices } = useOrganizationCatalogs('offices', 'divisions', 'departments');
   const { getSignal } = useAbortController();
 
   const [cases, setCases] = useState<Case[]>([]);

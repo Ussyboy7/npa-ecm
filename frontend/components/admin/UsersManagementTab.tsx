@@ -23,7 +23,7 @@ import {
   Loader2,
   Pencil,
 } from "lucide-react";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
 import { UserTableSkeleton, UserTableSkeletonRows } from "@/components/admin/UserTableSkeleton";
 import { GRADE_LEVELS, getGradeLevelByCode, type User } from "@/lib/npa-structure";
@@ -97,7 +97,7 @@ export const UsersManagementTab = forwardRef<
   },
   ref,
 ) {
-  const { divisions, departments, roles } = useOrganization();
+  const { divisions, departments, roles } = useOrganizationCatalogs('divisions', 'departments');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);

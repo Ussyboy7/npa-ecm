@@ -110,6 +110,9 @@ export type CreateRoleInput = {
 
 export type UpdateRoleInput = Partial<CreateRoleInput>;
 
+export type OrganizationCatalogKey = 'offices' | 'directorates' | 'divisions' | 'departments';
+export type AssistantAssignmentScope = 'mine' | 'principal' | 'all';
+
 export interface OrganizationContextType {
   directorates: Directorate[];
   divisions: Division[];
@@ -121,6 +124,11 @@ export interface OrganizationContextType {
   myOfficeMembershipsLoaded: boolean;
   officeCatalogLoaded: boolean;
   isOrganizationReady: boolean;
+  /** Loads catalog data on first use; each catalog is fetched once per user. */
+  ensureCatalogs: (...catalogs: OrganizationCatalogKey[]) => Promise<void>;
+  catalogsLoading: boolean;
+  /** Load active delegations for the signed-in user, either role, or full admin list. */
+  ensureAssistantAssignments: (scope?: AssistantAssignmentScope) => Promise<void>;
   fetchOfficeMemberships: (filters: {
     user?: string;
     office?: string;

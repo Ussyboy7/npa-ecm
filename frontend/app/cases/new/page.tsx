@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { getSelectableOffices } from "@/lib/office-choice-utils";
 import { createCase } from "@/lib/api/cases";
 import { PRIORITY_OPTIONS } from "@/lib/constants";
@@ -53,7 +53,7 @@ const priorityOptions = PRIORITY_OPTIONS;
 const NewCasePage = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const { divisions, departments, offices } = useOrganization();
+  const { divisions, departments, offices } = useOrganizationCatalogs('offices', 'divisions', 'departments');
   const { getSignal } = useAbortController();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);

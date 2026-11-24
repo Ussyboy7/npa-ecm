@@ -45,7 +45,7 @@ import {
 import { apiFetch } from '@/lib/api-client';
 import { unwrapResults } from '@/lib/type-utils';
 import { usePagination } from '@/hooks/use-pagination';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { toast } from "@/components/ui/sonner";
 import { logError } from '@/lib/client-logger';
@@ -136,7 +136,7 @@ interface CheckOutEvent {
 
 function PhysicalDocumentsForm() {
   const [locations, setLocations] = useState<Location[]>([]);
-  const { offices: organizationOffices } = useOrganization();
+  const { offices: organizationOffices } = useOrganizationCatalogs('offices');
   const offices = useMemo(
     () => organizationOffices.filter((office) => office.isActive),
     [organizationOffices],

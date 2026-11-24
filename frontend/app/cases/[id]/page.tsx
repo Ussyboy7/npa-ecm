@@ -22,7 +22,7 @@ import { CaseFormPreviewDialog } from "./components/CaseFormPreviewDialog";
 import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPreviewModal";
 import { DocumentPreviewModal } from "@/components/correspondence/DocumentPreviewModal";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import {
   getCaseById,
   updateCaseStatus,
@@ -75,7 +75,7 @@ const CaseDetailPage = () => {
   const { query: highlightQuery, matchField } = readSearchHighlight(searchParams);
   const caseId = params.id as string;
   const { currentUser, hydrated } = useCurrentUser();
-  const { offices } = useOrganization();
+  const { offices } = useOrganizationCatalogs('offices');
   const { getSignal } = useAbortController();
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);

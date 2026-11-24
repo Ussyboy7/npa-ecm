@@ -49,6 +49,7 @@ vi.mock('@/hooks/use-org-users', () => ({
 vi.mock('@/contexts/OrganizationContext', () => ({
   useOrganization: () => ({
     assistantAssignments: [],
+    ensureAssistantAssignments: vi.fn(async () => {}),
     addAssignment: vi.fn(),
     divisions: [
       { id: 'div-1', name: 'Operations', directorateId: 'dir-1', isActive: true },

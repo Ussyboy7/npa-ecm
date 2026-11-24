@@ -19,7 +19,7 @@ import {
   Download,
   MoreVertical,
 } from 'lucide-react';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import type { Correspondence } from '@/lib/npa-structure';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -63,7 +63,7 @@ type UserScope = {
 const RecordsArchiveForm = () => {
   const searchParams = useSearchParams();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganization();
+  const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   const { getSignal } = useAbortController();
   const [filtersRestored, setFiltersRestored] = useState(false);
 

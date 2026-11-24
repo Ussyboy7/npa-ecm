@@ -245,7 +245,9 @@ class DocumentSerializer(serializers.ModelSerializer):
         required=False,
     )
     division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
+    division_name = serializers.CharField(source="division.name", read_only=True)
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
+    department_name = serializers.CharField(source="department.name", read_only=True)
     versions = DocumentVersionSerializer(many=True, read_only=True)
     permissions = DocumentPermissionSerializer(many=True, read_only=True)
     form_document = serializers.SerializerMethodField()
@@ -284,7 +286,9 @@ class DocumentSerializer(serializers.ModelSerializer):
             "author",
             "author_id",
             "division",
+            "division_name",
             "department",
+            "department_name",
             "tags",
             "versions",
             "permissions",

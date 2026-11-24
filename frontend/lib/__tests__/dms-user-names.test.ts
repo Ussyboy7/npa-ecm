@@ -33,6 +33,22 @@ describe('DMS user names from API payloads', () => {
     expect(document.authorName).toBe('Amina Bello Yusuf');
   });
 
+  it('maps document hierarchy names from its detail payload', () => {
+    const document = mapDocument({
+      id: 'doc-1',
+      title: 'Hierarchy names',
+      division: 'division-1',
+      division_name: 'Marine Division',
+      department: 'department-1',
+      department_name: 'Port Department',
+    });
+
+    expect(document.divisionId).toBe('division-1');
+    expect(document.divisionName).toBe('Marine Division');
+    expect(document.departmentId).toBe('department-1');
+    expect(document.departmentName).toBe('Port Department');
+  });
+
   it('derives the version uploader name from the nested uploaded_by payload', () => {
     const version = mapDocumentVersion({
       id: 'version-1',

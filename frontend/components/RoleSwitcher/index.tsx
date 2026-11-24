@@ -5,7 +5,7 @@ import { Search, Shield, User as UserIcon, Loader2, Star, Users } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useRoleSwitcherSearch } from "@/hooks/use-role-switcher-search";
@@ -42,7 +42,7 @@ interface SimplifiedRoleSwitcherProps {
 }
 
 const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
-  const { directorates, divisions, departments } = useOrganization();
+  const { directorates, divisions, departments } = useOrganizationCatalogs('directorates', 'divisions', 'departments');
   const { users: orgUsers } = useOrgUsers();
   const { currentUser, isImpersonating } = useCurrentUser();
 

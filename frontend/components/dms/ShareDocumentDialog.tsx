@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { usePaginatedUserSearch } from "@/hooks/use-paginated-user-search";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/api/dms";
 import { shareDocument, apiFetch, hasTokens, canShareDocument } from "@/lib/api/dms";
@@ -68,7 +68,7 @@ const ShareDocumentDialogContent = ({
   currentUserId,
   onShared,
 }: ShareDocumentDialogProps) => {
-  const { divisions, officeMemberships: _officeMemberships } = useOrganization();
+  const { divisions, officeMemberships: _officeMemberships } = useOrganizationCatalogs('divisions');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("share");
   const [accessLevel, setAccessLevel] = useState<PermissionAccess>("read");

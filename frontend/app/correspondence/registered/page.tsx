@@ -10,7 +10,7 @@ import { toast } from "@/components/ui/sonner";
 import { useRouter } from "next/navigation";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { mapApiCorrespondence } from "@/lib/api/correspondence-mappers";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
@@ -53,7 +53,7 @@ const RegisteredCorrespondencePage = () => {
   const { currentUser } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const visibility = useSidebarVisibility();
-  const { divisions } = useOrganization();
+  const { divisions } = useOrganizationCatalogs('divisions');
   const [items, setItems] = useState<Correspondence[]>([]);
   const [loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);

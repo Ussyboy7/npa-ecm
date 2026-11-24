@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch } from "@/lib/api/dms";
 import {
@@ -60,7 +60,7 @@ export const CorrespondenceRoutingView = forwardRef<
   CorrespondenceRoutingHandle,
   CorrespondenceRoutingViewProps
 >(function CorrespondenceRoutingView({ document, onComplete, onStateChange }, ref) {
-  const { directorates, divisions, offices } = useOrganization();
+  const { directorates, divisions, offices } = useOrganizationCatalogs('offices', 'directorates', 'divisions');
   const { currentUser } = useCurrentUser();
 
   const [subject, setSubject] = useState<string>(document.title || '');

@@ -70,7 +70,7 @@ import {
   X,
 } from "lucide-react";
 import { toast as sonnerToast } from "@/components/ui/sonner";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
@@ -146,7 +146,7 @@ function TemplatesHubForm() {
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab");
   const urlQuery = searchParams.get("q") ?? "";
-  const { directorates, divisions, departments } = useOrganization();
+  const { directorates, divisions, departments } = useOrganizationCatalogs('directorates', 'divisions', 'departments');
   const { currentUser, hydrated: userHydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const canAccessAdvancedTemplates = useMemo(() => {

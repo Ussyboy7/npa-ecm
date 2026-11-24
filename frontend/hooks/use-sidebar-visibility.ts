@@ -116,7 +116,6 @@ export function useSidebarVisibility(): SidebarVisibility {
     officeMemberships,
     assistantAssignments,
     roles,
-    offices,
     myOfficeMembershipsLoaded,
     isOrganizationReady,
   } = useOrganization();
@@ -368,7 +367,6 @@ export function useSidebarVisibility(): SidebarVisibility {
     assistantAssignments,
     roleChecks,
     roles,
-    offices,
     pageAccess,
     myOfficeMembershipsLoaded,
     isOrganizationReady,

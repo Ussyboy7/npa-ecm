@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Send, User, Building2, Briefcase, Search, X } from 'lucide-react';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { usePaginatedUserSearch } from '@/hooks/use-paginated-user-search';
 import { toast } from '@/components/ui/sonner';
 import { logError } from '@/lib/client-logger';
@@ -47,7 +47,7 @@ export function ForwardFormDialog({
   form,
   onForwarded,
 }: ForwardFormDialogProps) {
-  const { divisions, departments, offices } = useOrganization();
+  const { divisions, departments, offices } = useOrganizationCatalogs('offices', 'divisions', 'departments');
   const {
     query: userSearch,
     setQuery: setUserSearch,

@@ -35,7 +35,8 @@ import {
   MapPin,
   X,
 } from "lucide-react";
-import { useOrganization, type Directorate, type Division, type Department, type Office, type OfficeMembership } from "@/contexts/OrganizationContext";
+import { type Directorate, type Division, type Department, type Office, type OfficeMembership } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import {
   Select,
@@ -189,7 +190,7 @@ const OrganizationStructureAdminContent = () => {
     updateOfficeMembership,
     deleteOfficeMembership,
     refreshOrganizationData,
-  } = useOrganization();
+  } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   const { currentUser, hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const canManageStructure = permissions.canManageOrgStructure;

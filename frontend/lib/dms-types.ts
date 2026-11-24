@@ -126,7 +126,9 @@ export interface DocumentRecord {
   authorId: string;
   authorName?: string;
   divisionId?: string;
+  divisionName?: string;
   departmentId?: string;
+  departmentName?: string;
   tags: string[];
   versions: DocumentVersion[];
   publicationHistory?: DocumentPublicationEvent[];
@@ -516,7 +518,9 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
     authorId: author && 'id' in author ? String(author.id) : String(item.author ?? ''),
     authorName: getApiUserName(author),
     divisionId: typeof item.division === 'string' ? item.division : (typeof item.division_id === 'string' ? item.division_id : undefined),
+    divisionName: typeof item.division_name === 'string' ? item.division_name : undefined,
     departmentId: typeof item.department === 'string' ? item.department : (typeof item.department_id === 'string' ? item.department_id : undefined),
+    departmentName: typeof item.department_name === 'string' ? item.department_name : undefined,
     tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
     versions: Array.isArray(item.versions) ? item.versions.map(mapDocumentVersion) : [],
     publicationHistory: Array.isArray(item.publication_history)

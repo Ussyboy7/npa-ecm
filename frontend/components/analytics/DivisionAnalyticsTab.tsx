@@ -25,7 +25,7 @@ import {
   AnalyticsHeaderSlots,
   AnalyticsRefreshAction,
 } from "./AnalyticsHeaderSlots";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import {
   fetchEnhancedDivisionPerformance,
   fetchEnhancedSLAAnalytics,
@@ -45,7 +45,7 @@ const divisionKey = (division: { id: string | null; name: string }) =>
 
 export function DivisionAnalyticsTab() {
   const chartColors = useThemeChartColors();
-  const { directorates } = useOrganization();
+  const { directorates } = useOrganizationCatalogs('directorates');
   const [selectedPeriod, setSelectedPeriod] = useState("30");
   const [directorateId, setDirectorateId] = useState("all");
   const [data, setData] = useState<EnhancedDivisionPerformance | null>(null);

@@ -31,7 +31,6 @@ export interface User {
   department: string | null;
   department_name?: string;
   is_active: boolean;
-  is_management: boolean;
   is_superuser: boolean;
   date_joined: string;
   last_login: string | null;
@@ -71,7 +70,6 @@ export interface UserQueryParams {
   page_size?: number;
   search?: string;
   is_active?: boolean;
-  is_management?: boolean;
   grade_level?: string;
   system_role?: string;
   division?: string;

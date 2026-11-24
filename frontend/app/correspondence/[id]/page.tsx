@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Minute, Correspondence } from '@/lib/npa-structure';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { getSelectableOffices } from '@/lib/office-choice-utils';
 import { usePaginatedUserSearch } from '@/hooks/use-paginated-user-search';
 import { logDocumentAccess, type DocumentAccessLog, type DocumentRecord } from '@/lib/api/dms';
@@ -69,7 +69,7 @@ const CorrespondenceDetailContent = () => {
     offices,
     officeMemberships,
     refreshOrganizationData,
-  } = useOrganization();
+  } = useOrganizationCatalogs('offices');
 
   // Current user's own office memberships, fetched directly (filtered by user)
   // to avoid depending on the paginated global officeMemberships list, which

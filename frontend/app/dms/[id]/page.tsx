@@ -1,7 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { SearchHighlightBanner } from '@/components/search/SearchHighlightBanner';
 import {
@@ -12,7 +12,6 @@ import {
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from "@/components/ui/sonner";
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useOrganization } from '@/contexts/OrganizationContext';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
@@ -20,7 +19,6 @@ import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog'
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import {
   fetchDocumentById,
-  getDocumentComments,
   getDocumentAccessLogs,
   downloadDocumentVersion,
   canDownloadDocument,
@@ -80,27 +78,11 @@ const DocumentDetailContent = () => {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [documentFocus, setDocumentFocus] = useState(false);
   const [metadataEditOpen, setMetadataEditOpen] = useState(false);
-  const [unreadComments, setUnreadComments] = useState(0);
-  const seenCommentsRef = useRef<number | null>(null);
-  const notifiedCommentsRef = useRef(0);
-
-  // Mark known comments as seen (resets unread count and notification baseline).
-  const markCommentsSeen = useCallback(() => {
-    seenCommentsRef.current = comments.length;
-    notifiedCommentsRef.current = comments.length;
-    setUnreadComments(0);
-  }, [comments.length]);
 
   const { currentUser, hydrated } = useCurrentUser();
   const { result: accessExplanation, loading: accessExplanationLoading } = useAccessExplanation(
     'document_view',
     accessDenied,
-  );
-  const { divisions, departments } = useOrganization();
-  const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
-  const departmentLookup = useMemo(
-    () => new Map(departments.map((department) => [department.id, department.name])),
-    [departments],
   );
   const uploadUser = currentUser ?? null;
 
@@ -137,9 +119,8 @@ const DocumentDetailContent = () => {
 
   // Memoize open comments dialog handler
   const handleOpenCommentsDialog = useCallback(() => {
-    markCommentsSeen();
     setCommentsDialogOpen(true);
-  }, [markCommentsSeen]);
+  }, []);
 
   const versions = useMemo(
     () => (Array.isArray(document?.versions) ? document.versions : []),
@@ -152,46 +133,6 @@ const DocumentDetailContent = () => {
     }
     return versions[0];
   }, [versions, selectedVersionId]);
-
-  // ---- Comments live updates (polling + unread + toast) ----
-  useEffect(() => {
-    if (!document?.id) return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const latest = await getDocumentComments(document.id);
-        if (cancelled) return;
-        setComments(latest);
-        const count = latest.length;
-        if (seenCommentsRef.current === null) {
-          seenCommentsRef.current = count;
-          notifiedCommentsRef.current = count;
-          return;
-        }
-        if (count > seenCommentsRef.current) {
-          setUnreadComments(count - seenCommentsRef.current);
-        }
-        if (count > notifiedCommentsRef.current) {
-          notifiedCommentsRef.current = count;
-          const newCount = count - seenCommentsRef.current;
-          toast.info(
-            `${newCount} new comment${newCount === 1 ? "" : "s"} on “${
-              document.title || "document"
-            }”`,
-            { id: "document-new-comment" },
-          );
-        }
-      } catch {
-        /* ignore transient poll errors */
-      }
-    };
-    void poll();
-    const id = window.setInterval(poll, 30000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [document?.id, document?.title, setComments]);
 
   const handleDownloadVersion = useCallback(async (version: DocumentVersion | null | undefined) => {
     if (!document) return;
@@ -273,12 +214,8 @@ const DocumentDetailContent = () => {
                 authorName={document.authorName}
                 versionCount={versions.length}
                 linkedCorrespondenceCount={relatedCorrespondence.length}
-                divisionName={
-                  document.divisionId ? divisionLookup.get(document.divisionId) : undefined
-                }
-                departmentName={
-                  document.departmentId ? departmentLookup.get(document.departmentId) : undefined
-                }
+                divisionName={document.divisionName}
+                departmentName={document.departmentName}
               />
 
               {highlightQuery ? (
@@ -353,10 +290,6 @@ const DocumentDetailContent = () => {
                   onReplaceVersion: setReplaceVersionId,
                   onVersionOCR: handleVersionOCR,
                   onCancelOCR: handleCancelOCR,
-                  unreadComments,
-                  onActiveTabChange: (tab) => {
-                    if (tab === "comments") markCommentsSeen();
-                  },
                   onEditMetadata: () => setMetadataEditOpen(true),
                   onLinkCase: () => setLinkCaseDialogOpen(true),
                 }}

@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useOrganization, Department } from '@/contexts/OrganizationContext';
+import { Department } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { toast } from "@/components/ui/sonner";
 
@@ -18,7 +19,7 @@ interface DepartmentFormModalProps {
 const EMPTY_VALUE = "__none";
 
 export const DepartmentFormModal = ({ open, onOpenChange, department, defaultDivisionId }: DepartmentFormModalProps) => {
-  const { addDepartment, updateDepartment, divisions } = useOrganization();
+  const { addDepartment, updateDepartment, divisions } = useOrganizationCatalogs('divisions');
   const { users } = useOrgUsers({ enabled: open });
   const [formData, setFormData] = useState({
     name: '',

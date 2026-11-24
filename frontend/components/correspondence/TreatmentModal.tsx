@@ -56,7 +56,7 @@ import {
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { useScopedOfficeMemberships } from '@/hooks/use-scoped-office-memberships';
 import { useUserLookup } from '@/hooks/use-user-lookup';
 import { useRoutingSuggestions } from '@/hooks/use-routing-suggestions';
@@ -107,7 +107,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     offices,
     officeMemberships: signedInOfficeMemberships,
     directorates,
-  } = useOrganization();
+  } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   // Form state
   const [currentUser, setCurrentUser] = useState(activeUser ?? null);
   const [responseType, setResponseType] = useState<'memo' | 'existing-document' | 'new-document'>('memo');

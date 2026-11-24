@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { GRADE_LEVELS, type User } from "@/lib/npa-structure";
 import type { OfficeMembership } from "@/lib/organization-types";
 import { listOfficeMembershipsForUser } from "@/lib/office-memberships-client";
@@ -80,7 +80,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
     addOfficeMembership,
     updateOfficeMembership,
     deleteOfficeMembership,
-  } = useOrganization();
+  } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   const { users } = useOrgUsers({ enabled: open });
   const { currentUser } = useCurrentUser();
   const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string }>(defaultState);

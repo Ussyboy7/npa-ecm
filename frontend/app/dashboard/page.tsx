@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useSidebarVisibility } from "@/hooks/use-sidebar-visibility";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useRoleChecks } from "@/hooks/use-role-checks";
 import { apiFetch } from "@/lib/api-client";
 import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/pagination-constants";
@@ -74,7 +74,7 @@ const Dashboard = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser } = useCurrentUser();
-  const { divisions } = useOrganization();
+  const { divisions } = useOrganizationCatalogs('divisions');
   const { isSecretary } = useRoleChecks();
   const {
     isVisibilityReady,

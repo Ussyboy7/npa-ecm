@@ -8,7 +8,7 @@ import { ActingWorkspace, type ActingWorkspaceHandle } from "@/components/acting
 import { OrganizationTabList } from "@/components/admin/OrganizationTabList";
 import { PermissionDeniedCard } from "@/components/shared/PermissionDeniedCard";
 import { Button } from "@/components/ui/button";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganizationCatalogs } from "@/hooks/use-organization-catalogs";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getActingOfficeScope, getOrganizationActingCapabilities } from "@/lib/acting-permissions";
 import type { Office, OfficeMembership } from "@/lib/organization-types";
@@ -20,7 +20,7 @@ const SUBTITLE =
 export default function ActingAppointmentsPage() {
   const { currentUser } = useCurrentUser();
   const capabilities = getOrganizationActingCapabilities(currentUser);
-  const { myOfficeMemberships, offices } = useOrganization();
+  const { myOfficeMemberships, offices } = useOrganizationCatalogs('offices');
   const { memberOffices, principalOffices } = getActingOfficeScope(currentUser?.id, myOfficeMemberships);
 
   if (!currentUser || (!capabilities.canAccess && memberOffices.length === 0)) {

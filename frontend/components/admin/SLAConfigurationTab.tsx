@@ -55,7 +55,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import {
   type SLAConfiguration,
   type SLAConfigurationInput,
@@ -103,7 +103,7 @@ export const SLAConfigurationTab = forwardRef<
   { searchQuery = '', hideAddRuleButton = false, onDataChange },
   ref,
 ) {
-  const { divisions } = useOrganization();
+  const { divisions } = useOrganizationCatalogs('divisions');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [configs, setConfigs] = useState<SLAConfiguration[]>([]);

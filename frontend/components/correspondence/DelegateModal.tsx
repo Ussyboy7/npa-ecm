@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOrganizationCatalogs } from '@/hooks/use-organization-catalogs';
 import { useOrgUsers } from "@/hooks/use-org-users";
 import { useGradeCatalog } from "@/hooks/use-grade-catalog";
 import { getGradeInfo } from "@/lib/grade-catalog";
@@ -104,8 +104,12 @@ export const DelegateModal = ({
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
-  const { assistantAssignments, addAssignment, divisions, departments, refreshOrganizationData, isSyncing } = useOrganization();
+  const { assistantAssignments, addAssignment, ensureAssistantAssignments, divisions, departments, refreshOrganizationData, isSyncing } = useOrganizationCatalogs('divisions', 'departments');
   const { users } = useOrgUsers({ enabled: open });
+
+  useEffect(() => {
+    if (open) void ensureAssistantAssignments('principal');
+  }, [open, ensureAssistantAssignments]);
   const gradeCatalog = useGradeCatalog();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
