@@ -449,11 +449,7 @@ class Command(BaseCommand):
                         "designation",
                         "email",
                     ]
-                    # Management status is derived state. Set it for the band but
-                    # never clear a manual grant for a lower grade.
-                    if grade_is_management(grade_level) and not user.is_management:
-                        user.is_management = True
-                        update_fields.append("is_management")
+                    # User.save() derives is_management from grade_level.
                     if password and not user.has_usable_password():
                         user.set_password(password)
                         update_fields.append("password")

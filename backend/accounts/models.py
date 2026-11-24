@@ -10,6 +10,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from common.fields import EncryptedCharField
+from common.grade_utils import canonical_grade_code, grade_is_management
 from common.models import UUIDModel, TimeStampedModel
 from .storage import signature_storage
 
@@ -105,6 +106,30 @@ class User(AbstractUser):
                 condition=~models.Q(employee_id=""),
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        """Store the canonical grade and derive management status from it.
+
+        ``is_management`` duplicates the catalogue's management band, so it must
+        never be set independently. Every write path (API, admin, CSV import,
+        management commands) lands here, and a stale value is corrected even
+        when the caller saves unrelated fields.
+        """
+        raw_grade = self.grade_level
+        self.grade_level = canonical_grade_code(raw_grade)
+        derived = grade_is_management(self.grade_level)
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            if self.grade_level != raw_grade:
+                update_fields.add("grade_level")
+            if self.is_management != derived:
+                update_fields.add("is_management")
+            kwargs["update_fields"] = update_fields
+
+        self.is_management = derived
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.get_full_name() or self.username

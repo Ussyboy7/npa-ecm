@@ -112,6 +112,9 @@ class NominalRollManagementFlagTests(TestCase):
             employee_id="9301",
             grade_level="SSS1",
         )
+        # Simulate a row seeded before the flag was derived.
+        User.objects.filter(pk=existing.pk).update(is_management=False)
+        existing.refresh_from_db()
         self.assertFalse(existing.is_management)
 
         self._import([self._row("9301", "ASSISTANT", "SSS1", "ASSISTANT MANAGER")])
@@ -119,16 +122,19 @@ class NominalRollManagementFlagTests(TestCase):
         existing.refresh_from_db()
         self.assertTrue(existing.is_management)
 
-    def test_reimport_keeps_a_manual_management_grant(self):
+    def test_reimport_clears_a_flag_that_contradicts_the_grade(self):
         existing = User.objects.create_user(
             username="manually-granted",
             password="x",
             employee_id="9302",
             grade_level="SSS3",
-            is_management=True,
         )
+        # Simulate a legacy manual grant that contradicts the grade.
+        User.objects.filter(pk=existing.pk).update(is_management=True)
+        existing.refresh_from_db()
+        self.assertTrue(existing.is_management)
 
         self._import([self._row("9302", "GRANTED", "SSS3", "OFFICER I")])
 
         existing.refresh_from_db()
-        self.assertTrue(existing.is_management)
+        self.assertFalse(existing.is_management)

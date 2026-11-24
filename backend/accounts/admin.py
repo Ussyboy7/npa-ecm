@@ -36,3 +36,5 @@ class UserAdmin(DjangoUserAdmin):
     )
     list_filter = ("is_active", "is_staff", "is_superuser", "is_management", "grade_level")
     search_fields = ("username", "email", "first_name", "last_name", "employee_id")
+    # Derived from grade_level on save; shown for reference, not editable.
+    readonly_fields = ("is_management",)

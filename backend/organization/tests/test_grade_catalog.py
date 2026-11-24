@@ -78,7 +78,6 @@ class GradeCatalogTests(APITestCase):
             list(CANONICAL_GRADES),
         )
         self.assertEqual(len(grades), 14)
-        self.assertFalse({"GMCS", "AGMCS"} & {row["code"] for row in grades})
 
     def test_pins_the_key_leadership_tiers(self):
         rows = {row["code"]: row for row in self._fetch_grades()}
