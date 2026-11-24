@@ -166,8 +166,9 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8002/api/v1
       INTERNAL_API_URL: http://backend:8002/api/v1
       NODE_ENV: development
-      # The dev server grew past 5 GB before it was OOM-killed; cap the heap.
-      NODE_OPTIONS: "--max-old-space-size=3072"
+      # Turbopack's native memory sits outside this heap, so keep the cap below
+      # the container's share of the Docker VM or the dev server gets OOM-killed.
+      NODE_OPTIONS: "--max-old-space-size=2048"
     volumes:
       - ./frontend:/app/frontend
       - /app/node_modules
