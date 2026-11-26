@@ -175,7 +175,7 @@ def load_stored_pdf(minute) -> bytes | None:
     """Return the frozen PDF, or None when no intact snapshot exists."""
 
     snapshot = ApprovalSnapshot.objects.filter(minute=minute).first()
-    if not snapshot or not snapshot.pdf_file:
+    if not snapshot or snapshot.is_void or not snapshot.pdf_file:
         return None
     try:
         with snapshot.pdf_file.open("rb") as handle:

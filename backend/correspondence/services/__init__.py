@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 from accounts.models import User
 from audit.services import AuditService
+from common.plain_text import to_plain_text
 from correspondence.archive_policy import archive_org_units
 from correspondence.models import (
     Case,
@@ -61,7 +62,8 @@ def validate_workflow_vs_requirement(correspondence, template=None) -> None:
     - WorkflowStep.required_approval_level is routing constraint
     - If corr required=EXECUTIVE, workflow must contain a step with required_approval_level=executive,
       else ValidationError "Workflow configuration cannot satisfy this correspondence's required approval level."
-    - DEPARTMENTAL: Officer -> GM APPROVED (DEPARTMENTAL+APPROVAL) -> Treat/COMPLETED
+    - DEPARTMENTAL: Officer -> MD EXECUTIVE APPROVED -> Treat/COMPLETED; a department that needs
+      the record approved routes it to the MD (there is no departmental approver)
     - EXECUTIVE: Officer -> GM ENDORSED (DEPARTMENTAL+ENDORSEMENT) -> MD EXECUTIVE APPROVED -> Treat/COMPLETED,
       or direct Officer->MD when requires_departmental_endorsement=False (inferred from template steps)
     - Workflow grouping labels already: upward/downward/special; keep.
@@ -272,11 +274,7 @@ class CorrespondenceDocumentService:
                 cls._create_document_version_from_body(primary, correspondence)
             elif has_treatment:
                 # Fallback: create version from plain treatment_response text
-                content_text = (
-                    strip_tags(correspondence.treatment_response)
-                    if correspondence.treatment_response
-                    else ""
-                )
+                content_text = to_plain_text(correspondence.treatment_response)
                 DocumentVersion.objects.create(
                     document=primary,
                     version_number=1,
@@ -404,8 +402,6 @@ class CorrespondenceDocumentService:
         correspondence: Correspondence,
     ) -> DocumentVersion:
         """Create a DocumentVersion from correspondence body_html."""
-        from django.utils.html import strip_tags
-
         from correspondence.reference_utils import normalize_printed_reference
 
         # Get next version number
@@ -418,7 +414,7 @@ class CorrespondenceDocumentService:
             correspondence.body_html or "",
             correspondence.reference_number or "",
         )
-        content_text = strip_tags(content_html) if content_html else ""
+        content_text = to_plain_text(content_html)
 
         # Create DocumentVersion
         document_version = DocumentVersion.objects.create(
@@ -624,7 +620,7 @@ class CompletionPackageService:
             file_size=len(pdf_bytes),
             file_url=file_url,
             content_html=html,
-            content_text=strip_tags(html),
+            content_text=to_plain_text(html),
             summary="Automated completion summary",
             uploaded_by=triggered_by or correspondence.created_by,
         )
@@ -2099,6 +2095,10 @@ class ExecutiveApprovalPDFService:
     @classmethod
     def generate_and_store_approval_pdf(cls, minute, correspondence) -> bytes:
         """Generate the PDF and persist it as one linked DMS approved copy."""
+        if minute.is_recalled:
+            raise ValidationError(
+                "A recalled approval has no approved copy to issue or store."
+            )
         from .approval_pdf import _source_memo, build_approval_pdf
         from .approval_snapshot import (
             capture_approval_snapshot,
@@ -2150,6 +2150,35 @@ class ExecutiveApprovalPDFService:
             approved_document=approved_document,
         )
         return pdf_bytes
+
+    @classmethod
+    def withdraw_approved_copy(cls, *, minute) -> list[str]:
+        """Withdraw the approved copy from the DMS on recall.
+
+        The document is soft-deleted so the withdrawn copy cannot be
+        downloaded, and tagged ``recalled`` so the correspondence still shows
+        the copy as recalled rather than silently losing it. Its row, versions
+        and link stay as evidence. Returns the ids of the withdrawn documents
+        so the recall audit trail can name them.
+        """
+        from dms.models import Document
+
+        copies = list(
+            Document.objects.filter(
+                tags__contains=[
+                    cls.APPROVED_COPY_TAG,
+                    f"approval-minute:{minute.id}",
+                ]
+            )
+        )
+        for document in copies:
+            tags = list(document.tags or [])
+            if "recalled" not in tags:
+                tags.append("recalled")
+            Document.objects.filter(pk=document.pk).update(
+                tags=tags, is_deleted=True, updated_at=timezone.now()
+            )
+        return [str(document.pk) for document in copies]
 
     @classmethod
     def _find_approved_copy(cls, source_document, minute):
@@ -3329,17 +3358,18 @@ class MinuteRouterService:
 
     @classmethod
     def resolve_approval_levels(cls, user, correspondence):
-        """Map required_approval_level + actor grade/role to actual approval_level/approval_role.
+        """Map the actor to the approval level/role actually being recorded.
 
         - MD/executive authority -> EXECUTIVE+APPROVAL regardless of the
           correspondence requirement; the level records the authority
           actually exercised.
         - required==EXECUTIVE and GM/AGM/ED or other non-MD -> DEPARTMENTAL+ENDORSEMENT
-        - required==DEPARTMENTAL -> DEPARTMENTAL+APPROVAL
-        - required==NONE -> DEPARTMENTAL+APPROVAL (final)
+        - required==DEPARTMENTAL/NONE -> no level for a non-MD: the department
+          routes the record to the MD, who records the approval. Asking to
+          approve it is refused rather than downgraded.
         Never returns EXECUTIVE+ENDORSEMENT.
         """
-        from correspondence.models import Correspondence, Minute
+        from rest_framework.exceptions import PermissionDenied
 
         if cls._is_md(user):
             return (Minute.ApprovalLevel.EXECUTIVE, Minute.ApprovalRole.APPROVAL)
@@ -3352,8 +3382,16 @@ class MinuteRouterService:
         if required == Correspondence.RequiredApprovalLevel.EXECUTIVE:
             # GM/AGM/ED or any non-MD within scope -> endorsement
             return (Minute.ApprovalLevel.DEPARTMENTAL, Minute.ApprovalRole.ENDORSEMENT)
-        # DEPARTMENTAL or NONE -> final approval
-        return (Minute.ApprovalLevel.DEPARTMENTAL, Minute.ApprovalRole.APPROVAL)
+
+        raise PermissionDenied(
+            {
+                "detail": (
+                    "Approvals are recorded by the Managing Director. "
+                    "Route this correspondence to the MD for approval."
+                ),
+                "reason": "md_approval_required",
+            }
+        )
 
     @classmethod
     def initial_office_actor_ids(cls, correspondence) -> set[int] | None:
@@ -3582,40 +3620,31 @@ class MinuteRouterService:
                     }
                 )
 
-            # If correspondence is EXECUTIVE track, ensure caller is not trying to claim EXECUTIVE+APPROVAL without MD
-            # This is also enforced in serializer, but double-check here for service-level callers
-            from correspondence.models import Minute
+            # Only the MD records an approval. A non-MD executive endorses the
+            # executive track; a departmental record has no departmental
+            # approver, so resolving its level raises before a minute is written.
+            # This is also enforced in the serializer, but double-check here for
+            # service-level callers.
+            from rest_framework.exceptions import PermissionDenied
 
-            expected_level, expected_role = cls.resolve_approval_levels(
-                user, correspondence
-            )
-            # If expected is EXECUTIVE+APPROVAL, caller must be MD (already handled)
-            if (
-                expected_level == Minute.ApprovalLevel.EXECUTIVE
-                and expected_role == Minute.ApprovalRole.APPROVAL
-            ):
-                if not cls._is_md(user):
-                    from rest_framework.exceptions import PermissionDenied
-                    from audit.services import AuditService
-                    from audit.models import ActivityLog
+            try:
+                cls.resolve_approval_levels(user, correspondence)
+            except PermissionDenied:
+                from audit.services import AuditService
+                from audit.models import ActivityLog
 
-                    try:
-                        AuditService.log_correspondence_activity(
-                            user=user,
-                            action=ActivityLog.ActionType.CORRESPONDENCE_REJECTED,
-                            correspondence=correspondence,
-                            request=request,
-                            description=f"Approval denied – MD only for EXECUTIVE+APPROVAL ({getattr(user, 'username', user)})",
-                            metadata={"reason": "md_only"},
-                        )
-                    except Exception:
-                        pass
-                    raise PermissionDenied(
-                        {
-                            "detail": "Only MD can perform EXECUTIVE+APPROVAL.",
-                            "reason": "md_only",
-                        }
+                try:
+                    AuditService.log_correspondence_activity(
+                        user=user,
+                        action=ActivityLog.ActionType.CORRESPONDENCE_REJECTED,
+                        correspondence=correspondence,
+                        request=request,
+                        description=f"Approval denied – MD approval required ({getattr(user, 'username', user)})",
+                        metadata={"reason": "md_approval_required"},
                     )
+                except Exception:
+                    pass
+                raise
 
     @classmethod
     def prevent_self_loop(cls, user, to_user, to_office, from_office, *, is_dispatch=False):
@@ -4299,7 +4328,7 @@ class ParallelBranchService:
                 action_type=Minute.ActionType.MINUTE,
                 direction=correspondence.direction,
                 purpose=purpose,
-                requires_response=(outcome == "respond" or purpose == "approval"),
+                requires_response=(purpose == "approval" or (purpose == "action" and outcome == "respond")),
                 routing_type="parallel",
                 parallel_group_id=parallel_group.id,
                 is_parallel_branch=True,

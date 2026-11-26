@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, CheckCircle, FileText, Save } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileText, Maximize2, Save } from 'lucide-react';
 import { RichTextEditor } from '@/components/dms/RichTextEditor';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import type { DocumentTemplate } from '@/lib/api/document-templates';
@@ -30,6 +30,9 @@ interface MemoCompositionSectionProps {
   onUseSuggestedNote: () => void;
   onDismissSuggestedNote: () => void;
   hasFiles: boolean;
+  /** Focus mode: the editor fills the composer and the chrome falls away. */
+  expanded?: boolean;
+  onExpand?: () => void;
 }
 
 export const MemoCompositionSection = ({
@@ -53,6 +56,8 @@ export const MemoCompositionSection = ({
   onUseSuggestedNote,
   onDismissSuggestedNote,
   hasFiles,
+  expanded = false,
+  onExpand,
 }: MemoCompositionSectionProps) => {
   const getCharacterCountColor = (current: number, max: number) => {
     if (current >= max) return 'text-destructive';
@@ -86,10 +91,25 @@ export const MemoCompositionSection = ({
 
       {/* Memo Content */}
       <div className="space-y-3">
-        <Label className="flex items-center justify-between">
+        <Label className="flex items-center justify-between gap-2">
           <span>Memo Content *</span>
-          <span className={`text-xs ${getCharacterCountColor(characterCount, MODAL_CONSTANTS.MEMO_CONTENT.MAX)}`}>
-            {characterCount}/{MODAL_CONSTANTS.MEMO_CONTENT.MAX}
+          <span className="flex items-center gap-2">
+            {onExpand && !expanded && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 rounded-full px-2.5 text-[11px] font-normal text-muted-foreground"
+                onClick={onExpand}
+                aria-label="Expand memo editor"
+              >
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Expand
+              </Button>
+            )}
+            <span className={`text-xs ${getCharacterCountColor(characterCount, MODAL_CONSTANTS.MEMO_CONTENT.MAX)}`}>
+              {characterCount}/{MODAL_CONSTANTS.MEMO_CONTENT.MAX}
+            </span>
           </span>
         </Label>
 
@@ -188,7 +208,7 @@ export const MemoCompositionSection = ({
           value={memoContent}
           onChange={(html) => onMemoContentChange(html)}
           placeholder="Compose your response memo here..."
-          className={`min-h-[300px] ${memoContentError ? 'border-destructive' : ''}`}
+          className={`${expanded ? 'min-h-[52vh]' : 'min-h-[300px]'} ${memoContentError ? 'border-destructive' : ''}`}
           // The memo section lives on a scrolling page, so let the paper grow.
           autoGrow
           showCharacterCount

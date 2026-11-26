@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 // Hoisted mocks
 const mockUseCurrentUser = vi.hoisted(() => vi.fn());
@@ -43,6 +44,21 @@ vi.mock('@/hooks/use-abort-controller', () => ({
 }));
 vi.mock('@/hooks/use-keyboard-shortcuts', () => ({
   useKeyboardShortcuts: () => {},
+}));
+vi.mock('@/hooks/use-routing-suggestions', () => ({
+  useRoutingSuggestions: () => [
+    {
+      id: 'user-next',
+      name: 'Next Person',
+      systemRole: 'Principal Manager',
+      gradeLevel: 'MSS3',
+      active: true,
+    },
+  ],
+}));
+vi.mock('@/components/seals/TwoFactorVerificationModal', () => ({
+  TwoFactorVerificationModal: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="two-factor-dialog" /> : null,
 }));
 vi.mock('@/contexts/CorrespondenceContext', () => ({
   useCorrespondence: () => ({
@@ -165,6 +181,10 @@ function setupMocks(activeUser: typeof mdUser) {
 describe('MinuteModal approval-level', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   it('GM sees Endorse on executive track', async () => {
@@ -183,11 +203,37 @@ describe('MinuteModal approval-level', () => {
     expect(await screen.findByText('Executive Approval')).toBeDefined();
   });
 
-  it('GM sees Departmental Approval on departmental track', async () => {
+  it('GM sees no approval option on departmental track', async () => {
     setupMocks(gmUser as unknown as typeof mdUser);
     const corr = { ...baseCorrespondence, requiredApprovalLevel: 'departmental', currentApproverId: gmUser.id } as unknown as import('@/lib/npa-structure').Correspondence;
     render(<MinuteModal correspondence={corr as unknown as import('@/lib/npa-structure').Correspondence} isOpen onClose={vi.fn()} direction="downward" />);
-    expect(await screen.findByText('Departmental Approval')).toBeDefined();
+    expect(await screen.findByText('Add Minute')).toBeDefined();
+    expect(screen.queryByText('Departmental Approval')).toBeNull();
+    expect(screen.queryByText('Executive Approval')).toBeNull();
+    expect(screen.queryByText('Endorse')).toBeNull();
+  });
+
+  it('MD sees Executive Approval on departmental track', async () => {
+    setupMocks(mdUser as unknown as typeof mdUser);
+    const corr = { ...baseCorrespondence, requiredApprovalLevel: 'departmental', currentApproverId: mdUser.id } as unknown as import('@/lib/npa-structure').Correspondence;
+    render(<MinuteModal correspondence={corr as unknown as import('@/lib/npa-structure').Correspondence} isOpen onClose={vi.fn()} direction="downward" />);
+    expect(await screen.findByText('Executive Approval')).toBeDefined();
+    expect(screen.queryByText('Departmental Approval')).toBeNull();
+  });
+
+  it('requires 2FA when an MD approves a departmental record', async () => {
+    const user = userEvent.setup();
+    setupMocks(mdUser as unknown as typeof mdUser);
+    const corr = { ...baseCorrespondence, requiredApprovalLevel: 'departmental', currentApproverId: mdUser.id } as unknown as import('@/lib/npa-structure').Correspondence;
+    render(<MinuteModal correspondence={corr as unknown as import('@/lib/npa-structure').Correspondence} isOpen onClose={vi.fn()} direction="downward" />);
+
+    await user.click(await screen.findByRole('radio', { name: 'Executive Approval' }));
+    await user.type(screen.getByRole('textbox', { name: 'Approval comments' }), 'Approved after review.');
+    await user.click(screen.getByRole('combobox', { name: 'Recipient' }));
+    await user.click(await screen.findByRole('option', { name: /Next Person/ }));
+    await user.click(screen.getByRole('button', { name: 'Approve and route' }));
+
+    expect(await screen.findByTestId('two-factor-dialog')).toBeDefined();
   });
 
   it('clerk sees no approve option', async () => {

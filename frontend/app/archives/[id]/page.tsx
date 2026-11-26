@@ -496,15 +496,12 @@ const ArchiveRecordContent = () => {
                 <MinuteThreadPanel
                   minutes={minutes}
                   activeUserId={activeUser.id}
-                  isCompleted
-                  isCurrentUserTurn={false}
                   getActionIcon={getActionIcon}
                   embedded
                   scrollable={false}
                   onMinuteClick={setSelectedMinute}
                   onEditMinute={noop}
                   onRecallMinute={noop}
-                  onAddNote={noop}
                   readOnly
                 />
               </section>

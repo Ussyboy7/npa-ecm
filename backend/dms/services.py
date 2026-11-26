@@ -11,6 +11,7 @@ from typing import Optional
 from django.conf import settings
 
 from common.media_urls import build_media_url
+from common.plain_text import to_plain_text
 from common.storage_utils import resolve_media_path
 
 logger = logging.getLogger(__name__)
@@ -161,9 +162,7 @@ class OCRService:
             return existing
 
         if version.content_html and version.content_html.strip():
-            from django.utils.html import strip_tags
-
-            text = " ".join(strip_tags(version.content_html).split())
+            text = to_plain_text(version.content_html)
             if text:
                 version.ocr_text = text
                 version.save(update_fields=["ocr_text"])

@@ -12,7 +12,6 @@ import {
   ChevronRight,
   X,
   RefreshCw,
-  Plus,
   Image as ImageIcon,
   Shield,
   CheckCircle2,
@@ -28,13 +27,10 @@ import { corrType } from '../correspondence-type';
 interface MinuteThreadPanelProps {
   minutes: Minute[];
   activeUserId: string;
-  isCompleted: boolean;
-  isCurrentUserTurn: boolean;
   getActionIcon: (actionType: string) => React.ComponentType<{ className?: string }> | null;
   onMinuteClick: (minute: Minute) => void;
   onEditMinute: (minute: Minute) => void;
   onRecallMinute: (minute: Minute) => void;
-  onAddNote: (minute: Minute) => void;
   fullWidth?: boolean;
   /** Right-column layout: fills parent, no fixed widths */
   embedded?: boolean;
@@ -75,13 +71,10 @@ const ASSIGNMENT_OUTCOME_LABELS: Record<'respond' | 'treat' | 'onward', string> 
 export const MinuteThreadPanel = ({
   minutes,
   activeUserId,
-  isCompleted,
-  isCurrentUserTurn,
   getActionIcon,
   onMinuteClick,
   onEditMinute,
   onRecallMinute,
-  onAddNote,
   fullWidth,
   embedded,
   scrollable = true,
@@ -171,11 +164,7 @@ export const MinuteThreadPanel = ({
                 const hasActions =
                   !readOnly &&
                   ((canEditMinute && isOwn) ||
-                    (minuteItem.canBeRecalled && !isMinuteRecalled(minuteItem) && isOwn) ||
-                    (!minuteItem.isAdditional &&
-                      !isCompleted &&
-                      !isMinuteRecalled(minuteItem) &&
-                      (isOwn || isCurrentUserTurn)));
+                    (minuteItem.canBeRecalled && !isMinuteRecalled(minuteItem) && isOwn));
 
                 return (
                   <li key={minuteItem.id} className="relative flex flex-col gap-0">
@@ -442,23 +431,6 @@ export const MinuteThreadPanel = ({
                               >
                                 <X className="h-3 w-3 mr-1" />
                                 Recall
-                              </Button>
-                            )}
-                          {!minuteItem.isAdditional &&
-                            !isCompleted &&
-                            !isMinuteRecalled(minuteItem) &&
-                            (isOwn || isCurrentUserTurn) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onAddNote(minuteItem);
-                                }}
-                              >
-                                <Plus className="h-3 w-3 mr-1" />
-                                Add Note
                               </Button>
                             )}
                         </div>

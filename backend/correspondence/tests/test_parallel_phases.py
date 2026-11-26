@@ -274,6 +274,39 @@ class ParallelPhasesTests(TestCase):
         self.assertEqual(branch_a.assignment_outcome, "respond")
         self.assertEqual(branch_b.assignment_outcome, "treat")
 
+    def test_information_branch_does_not_require_response(self):
+        self.md.grade_level = "MDCS"
+        self.md.save(update_fields=["grade_level"])
+
+        response = self.client.post(
+            reverse("api_v1:minute-parallel-route"),
+            {
+                "correspondence_id": str(self.correspondence.id),
+                "recipients": [
+                    {
+                        "office_id": str(self.office_a.id),
+                        "purpose": "information",
+                        "minute_text": "For your awareness.",
+                        "outcome": "respond",
+                    },
+                    {
+                        "office_id": str(self.office_b.id),
+                        "purpose": "action",
+                        "minute_text": "Review and respond.",
+                        "outcome": "respond",
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        group_id = response.data["parallel_group_id"]
+        info_branch = Minute.objects.get(to_office=self.office_a, parallel_group_id=group_id)
+        action_branch = Minute.objects.get(to_office=self.office_b, parallel_group_id=group_id)
+        self.assertFalse(info_branch.requires_response)
+        self.assertTrue(action_branch.requires_response)
+
     def test_independent_treat_branch_returns_to_origin_without_waiting(self):
         self.md.grade_level = "MDCS"
         self.md.save(update_fields=["grade_level"])

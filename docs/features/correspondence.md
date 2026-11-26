@@ -43,9 +43,10 @@ Handles letters, memos, official communications with approval workflows, digital
 
 Tiered model (scope-aware):
 
-- **Executive Approval** — MD only. UI label "Executive Approval". Requires `can_approve` with MD scope.
-- **Departmental Approval / Endorse** — GM / AGM / ED. UI labels "Departmental Approval" or "Endorse" (GM endorses on executive track, approves on departmental track).
-- **Permissions**: `can_approve` = "Departmental / Executive Approval (scope-aware)", `can_classify_approval` = "Classify Approval Level" (escalate/downgrade), `can_access_approvals` = "Access Approvals" (registers). Labels are intentionally distinct.
+- **Executive Approval** — MD only. UI label "Executive Approval". Requires `can_approve` with MD scope, and 2FA when the MD has an active signature.
+- **Departmental** — a classification, not a separate approver. A department that needs its record approved routes it to the MD, who records the approval (Executive + Approval). No departmental approver exists: the minute modal offers GM / AGM / ED no Approve action, and the API refuses a non-MD approval with `reason: md_approval_required`.
+- **Endorse** — GM / AGM / ED on the executive track only (`Departmental` + `Endorsement`). An endorsement does not complete the record; the MD's approval does. The Departmental register is the endorsement (and historical departmental) history.
+- **Permissions**: `can_approve` = "Approve or Endorse (scope-aware)", `can_classify_approval` = "Classify Approval Level" (escalate/downgrade), `can_access_approvals` = "Access Approvals" (registers). Labels are intentionally distinct.
 - **Threshold**: `EXECUTIVE_THRESHOLD = ₦50,000,000` (`backend/correspondence/services/classification.py`). `amount >= 50m` or `strategic_flag=True` ⇒ `EXECUTIVE`, else `DEPARTMENTAL`. Seeded thresholds documented in `seed_demo_data`.
 - **Audit**: Any classification change logs `CORRESPONDENCE_CLASSIFICATION_CHANGED` with explicit `reason` (escalate/downgrade via `classification.py`).
 
@@ -94,6 +95,7 @@ Shared statuses: `pending` → `in-progress` → `completed`, then flow-specific
 - UI closed state includes completed / dispatched / acknowledged / archived / withdrawn (not only `completed`).
 
 ## Recent Changes
+- **Approval gate**: Only the MD records an approval. Departmental records are approved by the MD after the department routes them upward; non-MD executives can only endorse the executive track.
 - **Status flow**: Inward completed → archive only; outward completed → dispatch; closed-state UI fixed
 - **Sent queues**: `/correspondence/my-sent`, `/correspondence/office-sent`
 - **Parallel routing**: `ParallelBranch` model, branch tree visualization, force-complete, deadline tracking

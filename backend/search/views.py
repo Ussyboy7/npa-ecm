@@ -157,16 +157,27 @@ class SearchViewSet(viewsets.ViewSet):
                 "documents": {
                     "results": doc_serialized,
                     "total_count": doc_results["total_count"],
+                    "has_more": doc_results["has_more"],
                 },
                 "correspondence": {
                     "results": corr_serialized,
                     "total_count": corr_results["total_count"],
+                    "has_more": corr_results["has_more"],
                 },
                 "cases": {
                     "results": case_serialized,
                     "total_count": case_results["total_count"],
+                    "has_more": case_results["has_more"],
                 },
                 "total_count": doc_results["total_count"] + corr_results["total_count"] + case_results["total_count"],
+                "limit": limit,
+                "offset": offset,
+                # Each type pages independently, so another page exists while
+                # any one of them still has matches left.
+                "has_more": any(
+                    page["has_more"]
+                    for page in (doc_results, corr_results, case_results)
+                ),
             }
 
         # Save to search history
@@ -239,6 +250,86 @@ class SearchViewSet(viewsets.ViewSet):
         suggestions = SearchService.get_search_suggestions(query, limit)
 
         return Response({"suggestions": suggestions})
+
+    @action(detail=False, methods=["get"])
+    def scope(self, request):
+        """Describe the boundary this user's search is allowed to cross.
+
+        The search page shows the answer as a scope note, so an empty result
+        reads as "outside your scope" instead of "nothing exists". The level
+        comes from the same resolver the correspondence and case searches
+        filter with, so the note cannot promise more than those queries return.
+
+        Documents are not covered by that boundary: they follow sharing, the
+        correspondence trail and the classification gate, except published
+        PUBLIC records, which every signed-in user may search org-wide.
+        """
+        from organization.models import Department, Directorate, Division
+        from organization.org_scope import resolve_user_org_scope
+
+        scope = resolve_user_org_scope(request.user)
+        unit_model = {
+            "directorate": (Directorate, scope.directorate_id),
+            "division": (Division, scope.division_id),
+            "department": (Department, scope.department_id),
+        }.get(scope.level)
+
+        unit = None
+        if unit_model and unit_model[1]:
+            unit = (
+                unit_model[0]
+                .objects.filter(pk=unit_model[1])
+                .values_list("name", flat=True)
+                .first()
+            )
+
+        # Unit ids the search page may offer as filters. Anything outside this
+        # list sits beyond the boundary above, so choosing it could only produce
+        # an empty page. None means the boundary is the whole organisation.
+        if scope.level == "all":
+            division_ids: list[str] | None = None
+            department_ids: list[str] | None = None
+        else:
+            # Participation and department scopes anchor on the user's own units;
+            # a department user's division filter offers its parent division.
+            division_id = scope.division_id
+            if not division_id and scope.department_id:
+                division_id = (
+                    Department.objects.filter(pk=scope.department_id)
+                    .values_list("division_id", flat=True)
+                    .first()
+                )
+            division_ids = [str(division_id)] if division_id else []
+            department_ids = [str(scope.department_id)] if scope.department_id else []
+            if scope.level == "directorate" and scope.directorate_id:
+                division_ids = [
+                    str(pk)
+                    for pk in Division.objects.filter(
+                        directorate_id=scope.directorate_id
+                    ).values_list("id", flat=True)
+                ]
+                department_ids = [
+                    str(pk)
+                    for pk in Department.objects.filter(
+                        division__directorate_id=scope.directorate_id
+                    ).values_list("id", flat=True)
+                ]
+            elif scope.level == "division" and scope.division_id:
+                department_ids = [
+                    str(pk)
+                    for pk in Department.objects.filter(
+                        division_id=scope.division_id
+                    ).values_list("id", flat=True)
+                ]
+
+        return Response(
+            {
+                "level": scope.level,
+                "unit": unit,
+                "division_ids": division_ids,
+                "department_ids": department_ids,
+            }
+        )
 
     @action(detail=False, methods=["post"], url_path="related")
     def related(self, request):

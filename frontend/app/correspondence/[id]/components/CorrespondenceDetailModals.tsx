@@ -5,7 +5,6 @@ import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { EditMinuteModal } from '@/components/correspondence/EditMinuteModal';
-import { AdditionalMinuteModal } from '@/components/correspondence/AdditionalMinuteModal';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { TreatmentModal } from '@/components/correspondence/TreatmentModal';
 import { MinuteDetailModal } from '@/components/correspondence/MinuteDetailModal';
@@ -45,6 +44,7 @@ interface CorrespondenceDetailModalsProps {
   onSetSelectedAttachmentIndex: (index: number | null) => void;
   onSetRemoteCorrespondence: (corr: Correspondence | null) => void;
   refreshData: () => void;
+  refreshDetail: () => Promise<unknown>;
   refreshMinutes: () => Promise<void>;
   syncFromApi: () => Promise<unknown>;
   defaultPreviewAttachmentFileName: string | undefined;
@@ -73,6 +73,7 @@ export function CorrespondenceDetailModals({
   onSetSelectedAttachmentIndex,
   onSetRemoteCorrespondence,
   refreshData,
+  refreshDetail,
   refreshMinutes,
   syncFromApi,
   defaultPreviewAttachmentFileName,
@@ -150,22 +151,6 @@ export function CorrespondenceDetailModals({
                 }
               }
             }}
-          />
-          <AdditionalMinuteModal
-            correspondence={correspondence}
-            isOpen={isOpen('additional-minute')}
-            onClose={() => {
-              closeModal();
-              onSetSelectedMinute(null);
-            }}
-            onSuccess={() => {
-              onSetSelectedMinute(null);
-              bumpSidebarCounts();
-              refreshData();
-              void syncFromApi();
-              void refreshMinutes();
-            }}
-            preSelectedMinuteId={selectedMinute?.id}
           />
         </>
       )}
@@ -246,6 +231,9 @@ export function CorrespondenceDetailModals({
           correspondenceId={correspondence.id}
           onLinked={async () => {
             bumpSidebarCounts();
+            // The detail payload carries the linked case summary, so refresh it
+            // for the Info row; the list payload does not include case data.
+            await refreshDetail();
             await refreshData();
             await syncFromApi();
           }}

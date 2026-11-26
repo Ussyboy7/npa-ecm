@@ -20,6 +20,8 @@ import {
   FolderTree,
   History,
   Info,
+  Link2,
+  Paperclip,
   Send,
   Users,
 } from "lucide-react";
@@ -33,6 +35,8 @@ interface CorrespondenceInfoPanelProps {
   logsLoading: boolean;
   onRefreshAccessLogs: () => Promise<void>;
   onOpenLinkDocument: () => void;
+  /** Present when the record can still be filed against a case. */
+  onOpenLinkCase?: () => void;
   onViewThread?: () => void;
   isCompleted?: boolean;
   /** Archive record pages render retained files in their own rail card. */
@@ -104,11 +108,13 @@ export function CorrespondenceInfoPanel({
   logsLoading,
   onRefreshAccessLogs,
   onOpenLinkDocument,
+  onOpenLinkCase,
   onViewThread,
   isCompleted = false,
   showFiles = true,
 }: CorrespondenceInfoPanelProps) {
   const attachments = correspondence.attachments ?? [];
+  const recalledDocumentCount = correspondence.recalledDocuments?.length ?? 0;
   const distribution = (correspondence.distribution ?? []).filter(
     (recipient) => recipient.is_active !== false,
   );
@@ -254,15 +260,53 @@ export function CorrespondenceInfoPanel({
               <span className="capitalize">{correspondence.archiveLevel}</span>
             </Row>
           ) : null}
-          {correspondence.caseId ? (
+          {correspondence.caseId || onOpenLinkCase ? (
             <Row label="Case">
-              <Link
-                href={`/cases/${correspondence.caseId}`}
-                className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
-              >
-                <FolderTree className="h-3 w-3" />
-                {correspondence.caseId.slice(0, 8)}
-              </Link>
+              {correspondence.case ? (
+                <Link
+                  href={`/cases/${correspondence.case.id}`}
+                  className="inline-flex min-w-0 items-start gap-1.5 font-medium text-primary hover:underline"
+                >
+                  <FolderTree className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block break-words">
+                      {correspondence.case.caseNumber || correspondence.case.id.slice(0, 8)}
+                    </span>
+                    {correspondence.case.title ? (
+                      <span className="block text-[11px] font-normal leading-snug text-muted-foreground line-clamp-2">
+                        {correspondence.case.title}
+                      </span>
+                    ) : null}
+                  </span>
+                </Link>
+              ) : correspondence.caseId ? (
+                <Link
+                  href={`/cases/${correspondence.caseId}`}
+                  className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+                >
+                  <FolderTree className="h-3 w-3" />
+                  {correspondence.caseId.slice(0, 8)}
+                </Link>
+              ) : (
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-muted-foreground">Not linked</span>
+                  {onOpenLinkCase ? (
+                    <>
+                      <span aria-hidden="true" className="text-muted-foreground/40">
+                        ·
+                      </span>
+                      <Button
+                        variant="link"
+                        className="h-auto min-h-11 gap-1 p-0 text-xs font-medium sm:min-h-0 sm:text-[11px]"
+                        onClick={onOpenLinkCase}
+                      >
+                        <Link2 className="h-3 w-3" />
+                        Link to case
+                      </Button>
+                    </>
+                  ) : null}
+                </span>
+              )}
             </Row>
           ) : null}
           {correspondence.parentCorrespondence ? (
@@ -397,19 +441,23 @@ export function CorrespondenceInfoPanel({
             ) : null
           }
         >
-          {linkedDocuments.length === 0 && attachments.length === 0 ? (
-            <div className="space-y-2">
+          {linkedDocuments.length === 0 && attachments.length === 0 && recalledDocumentCount === 0 ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <p className={corrType.caption}>No documents linked yet.</p>
               {!isCompleted ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-full justify-start text-xs"
-                  onClick={onOpenLinkDocument}
-                >
-                  <FolderTree className="mr-2 h-3.5 w-3.5 opacity-70" />
-                  Link a DMS document
-                </Button>
+                <>
+                  <span aria-hidden="true" className="text-muted-foreground/40">
+                    ·
+                  </span>
+                  <Button
+                    variant="link"
+                    className="h-auto min-h-11 gap-1 p-0 text-xs font-medium sm:min-h-0 sm:text-[11px]"
+                    onClick={onOpenLinkDocument}
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    Link a DMS document
+                  </Button>
+                </>
               ) : null}
             </div>
           ) : (
@@ -425,6 +473,16 @@ export function CorrespondenceInfoPanel({
                 <>
                   {attachments.length} attachment
                   {attachments.length === 1 ? "" : "s"}
+                </>
+              ) : null}
+              {(linkedDocuments.length > 0 || attachments.length > 0) &&
+              recalledDocumentCount > 0
+                ? " · "
+                : null}
+              {recalledDocumentCount > 0 ? (
+                <>
+                  {recalledDocumentCount} recalled cop
+                  {recalledDocumentCount === 1 ? "y" : "ies"}
                 </>
               ) : null}
               {" — manage in Document."}

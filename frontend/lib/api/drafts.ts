@@ -8,6 +8,66 @@ export interface DraftFileMetadata {
   type: string;
 }
 
+/** Everything a treatment draft needs to resume where it left off. */
+export interface DraftRoutingData {
+  routeType: 'person' | 'office';
+  targetOfficeId: string;
+  routeMode: 'single' | 'parallel';
+  parallelUserIds: string[];
+  parallelOfficeIds: string[];
+  purpose: 'action' | 'information' | 'approval';
+  branchConfigs: Record<
+    string,
+    {
+      purpose: 'action' | 'information' | 'approval';
+      minuteText: string;
+      outcome: 'respond' | 'treat' | 'onward';
+    }
+  >;
+  mergeStrategy: 'independent' | 'all' | 'any' | 'majority';
+}
+
+const ROUTE_TYPES = ['person', 'office'] as const;
+const ROUTE_MODES = ['single', 'parallel'] as const;
+const PURPOSES = ['action', 'information', 'approval'] as const;
+const MERGE_STRATEGIES = ['independent', 'all', 'any', 'majority'] as const;
+const OUTCOMES = ['respond', 'treat', 'onward'] as const;
+
+const isOneOf = <T extends string>(value: unknown, choices: readonly T[]): value is T =>
+  typeof value === 'string' && choices.includes(value as T);
+
+/** Reject partial or malformed draft routing so a draft can never crash the composer. */
+export function isDraftRoutingData(value: unknown): value is DraftRoutingData {
+  if (!isRecord(value)) return false;
+  const routing = value;
+
+  const branchConfigs = routing.branchConfigs;
+  if (!isRecord(branchConfigs) || Array.isArray(branchConfigs)) {
+    return false;
+  }
+
+  return (
+    isOneOf(routing.routeType, ROUTE_TYPES) &&
+    typeof routing.targetOfficeId === 'string' &&
+    isOneOf(routing.routeMode, ROUTE_MODES) &&
+    Array.isArray(routing.parallelUserIds) &&
+    routing.parallelUserIds.every((id) => typeof id === 'string') &&
+    Array.isArray(routing.parallelOfficeIds) &&
+    routing.parallelOfficeIds.every((id) => typeof id === 'string') &&
+    isOneOf(routing.purpose, PURPOSES) &&
+    Object.values(branchConfigs).every((config) => {
+      if (!isRecord(config)) return false;
+      const branch = config;
+      return (
+        isOneOf(branch.purpose, PURPOSES) &&
+        typeof branch.minuteText === 'string' &&
+        isOneOf(branch.outcome, OUTCOMES)
+      );
+    }) &&
+    isOneOf(routing.mergeStrategy, MERGE_STRATEGIES)
+  );
+}
+
 export interface ApiDraft {
   id: string;
   correspondence: {
@@ -23,9 +83,10 @@ export interface ApiDraft {
   forward_to?: string;
   on_behalf_of?: string;
   action_type?: 'minute' | 'approve' | null;
-  apply_signature?: boolean | null;
-  selected_signature_template_id?: string | null;
   files_metadata: DraftFileMetadata[];
+  routing_data?: DraftRoutingData | null;
+  response_type?: string | null;
+  selected_document_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,13 +97,14 @@ export interface Draft {
   type: 'minute' | 'treatment';
   content: string;
   subject?: string;
-  forwardTo?: string;
+  forwardTo: string;
   onBehalfOf?: string;
   actionType?: 'minute' | 'approve';
-  applySignature?: boolean;
-  selectedSignatureTemplateId?: string;
   timestamp: string;
   files?: DraftFileMetadata[];
+  routingData?: DraftRoutingData;
+  responseType?: 'memo' | 'existing-document';
+  selectedDocumentId: string;
 }
 
 const mapApiDraftToFrontend = (api: ApiDraft): Draft => ({
@@ -51,13 +113,17 @@ const mapApiDraftToFrontend = (api: ApiDraft): Draft => ({
   type: api.draft_type,
   content: api.content,
   subject: api.subject || undefined,
-  forwardTo: api.forward_to || undefined,
+  forwardTo: api.forward_to ?? '',
   onBehalfOf: api.on_behalf_of || undefined,
   actionType: api.action_type || undefined,
-  applySignature: api.apply_signature ?? undefined,
-  selectedSignatureTemplateId: api.selected_signature_template_id ?? undefined,
   timestamp: api.updated_at,
   files: api.files_metadata.length > 0 ? api.files_metadata : undefined,
+  routingData: isDraftRoutingData(api.routing_data) ? api.routing_data : undefined,
+  responseType:
+    api.response_type === 'memo' || api.response_type === 'existing-document'
+      ? api.response_type
+      : undefined,
+  selectedDocumentId: api.selected_document_id ?? '',
 });
 
 const mapFrontendDraftToApi = (draft: Partial<Draft>): Partial<ApiDraft> => ({
@@ -68,9 +134,10 @@ const mapFrontendDraftToApi = (draft: Partial<Draft>): Partial<ApiDraft> => ({
   forward_to: draft.forwardTo,
   on_behalf_of: draft.onBehalfOf,
   action_type: draft.actionType,
-  apply_signature: draft.applySignature ?? null,
-  selected_signature_template_id: draft.selectedSignatureTemplateId ?? null,
   files_metadata: draft.files || [],
+  routing_data: draft.routingData,
+  response_type: draft.responseType,
+  selected_document_id: draft.selectedDocumentId,
 });
 
 export async function getDrafts(params?: {

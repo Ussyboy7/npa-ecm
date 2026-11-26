@@ -100,6 +100,12 @@ class Command(BaseCommand):
             raise CommandError(
                 f"No approval record found for {options['reference']}."
             )
+        if snapshot.voided_at is not None:
+            raise CommandError(
+                f"The approval record for {options['reference']} was withdrawn "
+                f"({snapshot.voided_reason or 'no reason recorded'}); "
+                "a withdrawn record cannot be corrected."
+            )
 
         rows = [dict(row) for row in (snapshot.minutes or [])]
         changes = []

@@ -1,6 +1,7 @@
 import uuid
 
 from django.test import TestCase
+from rest_framework.exceptions import PermissionDenied
 
 from accounts.models import User
 from correspondence.models import Correspondence, Minute
@@ -51,17 +52,15 @@ class ApprovalLevelResolutionTests(TestCase):
         self.assertEqual(level, Minute.ApprovalLevel.EXECUTIVE)
         self.assertEqual(role, Minute.ApprovalRole.APPROVAL)
 
-    def test_gm_departmental_approval_stays_departmental(self):
+    def test_non_md_cannot_record_a_departmental_approval(self):
         correspondence = self._correspondence(
             Correspondence.RequiredApprovalLevel.DEPARTMENTAL
         )
 
-        level, role = MinuteRouterService.resolve_approval_levels(
-            self.gm, correspondence
-        )
+        with self.assertRaises(PermissionDenied) as ctx:
+            MinuteRouterService.resolve_approval_levels(self.gm, correspondence)
 
-        self.assertEqual(level, Minute.ApprovalLevel.DEPARTMENTAL)
-        self.assertEqual(role, Minute.ApprovalRole.APPROVAL)
+        self.assertEqual(ctx.exception.detail["reason"], "md_approval_required")
 
     def test_non_md_on_executive_track_is_departmental_endorsement(self):
         correspondence = self._correspondence(

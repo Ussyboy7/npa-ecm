@@ -1,16 +1,16 @@
-# Graph Report - npa-ecm  (2026-11-14)
+# Graph Report - npa-ecm  (2026-11-25)
 
 ## Corpus Check
-- 1150 files · ~781,098 words
+- 1275 files · ~823,942 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12998 nodes · 35180 edges · 740 communities (421 shown, 319 thin omitted)
-- Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 5419 edges (avg confidence: 0.54)
+- 13959 nodes · 37133 edges · 716 communities (439 shown, 277 thin omitted)
+- Extraction: 85% EXTRACTED · 15% INFERRED · 0% AMBIGUOUS · INFERRED: 5640 edges (avg confidence: 0.55)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `92acc5e9`
+- Built from commit: `a7526baa`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -74,7 +74,7 @@
 - package.json
 - .log_document_activity
 - .getObj
-- page.tsx
+- ReferenceSchemesPanel.tsx
 - compilerOptions
 - NPA Electronic Content Management System (ECM)
 - Migration Guide
@@ -88,7 +88,7 @@
 - models.py
 - Command
 - MinuteModal.tsx
-- FormDocumentViewSet
+- compileGlyf
 - SearchService
 - FeatureErrorBoundary.tsx
 - .sync_documents
@@ -280,12 +280,12 @@
 - Shared Components
 - .generate_token
 - PostScriptStack
-- NPA-ECM — CFO Executive Summary (One Page)
+- CaseSidebar.tsx
 - proxy.ts
 - run-e2e-smoke.sh
 - run-local-ci.sh
 - ecm
-- AccountsConfig
+- external-entities-api.ts
 - AnalyticsConfig
 - AuditConfig
 - CaptureConfig
@@ -431,7 +431,7 @@
 - .remove_documents
 - .active_sessions
 - .end_session
-- .perform_create
+- Advanced Features
 - wsgi.py
 - __init__.py
 - ContentObject
@@ -519,13 +519,13 @@
 - Troubleshooting
 - .get_is_inward
 - .get_is_outward
-- sonner
+- FormTemplate
 - .get_parallel_branches
 - @radix-ui/react-separator
 - use-sidebar-counts.ts
 - pdfjs-dist.d.ts
-- signature-templates.ts
-- react-hook-form
+- status-filter.test.tsx
+- flushLogs
 - Version Management
 - .get_related_responses
 - .validate
@@ -552,92 +552,74 @@
 - backend-status.sh
 - env-manager.sh
 - .get_can_be_edited
-- .get_can_be_recalled
-- .get_correspondence_details
+- .check_and_handle_completion
+- Troubleshooting
+- tests.py
 - .get_is_acknowledged
-- .get_is_dispatched
-- DocumentAclLevelTests
+- ResizeObserverMock
+- HealthEndpointTests
 - form_serials.py
-- .get_seal_data
+- 0023_remove_user_is_management.py
+- tests.py
+- .patch
 - .get_lifecycle_stages
 - .get_to_user_name
-- listRowCardShellClass
+- .targets
 - .validate
 - Ui
 - .validate_reference_number
-- .grant_document_access_for_minute
+- .requires_signatures
 - .reject
-- 🚀 Deployment Strategy
+- .my_performance
 - cmdk
-- .get_or_create_preferences
+- .mark_as_archived
 - ._normalise_charfields
 - .patch
-- .get_related_forms
+- .perform_create
 - .create_case_sla
 - Troubleshooting
 - @radix-ui/react-toggle
-- .is_external
+- Command
 - .get_queryset
 - 🔧 Maintenance Tasks
-- .is_dispatched
+- .archive_old_notifications
 - Troubleshooting
-- Root
+- ContentObject
 - .requires_signatures
 - .get_case_links
-- .end_session
-- .perform_create
+- class-variance-authority
 - 0004_workflowstep_required_approval_level.py
 - 0005_workflowtemplate_requires_departmental_endorsement.py
-- @tiptap/extension-highlight
-- .is_routing_inward
-- .is_routing_outward
-- @tiptap/extension-placeholder
-- .get_form_document_id
-- .get_form_title
-- .get_activities_count
-- .get_completion_package
-- @tiptap/extension-table-header
-- @tiptap/extension-table-row
-- .get_correspondence_count
-- @tiptap/extension-text-style
-- .get_correspondence
-- @types/qrcode
-- 🚀 Deployment Strategy
-- .get_validators
-- .get_correspondence
-- .get_branch_originator_name
-- .get_can_be_edited
-- @dnd-kit/core
-- .get_is_acknowledged
-- @dnd-kit/utilities
-- .get_is_dispatched
-- @radix-ui/react-alert-dialog
-- @tiptap/extension-placeholder
-- @types/dompurify
-- @tiptap/extension-text-style
-- .get_seal_data
-- .get_to_user_name
-- @tiptap/extension-table-cell
-- 0066_correspondence_pre_archive_status.py
-- .get_workflow_history_for_document
-- @tiptap/extension-superscript
-- @tiptap/extension-table-header
-- ERPSyncRecord
-- 🔧 Maintenance Tasks
 - .get_queryset
-- installStorage
-- .update
-- .validate
-- .validate_parent
+- .list
+- @tiptap/extension-placeholder
+- cmdk
+- .get_related_forms
+- .is_external
+- @tiptap/extension-text-style
+- ._log
+- .get_validators
+- .is_acknowledged
+- .is_routing_outward
+- .can_be_edited
+- ensure_audit_workflow_rules
+- @tiptap/extension-placeholder
+- @tiptap/extension-text-style
+- .is_dispatched
+- 0066_correspondence_pre_archive_status.py
+- .is_routing_outward
+- .get_document_id
+- .get_document_id
+- .get_document_title
+- @radix-ui/react-collapsible
+- @radix-ui/react-dialog
 - 0002_retentionschedule_department.py
-- Ui
+- @radix-ui/react-dropdown-menu
 - 0017_backfill_seal_signature_snapshots.py
 - 0019_encrypt_existing_signature_files.py
 - 0015_optional_reference_unit_segment.py
 - 0016_use_sa_dm_reference_segment.py
-- 🚀 Deployment Strategy
 - .generate_serial_number
-- File Requirements
 - 0014_user_personnel_fields.py
 - .consume_token
 - .perform_create
@@ -645,56 +627,53 @@
 - .my_preferences
 - 0020_documentseal_seal_image_sha256.py
 - .signature_image
-- .display_role
-- .latest
-- .my_performance
 - 0068_correspondence_reference_classification.py
 - @radix-ui/react-popover
 - 0070_add_assignment_outcome.py
 - 0071_alter_minute_merge_strategy_and_more.py
 - 0073_approval_snapshot_fields.py
-- .get_workflow_history_for_document
-- .handle_consultation_response
-- .save_minute_with_delegation
-- .validate
-- .is_supported
-- @dnd-kit/core
-- @dnd-kit/sortable
 - @dnd-kit/utilities
-- @radix-ui/react-alert-dialog
+- calendar-api.ts
 - @radix-ui/react-avatar
-- @radix-ui/react-collapsible
-- @radix-ui/react-select
-- .get_queryset
-- ._can_user_sign
-- 🚀 Deployment Strategy
-- .get_workflow_history_for_document
-- .requires_signatures
+- @tiptap/extension-font-family
+- .mark_as_read
+- ArithmeticDecoder
+- class-variance-authority
+- emf-converter
+- @radix-ui/react-accordion
+- @radix-ui/react-checkbox
+- @radix-ui/react-label
+- @radix-ui/react-slider
 - .get_case_links
-- .get_correspondence_links
-- .get_form_document
 - .get_publication_history
-- .add_documents
-- .remove_documents
-- .active_sessions
-- .end_session
-- .reject
-- .sign
-- .archive_old_notifications
-- .list
-- .perform_create
-- .clone_role
+- .get_queryset
+- .mark_completed
+- next
+- qrcode
+- @radix-ui/react-tabs
+- @radix-ui/react-toggle
+- recharts
+- sharp
+- @tiptap/extension-highlight
+- @tiptap/extension-underline
+- .validate
+- tailwind-merge
+- @tiptap/extension-subscript
+- @tiptap/extension-table
+- @tiptap/extension-table-row
+- @tiptap/pm
+- @tiptap/starter-kit
 
 ## God Nodes (most connected - your core abstractions)
-1. `react` - 310 edges
-2. `apiFetch()` - 301 edges
-3. `logError()` - 254 edges
-4. `cn()` - 225 edges
-5. `Button` - 205 edges
-6. `User` - 196 edges
+1. `react` - 347 edges
+2. `apiFetch()` - 274 edges
+3. `logError()` - 246 edges
+4. `cn()` - 223 edges
+5. `User` - 210 edges
+6. `Button` - 201 edges
 7. `WorkerTask` - 182 edges
 8. `warn()` - 157 edges
-9. `UserSerializer` - 150 edges
+9. `UserSerializer` - 154 edges
 10. `ConfigNamespace` - 141 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -706,190 +685,195 @@
   backend/forms/serializers.py → backend/accounts/serializers.py
 - `classify_required_level()` --calls--> `Decimal`  [EXTRACTED]
   backend/correspondence/services/classification.py → frontend/public/pdf.worker.min.mjs
-- `UserAdmin` --uses--> `User`  [INFERRED]
-  backend/accounts/admin.py → backend/accounts/models.py
+- `Command` --uses--> `User`  [INFERRED]
+  backend/accounts/management/commands/assign_nominal_roll_roles.py → backend/accounts/models.py
 
 ## Import Cycles
 - 1-file cycle: `backend/ecm_backend/celery.py -> backend/ecm_backend/celery.py`
+- 2-file cycle: `frontend/lib/npa-structure.ts -> frontend/lib/organization-types.ts -> frontend/lib/npa-structure.ts`
 - 2-file cycle: `frontend/lib/npa-structure.ts -> frontend/lib/organization-cache.ts -> frontend/lib/npa-structure.ts`
 
-## Communities (740 total, 319 thin omitted)
+## Communities (716 total, 277 thin omitted)
 
 ### Community 0 - "cn"
-Cohesion: 0.02
-Nodes (204): ApprovalsForm(), ExecutiveApproval, CaptureStats, CasesListContent(), CasesListContentProps, caseTypeOptions, getCaseTypeLabel(), getPriorityBadgeVariant() (+196 more)
+Cohesion: 0.04
+Nodes (154): emptyForm, ENTITY_TYPES, AuditField, AuditSection, TableFieldColumn, TableFieldConfig, CaseCommentsDialogProps, CaseFormPreviewDialogProps (+146 more)
 
 ### Community 1 - "react"
 Cohesion: 0.02
-Nodes (60): createTiptapEditor(), addHTML(), applyAssist(), Area, ariaLabel(), BooleanElement, Button, Caption (+52 more)
+Nodes (51): addHex(), Ascii85Stream, AsciiHexStream, BinaryCMapReader, BinaryCMapStream, bytesToString(), CCITTFaxDecoder, CCITTFaxStream (+43 more)
 
 ### Community 2 - "DocumentRecord"
-Cohesion: 0.05
-Nodes (83): WorkflowSLAForm(), ExecutiveDashboardTab(), itemCountLabel(), OrganizationProvider(), fetchExecutiveAnalytics(), CalendarEvent, createCalendarEvent(), fetchCalendarEvents() (+75 more)
+Cohesion: 0.02
+Nodes (50): addLocallyCachedImageOps(), adjustMapping(), Annotation, AnnotationFactory, assert(), ButtonWidgetAnnotation, ChoiceWidgetAnnotation, CMapFactory (+42 more)
 
 ### Community 3 - "page.tsx"
-Cohesion: 0.13
-Nodes (36): applyRunFormats(), collectParagraphs(), cssFontFamily(), HIGHLIGHT_COLORS, isInFallback(), mergeParagraphFormat(), mergeRunFormat(), ParagraphFormat (+28 more)
+Cohesion: 0.07
+Nodes (63): applyRunFormats(), applyWordFormatting(), collectBlocks(), collectParagraphs(), cssFontFamily(), HIGHLIGHT_COLORS, isInFallback(), mergeParagraphFormat() (+55 more)
 
 ### Community 4 - "badge.tsx"
-Cohesion: 0.03
-Nodes (192): formatDate(), formatDate(), AuditField, AuditSection, evaluateFormula(), formatCurrency(), parseCurrency(), TableFieldColumn (+184 more)
+Cohesion: 0.07
+Nodes (33): makeEditor(), mount(), base, mount(), Commands, getSelectedImageAttrs(), IMAGE_WIDTH_PRESETS, ImageAlign (+25 more)
 
 ### Community 5 - "useCurrentUser"
-Cohesion: 0.05
-Nodes (38): CaseCommentsSummaryCard(), CaseCommentsSummaryCardProps, CaseHeaderProps, CaseInfoCard(), CaseInfoCardProps, CaseLinksPanel(), CaseLinksPanelProps, CaseOverviewPanel() (+30 more)
+Cohesion: 0.29
+Nodes (9): ActivityLog, asBoolean(), asOneOf(), asStringOptional(), ComplianceExportParams, downloadComplianceExport(), getActivityLogs(), mapApiLog() (+1 more)
 
 ### Community 7 - "CatalogPageNumberPagination"
 Cohesion: 0.08
-Nodes (131): AbstractUser, DocumentSeal, ExecutiveSignature, Securely stores executive digital signatures for document approval seals.      S, User model augmented with NPA-specific metadata., Template for signature formatting in correspondence minutes and approvals., User preferences for signature templates and auto-apply settings., Records of digital seals applied to documents.     Used for verification and aud (+123 more)
+Nodes (137): AnonRateThrottle, DocumentSeal, ExecutiveSignature, Securely stores executive digital signatures for document approval seals.      S, Template for signature formatting in correspondence minutes and approvals., User preferences for signature templates and auto-apply settings., Records of digital seals applied to documents.     Used for verification and aud, Temporary OTP codes for seal 2FA verification via email.     Codes expire after (+129 more)
 
 ### Community 8 - "UUIDModel"
-Cohesion: 0.10
-Nodes (9): assert(), convertBlackAndWhiteToRGBA(), convertToRGBA(), decodeAndClamp(), ImageResizer, PDFImage, PDFWorkerStream, resizeImageMask() (+1 more)
+Cohesion: 0.02
+Nodes (28): a, AppearanceStreamEvaluator, Button, Catalog, clearGlobalCaches(), createValidAbsoluteUrl(), DecodingContext, EquateRange (+20 more)
 
 ### Community 9 - "views.py"
 Cohesion: 0.14
 Nodes (14): DisposalRequest, DispositionAction, LegalHold, Meta, Records retention, legal hold, and disposal models., Defines how long records are kept before review or disposal., Approval workflow before records are disposed., Litigation or audit hold that blocks disposal. (+6 more)
 
 ### Community 10 - "FormSignatureWorkflow"
-Cohesion: 0.02
-Nodes (23): a, AppearanceStreamEvaluator, Catalog, clearGlobalCaches(), createValidAbsoluteUrl(), DecodingContext, EquateRange, FeatureTest (+15 more)
+Cohesion: 0.06
+Nodes (55): FormTemplateEditorPage(), FORM_CATEGORY_FILTERS, HubTab, scopeOptions, TemplatesHubForm(), WORKFLOW_GROUP_LABELS, WORKFLOW_GROUP_ORDER, WorkflowGroupKey (+47 more)
 
 ### Community 11 - "SLAConfiguration"
 Cohesion: 0.16
-Nodes (74): DivisionPerformanceSnapshotAdmin, EscalationAdmin, EscalationRuleAdmin, Admin registrations for analytics models., ReportSnapshotAdmin, SLAConfigurationAdmin, StaffPerformanceSnapshotAdmin, UsageMetricAdmin (+66 more)
+Nodes (72): DivisionPerformanceSnapshotAdmin, EscalationAdmin, EscalationRuleAdmin, Admin registrations for analytics models., ReportSnapshotAdmin, SLAConfigurationAdmin, StaffPerformanceSnapshotAdmin, UsageMetricAdmin (+64 more)
 
 ### Community 12 - "DocumentPreviewPanel.tsx"
 Cohesion: 0.04
-Nodes (11): AstNode, BaseLocalCache, BasePdfManager, BaseShading, BaseStream, ColorSpace, NetworkPdfManager, Pattern (+3 more)
+Nodes (19): CorrespondenceSerializer, Get human-readable description of flow type., Detail-only: per-branch status for parallel routing + non-response handling., Skip uniqueness validation for reference_number during creation.         The vie, Require the guarded completion action for status transitions to completed., Cross-field validation for correspondence and declared physical custody., Return lifecycle progress stages for the frontend progress bar., Get the primary DMS document for this correspondence. Uses annotated value on li (+11 more)
 
 ### Community 13 - "dms-storage.ts"
-Cohesion: 0.04
-Nodes (126): useDocumentDetail(), DocumentCommentsDialog(), relativeTime(), DocumentSummaryCard(), bulkActivateUsers(), bulkArchiveUsers(), bulkAssignRole(), bulkDeactivateUsers() (+118 more)
+Cohesion: 0.05
+Nodes (108): useDocumentDetail(), DocumentCommentsCardProps, DocumentCommentsDialog(), initialsForName(), relativeTime(), isRecord(), ShareDocumentDialogContent(), hasTokens() (+100 more)
 
 ### Community 14 - "Dict"
 Cohesion: 0.29
 Nodes (7): 5-year TCO — NPA-ECM vs commercial (fixed vs scaling), Annual subscription run-rate (why per-seat hurts at scale), Decision, Investment requested — **same price at any scale**, NPA-ECM — CFO Executive Summary (One Page), Recommendation, What ₦350M buys (all staff, not 840 only)
 
 ### Community 15 - "Document"
-Cohesion: 0.09
-Nodes (25): archived_correspondence_visibility_q(), Q, Archive filing policy shared by archive endpoints and package sharing., Levels visible within the user's org boundary (read inheritance flows up)., Archived-record scope: exact filing unit plus upward-only read inheritance., readable_archive_levels(), Map required_approval_level + actor grade/role to actual approval_level/approval, Gate creation by action type with unified approval gate.          For approve: h (+17 more)
+Cohesion: 0.03
+Nodes (16): AstNode, BaseLocalCache, BasePdfManager, BaseShading, BaseStream, CFFFDSelect, ColorSpace, Commands (+8 more)
 
 ### Community 16 - "acting_services.py"
 Cohesion: 0.06
-Nodes (49): ActingAppointment, ActingRequest, Return a single acting-seat item to the original principal., Update correspondence.current_office and current_approver based on routing., Update correspondence.current_office and current_approver based on routing., activate_due_transfers(), apply_acting_markers_if_needed(), appoint_acting() (+41 more)
+Nodes (54): ActingAppointment, ActingRequest, get_grade_level(), Return the numeric rank of a grade; unknown grades rank last., find_office_recipient(), Find the appropriate recipient for an office.      Relaxed behaviour (per produc, activate_due_transfers(), apply_acting_markers_if_needed() (+46 more)
 
 ### Community 17 - "UserViewSet"
-Cohesion: 0.31
-Nodes (10): ApiCorrespondenceDelegation, ApiDelegation, completeDelegation(), createCorrespondenceDelegation(), getCorrespondenceDelegations(), getDelegationByCorrespondence(), getDelegationsByAssistant(), mapApiCorrespondenceDelegationToFrontend() (+2 more)
+Cohesion: 0.07
+Nodes (14): grade_catalog(), The grade hierarchy plus the leadership tiers each grade carries.      ``rank``, Add backend filtering for date ranges and additional filters., Add backend filtering for additional filters., Administrative permission grants and revocations are superuser-only., Toggle one permission atomically so concurrent edits do not clobber peers., Merge a batch of permission changes under one row lock., Clone an existing role with a new name. (+6 more)
 
 ### Community 18 - "AnalyticsService"
-Cohesion: 0.10
-Nodes (26): AnalyticsService, compute_executive_metrics(), compute_performance_metrics(), compute_report_metrics(), DivisionMetric, EnhancedDivisionMetric, Any, Correspondence (+18 more)
+Cohesion: 0.11
+Nodes (19): AnalyticsService, compute_report_metrics(), DivisionMetric, Any, Correspondence, datetime, Office, QuerySet (+11 more)
 
 ### Community 19 - "views.py"
-Cohesion: 0.02
-Nodes (57): addChildren(), addLocallyCachedImageOps(), adjustMapping(), Annotation, AnnotationFactory, buildHuffmanTable(), ButtonWidgetAnnotation, ChoiceWidgetAnnotation (+49 more)
+Cohesion: 0.01
+Nodes (134): createTiptapEditor(), addHTML(), AppearanceFilter, applyAssist(), Arc, Area, ariaLabel(), BatchOutput (+126 more)
 
 ### Community 20 - "pdf.worker.min.mjs"
 Cohesion: 0.00
-Nodes (410): Aa, AbortException, Acrobat, Acrobat7, ADBE_JSConsole, ADBE_JSDebugger, AddSilentPrint, AddViewerPreferences (+402 more)
+Nodes (403): Aa, AbortException, Acrobat, Acrobat7, ADBE_JSConsole, ADBE_JSDebugger, AddSilentPrint, AddViewerPreferences (+395 more)
 
 ### Community 21 - "CorrespondenceSerializer"
-Cohesion: 0.05
-Nodes (28): Command, BaseCommand, Freeze snapshots for approval minutes that predate approval integrity., ExecutiveApprovalPDFService, find_office_recipient(), _find_or_create_parallel_group(), ParallelBranchService, Domain services for correspondence workflows. (+20 more)
+Cohesion: 0.03
+Nodes (43): adjustWidths(), amendFallbackToUnicode(), applyStandardFontGlyphMap(), Builder, buildToFontChar(), CFF, ci, convertCidString() (+35 more)
 
 ### Community 22 - "Office"
 Cohesion: 0.10
-Nodes (62): CanAccessAdministration, Allow only users whose role grants administration access., Validate signature assignments., ActingRequestViewSet, Plan C: office members request acting appointments; admins resolve them., ActingAppointmentAdmin, ActingRequestAdmin, DepartmentAdmin (+54 more)
+Nodes (68): Abstract base model providing created/updated timestamps., TimeStampedModel, CanAccessAdministration, Allow only users whose role grants administration access., Validate signature assignments., ActingAppointmentAdmin, ActingRequestAdmin, DepartmentAdmin (+60 more)
 
 ### Community 23 - "CorrespondenceViewSet"
-Cohesion: 0.02
-Nodes (50): Return a dict of priority -> target hours for the defaults., Log correspondence-related activity., _normalize_mime(), Utilities for validating uploaded files., Validate extension, mime-type, size and run AV scan on uploaded bytes., _scan_with_clamav(), validate_file_upload(), archive_org_units() (+42 more)
+Cohesion: 0.03
+Nodes (44): Return a dict of priority -> target hours for the defaults., Log correspondence-related activity., Operational lists — default 50 rows, max 100 per request., StandardPageNumberPagination, _normalize_mime(), Utilities for validating uploaded files., Validate extension, mime-type, size and run AV scan on uploaded bytes., _scan_with_clamav() (+36 more)
 
 ### Community 24 - "FOIARequest"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (15): Command, BaseCommand, User, Merge org-chart seed shell users into canonical login usernames., Reassign all User FKs/M2Ms from source → target, then delete source., CanonicalUsernameTests, SimpleTestCase, canonical_email() (+7 more)
 
 ### Community 25 - "page.tsx"
-Cohesion: 0.06
-Nodes (50): CaseStatusStrip, CaseStatusStripContent(), FOIADocument, FOIANote, FOIARequest, FOIAStatus, formatShortDate(), VerifyPage() (+42 more)
+Cohesion: 0.07
+Nodes (49): CalendarEvent, createCalendarEvent(), fetchCalendarEvents(), mapEvent(), asNumber(), fetchDocumentVersionDiff(), mapDiff(), getNested() (+41 more)
 
 ### Community 26 - "page.tsx"
-Cohesion: 0.06
-Nodes (46): NewCasePage(), CaseComments(), CaseCommentsProps, LinkCorrespondenceDialog(), LinkDocumentDialog(), LinkFormDialog(), LinkCaseDialog(), ApiCase (+38 more)
+Cohesion: 0.02
+Nodes (42): B, Barcode, BehaviorOverride, Border, br, CMap, codePointIter(), computeIDs() (+34 more)
 
 ### Community 27 - "index.tsx"
-Cohesion: 0.02
-Nodes (60): adjustWidths(), amendFallbackToUnicode(), applyStandardFontGlyphMap(), Ascii85Stream, AsciiHexStream, buildToFontChar(), bytesToString(), CCITTFaxDecoder (+52 more)
+Cohesion: 0.19
+Nodes (14): useClassificationPolicy(), buildClassificationPolicy(), ClassificationPolicy, ClassificationRule, fetchClassificationPolicy(), getCachedClassificationPolicy(), gradeReachesSensitivity(), isSensitivity() (+6 more)
 
 ### Community 28 - "getStringOption"
-Cohesion: 0.01
-Nodes (80): AppearanceFilter, Arc, Barcode, BatchOutput, Bind, Break, BreakAfter, BreakBefore (+72 more)
+Cohesion: 0.05
+Nodes (39): SearchContext, SearchForm(), AdvancedSearch(), AdvancedSearchProps, isUnifiedSearchResult(), SearchFilters, SearchOverrides, SearchType (+31 more)
 
 ### Community 29 - "DocumentMetadataEditDialog.tsx"
 Cohesion: 0.04
-Nodes (47): available_login_mfa_methods(), clear_mfa_challenge(), create_mfa_challenge(), get_challenge_user(), get_or_create_login_security(), login_mfa_globally_required(), Any, User (+39 more)
+Nodes (32): Compute SHA-256 hash of file content., Generate a token, store it in cache, and return it., Replace all existing codes with a new set and return the plaintext., process_signature_background(), Change the user's password., CRUD endpoints for managing users within the demo environment., Get the current user's signature., Upload or update signature. (+24 more)
 
 ### Community 30 - "UUID"
 Cohesion: 0.02
-Nodes (50): Migration, Migration, Migration, Migration, Migration, Migration, Migration, Migration (+42 more)
+Nodes (76): Migration, Migration, Migration, Migration, Migration, Migration, encrypt_existing_secrets(), Migration (+68 more)
 
 ### Community 31 - "serializers.py"
-Cohesion: 0.08
-Nodes (17): URL configuration for content capture module., BatchUploadViewSet, CaptureViewSet, OCRResultViewSet, Views for content capture module., ViewSet for viewing OCR results., Filter results by document access., ViewSet for managing scan sessions. (+9 more)
+Cohesion: 0.11
+Nodes (6): convertBlackAndWhiteToRGBA(), convertToRGBA(), decodeAndClamp(), ImageResizer, PDFImage, resizeImageMask()
 
 ### Community 32 - "CorrespondenceDelegationViewSet"
-Cohesion: 0.13
-Nodes (66): DocumentAccessLogAdmin, DocumentAdmin, DocumentCommentAdmin, DocumentDiscussionMessageAdmin, DocumentEditorSessionAdmin, DocumentPermissionAdmin, DocumentPermissionInline, DocumentVersionAdmin (+58 more)
+Cohesion: 0.12
+Nodes (76): DocumentAccessLogAdmin, DocumentAdmin, DocumentCommentAdmin, DocumentDiscussionMessageAdmin, DocumentEditorSessionAdmin, DocumentPermissionAdmin, DocumentPermissionInline, DocumentVersionAdmin (+68 more)
 
 ### Community 33 - "models.py"
 Cohesion: 0.05
-Nodes (53): Shared business constants used across apps.  Grade-related constants are re-expo, Grade level utilities and constants shared across apps.  NPA grade hierarchy (hi, Seed the database with demo data matching the frontend mocks., FOIANote, FOIARequest, FOIARequestDocument, FormatPreference, Meta (+45 more)
+Nodes (66): ActionType, Meta, Audit trail models for comprehensive activity logging., Severity, Audit trail service for logging system activities., Seed the NPA organisation structure and user accounts.  User accounts come from, ExternalEntitySerializer, Meta (+58 more)
 
 ### Community 34 - "Command"
-Cohesion: 0.17
-Nodes (30): IsExecutiveGrade, Shared DRF permission classes., Allow read access to all authenticated users, but write access only to     users, ApprovalTaskAdmin, Admin registrations for workflow models., TaskActionAdmin, TaskActionInline, WorkflowStepAdmin (+22 more)
+Cohesion: 0.21
+Nodes (27): ApprovalTaskAdmin, Admin registrations for workflow models., TaskActionAdmin, TaskActionInline, WorkflowStepAdmin, WorkflowStepInline, WorkflowTemplateAdmin, ApprovalTask (+19 more)
 
 ### Community 35 - "devDependencies"
 Cohesion: 0.04
-Nodes (49): autoprefixer, eslint, eslint-config-next, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, devDependencies, autoprefixer (+41 more)
+Nodes (51): autoprefixer, eslint, eslint-config-next, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, devDependencies, autoprefixer (+43 more)
 
 ### Community 36 - "storage.ts"
-Cohesion: 0.04
-Nodes (70): HealthStatus, SystemHealthItem, PlatformIndexPage(), AnalyticsPage(), SetPasswordForm(), CapturePage(), CasesHub(), deliveryPhases (+62 more)
+Cohesion: 0.06
+Nodes (29): Return normalized role permissions from the backend (single source of truth)., explain_access_context(), explain_permission_denial(), get_role_permissions(), Any, User, Permission resolution and explainability helpers., Pass if the user has any of the listed permissions. (+21 more)
 
 ### Community 37 - "Code Quality Guide"
 Cohesion: 0.04
 Nodes (44): 1. Console Statement Cleanup ✅, 1. Console Statement Replacer, 2. Documentation Organizer, 2. TypeScript Type Safety ✅, 3. Import Optimization ✅, 3. TypeScript Type Analyzer, API Documentation, Application Monitoring (+36 more)
 
 ### Community 38 - "permission_utils.py"
-Cohesion: 0.06
-Nodes (26): Return normalized role permissions from the backend (single source of truth)., Command, BaseCommand, Seed canonical role permissions for all NPA system roles., explain_access_context(), explain_permission_denial(), get_role_permissions(), Any (+18 more)
+Cohesion: 0.03
+Nodes (127): AdminHelpdeskPage(), RecordsGovernanceContent(), statusBadge(), routeState, CaseCommentsDialog(), CaseMobileStickyBar(), CaseMobileStickyBarProps, CaseStatusStrip (+119 more)
+
+### Community 39 - "PhysicalDocumentSerializer"
+Cohesion: 0.10
+Nodes (29): IntegrationHubPage(), LegacyImportPage(), PlatformIndexPage(), ApprovalsPage(), CapturePage(), CasesHub(), InboxPage(), api (+21 more)
 
 ### Community 40 - ".success"
-Cohesion: 0.09
-Nodes (31): SearchForm(), ConfirmSwitchDialog(), SimplifiedRoleSwitcher, SimplifiedRoleSwitcherProps, UserButton(), UserButtonProps, UserGroup(), UserGroupProps (+23 more)
+Cohesion: 0.08
+Nodes (25): 1.1 Code and schema facts, 1.2 Dry-run against the local stack (read-only, 2026-11-16), 1. Verified current state, 2. Global safety protocol (both phases), 3.1 Target form and classification rules, 3.2 Dry run (read-only), 3.3 Backup, 3.4 Apply (+17 more)
 
 ### Community 41 - "Oracle ERP Integration Guide for NPA ECM"
 Cohesion: 0.05
 Nodes (41): 10. Next Steps, 11. Resources, 1.1 Integration Patterns, 1. Integration Architecture Overview, 2.1 Correspondence → Oracle ERP, 2.2 Oracle ERP → ECM, 2.3 Document Linking, 2.4 Approval Workflow Integration (+33 more)
 
 ### Community 42 - "XmlObject"
-Cohesion: 0.03
-Nodes (10): Binder, Builder, createDataNode(), createText(), In, parseExpression(), searchNode(), Template (+2 more)
+Cohesion: 0.06
+Nodes (67): membership(), session, workspace, AssistantAssignmentModalProps, DepartmentFormModalProps, DirectorateFormModalProps, DirectorateLeadershipDialogProps, DivisionFormModalProps (+59 more)
 
 ### Community 43 - "CaseViewSet"
-Cohesion: 0.13
-Nodes (5): CFFFont, parseDefaultAppearance(), PDFFunction, PDFFunctionFactory, toNumberArray()
+Cohesion: 0.04
+Nodes (80): ActingAppointmentsPage(), AdminActingWorkspace, api, session, DeactivateTarget, EntityType, OfficesView, ORGANIZATION_TABS (+72 more)
 
 ### Community 44 - "SecurityHeadersMiddleware"
-Cohesion: 0.11
-Nodes (10): Add baseline security headers for API responses., SecurityHeadersMiddleware, EnvironmentParityCommandTests, HealthEndpointTests, HealthMetricsTests, PaginationConfigTests, TestCase, SecurityHeadersMiddlewareTests (+2 more)
+Cohesion: 0.16
+Nodes (5): FakeWebSocket, restoreAuthCookies, user, useNotificationWebSocket(), WebSocketManager
 
 ### Community 45 - "CompletionPackageService"
-Cohesion: 0.11
-Nodes (23): Shared pagination utilities.  Standardize on `page_size` query param across the, Operational lists — default 50 rows, max 100 per request., StandardPageNumberPagination, CheckOutEvent, Location, PhysicalHandover, Physical location within NPA buildings for storing physical documents., Auditable office-to-office custody transfer for a physical document. (+15 more)
+Cohesion: 0.07
+Nodes (46): AppearanceSection, NotificationsSection, PasswordDialog, ProfileSection, SecuritySection, SettingsPage(), convertBackendToFrontend(), convertFrontendToBackend() (+38 more)
 
 ### Community 46 - "ClientLogEntry"
 Cohesion: 0.17
@@ -900,8 +884,8 @@ Cohesion: 0.08
 Nodes (24): 10.1 Technology Stack (As Implemented), 10.2 Application Modules (Backend), 10.3 Security Architecture, 12.1 Quantifiable Benefits, 12.2 Strategic Benefits, 12.3 Competitive Positioning Summary, 3.1 Budget Summary Table, 3.2 Implementation Phasing Strategy (+16 more)
 
 ### Community 48 - "views_auth.py"
-Cohesion: 0.23
-Nodes (12): build_authorization_url(), create_oidc_state(), exchange_code_for_tokens(), fetch_userinfo(), oidc_enabled(), _oidc_setting(), pop_oidc_state(), Any (+4 more)
+Cohesion: 0.16
+Nodes (22): _add_field_to_pdf(), _ensure_unicode_fonts(), format_currency(), generate_audit_query_pdf(), generate_generic_form_pdf(), generate_project_monitoring_report_pdf(), generate_witnessing_deliveries_pdf(), _money_parts() (+14 more)
 
 ### Community 49 - "serializers.py"
 Cohesion: 0.12
@@ -913,39 +897,39 @@ Nodes (38): 📂 Abuja Liaison Office, 📂 Administration, 📂 Audit, 📂 Cor
 
 ### Community 51 - "XFAObject"
 Cohesion: 0.04
-Nodes (41): get_grade_level(), Return the numeric rank of a grade; unknown grades rank last., CorrespondenceDocumentService, find_office_recipient(), _find_or_create_parallel_group(), MinuteRouterService, MinuteSealService, ParallelBranchService (+33 more)
+Nodes (66): DocumentMobileStickyBar(), DocumentMobileStickyBarProps, DocumentPreviewPanel(), DocumentPreviewPanelProps, fileTypeLabel(), VersionsManageProps, DocumentVersionsPanel(), DocumentVersionsPanelProps (+58 more)
 
 ### Community 52 - "sla-client.ts"
-Cohesion: 0.10
-Nodes (7): clear_policy_name_cache(), Test helper — call after creating/renaming seeded policies., DocumentVisibilityNullOrgTests, DrmDownloadTests, APITestCase, View-only DRM blocks download/print, not in-app ACL grants to NPA users., A user with no division/department must not match permission rows that lack thos
+Cohesion: 0.08
+Nodes (14): DocumentVisibilityNullOrgTests, DrmDownloadTests, DrmPdfWatermarkTests, _minimal_pdf_bytes(), APITestCase, DRM download enforcement, share blocking, and PDF watermark tests., View-only DRM blocks download/print, not in-app ACL grants to NPA users., A user with no division/department must not match permission rows that lack thos (+6 more)
 
 ### Community 53 - "views.py"
-Cohesion: 0.09
-Nodes (22): _decode_header_value(), _extract_body(), IMAPIngestionService, Any, IMAP inbound email ingestion into correspondence., Poll IMAP mailboxes and optionally create correspondence from inbound mail., URL configuration for integrations module., EmailConnectorViewSet (+14 more)
+Cohesion: 0.07
+Nodes (26): _decode_header_value(), _extract_body(), IMAPIngestionService, Any, IMAP inbound email ingestion into correspondence., Poll IMAP mailboxes and optionally create correspondence from inbound mail., URL configuration for integrations module., EmailConnectorViewSet (+18 more)
 
 ### Community 54 - "dependencies"
 Cohesion: 0.04
-Nodes (46): @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, dependencies, @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, lucide-react (+38 more)
+Nodes (45): clsx, cmdk, @dnd-kit/core, @dnd-kit/utilities, dependencies, clsx, cmdk, @dnd-kit/core (+37 more)
 
 ### Community 55 - "page.tsx"
-Cohesion: 0.07
-Nodes (23): ActivityLogAdmin, Admin configuration for audit logs., Prevent manual creation of audit logs., Prevent modification of audit logs., Only superusers can delete audit logs., ActionType, ActivityLog, Meta (+15 more)
+Cohesion: 0.12
+Nodes (17): Update search vector when document is created or updated., update_document_search_vector(), Any, QuerySet, Highlight search terms in text (simple version - returns text as-is for now)., Build search vector for documents.          Returns:             SearchVector co, Perform full-text search on documents.          Args:             query: Search, Service for advanced document and correspondence search. (+9 more)
 
 ### Community 56 - "package.json"
 Cohesion: 0.05
-Nodes (37): author, bugs, url, description, devDependencies, @types/node, typescript, engines (+29 more)
+Nodes (38): author, bugs, url, description, devDependencies, @types/node, typescript, engines (+30 more)
 
 ### Community 57 - ".log_document_activity"
-Cohesion: 0.06
-Nodes (27): DocumentAccessOnRoutingTests, TestCase, Combine document ACL access with DRM restrictions for one user., resolve_effective_document_rights(), DepartmentDivisionAclInheritanceTests, DocumentAPITests, DocumentModelTests, DocumentPermissionViewSetTests (+19 more)
+Cohesion: 0.17
+Nodes (17): DocumentUploadDialog(), fileToDataUrl(), clearDraft(), ComposeDraft, ComposeField, ComposeFieldInput, DraftStorage, firstInvalidField() (+9 more)
 
 ### Community 58 - ".getObj"
-Cohesion: 0.04
-Nodes (32): addHex(), BinaryCMapReader, BinaryCMapStream, CMapFactory, Cmd, createBuiltInCMap(), decrypt(), expectInt() (+24 more)
+Cohesion: 0.12
+Nodes (24): apply_case_org_scope(), apply_correspondence_org_scope(), case_org_boundary_q(), correspondence_org_boundary_q(), correspondence_participation_q(), office_within_people_admin_boundary(), Q, Org-boundary visibility for search and archives. (+16 more)
 
-### Community 59 - "page.tsx"
-Cohesion: 0.15
-Nodes (23): Generate PDF for a form document. Can be called when signatures are complete or, _add_field_to_pdf(), _ensure_unicode_fonts(), generate_audit_query_pdf(), generate_generic_form_pdf(), generate_project_completion_validation_pdf(), generate_project_monitoring_report_pdf(), generate_witnessing_deliveries_pdf() (+15 more)
+### Community 59 - "ReferenceSchemesPanel.tsx"
+Cohesion: 0.11
+Nodes (14): WebSocket URL routing for DMS., ASGI config for the ECM backend project.  It exposes the ASGI callable as a modu, WebSocket consumer for real-time notifications., Helper function to send notification via WebSocket., Helper function to send unread count update via WebSocket., send_notification_to_user(), send_unread_count_update(), get_user_from_token() (+6 more)
 
 ### Community 60 - "compilerOptions"
 Cohesion: 0.05
@@ -972,44 +956,44 @@ Cohesion: 0.05
 Nodes (38): 10. Alfresco (Hyland) Enterprise, 10-year horizon (optional), 1. Microsoft SharePoint (+ Microsoft 365), 2. OpenText Content Suite, 3. IBM FileNet / Cloud Pak for Business Automation, 4. Hyland OnBase, 5. Laserfiche, 6. M-Files (+30 more)
 
 ### Community 66 - "api-client.ts"
-Cohesion: 0.10
-Nodes (9): ExecutiveSignatureSettingsTests, make_png(), APITestCase, A signature written before encryption existed must not vanish from Settings., SealApplicationTwoFactorTests, SealSignatureImageAccessTests, SealSignatureSnapshotTests, Read the signature image used for this seal, if it is still available. (+1 more)
+Cohesion: 0.09
+Nodes (31): AdminPage(), getStatusColor(), timeAgo(), ServiceRow(), statusBorderClass(), statusColor(), SystemHealthPage(), router (+23 more)
 
 ### Community 67 - ".get"
 Cohesion: 0.04
 Nodes (47): 1. Executive Summary, 2.1 Stakeholder Map, 2.2 Elicitation Methods (contract-mandated), 2.3 Functional Requirements by Module (with source & status), 2.4 Non-Functional Requirements (with evaluation probes), 2.5 Acceptance Criteria Template (for every FR), 2. Requirements Gathering Framework, 3.1 AS-IS (Paper-Based) — Current State (+39 more)
 
 ### Community 68 - "logError"
-Cohesion: 0.05
-Nodes (62): FormTemplateEditorPage(), FORM_CATEGORY_FILTERS, HubTab, scopeOptions, TemplatesHubForm(), WORKFLOW_GROUP_LABELS, WORKFLOW_GROUP_ORDER, WorkflowGroupKey (+54 more)
+Cohesion: 0.03
+Nodes (104): CaseFormPreviewDialog(), DocumentSidebar(), RootError(), FormDetailPage(), FormsTemplatesPage(), FaqEntry, faqItems, getCategoryDisplayName() (+96 more)
 
 ### Community 69 - "env-manager.sh"
 Cohesion: 0.12
-Nodes (32): cmd_backend_status(), cmd_backup(), cmd_collectstatic(), cmd_deploy(), cmd_diagnostics(), cmd_health(), cmd_logs(), cmd_migrate() (+24 more)
+Nodes (34): cmd_backend_status(), cmd_backup(), cmd_collectstatic(), cmd_deploy(), cmd_diagnostics(), cmd_health(), cmd_load_users(), cmd_logs() (+26 more)
 
 ### Community 70 - "models.py"
-Cohesion: 0.07
-Nodes (29): Command, BaseCommand, Audit and optionally replace legacy fallback correspondence references.  Only re, Command, _exact_scope(), BaseCommand, Audit reference-scheme coverage against the active office hierarchy., _active_scheme() (+21 more)
+Cohesion: 0.05
+Nodes (33): Command, BaseCommand, Audit and optionally replace legacy fallback correspondence references.  Only re, Command, _exact_scope(), BaseCommand, Audit reference-scheme coverage against the active office hierarchy., _active_scheme() (+25 more)
 
 ### Community 71 - "Command"
 Cohesion: 0.14
-Nodes (9): Command, BaseCommand, User, Create sample project cases with forms, documents, and correspondence., Seed default case templates., Ensure NPA memo templates match Memo Headers.docx (Verdana 20pt/12pt)., Ensure the three NPA Internal Audit Division form templates., Set up default permissions for all system roles. (+1 more)
+Nodes (13): Command, BaseCommand, Office, User, Seed default case templates., Ensure NPA memo templates match Memo Headers.docx (Verdana 20pt/12pt)., Ensure the three NPA Internal Audit Division form templates., Set up default permissions for all system roles. (+5 more)
 
 ### Community 72 - "MinuteModal.tsx"
-Cohesion: 0.10
-Nodes (35): emptyForm, ENTITY_TYPES, ExternalEntitiesPage(), OfficeSelectionCardProps, ExternalEntityCombobox(), ExternalEntityComboboxProps, OFFICE_TYPE_LABELS, OFFICE_TYPE_ORDER (+27 more)
+Cohesion: 0.06
+Nodes (23): Command, BaseCommand, Ensure the superadmin break-glass account exists (idempotent).  Real staff accou, TestCase, Registered correspondence uses the same boundary as search and archives., RegisteredScopeTests, ExecutiveCalendarEventSerializer, Meta (+15 more)
 
-### Community 73 - "FormDocumentViewSet"
-Cohesion: 0.07
-Nodes (10): Generate a secure 6-digit OTP code., Create a new OTP for a user, invalidating any existing unused OTPs., AuthAPITests, InitialPasswordSetTests, NominalRollImportTests, NominalRollMappingTests, NominalRollRoleAssignmentCommandTests, TestCase (+2 more)
+### Community 73 - "compileGlyf"
+Cohesion: 0.03
+Nodes (25): addState(), compileGlyf(), CompositeGlyph, EvaluatorPreprocessor, FontRendererFactory, getFloat214(), getIndexes(), getInt16() (+17 more)
 
 ### Community 74 - "SearchService"
-Cohesion: 0.09
-Nodes (12): Log document-related activity., CorrespondenceAttachment, DocumentVersion, Create DMS Documents from a Correspondence.                  Creates:, Create a DocumentVersion from a CorrespondenceAttachment., Create a DocumentVersion from correspondence body_html., _may_manage(), True when the user holds owner/admin rights on this document. (+4 more)
+Cohesion: 0.05
+Nodes (49): AppSidebar(), AppSidebarProps, AdminNavItem(), AdminNavItemProps, SidebarNavItem(), SidebarNavItemProps, state, SheetContent (+41 more)
 
 ### Community 75 - "FeatureErrorBoundary.tsx"
-Cohesion: 0.09
-Nodes (15): APIErrorBoundary, AdminErrorBoundary(), ApprovalsErrorBoundary(), CasesErrorBoundary(), CorrespondenceErrorBoundary(), DMSErrorBoundary(), FeatureConfig, featureConfigs (+7 more)
+Cohesion: 0.04
+Nodes (29): Log document-related activity., assert_share_allowed(), Gate *internal* ACL share (grant access to NPA users/offices).      allow_extern, Process a base64 data URL: decode, validate, save to disk.          Returns a di, _apply_document_tag_search_postgresql(), _apply_document_text_search(), _document_search_terms(), _may_manage() (+21 more)
 
 ### Community 76 - ".sync_documents"
 Cohesion: 0.09
@@ -1017,38 +1001,38 @@ Nodes (18): EmailService, ERPConnectorService, Any, Integration services for web
 
 ### Community 78 - "DocumentEditorConsumer"
 Cohesion: 0.08
-Nodes (16): AsyncJsonWebsocketConsumer, DocumentEditorConsumer, WebSocket consumer for real-time document editing collaboration.          Handle, Handle user joined event., Handle user left event., Handle cursor position update., Handle content update., Handle typing indicator. (+8 more)
+Nodes (17): AsyncJsonWebsocketConsumer, DocumentEditorConsumer, WebSocket consumers for real-time document collaboration., WebSocket consumer for real-time document editing collaboration.          Handle, Handle user joined event., Handle user left event., Handle cursor position update., Handle content update. (+9 more)
 
 ### Community 79 - "apiFetch"
-Cohesion: 0.09
-Nodes (27): ExecutiveWorkspaceProps, AnalyticsExportOptions, AnalyticsMetadata, buildQuery(), deleteReportTemplate(), DivisionMetric, downloadAnalyticsExport(), EnhancedReportsAnalytics (+19 more)
+Cohesion: 0.12
+Nodes (22): CheckOutEvent, Location, PhysicalDocument, PhysicalHandover, Physical location within NPA buildings for storing physical documents., Tracks physical (paper) documents alongside their digital records., Auditable office-to-office custody transfer for a physical document., Audit trail for physical document check-in/check-out. (+14 more)
 
 ### Community 80 - "NPA ECM Frontend"
 Cohesion: 0.07
 Nodes (28): Administration, 🔗 API Integration, Build Commands, Common Issues, 🔧 Configuration, 🤝 Contributing, Correspondence System, 🚢 Deployment (+20 more)
 
 ### Community 81 - "serializers.py"
-Cohesion: 0.14
-Nodes (23): BatchUpload, CaptureJob, OCRResult, Represents a document scanning session., Represents a capture job (OCR, scan, or batch processing)., Tracks batch document uploads and processing., Stores OCR extraction results for a document., ScanSession (+15 more)
+Cohesion: 0.04
+Nodes (56): BatchStatus, BatchUpload, CaptureJob, JobStatus, JobType, Meta, OCRResult, Content capture models for OCR, scanning, and batch processing. (+48 more)
 
 ### Community 82 - "SoftDeleteQuerySet"
-Cohesion: 0.18
-Nodes (7): Meta, Common reusable models and mixins., QuerySet with helpers for soft-deleted models., Soft delete queryset records., Manager that hides soft-deleted records by default., SoftDeleteManager, SoftDeleteQuerySet
+Cohesion: 0.09
+Nodes (22): AccountsConfig, AppConfig, clear_auth_token_cookies(), clear_impersonation_cookies(), csrf_token_is_valid(), _delete_cookie(), get_access_token_from_cookies(), get_refresh_token_from_cookies() (+14 more)
 
 ### Community 83 - ".parse"
-Cohesion: 0.09
-Nodes (20): CompletionPackageService, Correspondence, CorrespondenceAttachment, DocumentVersion, User, Build media URL. Always returns relative path (browser resolves to current domai, Create DMS Documents from a Correspondence.          Creates:           - One PR, Give the current filing level's org unit read access to the package.          Ad (+12 more)
+Cohesion: 0.21
+Nodes (20): SimplifiedRoleSwitcherComponent(), SearchBar(), SearchBarProps, useRoleSwitcherGroups(), addFavoriteUser(), addRecentUser(), addSearchHistory(), clearRecentUsers() (+12 more)
 
 ### Community 84 - "isRecord"
-Cohesion: 0.12
-Nodes (4): arrayBuffersToBytes(), ChunkedStreamManager, DefaultAppearanceEvaluator, PDFWorkerStreamRangeReader
+Cohesion: 0.06
+Nodes (32): Storage/path helpers shared across apps., Convert a stored file_url into an absolute filesystem path.      Handles:     -, resolve_media_path(), Stream the case completion package via DRM-aware DMS version delivery., apply_version_drm_redaction(), assert_download_allowed(), assert_plaintext_extraction_allowed(), assert_print_allowed() (+24 more)
 
 ### Community 85 - "NPA ECM — Quick Start Guide"
 Cohesion: 0.17
-Nodes (12): Correspondence & cases, Demo data (optional), Dev login users, Documents, Frontend-only dev (API already running), Further reading, Main routes, NPA ECM — Quick Start Guide (+4 more)
+Nodes (12): Correspondence & cases, Documents, Frontend-only dev (API already running), Further reading, Login accounts, Main routes, NPA ECM — Quick Start Guide, Seeding NPA users (optional) (+4 more)
 
 ### Community 86 - "require_permission"
-Cohesion: 0.09
+Cohesion: 0.10
 Nodes (7): Any, HttpResponse, Resolve an escalation., Get performance trend for a division over time., Get top performers for the current week., Raise PermissionDenied with structured explain payload when permission is missin, require_permission()
 
 ### Community 87 - "NPA-ECM Procurement Comparison Matrix"
@@ -1056,60 +1040,56 @@ Cohesion: 0.08
 Nodes (26): 10. Administration & Configuration, 11. Deployment & Operations, 12. User Experience & Adoption, 13. Forms & Templates, 1. Core Content Management, 2. Correspondence & Workflow (NPA-ECM differentiator), 3. Search & Discovery, 4. Capture & OCR (+18 more)
 
 ### Community 88 - "npa-structure.ts"
-Cohesion: 0.07
-Nodes (22): Command, BaseCommand, Ensure default development login accounts exist (idempotent)., Look up an org unit by name. Returns None if not found., _resolve_id(), ExecutiveCalendarEventSerializer, Meta, Serializers for executive calendar events. (+14 more)
+Cohesion: 0.18
+Nodes (16): clampMarginMm(), EditorPageRuler(), EditorPageRulerProps, buildComposePrintHtml(), getPageDimensions(), PageSettings, PageSetupDialog(), bodyContentHeightPx() (+8 more)
 
 ### Community 89 - "use-sidebar-counts.ts"
-Cohesion: 0.04
-Nodes (102): DeactivateTarget, EntityType, OrganizationTab, ConnectorView, defaultForm, DrmPoliciesPage(), caseTypeOptions, SidebarTab (+94 more)
+Cohesion: 0.07
+Nodes (43): ActingWorkspaceBase(), admin, api, baseProps, candidate, offices, pendingRequest, principalMembership (+35 more)
 
 ### Community 90 - "tasks.py"
-Cohesion: 0.09
-Nodes (23): Get the most specific SLA configuration for given parameters.         Priority o, Return priority -> default target/threshold settings., Return the default warning/critical thresholds for a priority., check_sla_and_escalate(), _create_escalation(), _execute_escalation_action(), generate_daily_snapshots(), generate_weekly_staff_snapshots() (+15 more)
+Cohesion: 0.08
+Nodes (24): Get the most specific SLA configuration for given parameters.         Priority o, Return priority -> default target/threshold settings., Return the default warning/critical thresholds for a priority., Get the SLA target in hours for a priority and optional division., check_sla_and_escalate(), _create_escalation(), _execute_escalation_action(), generate_daily_snapshots() (+16 more)
 
 ### Community 91 - "OrganizationContext.tsx"
-Cohesion: 0.02
-Nodes (51): addState(), B, BehaviorOverride, Border, br, CMap, codePointIter(), computeIDs() (+43 more)
+Cohesion: 0.14
+Nodes (23): PartiesStepComponent(), DOCUMENT_TYPE_OPTIONS, FormStep, PRIORITY_OPTIONS, REGISTER_CONSTANTS, createInitialState(), RegisterAction, registerReducer() (+15 more)
 
 ### Community 92 - "shadow"
-Cohesion: 0.09
-Nodes (28): AdminPage(), getStatusColor(), timeAgo(), ServiceRow(), statusBorderClass(), statusColor(), SystemHealthPage(), ActivityEntry (+20 more)
+Cohesion: 0.02
+Nodes (262): ApprovalsForm(), ExecutiveApproval, CaptureStats, CasesListContent(), CasesListContentProps, caseTypeOptions, getCaseTypeLabel(), getPriorityBadgeVariant() (+254 more)
 
 ### Community 93 - "Deployment Guide - NPA ECM"
 Cohesion: 0.08
 Nodes (24): 1. Connect to Server, 2. Navigate to Project Directory, 3. Pull Latest Code, 4. Run Deployment Script, 5. Verify Deployment, Access URLs, Alternative Deployment Options, Alternative: Direct Docker Commands (+16 more)
 
-### Community 94 - "page.tsx"
-Cohesion: 0.12
-Nodes (18): Attachment, resolvePreviewRef(), useDocumentPreview(), UseDocumentPreviewResult, COMPLETION_PACKAGE_PATTERNS, convertDocxArrayBufferToHtml(), imageToSrc(), isMetafileContentType() (+10 more)
-
 ### Community 95 - "models.py"
-Cohesion: 0.07
-Nodes (51): BasicInfoStep, BasicInfoStepProps, DocumentsStep, DocumentsStepProps, OfficeSelectionCard(), DistributionOption, PartiesStep, PartiesStepComponent() (+43 more)
+Cohesion: 0.04
+Nodes (108): defaultForm, DrmPoliciesPage(), ActionsPanel(), SidebarTab, TypeFilter, ViewMode, RoleTableSkeleton(), ActiveFilter (+100 more)
 
 ### Community 96 - "models.py"
-Cohesion: 0.13
-Nodes (19): NotificationPreferences, User preferences for notification delivery., Meta, NotificationPreferencesSerializer, NotificationSerializer, Serializers for notifications., NotificationService, Notification service for creating and sending notifications. (+11 more)
+Cohesion: 0.08
+Nodes (29): NotificationAdmin, NotificationPreferencesAdmin, Admin configuration for notifications., Notification, NotificationPreferences, In-app notification for users., Mark notification as read., Mark notification as archived. (+21 more)
 
 ### Community 97 - "Digital Signature & Executive Seal – Holistic Review"
 Cohesion: 0.09
 Nodes (22): 10. Implementation Summary, 11. Recommendations, 1. Architecture Overview, 2. Settings → Signature (`SignatureSettingsCard`), 3. Seal Preview page (`/seal-preview`), 4. Minute Modal – Approve, 5. Minute Details, 6. Executive Approvals (`/approvals`) (+14 more)
 
 ### Community 98 - "CaptureJobViewSet"
-Cohesion: 0.10
-Nodes (23): Command, BaseCommand, Map imported roll users to system roles and primary offices., _admin_name_matches(), Command, _email(), _first_login_url(), _header_key() (+15 more)
+Cohesion: 0.07
+Nodes (30): Command, BaseCommand, Map imported roll users to system roles and primary offices., _admin_name_matches(), Command, _email(), _first_login_url(), _header_key() (+22 more)
 
 ### Community 99 - "NPA ECM Component Reference"
 Cohesion: 0.08
 Nodes (26): Accessibility, ActionsPanel, AdvancedSearch, API client, CaseWorkspace, Common patterns, CompletionSummaryModal, Component index (+18 more)
 
 ### Community 101 - "User"
-Cohesion: 0.12
-Nodes (12): WebSocket URL routing for DMS., ASGI config for the ECM backend project.  It exposes the ASGI callable as a modu, WebSocket consumer for real-time notifications., Helper function to send notification via WebSocket., send_notification_to_user(), get_user_from_token(), JWTAuthMiddleware, Custom middleware for WebSocket JWT authentication. (+4 more)
+Cohesion: 0.05
+Nodes (20): User, Invalidate a seal (e.g., if document was tampered with).                  Return, Verify a token. Returns True if valid and not expired.         Deletes the token, A seal 2FA failure with a machine-readable reason and recovery steps., Return the user's ability to start and complete a seal request., A security-sensitive change requires a fresh proof of identity., Enforce seal 2FA, including method availability, before sealing., Authorize the record a user is trying to seal.      The seal endpoint accepts a (+12 more)
 
 ### Community 102 - "Command"
-Cohesion: 0.11
-Nodes (9): Command, BaseCommand, Detect configuration drift across deployments (roles, beat tasks, env vars)., Command, BaseCommand, Seed django-celery-beat PeriodicTask rows from canonical schedule definitions., Canonical Celery Beat schedule definitions for NPA-ECM., Django settings for the ECM backend project. (+1 more)
+Cohesion: 0.31
+Nodes (6): Validate that workflow configuration can satisfy correspondence's required appro, validate_workflow_vs_requirement(), TestCase, Integration: creating a minute on executive corr with departmental-only template, step_levels: list of required_approval_level strings e.g. ["departmental", "exec, WorkflowRequirementValidationTests
 
 ### Community 103 - "Document Access Architecture Decision"
 Cohesion: 0.10
@@ -1124,20 +1104,24 @@ Cohesion: 0.10
 Nodes (20): Current Status, Docker Installation (Alternative), macOS Installation, ✅ Migrations Status, Notes, Option 1: MacPorts (Recommended for macOS 13 Ventura), Option 2: Homebrew (After updating Command Line Tools), Option 3: Manual Installation (+12 more)
 
 ### Community 106 - "logWarn"
-Cohesion: 0.23
-Nodes (11): user(), capture_approval_snapshot(), _designation(), _display_name(), get_or_create_approval_snapshot(), _minutes_snapshot(), _personnel_number(), Freeze the approval record and generated PDF for later verification. (+3 more)
+Cohesion: 0.15
+Nodes (18): user(), _public_app_origin(), Return the externally reachable application origin, if configured., Build the verification URL from the configured public app origin., _verification_url(), approval_record_minutes(), capture_approval_snapshot(), _designation() (+10 more)
 
 ### Community 107 - "NotificationConsumer"
 Cohesion: 0.12
 Nodes (12): AsyncWebsocketConsumer, NotificationConsumer, Handle notification created event., Handle notification updated event., Handle unread count changed event., Get unread notification count for user., Mark notification as read. Returns True if a row was updated., WebSocket consumer for real-time notifications. (+4 more)
 
 ### Community 108 - "models.py"
-Cohesion: 0.10
-Nodes (17): ConnectorType, ERPType, EventStatus, LogStatus, LogType, Meta, Integration models for webhooks, email, and external system connectors., Retry failed webhook deliveries that haven't exceeded retry count. (+9 more)
+Cohesion: 0.11
+Nodes (14): Retry failed webhook deliveries that haven't exceeded retry count., Deliver a webhook event.          Args:             webhook_event: WebhookEvent, deliver_webhook(), poll_imap_inboxes(), Celery tasks for integration operations., Deliver a webhook event asynchronously.      Args:         webhook_event_id: UUI, Periodic task to retry failed webhook deliveries., Poll all active IMAP connectors for inbound correspondence. (+6 more)
 
 ### Community 109 - "NPA Electronic Content Management System — Setup Guide"
 Cohesion: 0.10
-Nodes (20): Access control & sensitivity, Adding a user (Django admin or API), API endpoints (canonical `/api/v1/`), Development workflow, Divisions (23+), Hierarchy (summary), Key Django apps, NPA Electronic Content Management System — Setup Guide (+12 more)
+Nodes (20): Access control & sensitivity, Accounts, Adding a user (Django admin or API), API endpoints (canonical `/api/v1/`), Development workflow, Divisions (23+), Hierarchy (summary), Key Django apps (+12 more)
+
+### Community 110 - "semantic_service.py"
+Cohesion: 0.09
+Nodes (18): assign(), make_office(), make_user(), Office, OfficeMembership, Path, User, Tests for the deactivate_mock_accounts management command. (+10 more)
 
 ### Community 111 - "AdvancedSearch.tsx"
 Cohesion: 0.11
@@ -1160,60 +1144,60 @@ Cohesion: 0.09
 Nodes (12): minute_satisfies_assignment_outcome(), Allow only first creation and the archived PDF attachment afterward., Check if parallel routing group should be marked as complete based on merge stra, Revoke this delegation., Mark delegation as completed (usually when correspondence is completed)., Check if delegation is still active., Increment usage count., Mark this comment as resolved. (+4 more)
 
 ### Community 116 - "HRMSSyncService"
-Cohesion: 0.19
-Nodes (10): build_auth_headers(), get_json(), Any, Shared HTTP auth helpers for integration connectors., HRMSSyncService, Any, HRMS staff and organization synchronization., Sync staff profiles and org units from NPA HRMS. (+2 more)
+Cohesion: 0.04
+Nodes (80): HealthStatus, SystemHealthItem, ConnectorView, LoginForm(), readRememberedUsername(), SetPasswordForm(), deliveryPhases, features (+72 more)
 
 ### Community 117 - "components.json"
 Cohesion: 0.12
 Nodes (16): aliases, components, hooks, lib, ui, utils, rsc, $schema (+8 more)
 
 ### Community 118 - "type-utils.ts"
-Cohesion: 0.05
-Nodes (22): User, Services for seal generation and verification., Invalidate a seal (e.g., if document was tampered with).                  Return, Verify a token. Returns True if valid and not expired.         Deletes the token, A seal 2FA failure with a machine-readable reason and recovery steps., Return the user's ability to start and complete a seal request., A security-sensitive change requires a fresh proof of identity., Enforce seal 2FA, including method availability, before sealing. (+14 more)
+Cohesion: 0.03
+Nodes (25): AbstractUser, Admin configuration for the accounts app., UserAdmin, Return a human readable representation of the user's role., User model augmented with NPA-specific metadata., User, CurrentUserProfileTests, make_image() (+17 more)
 
 ### Community 119 - "SealGenerationService"
-Cohesion: 0.13
-Nodes (24): activeBlockType(), BLOCK_TYPES, BORDER_CLEAR, Commands, formatPx(), getBlockLineHeight(), getBlockMarginLeftPx(), getBlockStyle() (+16 more)
+Cohesion: 0.09
+Nodes (10): get_office_queue_office_ids(), Return office IDs where the user holds a queue-visible seat.      Queue roles: p, user_can_view_all_correspondence(), _page_scope_context(), Enforce a page rule and optionally ensure the requested collection scope is allo, Resolve page visibility and its scope using the canonical backend map., require_page_access(), resolve_page_access() (+2 more)
 
 ### Community 120 - "ActivityLogViewSet"
-Cohesion: 0.11
-Nodes (15): CompletionPackageService, Correspondence, User, Build media URL. Always returns relative path (browser resolves to current domai, Generate a unique case number., Auto-create a Case from a Correspondence if it matches trigger criteria., Link a correspondence to a case., Update case status and handle lifecycle transitions. (+7 more)
+Cohesion: 0.17
+Nodes (8): AutoSchema, LenientAutoSchema, OpenAPI fallbacks for APIViews whose response shapes are not serialized., Keep custom views in the schema without guessing undeclared fields., LenientAutoSchemaTests, APIView, SimpleTestCase, UnspecifiedAPIView
 
 ### Community 121 - "build_version_diff"
-Cohesion: 0.14
-Nodes (10): SimpleTestCase, Tests for document version diff., VersionDiffTests, build_version_diff(), extract_version_plain_text(), Any, Document version text extraction and diff utilities., Return best-effort plain text for a document version. (+2 more)
+Cohesion: 0.05
+Nodes (30): normalize_text_spacing(), Plain text for search, snippets and diffs.  Rich-text memos store their layout a, Return single-line plain text for an HTML or plain-text value., Collapse non-breaking/space runs per line, preserving line structure., to_plain_text(), NormalizeTextSpacingTests, SimpleTestCase, Plain-text extraction must survive the non-breaking spaces memos store. (+22 more)
 
 ### Community 122 - "Quick Installation Guide - System Dependencies"
 Cohesion: 0.12
 Nodes (15): "Command not found" after installation, Homebrew fails on macOS 13, If Homebrew works:, If MacPorts is installed:, 📝 Important Notes, ⚡ One-Line Commands, Option 1: MacPorts (Recommended for macOS 13) ⭐, Option 2: Try Homebrew (May Work After Updates) (+7 more)
 
 ### Community 123 - "admin-search.ts"
-Cohesion: 0.50
-Nodes (3): Unified history: Case + FormSubmission + Correspondence + minutes., get_case_history(), Build unified history for a Case(AUDIT): case + forms + correspondence + minutes
+Cohesion: 0.05
+Nodes (14): Binder, createDataNode(), createText(), DatasetReader, decodeString(), In, MetadataParser, parseExpression() (+6 more)
 
 ### Community 124 - "scripts"
 Cohesion: 0.12
-Nodes (15): name, private, scripts, analyze, build, dev, lint, start (+7 more)
+Nodes (16): name, private, scripts, analyze, build, dev, generate:api-types, lint (+8 more)
 
 ### Community 125 - "views.py"
-Cohesion: 0.07
-Nodes (36): count_online_users(), list_online_users(), online_presence_cutoff(), presence_window_seconds(), Online presence helpers for admin dashboards., ProtectedMediaView, APIView, Authenticated media serving for allowlisted non-document paths (signatures, seal (+28 more)
+Cohesion: 0.16
+Nodes (15): URL routes for common platform endpoints., AdminDashboardOverviewView, BackupLatestDownloadView, health_live(), LiveDashboardView, APIView, Common views and utilities., Admin dashboard: system health summary + online user count. (+7 more)
 
 ### Community 126 - "Component Map"
 Cohesion: 0.13
 Nodes (14): ✅ ActionsPanel, Component Map, Correspondence Detail Page Refactoring Plan, ✅ CorrespondenceDetailModals, ✅ CorrespondenceHeader, ✅ CorrespondenceWorkspace, Current State, ✅ DocumentPreviewPanel (+6 more)
 
 ### Community 127 - "Providers.tsx"
-Cohesion: 0.20
-Nodes (10): metadata, viewport, AppShell(), AppShellProps, DashboardLayout(), AuthzGate(), Providers(), ProvidersProps (+2 more)
+Cohesion: 0.25
+Nodes (5): build_media_url(), Canonical builder for stored and served media URLs., Return a browser-relative media URL for a storage-relative path., BuildMediaUrlTests, SimpleTestCase
 
 ### Community 128 - "WorkerTask"
-Cohesion: 0.17
-Nodes (19): _approval_certificate(), _format_date(), _html_segments(), _inline_markup(), _memo_flowables(), _memo_table(), _memo_text_flowables(), _minutes_table() (+11 more)
+Cohesion: 0.10
+Nodes (32): _approval_certificate(), _dms_paper_html(), _format_date(), _html_segments(), _inline_markup(), _memo_flowables(), _memo_table(), _memo_text_flowables() (+24 more)
 
 ### Community 129 - "CFFFont"
-Cohesion: 0.02
-Nodes (197): CaseAnalyticsPage(), CaseCommentsDialog(), CaseMobileStickyBar(), CaseMobileStickyBarProps, CaseDetailPage(), ActionsPanelProps, CorrespondenceDetailModals(), CorrespondenceDetailModalsProps (+189 more)
+Cohesion: 0.12
+Nodes (14): CompletionPackageService, Correspondence, User, Give the current filing level's org unit read access to the package.          Ad, Add the org unit the record is filed under to a read permission., Publish draft primary documents when correspondence formally issues them., Handles generation and distribution of correspondence completion summaries., Create or refresh the completion package for a correspondence. (+6 more)
 
 ### Community 130 - "System Dependencies Installation Guide"
 Cohesion: 0.14
@@ -1236,8 +1220,12 @@ Cohesion: 0.14
 Nodes (14): Adding a new permission (developer workflow), After (S2 target), API reference, Architecture, Before (hybrid), Enforcement pattern, Goals, In scope (this sprint) (+6 more)
 
 ### Community 135 - "stack-utils.sh"
-Cohesion: 0.23
+Cohesion: 0.19
 Nodes (9): stack-utils.sh script, stack_assert_stag_host(), stack_backend_manage(), stack_compose(), stack_compose_exec(), stack_detect_compose_cmd(), stack_init_env(), stack_is_macos() (+1 more)
+
+### Community 136 - "field_encryption.py"
+Cohesion: 0.16
+Nodes (7): _derive_key(), decrypt_value(), _derive_fernet_key(), encrypt_value(), _get_fernet(), Symmetric encryption for integration credentials at rest., Fernet
 
 ### Community 137 - "views.py"
 Cohesion: 0.13
@@ -1248,40 +1236,52 @@ Cohesion: 0.14
 Nodes (13): EmailConnectorAdmin, ERPConnectorAdmin, ERPSyncRecordAdmin, HRMSConnectorAdmin, IntegrationLogAdmin, Admin configuration for integrations module., Admin interface for IntegrationLog., Admin interface for Webhook. (+5 more)
 
 ### Community 139 - ".deliver_webhook"
-Cohesion: 0.09
-Nodes (43): AuthCallbackPage(), ALLOWED_REDIRECT_PREFIXES, LoginForm(), resolveRedirectPath(), TopBar(), AccessContext, PermissionCheckResult, downloadComplianceExport() (+35 more)
+Cohesion: 0.08
+Nodes (10): AESBaseCipher, Ag, ARCFourCipher, CipherTransform, CipherTransformFactory, eg, isArrayEqual(), NullCipher (+2 more)
+
+### Community 140 - "ActingAppointmentSerializer"
+Cohesion: 0.10
+Nodes (32): VerifyPage(), FAILED_RESULT_VIEW, FailedResultState, SealVerificationResult(), SealVerificationResultProps, baseVerification, mockCheckSealDocument, AdminError (+24 more)
 
 ### Community 141 - "⚠️ CRITICAL: Preventing Data Loss"
 Cohesion: 0.15
-Nodes (12): 1. Never Remove Volumes, 2. Never Run Bootstrap Scripts in Production/Staging, 3. Never Use --reset Flag in Production/Staging, 4. Check Volume Status, 5. Backup Before Deployment, ⚠️ CRITICAL: Preventing Data Loss, Database Persistence Guide, Deployment Checklist (+4 more)
+Nodes (12): 1. Never Remove Volumes, 2. Never Run Bootstrap Scripts in Production/Staging, 3. Never Seed Over Live Data in Production/Staging, 4. Check Volume Status, 5. Backup Before Deployment, ⚠️ CRITICAL: Preventing Data Loss, Database Persistence Guide, Deployment Checklist (+4 more)
 
 ### Community 142 - "Document Upload and Versioning"
 Cohesion: 0.15
-Nodes (13): Advanced Features, Bulk Upload, Document Upload and Versioning, Drag and Drop, File Requirements, New Document Upload, Progress Tracking, Size Limits (+5 more)
+Nodes (13): Document Upload and Versioning, File Not Opening, File Requirements, New Document Upload, Permission Issues, Size Limits, Step-by-Step Guide, Supported Formats (+5 more)
 
 ### Community 143 - "sidebar.tsx"
-Cohesion: 0.15
-Nodes (13): Any, QuerySet, Highlight search terms in text (simple version - returns text as-is for now)., Service for advanced document and correspondence search., Apply visibility filters based on user permissions.                  Args:, Search within specific documents (e.g., OCR text, content).          Args:, Apply org-boundary visibility for correspondence search (same as Archives)., Perform full-text search on correspondence.          Args:             query: Se (+5 more)
+Cohesion: 0.09
+Nodes (41): AttachmentImagePreview(), DmsVersionPreviewContent(), DmsVersionPreviewContentProps, useScrollToSearchHit(), PrintPreviewModalContent(), CanonicalDocumentViewer(), CanonicalDocumentViewerProps, sourceKey() (+33 more)
 
 ### Community 144 - "page.tsx"
-Cohesion: 0.23
-Nodes (5): Seed audit workflow rules and backfill Cases(AUDIT) from FormSubmissions., backfill_audit_cases(), For each FormSubmission with audit-query-bills-certification, ensure a Case(AUDI, AuditCaseAggregateTests, TestCase
+Cohesion: 0.18
+Nodes (7): Seed audit workflow rules and backfill Cases(AUDIT) from FormSubmissions., backfill_audit_cases(), ensure_audit_workflow_rules(), For each FormSubmission with audit-query-bills-certification, ensure a Case(AUDI, Seed CaseWorkflowRule entries for each audit state.      One rule per state enco, AuditCaseAggregateTests, TestCase
 
 ### Community 145 - ".log_activity"
-Cohesion: 0.03
-Nodes (99): RecordsGovernanceContent(), statusBadge(), formatRouteTimestamp(), routeActionLabel(), RoutingPanel(), WorkflowStepsBuilder(), ALLOWED_TYPES, BatchUploadDialog() (+91 more)
+Cohesion: 0.11
+Nodes (9): Command, BaseCommand, Detect configuration drift across deployments (roles, beat tasks, env vars)., Command, BaseCommand, Seed django-celery-beat PeriodicTask rows from canonical schedule definitions., Canonical Celery Beat schedule definitions for NPA-ECM., Django settings for the ECM backend project. (+1 more)
 
 ### Community 146 - ".extract_text"
-Cohesion: 0.06
-Nodes (23): load_file_bytes(), Storage/path helpers shared across apps., Convert a stored file_url into an absolute filesystem path.      Handles:     -, Load file bytes from local path or return None if missing/remote., resolve_media_path(), DocumentAnalyticsService, OCRService, Document Management Services - OCR and AI Summary. (+15 more)
+Cohesion: 0.09
+Nodes (10): BackupCode, A hashed, single-use recovery code for login MFA., BackupCodeHardeningTests, EmailOtpHardeningTests, LoginMfaHardeningTests, make_png(), APITestCase, raw_column() (+2 more)
+
+### Community 147 - "CorrespondenceContext.tsx"
+Cohesion: 0.09
+Nodes (24): fetchActiveUsersMock, state, userA, userB, clearOrgUsersCache(), fetchAllUsers(), clearers, clearIdentityCaches() (+16 more)
+
+### Community 148 - "HelpAndGuidePage"
+Cohesion: 0.07
+Nodes (11): CorrespondenceAttachment, Create DMS Documents from a Correspondence.          Creates:           - One PR, Create a DocumentVersion from a CorrespondenceAttachment., Create a DocumentVersion from correspondence body_html., CorrespondenceReferenceGenerationTests, APITestCase, References are generated from the owning office, not the creator., CorrespondenceTreatmentResponseTests (+3 more)
 
 ### Community 149 - "Correspondence Management"
 Cohesion: 0.13
 Nodes (14): Approval Tiers & Classification, Architecture, Correspondence Management, Key Components, Key Features, Key Models, Key Services, Legacy redirects (+6 more)
 
 ### Community 150 - ".add"
-Cohesion: 0.03
-Nodes (22): CFFCompiler, CFFDict, CFFFDSelect, CFFOffsetTracker, CFFParser, CFFPrivateDict, CFFStrings, CFFTopDict (+14 more)
+Cohesion: 0.04
+Nodes (13): CFFCompiler, CFFDict, CFFOffsetTracker, CFFParser, CFFPrivateDict, CFFStrings, CFFTopDict, Ei (+5 more)
 
 ### Community 151 - "Correspondence Feature Gap Analysis Implementation Plan"
 Cohesion: 0.17
@@ -1292,8 +1292,8 @@ Cohesion: 0.12
 Nodes (16): Action Permissions, Add Minute, Available Actions, Best Practices, Complete Correspondence, Correspondence Actions Panel, Delegation Guidelines, Delegation Status (+8 more)
 
 ### Community 153 - "User Guides for NPA ECM Features"
-Cohesion: 0.18
-Nodes (10): BOQ, CELL_STYLE_ALLOW, cellStyleAttr, filterCellStyle(), NpaTable, NpaTableCell, NpaTableHeader, NpaTableRow (+2 more)
+Cohesion: 0.12
+Nodes (15): Auditability, Discovery checklist, Discovery completion gate, ECM team, Field mapping, Future Read-Only M-Files Archive Pilot, Intent, M-Files administrator (+7 more)
 
 ### Community 154 - "TopBar.tsx"
 Cohesion: 0.24
@@ -1301,23 +1301,23 @@ Nodes (7): find_retention_schedule(), generate_due_disposals(), Any, Create disp
 
 ### Community 155 - "delegations.ts"
 Cohesion: 0.06
-Nodes (7): DatasetReader, decodeString(), MetadataParser, parseXFAPath(), SimpleDOMNode, SimpleXMLParser, XFAObjectArray
+Nodes (20): MinuteViewSet, MinuteRouterService, Route correspondence back to the origin office after a parallel merge.      Retu, Handles all routing decisions when creating a minute.      Responsibilities:, Map the actor to the approval level/role actually being recorded.          - MD/, Return eligible initial actors for an unassigned inward record.          ``None`, Gate creation by action type with unified approval gate.          For approve: h, Raise ValidationError if user routes to themselves or their own office. (+12 more)
 
 ### Community 156 - "._bindElement"
 Cohesion: 0.17
 Nodes (4): OfficeQueueAccessTests, TestCase, Tests for office queue access (principal/acting/secretariat only)., Archiving is a separate step after completion, so the tray must not         take
 
 ### Community 157 - "OCRService"
-Cohesion: 0.12
-Nodes (14): BatchProcessingService, MetadataExtractionService, OCRService, Any, Content capture services for OCR, scanning, and batch processing., Extract text from a DOCX file.          Args:             docx_path: Path to the, Process a document for OCR extraction.          Args:             document_id: U, Service for Optical Character Recognition processing. (+6 more)
+Cohesion: 0.14
+Nodes (10): _branch_status(), Command, BaseCommand, Escalate overdue parallel branches (non-response handling).  Flags / notifies br, One audience rule per share target — the canonical document share model.  person, Meta, NotificationType, Priority (+2 more)
 
 ### Community 158 - "FormDocumentSerializer"
-Cohesion: 0.07
-Nodes (10): compileGlyf(), CompositeGlyph, getFloat214(), getInt16(), getInt8(), GlyfTable, Glyph, GlyphHeader (+2 more)
+Cohesion: 0.12
+Nodes (10): Meta, Common reusable models and mixins., QuerySet with helpers for soft-deleted models., Soft delete queryset records., Permanently delete records., Manager that hides soft-deleted records by default., Mark the instance as deleted., Permanently delete the instance. (+2 more)
 
 ### Community 159 - ".constructor"
-Cohesion: 0.06
-Nodes (19): ContextCache, decodeBitmap(), decodeIAID(), decodeInteger(), decodeMMRBitmap(), decodeRefinement(), decodeTextRegion(), getB() (+11 more)
+Cohesion: 0.02
+Nodes (182): ArchiveRecordContent(), retainedFileType(), CorrespondenceDetailModals(), CorrespondenceDetailModalsProps, capitalize(), CorrespondenceInfoPanel(), CorrespondenceInfoPanelProps, DIRECTION_LABEL (+174 more)
 
 ### Community 160 - "NPA ECM API Reference"
 Cohesion: 0.20
@@ -1336,8 +1336,8 @@ Cohesion: 0.18
 Nodes (10): Architecture, DMS Tabs (`app/dms/`), Document Management System (DMS), Key Components, Key Features, Key Services, Overview, Related Docs (+2 more)
 
 ### Community 164 - "admin-error-handler.ts"
-Cohesion: 0.14
-Nodes (22): AdminError, ApiError, handleApiError(), handleBulkOperationErrors(), showSuccess(), showWarning(), withErrorHandling(), ApiErrorShape (+14 more)
+Cohesion: 0.04
+Nodes (45): Shared business constants used across apps.  Grade-related constants are re-expo, Grade level utilities and constants shared across apps.  NPA grade hierarchy (hi, Combine document ACL access with DRM restrictions for one user., resolve_effective_document_rights(), ClassificationPolicyEndpointTests, APITestCase, The served classification policy must be the gate the server enforces.  The shar, DepartmentDivisionAclInheritanceTests (+37 more)
 
 ### Community 165 - "✅ Completed Tasks"
 Cohesion: 0.14
@@ -1348,36 +1348,36 @@ Cohesion: 0.20
 Nodes (9): BatchUploadAdmin, CaptureJobAdmin, OCRResultAdmin, Admin configuration for content capture module., Admin interface for CaptureJob., Admin interface for OCRResult., Admin interface for ScanSession., Admin interface for BatchUpload. (+1 more)
 
 ### Community 167 - ".filter_queryset"
-Cohesion: 0.20
-Nodes (8): _apply_document_tag_search_postgresql(), _apply_document_text_search(), _document_search_terms(), Override to handle document filter gracefully., Override to add full-text search in document versions and date range filtering., Split comma-separated search into terms (OR match). Single phrase stays one term, OR across terms; each term matches title, reference, description, or version OCR, Documents where any JSON array tag string matches any term (substring, case-inse
+Cohesion: 0.14
+Nodes (7): Extract text from a PDF — native text layer first, then OCR., Return plain text for a DocumentVersion.          Uses content_text/ocr_text whe, Fallback: Extract text using tesseract CLI directly., Fallback: Extract text from PDF using pdftotext CLI., Extract text from a DOCX file using python-docx., Extract text from a document using OCR.                  Args:             file_, Extract text from an image using pytesseract.
 
 ### Community 168 - "use-org-search.ts"
 Cohesion: 0.11
-Nodes (24): applyTable(), applyWordTableFormatting(), BORDER_STYLE_MAP, BorderValue, CellBorders, CellPadding, cellsOf(), cellText() (+16 more)
+Nodes (3): DatasetXMLParser, XFAParser, XMLParserBase
 
 ### Community 169 - "organization-cache.ts"
-Cohesion: 0.12
-Nodes (3): CorrespondenceReferenceGenerationTests, APITestCase, References are generated from the owning office, not the creator.
+Cohesion: 0.03
+Nodes (92): WorkflowSLAForm(), calculateDaysPending(), calculateTaskStatus(), Dashboard(), DASHBOARD_TABS, DashboardTab, InboxSummary, parseDashboardTab() (+84 more)
 
 ### Community 171 - "`scripts/` — ECM Operations Toolkit"
-Cohesion: 0.20
-Nodes (9): Adding a new operation, Cheat sheet, Design, `env-manager` commands, Environment files, Legacy scripts, Local CI, `scripts/` — ECM Operations Toolkit (+1 more)
+Cohesion: 0.18
+Nodes (10): Adding a new operation, Cheat sheet, Design, `env-manager` commands, Environment files, Legacy scripts, Load users from the nominal roll, Local CI (+2 more)
 
 ### Community 172 - ".save"
-Cohesion: 0.12
-Nodes (16): SidebarFooter, SidebarGroupAction, SidebarHeader, SidebarInput, SidebarInset, SidebarMenuAction, SidebarMenuBadge, sidebarMenuButtonVariants (+8 more)
+Cohesion: 0.10
+Nodes (11): Add baseline security headers for API responses., SecurityHeadersMiddleware, Shared pagination utilities.  Standardize on `page_size` query param across the, EnvironmentParityCommandTests, HealthEndpointTests, HealthMetricsTests, PaginationConfigTests, TestCase (+3 more)
 
 ### Community 173 - "test_services.py"
-Cohesion: 0.43
-Nodes (5): _create_correspondence(), Tests for analytics service helpers., test_compute_executive_metrics_includes_division_and_documents(), test_compute_performance_metrics_counts(), test_compute_report_metrics_respects_division_filter()
+Cohesion: 0.18
+Nodes (6): Mark all unread notifications as read for a user., Push current unread count to the user's notification WebSocket (if connected)., Mark a notification as read., Mark a notification as archived., Mark all notifications as read., Get or create preferences for the current user.
 
 ### Community 174 - "DispatchTests"
-Cohesion: 0.14
-Nodes (12): ApiTimingMiddleware, InternalHostMiddleware, HttpResponse, Custom middleware for the ECM application., Record per-minute response time and error counters., Middleware to allow internal Docker hostnames with ports for metrics endpoints., Aggregate the last 5 one-minute buckets., Middleware to track user activity.     Updates last_activity timestamp for authe (+4 more)
+Cohesion: 0.25
+Nodes (7): ActionType, CorrespondenceType, Meta, Priority, Analytics and reporting data models., Status, TriggerType
 
 ### Community 175 - "ParallelPhasesTests"
-Cohesion: 0.13
-Nodes (15): RichTextEditorProps, EditorFailureShell(), RichTextEditor(), TipTapBoundaryProps, TipTapBoundaryState, TipTapErrorBoundary, TiptapRichTextEditor, browserSummary() (+7 more)
+Cohesion: 0.14
+Nodes (5): MySentEndpointTests, OfficeSentEndpointTests, TestCase, SidebarCountsCacheTests, SidebarCountsOfficeLookupTests
 
 ### Community 176 - "FormSubmission"
 Cohesion: 0.17
@@ -1403,25 +1403,21 @@ Nodes (9): 2.1 Budget Summary Table, 2.2 Detailed Infrastructure Specifications,
 Cohesion: 0.22
 Nodes (9): Documentation Structure, For Developers, For End Users, For Operations & Rollout, For Procurement & Stakeholders, Key Documents, NPA ECM Documentation, Recent Architecture Changes (+1 more)
 
-### Community 182 - "useNotificationWebSocket"
-Cohesion: 0.14
-Nodes (6): Command, BaseCommand, Write a presentation-ready multi-section demo PDF; return (/media/…, size)., Ensure MD has an active executive signature for seal demos., Attach an MD digital seal to an approve minute for executive approvals demo., DocumentRightsPolicy
-
 ### Community 183 - "sheet.tsx"
-Cohesion: 0.22
-Nodes (8): SheetContent, SheetContentProps, SheetDescription, SheetFooter(), SheetHeader(), SheetOverlay, SheetTitle, sheetVariants
+Cohesion: 0.13
+Nodes (14): build_authorization_url(), create_oidc_state(), exchange_code_for_tokens(), fetch_userinfo(), oidc_enabled(), _oidc_setting(), pop_oidc_state(), Any (+6 more)
 
 ### Community 184 - "unreachable"
 Cohesion: 0.25
 Nodes (4): Generate a summary of document content.                  This method provides a, Generate summary using an LLM API.                  Configure your LLM API crede, Generate a simple extractive summary by selecting key sentences.         This is, Generate AI summary for document.
 
 ### Community 185 - "models.py"
-Cohesion: 0.25
-Nodes (7): ActionType, CorrespondenceType, Meta, Priority, Analytics and reporting data models., Status, TriggerType
+Cohesion: 0.18
+Nodes (4): ClassificationGateParityTests, DocumentAclLevelTests, APITestCase, A share and a correspondence delivery obey the same classification gate.      Th
 
 ### Community 186 - ".search"
-Cohesion: 0.04
-Nodes (97): CaseFormPreviewDialog(), RootError(), FormDetailPage(), FormsTemplatesPage(), NotificationsPage(), AppearanceSection, NotificationsSection, PasswordDialog (+89 more)
+Cohesion: 0.18
+Nodes (5): CorrespondenceDocumentCustodyTests, TestCase, A document sent through correspondence belongs to the office it was sent to.  Co, The modal's contract: routing a document is not sharing it., Delivering a record to the office it is addressed to is not a loop.
 
 ### Community 187 - "Command"
 Cohesion: 0.22
@@ -1429,19 +1425,19 @@ Nodes (8): Behaviour change, Decision, Files changed, Known limitations, Ready f
 
 ### Community 188 - "CalRGBCS"
 Cohesion: 0.06
-Nodes (7): AlternateCS, CalGrayCS, CalRGBCS, DeviceCmykCS, DeviceRgbaCS, IndexedCS, LabCS
+Nodes (6): AlternateCS, CalGrayCS, CalRGBCS, DeviceCmykCS, DeviceRgbaCS, LabCS
 
 ### Community 189 - "Sprint S3 — Sent draft APIs, SSO/MFA Staging & Audit RBAC"
 Cohesion: 0.20
 Nodes (10): Audit log permission scoping, Delivered, Goals, Login MFA rollout, Related, Sent draft APIs, Sprint S3 — Sent draft APIs, SSO/MFA Staging & Audit RBAC, SSO / OIDC staging (+2 more)
 
 ### Community 190 - "OCRSignalTests"
-Cohesion: 0.20
-Nodes (6): queue_ocr_job(), Enqueue OCR for a document unless an active job already exists.      Returns ``(, CaptureJobRetryTests, TestCase, QueueOCRJobTests, CaptureJob
+Cohesion: 0.18
+Nodes (13): classify_required_level(), downgrade_with_reason(), escalate(), Classification service for correspondence approval levels.  Tiered approval mode, Return required approval level based on amount and strategic flag.      - EXECUT, Escalate correspondence to EXECUTIVE level.      Checks can_classify_approval pe, Downgrade auto-EXECUTIVE correspondence to DEPARTMENTAL with explicit reason., test_classify_auto_departmental_under_threshold() (+5 more)
 
 ### Community 191 - "celery.py"
-Cohesion: 0.15
-Nodes (9): process_batch_upload(), process_ocr_job(), Celery tasks for async content capture processing., Process a batch upload asynchronously.      Args:         batch_upload_id: UUID, Process an OCR job asynchronously.      Args:         capture_job_id: UUID of th, Celery application definition for the ECM backend., Initialize Celery for the ECM backend., Celery tasks for organization / acting appointments. (+1 more)
+Cohesion: 0.29
+Nodes (4): Celery application definition for the ECM backend., Initialize Celery for the ECM backend., Celery tasks for organization / acting appointments., Celery tasks for records governance automation.
 
 ### Community 192 - "Correspondence APIs"
 Cohesion: 0.20
@@ -1465,15 +1461,19 @@ Nodes (7): 🎯 Future Enhancements, 🔧 Maintenance Tasks, Monitoring Maintena
 
 ### Community 197 - "Util"
 Cohesion: 0.10
-Nodes (16): decodeScan(), findNextFileMarker(), Jbig2Image, JpegImage, prepareComponents(), processSegment(), processSegments(), _r (+8 more)
+Nodes (12): IsExecutiveGrade, IsSystemAdminRole, Shared DRF permission classes., Allow read access to all authenticated users, but write access only to     users, Allow read access to all authenticated users, but write access only to     users, FormSubmissionViewSet, FormTemplateViewSet, Get all form submissions for a correspondence. (+4 more)
 
 ### Community 198 - "CompactStatusStrip.tsx"
-Cohesion: 0.10
-Nodes (32): DocumentMetadataCard(), DocumentMetadataCardProps, applyClassStylesFromMap(), applyTipTapColwidths(), cellColSpan(), cellHasVisibleText(), cleanOfficeHtml(), cleanStyleAttribute() (+24 more)
+Cohesion: 0.24
+Nodes (3): GradeCatalogTests, APITestCase, The served grade catalogue is the hierarchy the server routes on.  Routing sugge
 
 ### Community 199 - "integrations-storage.ts"
-Cohesion: 0.18
-Nodes (13): classify_required_level(), downgrade_with_reason(), escalate(), Classification service for correspondence approval levels.  Tiered approval mode, Return required approval level based on amount and strategic flag.      - EXECUT, Escalate correspondence to EXECUTIVE level.      Checks can_classify_approval pe, Downgrade auto-EXECUTIVE correspondence to DEPARTMENTAL with explicit reason., test_classify_auto_departmental_under_threshold() (+5 more)
+Cohesion: 0.10
+Nodes (19): metadata, viewport, AppShell(), AppShellProps, DashboardLayout(), DashboardLayoutProps, AuthzGate(), ProtectedAuthGate() (+11 more)
+
+### Community 200 - "Stream"
+Cohesion: 0.21
+Nodes (3): OrganizationHierarchyAccessTests, TestCase, Organization hierarchy reads are scoped for non-administrative accounts.
 
 ### Community 201 - "0042_backfill_correspondence_current_office.py"
 Cohesion: 0.33
@@ -1484,36 +1484,32 @@ Cohesion: 0.33
 Nodes (5): backfill_current_approver(), find_office_head_cursor(), Migration, Set correspondence.current_approver to the office head of current_office if not, Find the office head user ID for a given office.
 
 ### Community 203 - ".parseXml"
-Cohesion: 0.02
-Nodes (45): Admin configuration for the accounts app., UserAdmin, Command, BaseCommand, Dry-run the nominal roll and write a row-by-row reconciliation report., Migration, Migration, Migration (+37 more)
+Cohesion: 0.16
+Nodes (7): DocumentSendFlowTests, APITestCase, The send flow in the share dialog, all the way to the receiving seat.  The dialo, Call 1 — the dialog's multipart FormData, field for field., Call 2 — attach the DMS document to the record., Call 3 — the dispatch minute names the receiving office., Guard the dialog's precondition: the record must arrive assigned.
 
 ### Community 204 - "resolve_document_rights"
-Cohesion: 0.04
-Nodes (46): Stream the case completion package via DRM-aware DMS version delivery., apply_version_drm_redaction(), assert_download_allowed(), assert_plaintext_extraction_allowed(), assert_print_allowed(), assert_share_allowed(), assert_view_allowed(), blocks_plaintext_extraction() (+38 more)
+Cohesion: 0.19
+Nodes (10): build_auth_headers(), get_json(), Any, Shared HTTP auth helpers for integration connectors., HRMSSyncService, Any, HRMS staff and organization synchronization., Sync staff profiles and org units from NPA HRMS. (+2 more)
 
 ### Community 205 - "custom_exception_handler"
 Cohesion: 0.29
 Nodes (6): custom_exception_handler(), Any, Custom exception handler for consistent API error responses., Wrap DRF's default exception handler to enforce a consistent payload.      Retur, Exception, Response
-
-### Community 206 - ".push"
-Cohesion: 0.08
-Nodes (10): AESBaseCipher, Ag, ARCFourCipher, CipherTransform, CipherTransformFactory, eg, isArrayEqual(), NullCipher (+2 more)
 
 ### Community 207 - "Backend Setup Guide"
 Cohesion: 0.29
 Nodes (6): 1. Create the database, 2. Install dependencies and seed demo data, 3. Running the backend, 4. Optional helpers, 5. Environment variables, Backend Setup Guide
 
 ### Community 208 - "Helpdesk Operations — NPA-ECM (12 months)"
-Cohesion: 0.22
-Nodes (15): clampMarginMm(), EditorPageRuler(), EditorPageRulerProps, buildComposePrintHtml(), getPageDimensions(), openComposePrintPreview(), PageSettings, PageSetupDialog() (+7 more)
+Cohesion: 0.13
+Nodes (20): ApiDraft, deleteDraft(), Draft, DraftFileMetadata, DraftRoutingData, getDraftByCorrespondence(), getDrafts(), isDraftRoutingData() (+12 more)
 
 ### Community 209 - ".validate_parent"
-Cohesion: 0.03
-Nodes (98): DocumentMobileStickyBar(), DocumentMobileStickyBarProps, DocumentPreviewPanel(), DocumentPreviewPanelProps, fileTypeLabel(), VersionsManageProps, DocumentSidebar(), DocumentVersionsPanel() (+90 more)
+Cohesion: 0.06
+Nodes (19): CaseService, CorrespondenceDocumentService, ExecutiveApprovalPDFService, _find_or_create_parallel_group(), MinuteSealService, Domain services for correspondence workflows., Service for automatically creating DMS documents from correspondence., Service for generating Executive Approval PDF documents. (+11 more)
 
 ### Community 210 - "Best Practices"
-Cohesion: 0.12
-Nodes (11): CaseService, Service for managing Cases - unified case/file management., Link a DMS document to a case., Link a form document to a case., Link a correspondence to a case., Update case status and handle lifecycle transitions., Generate completion package for a closed case., Build PDF summary for case completion package. (+3 more)
+Cohesion: 0.14
+Nodes (3): Color, Stipple, Util
 
 ### Community 211 - "correspondence-parallel.ts"
 Cohesion: 0.11
@@ -1532,8 +1528,8 @@ Cohesion: 0.33
 Nodes (5): migrate_roles_to_objects(), Migration, Convert Role ForeignKey back to string (for rollback)., Create Role objects from existing string values and update User references., reverse_migrate_roles_to_strings()
 
 ### Community 216 - "RefSetCache"
-Cohesion: 0.37
-Nodes (16): assign(), make_office(), make_user(), Office, OfficeMembership, Path, User, Tests for the deactivate_mock_accounts management command. (+8 more)
+Cohesion: 0.13
+Nodes (15): RichTextEditorProps, EditorFailureShell(), RichTextEditor(), TipTapBoundaryProps, TipTapBoundaryState, TipTapErrorBoundary, TiptapRichTextEditor, browserSummary() (+7 more)
 
 ### Community 217 - "🚦 Pipeline Stages"
 Cohesion: 0.33
@@ -1551,6 +1547,10 @@ Nodes (16): Architecture, Cases, Detail workspace (`/cases/[id]`), Overview, Rel
 Cohesion: 0.17
 Nodes (12): Automated checks (run each release), Editor a11y (closed with hardening), High-severity (closed), Medium-severity (closed), Operable (2.x), Perceivable (1.x), Platform-specific test script, Remediation log (July 2026) (+4 more)
 
+### Community 221 - "SealVerificationErrorBoundary"
+Cohesion: 0.13
+Nodes (10): ParallelBranchService, Manages parallel routing branch detection, tracking, SLA, and completion., Inherit branch_originator and parallel_group_id from parent parallel minute., Find the branch originator (who should review when the branch completes)., Resolve the effective merge strategy., Determine if this minute is a top-level parallel branch., Route an 'independent' completing branch back to its originator., Originators, parallel-group creators, and org-wide viewers see every branch. (+2 more)
+
 ### Community 222 - "Backup & Restore Runbook"
 Cohesion: 0.33
 Nodes (5): Backup layout, Backup & Restore Runbook, Notes, Scripts, Usage
@@ -1561,11 +1561,11 @@ Nodes (3): backfill_dispatched_at(), Migration, Set dispatched_at = timestamp fo
 
 ### Community 231 - ".get_queryset"
 Cohesion: 0.16
-Nodes (11): _media_storage_path(), _media_url(), Turn a stored media URL back into a storage-relative path., Build a relative media URL for a stored approved-copy PDF., load_stored_pdf(), Return the frozen PDF, or None when no intact snapshot exists., ExecutiveApprovalPDFService, Service for generating Executive Approval PDF documents. (+3 more)
+Nodes (16): OfficeSelectionCardProps, OFFICE_TYPE_LABELS, OFFICE_TYPE_ORDER, OfficeCombobox(), OfficeComboboxProps, OfficeSelectOption, UserSearchComboboxProps, Command (+8 more)
 
 ### Community 232 - "seed_audit_forms.py"
 Cohesion: 0.03
-Nodes (55): IsSystemAdminRole, Allow read access to all authenticated users, but write access only to     users, TDD: Case(AUDIT) as audit work-item aggregate., Hardening: AQ-YYYY-NNN, DMS guard breadth, lifecycle without manual DB, non-admi, Command, BaseCommand, Seed the three NPA Internal Audit Division form templates., Category (+47 more)
+Nodes (61): FormSignatureAdmin, FormSignatureWorkflowAdmin, FormSubmissionAdmin, FormTemplateAdmin, Admin configuration for forms app., Command, BaseCommand, Seed the three NPA Internal Audit Division form templates. (+53 more)
 
 ### Community 233 - "NPA ECM Backend"
 Cohesion: 0.18
@@ -1584,40 +1584,44 @@ Cohesion: 0.40
 Nodes (5): Common Issues, Deployment Failures, Network Issues, Performance Issues, 📚 Troubleshooting
 
 ### Community 237 - "use-role-switcher-search.ts"
-Cohesion: 0.22
-Nodes (7): auto_ocr_new_document_version(), Signals for DMS models., Update search vector when document is created or updated., Auto-enqueue OCR processing when a new document version with a file is uploaded., update_document_search_vector(), Build search vector for documents.          Returns:             SearchVector co, SearchVector
+Cohesion: 0.29
+Nodes (10): ActionType, asBoolean(), asOneOf(), asStringOrNull(), createTemplate(), deleteTemplate(), DocumentTemplate, getTemplates() (+2 more)
 
 ### Community 238 - ".generate_summary"
 Cohesion: 0.16
-Nodes (13): cosine_similarity(), document_text_blob(), embed_text(), expand_query(), Semantic / vector-style search utilities (embedding re-rank without external ML, Expand query with domain synonym groups., Deterministic bag-of-words style embedding for cosine similarity., Re-rank document queryset results by semantic similarity to query. (+5 more)
+Nodes (15): infer_signature_role(), merge_signatures_into_pdf_data(), pick_signature_field_for_recipient(), Any, Merge FormSignature rows into PDF field dictionaries., Write signer metadata + image bytes into pdf_data under role prefixes., Choose the best unused signature field for a recipient., Map a FormSignature to pm / procurement / audit when possible. (+7 more)
 
 ### Community 239 - "Correspondence Completion Summary"
 Cohesion: 0.17
 Nodes (12): Correspondence Completion Summary, Correspondence Details, Document Preview, Features Overview, Final Action Information, For Auditors, For Managers, For Staff (+4 more)
 
 ### Community 240 - "dms-collections.ts"
-Cohesion: 0.16
-Nodes (16): Meta, Search models for saved searches and search history., User's saved search queries., Track user search history for suggestions., SavedSearch, SearchHistory, Meta, Serializers for search module. (+8 more)
+Cohesion: 0.22
+Nodes (5): FormSubmission, Mark the form as submitted., Get the active signature workflow for this submission., Check if this form template requires signatures., A submitted form instance linked to a correspondence.
 
 ### Community 241 - "restore_backup.sh"
 Cohesion: 0.80
 Nodes (4): error_exit(), log(), restore_backup.sh script, usage()
 
 ### Community 242 - "verify_backup.sh"
-Cohesion: 0.70
-Nodes (4): find_latest_backup(), log(), main(), verify_backup.sh script
+Cohesion: 0.44
+Nodes (10): check_migrate_check(), check_migrations(), cleanup(), drop_scratch_db(), fail(), find_latest_backup(), log(), main() (+2 more)
 
 ### Community 243 - "validate-compose.sh"
-Cohesion: 0.40
-Nodes (4): DB_NAME, DB_PASSWORD, DB_USER, validate-compose.sh script
+Cohesion: 0.33
+Nodes (5): DB_NAME, DB_PASSWORD, DB_USER, validate-compose.sh script, THROTTLE_NUM_PROXIES
+
+### Community 244 - ".get_queryset"
+Cohesion: 0.13
+Nodes (18): Meta, Search models for saved searches and search history., User's saved search queries., Track user search history for suggestions., SavedSearch, SearchHistory, Meta, Serializers for search module. (+10 more)
 
 ### Community 245 - "CaptureViewSet"
 Cohesion: 0.17
 Nodes (11): build_ediscovery_bundle(), _correspondence_row(), _document_row(), Any, eDiscovery export bundle for legal holds., Build tamper-evident eDiscovery ZIP for a legal hold., _write_csv(), EDiscoveryExportTests (+3 more)
 
 ### Community 246 - "test_drm_download.py"
-Cohesion: 0.03
-Nodes (101): OrganizationStructureContent(), AssistantCalendarPage(), toLocalInputValue(), AuditFormFillPage(), ActionsPanel(), calculateDaysPending(), getCCInfo(), getPurposeColor() (+93 more)
+Cohesion: 0.27
+Nodes (11): assert_not_on_legal_hold(), calculate_disposal_due(), complete_disposal(), correspondence_due_for_disposal(), correspondence_under_legal_hold(), Correspondence, datetime, QuerySet (+3 more)
 
 ### Community 248 - "0016_document_role.py"
 Cohesion: 0.50
@@ -1628,12 +1632,16 @@ Cohesion: 0.46
 Nodes (7): add_bullets(), add_heading(), add_slide(), add_textbox(), build_docx(), build_pptx(), set_cell()
 
 ### Community 250 - "templates.ts"
-Cohesion: 0.18
-Nodes (7): ensure_audit_workflow_rules(), Seed CaseWorkflowRule entries for each audit state.      One rule per state enco, AuditHardeningTests, TestCase, Prove transitions without setting metadata directly., Superusers may CERTIFY an AWAITING_CERTIFICATION query with no signature workflo, DMS Share (user) -> Shared with Me, not Office Inbox. Audit REFER -> Office Inbo
+Cohesion: 0.22
+Nodes (7): create_audit_case_for_submission(), Idempotently create Case(AUDIT) for a FormSubmission.      Returns the Case inst, AuditHardeningTests, TestCase, Prove transitions without setting metadata directly., Superusers may CERTIFY an AWAITING_CERTIFICATION query with no signature workflo, DMS Share (user) -> Shared with Me, not Office Inbox. Audit REFER -> Office Inbo
 
 ### Community 251 - "apps.py"
 Cohesion: 0.50
 Nodes (3): FormsConfig, AppConfig, App configuration for forms.
+
+### Community 253 - ".filter_queryset"
+Cohesion: 0.14
+Nodes (12): ApiTimingMiddleware, InternalHostMiddleware, HttpResponse, Custom middleware for the ECM application., Record per-minute response time and error counters., Middleware to allow internal Docker hostnames with ports for metrics endpoints., Aggregate the last 5 one-minute buckets., Middleware to track user activity.     Updates last_activity timestamp for authe (+4 more)
 
 ### Community 254 - "Migration Notes"
 Cohesion: 0.50
@@ -1656,28 +1664,44 @@ Cohesion: 0.25
 Nodes (5): DisposalRequestSerializer, DisposalRequestViewSet, Create disposal requests for all correspondence past retention., RecordsAdminMixin, RetentionScheduleViewSet
 
 ### Community 260 - "Troubleshooting"
-Cohesion: 0.18
-Nodes (23): user(), SimplifiedRoleSwitcherComponent(), SearchBar(), SearchBarProps, useRoleSwitcherGroups(), useRoleSwitcherSearch(), Directorate, addFavoriteUser() (+15 more)
+Cohesion: 0.32
+Nodes (4): TestCase, The deploy-time data migration repairs version text in every environment.  Stagi, run_backfill_migration(), VersionTextBackfillMigrationTests
 
 ### Community 262 - "Shared Components"
 Cohesion: 0.50
 Nodes (3): Benefits, FilterPanel, Shared Components
 
+### Community 263 - ".generate_token"
+Cohesion: 0.14
+Nodes (10): _at(), DateToUpperBoundTests, PublicRecordCrossUnitSearchTests, datetime, TestCase, Regression tests for advanced search filtering and pagination contracts., A date-only `date_to` must cover the whole selected day., Published PUBLIC documents cross units; nothing else may. (+2 more)
+
 ### Community 264 - "PostScriptStack"
 Cohesion: 0.13
 Nodes (14): 1. Current Architecture Trace, 2. Target Audit Case Aggregate, 3. State Machine, 4. Capabilities / Actions, 5. Certification vs Routing, 6. Correspondence Integration, 7. Invariants (Acceptance Criteria), Audit Case Work-Item Implementation Plan (+6 more)
 
-### Community 265 - "NPA-ECM — CFO Executive Summary (One Page)"
-Cohesion: 0.15
-Nodes (9): URL configuration for search module., Views for search module., ViewSet for managing saved searches., Filter searches by current user unless shared., Set the creator when creating a saved search., ViewSet for viewing search history., Filter history by current user., SavedSearchViewSet (+1 more)
+### Community 265 - "CaseSidebar.tsx"
+Cohesion: 0.22
+Nodes (7): Command, MockAccount, BaseCommand, OfficeMembership, Path, User, Safely deactivate legacy mock accounts without deleting them.  The mock seed dat
 
 ### Community 266 - "proxy.ts"
-Cohesion: 0.67
-Nodes (3): config, isPublicPath(), proxy()
+Cohesion: 0.16
+Nodes (13): installStorage(), mocks, APP_ROUTE_ROOTS, isPublicRoute(), PUBLIC_ROUTE_PATHS, ALLOWED_REDIRECT_PREFIXES, resolveRedirectPath(), appDir (+5 more)
 
 ### Community 267 - "run-e2e-smoke.sh"
 Cohesion: 0.50
 Nodes (3): PLAYWRIGHT_API_URL, PLAYWRIGHT_BASE_URL, run-e2e-smoke.sh script
+
+### Community 270 - "external-entities-api.ts"
+Cohesion: 0.33
+Nodes (9): ExternalEntitiesPage(), createExternalEntity(), deleteExternalEntity(), ExternalEntity, ExternalEntityInput, ExternalEntityType, fetchExternalEntities(), mapEntity() (+1 more)
+
+### Community 274 - "CommonConfig"
+Cohesion: 0.18
+Nodes (7): CommonConfig, AppConfig, Deployment checks for settings that must match the real proxy chain., Warn when the trusted-proxy hop count was never configured explicitly.      DRF, throttle_proxy_chain_check(), SimpleTestCase, ThrottleProxyChainCheckTests
+
+### Community 275 - "CorrespondenceConfig"
+Cohesion: 0.31
+Nodes (3): DocumentVisibilityTests, A department-only account inherits the division containing it., Many accounts only carry a division or department, not a directorate.
 
 ### Community 285 - "Configuration"
 Cohesion: 0.67
@@ -1704,36 +1728,44 @@ Cohesion: 0.67
 Nodes (3): Performance Testing Stage, Quality Assurance Stage, 🧪 Testing Strategy
 
 ### Community 292 - "National Rollout Runbook — NPA-ECM"
-Cohesion: 0.06
-Nodes (21): AccessAction, AccessLevel, DocumentStatus, DocumentType, FormStatus, Meta, Document management system models., Role (+13 more)
+Cohesion: 0.20
+Nodes (10): archive_record_visible_to(), archived_correspondence_visibility_q(), filter_archived_records(), Q, Archive filing policy shared by archive endpoints and package sharing., Limit a correspondence queryset to records the user can read in archives.      C, Whether a user may read this record through archive visibility., Levels visible within the user's org boundary (read inheritance flows up). (+2 more)
 
 ### Community 312 - "AGENTS.md — NPA ECM"
 Cohesion: 0.14
 Nodes (13): AGENTS.md — NPA ECM, Backend commands, CI/CD, Conventions, Day-to-day stack, Documentation map, Environment files, Frontend commands (+5 more)
 
 ### Community 316 - ".generate_serial_number"
-Cohesion: 0.05
-Nodes (56): applyDocumentStyle(), applyRowDragHeight(), applyTableFit(), cellPositionFor(), ColorSwatchPopover(), cssPx(), DEFAULT_PAGE_SETTINGS, findRowResizeTarget() (+48 more)
+Cohesion: 0.04
+Nodes (87): HeaderFooterBand(), HeaderFooterBandProps, applyDocumentStyle(), applyRowDragHeight(), applyTableFit(), cellPositionFor(), ColorSwatchPopover(), cssPx() (+79 more)
 
 ### Community 318 - ".perform_create"
 Cohesion: 0.40
 Nodes (4): _html_from_text(), Migration, Seed organization-scope minute templates for common NPA routing phrases., seed_minute_templates()
 
 ### Community 319 - ".my_preferences"
-Cohesion: 0.18
-Nodes (23): AttachmentImagePreview(), PrintPreviewModalContent(), CanonicalDocumentViewer(), CanonicalDocumentViewerProps, sourceKey(), downloadCaseCompletionPackage(), assertAuth(), canonicalDocLabel() (+15 more)
+Cohesion: 0.02
+Nodes (145): ActionsPanelProps, ActingAppointmentDialogProps, ActingMode, ActingRequestDialogProps, ActingWorkspaceProps, UserEditDialogProps, AdditionalMinuteModal(), AuditRouteDialog() (+137 more)
 
 ### Community 320 - "PhysicalDocumentTests"
-Cohesion: 0.13
-Nodes (8): BatchStatus, JobStatus, JobType, Meta, Content capture models for OCR, scanning, and batch processing., ScanStatus, OCRSignalTests, TestCase
+Cohesion: 0.14
+Nodes (12): MetadataExtractionService, OCRService, Any, Extract text from a DOCX file.          Args:             docx_path: Path to the, Process a document for OCR extraction.          Args:             document_id: U, Service for Optical Character Recognition processing., Extract text from an image using Tesseract OCR.          Args:             image, Service for intelligent metadata extraction from documents. (+4 more)
 
 ### Community 323 - "signals.py"
 Cohesion: 0.15
 Nodes (11): baseCorrespondence, clerkUser, gmUser, mdUser, mockFetchSLATargets, mockGetTemplatesForUser, mockUseCurrentUser, mockUseOrganization (+3 more)
 
-### Community 329 - ".bulk_update"
+### Community 326 - "JpegImage"
+Cohesion: 0.23
+Nodes (12): Hierarchy-based recipient suggestions for this correspondence., _display_name(), get_routing_suggestions(), _grade(), Correspondence, Q, User, Hierarchy-aware routing suggestions for minute and treatment modals. (+4 more)
+
+### Community 327 - ".acknowledge"
 Cohesion: 0.18
-Nodes (11): ApiDraft, deleteDraft(), Draft, DraftFileMetadata, getDraftByCorrespondence(), getDrafts(), mapApiDraftToFrontend(), mapFrontendDraftToApi() (+3 more)
+Nodes (7): Command, BaseCommand, Mark incomplete auto-generated form PDFs as superseded., Helpers for form-document generated PDF versions., Mark tiny auto-generated PDF stubs as superseded so the UI ignores them.      Re, supersede_incomplete_generated_pdfs(), PdfVersionCleanupTests
+
+### Community 329 - ".bulk_update"
+Cohesion: 0.29
+Nodes (3): CleanVersionTextCommandTests, TestCase, The cleanup command rewrites stored layout characters in version text.
 
 ### Community 331 - "Cases"
 Cohesion: 0.09
@@ -1744,28 +1776,32 @@ Cohesion: 0.25
 Nodes (3): URL routes for records governance., LegalHoldViewSet, RecordsReportViewSet
 
 ### Community 344 - "Rich text editor"
-Cohesion: 0.21
-Nodes (17): useThemeChartColors(), downloadAsPDF(), downloadAsWord(), generateDocumentHTML(), showPrintPreview(), getUserById(), buildExportDocumentCss(), DOC_PAPER (+9 more)
+Cohesion: 0.08
+Nodes (20): correspondence, gmUser, mockApiFetch, mockFetchActiveUsersForGradeAndDivision, mockFetchDocumentById, mockGetDraftByCorrespondence, mockGetMinutesByCorrespondenceId, mockGetTemplatesForUser (+12 more)
 
 ### Community 350 - ".get_flow_type"
 Cohesion: 0.25
 Nodes (4): Check if correspondence is INWARD (coming INTO office).                  Returns, Check if correspondence is INTERNAL (within NPA).                  Returns:, Get the flow type based on routing concept.                  Returns:, Check if correspondence should appear in Office Inbox.                  Office I
 
 ### Community 355 - "admin.py"
-Cohesion: 0.18
-Nodes (13): FontSizeStepper(), Color, Commands, DocumentStyleId, FONT_FAMILIES, FONT_SIZES, FontSize, formatFontSizePt() (+5 more)
+Cohesion: 0.03
+Nodes (37): queue_ocr_job(), Content capture services for OCR, scanning, and batch processing., Enqueue OCR for a document unless an active job already exists.      Returns ``(, DocxExtractionSpacingTests, SimpleTestCase, Word files often pad columns with non-breaking spaces; extracted text must not k, CaptureJobRetryTests, TestCase (+29 more)
+
+### Community 369 - "PostScriptParser"
+Cohesion: 0.02
+Nodes (45): addChildren(), arrayBuffersToBytes(), ChunkedStreamManager, ContextCache, decodeBitmap(), decodeIAID(), decodeInteger(), decodeMMRBitmap() (+37 more)
 
 ### Community 370 - "ARCFourCipher"
 Cohesion: 0.17
-Nodes (5): Return a hash-verified seal PNG, regenerating it when necessary.          A cach, make_signature(), TestCase, SealImageImmutabilityTests, Generate a comprehensive PDF document for an executive approval.
+Nodes (3): make_signature(), TestCase, SealImageImmutabilityTests
 
 ### Community 371 - "5.2 QA & Testing Framework"
 Cohesion: 0.29
 Nodes (7): 5.1 Budget Summary Table, 5.2 QA & Testing Framework, ✅ Activity 01 — Functional & UAT Testing | ₦10,000,000, 🔐 Activity 02 — Security & Penetration Testing | ₦7,000,000, 🛠️ Activity 03 — Post-Go-Live Support (12 Months) | ₦8,000,000, Budget Allocation: ₦25,000,000, SECTION 5 — QUALITY ASSURANCE, SECURITY AUDIT & SUPPORT
 
 ### Community 373 - "TextState"
-Cohesion: 0.04
-Nodes (23): CorrespondenceSerializer, Skip uniqueness validation for reference_number during creation.         The vie, Require the guarded completion action for status transitions to completed., Cross-field validation for correspondence and declared physical custody., Return lifecycle progress stages for the frontend progress bar., Get the primary DMS document for this correspondence. Uses annotated value on li, Return parent correspondence reference if exists., Formal response correspondences linked to this record. (+15 more)
+Cohesion: 0.18
+Nodes (8): APP_ROUTES, PAGE_ACCESS_KEYS, PAGE_ROUTES, PageId, PERMISSION_KEYS, PermissionKey, SidebarPermissionKey, catalog
 
 ### Community 375 - ".get_lifecycle_stage"
 Cohesion: 0.40
@@ -1775,81 +1811,97 @@ Nodes (3): Check if correspondence is OUTWARD (going OUT OF office).            
 Cohesion: 0.29
 Nodes (7): Detail pages already aligned, Do / don’t, Modal tokens, Product UI language (Apple density), Rules, Source of truth, Theme
 
+### Community 379 - "AES128Cipher"
+Cohesion: 0.33
+Nodes (3): Command, BaseCommand, List approval-record rows that print a permission role as a designation.  Read-o
+
 ### Community 380 - "SECTION 10 — TECHNICAL ARCHITECTURE OVERVIEW"
-Cohesion: 0.18
-Nodes (3): MySentEndpointTests, OfficeSentEndpointTests, TestCase
+Cohesion: 0.15
+Nodes (11): imageToSrc(), isMetafileContentType(), MammothImage, METAFILE_TYPES, findEndOfCentralDirectory(), inflateRaw(), readZipTextEntry(), encodeGaps() (+3 more)
+
+### Community 381 - "SECTION 12 — EXPECTED OUTCOMES & BENEFITS"
+Cohesion: 0.24
+Nodes (5): FormatCurrencyTests, FormSerialParseTests, PdfSignatureMergeTests, SimpleTestCase, _sig()
+
+### Community 382 - "CFFIndex"
+Cohesion: 0.29
+Nodes (7): count_online_users(), list_online_users(), online_presence_cutoff(), presence_window_seconds(), Online presence helpers for admin dashboards., OnlineUsersView, List currently online users.
 
 ### Community 383 - "metrics.py"
-Cohesion: 0.14
-Nodes (4): CorrespondenceReferenceAllocationTests, TestCase, ReferenceAllocationApiTests, ReferenceSchemeApiTests
-
-### Community 384 - ".get_related_correspondence"
-Cohesion: 0.14
-Nodes (17): infer_signature_role(), merge_signatures_into_pdf_data(), pick_signature_field_for_recipient(), Any, Merge FormSignature rows into PDF field dictionaries., Write signer metadata + image bytes into pdf_data under role prefixes., Default signature slots when the template has none marked., Choose the best unused signature field for a recipient. (+9 more)
+Cohesion: 0.20
+Nodes (8): CaseAnalyticsPage(), DivisionAnalyticsPage(), ExecutiveDashboardPage(), AnalyticsPage(), PerformanceAnalyticsPage(), redirectMock, replaceMock, visibility
 
 ### Community 385 - "DeviceGrayCS"
-Cohesion: 0.19
-Nodes (12): AdminNavItem(), AdminNavItemProps, SidebarNavItem(), SidebarNavItemProps, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent (+4 more)
+Cohesion: 0.05
+Nodes (23): ActivityLog, AuditService, Any, Service for creating audit log entries., Extract client IP address from request., Extract user agent from request., Create an audit log entry.          Args:             user: User performing the, _generate_corr_reference() (+15 more)
 
 ### Community 386 - "ToUnicodeMap"
-Cohesion: 0.20
-Nodes (9): Toast, ToastAction, ToastActionElement, ToastClose, ToastDescription, ToastProps, ToastTitle, toastVariants (+1 more)
+Cohesion: 0.27
+Nodes (3): ArchiveWriteEndpointTests, TestCase, Direct write endpoints must not mutate closed records or their workflow.
 
 ### Community 387 - "Secondary Actions"
-Cohesion: 0.17
-Nodes (10): Lookup Case(AUDIT) by FormSubmission id via metadata or CaseFormLink., _audit_case_title(), create_audit_case_for_submission(), _find_form_document_for_submission(), _generate_audit_case_number(), _link_evidence_for_submission(), Audit work-item aggregate helpers.  Promotes Case(case_type=AUDIT) as the work-i, Best-effort locate FormDocument linked to a FormSubmission. (+2 more)
+Cohesion: 0.20
+Nodes (7): ViewSet for managing saved searches., Filter searches by current user unless shared., Set the creator when creating a saved search., ViewSet for viewing search history., Filter history by current user., SavedSearchViewSet, SearchHistoryViewSet
+
+### Community 388 - "ArithmeticDecoder"
+Cohesion: 0.25
+Nodes (7): memo_reference_conflict(), normalize_printed_reference(), printed_reference(), Helpers for keeping a memo's printed reference aligned with its record., Return the reference printed in a memo's HTML, if one is present., Replace the first printed ``Ref.:`` value with the canonical reference., Return an error message when a memo prints a different reference.
 
 ### Community 389 - "NetworkPdfManager"
-Cohesion: 0.06
-Nodes (22): FormDocumentViewSet, Override create to handle document creation., ViewSet for managing form documents in DMS., Mark a form document as completed after required signatures are complete., Create a new draft form document cloned from an existing one., Share a form with users/division/department and notify recipients.          Sign, Filter queryset based on user permissions., FormDocumentSerializer (+14 more)
+Cohesion: 0.24
+Nodes (8): CorrespondenceConfig, AppConfig, invalidate_sidebar_counts_cache(), Invalidate every cached sidebar count by advancing its shared version., connect_sidebar_counts_invalidation(), _invalidate_sidebar_counts_cache(), Signal wiring that keeps sidebar counts fresh after record changes., Connect relevant model writes to the sidebar-count cache version.
 
 ### Community 390 - "RefSet"
 Cohesion: 0.20
 Nodes (9): Completed (Phase 2), Files changed, How to verify manually, Known limitations, Not in Phase 2, Phase 1 gaps addressed, Remaining risks, Tests (+1 more)
 
 ### Community 402 - "SECTION 10 — TECHNICAL ARCHITECTURE OVERVIEW"
-Cohesion: 0.27
-Nodes (11): assert_not_on_legal_hold(), calculate_disposal_due(), complete_disposal(), correspondence_due_for_disposal(), correspondence_under_legal_hold(), Correspondence, datetime, QuerySet (+3 more)
+Cohesion: 0.25
+Nodes (5): Command, BaseCommand, Keep the DMS approved copy identical to the re-issued PDF., _media_storage_path(), Turn a stored media URL back into a storage-relative path.
 
 ### Community 403 - ".mark_completed"
 Cohesion: 0.12
 Nodes (15): 10. Re-verification (read-only) after preparation, 1. Decision, 2. Current state (evidence), 3. `superadmin` break-glass policy (the decision, in operative terms), 4. Cutover steps — `superadmin` (execute in this order, in an approved window), 5. `gmict` — what must be confirmed before matching or deactivating, 6. Recommended path — deactivate `gmict`, 7. Alternative path — match `gmict` (only if G1 and G3 confirm a real person) (+7 more)
 
-### Community 404 - ".requires_signatures"
-Cohesion: 0.23
-Nodes (7): Command, MockAccount, BaseCommand, OfficeMembership, Path, User, Safely deactivate seeded mock accounts without deleting them.  The command ident
-
-### Community 406 - "SECTION 12 — EXPECTED OUTCOMES & BENEFITS"
-Cohesion: 0.15
-Nodes (8): Helper function to send unread count update via WebSocket., send_unread_count_update(), Mark all unread notifications as read for a user., Push current unread count to the user's notification WebSocket (if connected)., Mark a notification as read., Mark a notification as archived., Mark all notifications as read., Get or create preferences for the current user.
-
 ### Community 407 - ".get_correspondence_links"
-Cohesion: 0.22
-Nodes (5): FormSubmission, Mark the form as submitted., Get the active signature workflow for this submission., Check if this form template requires signatures., A submitted form instance linked to a correspondence.
+Cohesion: 0.09
+Nodes (21): build_compliance_bundle(), Any, Tamper-evident audit export bundle generation., Build a ZIP compliance bundle: audit-export.csv + manifest.json + checksum.sha25, _row_for_log(), ActivityLog, Comprehensive audit log for all system activities., ActivityLogSerializer (+13 more)
 
 ### Community 408 - "Advanced Features"
-Cohesion: 0.36
-Nodes (7): ApiSignatureTemplate, ApiUserSignaturePreferences, getSignatureTemplates(), getUserSignaturePreferences(), mapApiPreferencesToFrontend(), mapApiTemplateToFrontend(), updateUserSignaturePreferences()
+Cohesion: 0.20
+Nodes (10): _image_scan_pdf(), Return the primary linked DMS document and its current version.      The approve, Return ``pdf`` or ``image`` when a version carries an original scan., Read the original uploaded file for a DMS version, if it is available., Place an image scan on a clean A4 page without cropping it., Return the original scan pages as a PDF, preserving PDF pagination., _read_version_file(), _render_scan_pdf() (+2 more)
 
 ### Community 409 - ".get_parent_document"
-Cohesion: 0.07
-Nodes (6): Resolve a TrueType font by path, independent of the process CWD., Render a seal from persisted, server-controlled fields only.          Callers mu, ApprovalPDFDownloadAPITests, ApprovalPDFSealTests, TestCase, Endpoint regression for authenticated approval-PDF downloads.
+Cohesion: 0.06
+Nodes (17): Render a seal from persisted, server-controlled fields only.          Callers mu, Return the stored seal PNG only when it matches its recorded hash.          Read, Return a hash-verified seal PNG, regenerating it when necessary.          A cach, Verify a seal by its serial number.                  Returns:             dict w, Service for generating and managing digital seals., Resolve a TrueType font by path, independent of the process CWD., SealGenerationService, TestCase (+9 more)
 
 ### Community 410 - "EvalState"
 Cohesion: 0.27
 Nodes (4): EncryptedSignatureStorage, Encrypt signature bytes before writing them to private media storage., Encrypt an existing file atomically, returning whether it changed., FileSystemStorage
 
+### Community 412 - ".add_documents"
+Cohesion: 0.27
+Nodes (3): EditorVersionContentTextTests, TestCase, Editor-composed versions must be searchable as soon as they are saved.
+
 ### Community 413 - ".remove_documents"
-Cohesion: 0.17
-Nodes (8): Permanently delete records., Abstract model providing ``is_deleted`` flag instead of hard deletes., Mark the instance as deleted., Restore a soft-deleted instance., Permanently delete the instance., SoftDeleteModel, FormTemplate, Template definition for reusable forms.
+Cohesion: 0.09
+Nodes (9): buildHuffmanTable(), Dict, findNextFileMarker(), JpegImage, prepareComponents(), _r, readDataBlock(), readUint16() (+1 more)
+
+### Community 414 - ".active_sessions"
+Cohesion: 0.38
+Nodes (4): AuthCallbackPage(), NpaLoading(), NpaLoadingProps, PageSuspenseFallback()
 
 ### Community 415 - ".end_session"
 Cohesion: 0.29
 Nodes (6): _line(), prometheus_metrics(), HttpResponse, Lightweight Prometheus metrics endpoint (no django-prometheus dependency)., Expose basic service health gauges for Prometheus scraping., Root URL configuration for the ECM backend.
 
-### Community 416 - ".perform_create"
-Cohesion: 0.29
-Nodes (10): ActivityLog, asBoolean(), asOneOf(), asStringOptional(), ComplianceExportParams, getActivityLogs(), getActivityLogsForObject(), getMyActivityLogs() (+2 more)
+### Community 416 - "Advanced Features"
+Cohesion: 0.20
+Nodes (5): Store the canonical grade code on every write path., Record that this signature was used., Invalidate this seal., Check if this OTP is still valid (not expired, not used, not too many attempts)., Verify the OTP code. Returns True if valid, False otherwise.
+
+### Community 419 - "ContentObject"
+Cohesion: 0.20
+Nodes (9): Global Constraints, Office Memberships and Analytics Implementation Plan, Review Focus, Task 1: Scoped membership API and actionable quality findings, Task 2: Replace global membership context with current-user and selected-scope queries, Task 3: Server-driven Offices membership view, quality panel, deep links, and legacy cleanup, Task 4: Observed workflow timestamp gaps in performance analytics, Task 5: Analytics drill-down links and observed-gap presentation (+1 more)
 
 ### Community 421 - "Type Definitions"
 Cohesion: 0.50
@@ -1860,72 +1912,112 @@ Cohesion: 0.14
 Nodes (13): A — Prometheus + scale script (stay on Compose), Autoscaling (future), B — Kubernetes + HPA (real autoscaling), Concurrent users (ECMS web), Docker Compose (prod / stag) — what we have, DRM — treated as done for ECM scope, ECMS capacity & scaling notes, Hardware (+5 more)
 
 ### Community 425 - "ERPSyncRecord"
+Cohesion: 0.20
+Nodes (6): Override create to handle document creation., Generate PDF for a form document. Can be called when signatures are complete or, Create a new draft form document cloned from an existing one., Share a form with users/division/department and notify recipients.          Sign, Default signature slots when the template has none marked., signature_fields_for_template()
+
+### Community 427 - "🔧 Maintenance Tasks"
 Cohesion: 0.22
-Nodes (8): build_compliance_bundle(), Any, Tamper-evident audit export bundle generation., Build a ZIP compliance bundle: audit-export.csv + manifest.json + checksum.sha25, _row_for_log(), ComplianceExportTests, SimpleTestCase, Tests for tamper-evident audit export.
+Nodes (5): ActivityLogAdmin, Admin configuration for audit logs., Prevent manual creation of audit logs., Prevent modification of audit logs., Only superusers can delete audit logs.
+
+### Community 428 - ".can_be_edited"
+Cohesion: 0.11
+Nodes (8): ShareDocumentDialog, apiFetchMock, fetchUsersMock, ResizeObserverMock, sharedDocument, apiFetchMock, fetchUsersMock, ResizeObserverMock
 
 ### Community 429 - ".display_role"
-Cohesion: 0.17
-Nodes (12): build_approval_pdf(), _dms_paper_html(), _merge_pdfs(), _pdf_page_count(), Build the approved-copy PDF without modifying the source memo.      Page 1 (and, Wrap stored DMS HTML in the same paper CSS used by the DMS preview., Join separately rendered memo and certificate pages into one PDF., Render fallback memo or certificate/record pages with ReportLab. (+4 more)
+Cohesion: 0.19
+Nodes (9): build_approval_pdf(), _pdf_page_count(), Build the approved-copy PDF without modifying the source memo.      Page 1 (and, ApprovalRecordIntegrityTests, _flowed(), _pdf_text(), TestCase, The approval record must state only what was recorded, and only up to the approv (+1 more)
 
 ### Community 440 - ".verify_seal"
 Cohesion: 0.32
 Nodes (4): LegalHoldSerializer, refresh_legal_hold_flags_for_hold(), sync_correspondence_legal_hold_flag(), LegalHold
 
 ### Community 441 - ".latest"
-Cohesion: 0.22
-Nodes (6): Command, BaseCommand, Mark incomplete auto-generated form PDFs as superseded., Helpers for form-document generated PDF versions., Mark tiny auto-generated PDF stubs as superseded so the UI ignores them.      Re, supersede_incomplete_generated_pdfs()
+Cohesion: 0.16
+Nodes (13): cosine_similarity(), document_text_blob(), embed_text(), expand_query(), Semantic / vector-style search utilities (embedding re-rank without external ML, Expand query with domain synonym groups., Deterministic bag-of-words style embedding for cosine similarity., Re-rank document queryset results by semantic similarity to query. (+5 more)
+
+### Community 442 - ".get_all_activities"
+Cohesion: 0.40
+Nodes (3): organization, permissionState, routeState
 
 ### Community 443 - ".get_form_document_id"
 Cohesion: 0.33
 Nodes (5): Engine selection (Phase 5), Phase status, Related, TipTap Migration Specification (NPA ECMS), Working decisions
 
 ### Community 444 - ".get_activities_count"
-Cohesion: 0.05
-Nodes (27): ActivityLog, AuditService, Any, Audit trail service for logging system activities., Service for creating audit log entries., Extract client IP address from request., Extract user agent from request., Create an audit log entry.          Args:             user: User performing the (+19 more)
+Cohesion: 0.40
+Nodes (3): Get or create notification preferences for a user., Check if notification should be sent based on user preferences.         Returns, NotificationPreferences
 
 ### Community 447 - "loading.tsx"
 Cohesion: 0.18
 Nodes (11): Document Version Comparison, Helpdesk — Get Support, How to Access, How to Access, Keyboard Shortcuts, Response Times, Submit a Ticket, Support (+3 more)
 
+### Community 448 - "loading.tsx"
+Cohesion: 0.25
+Nodes (6): _check_services(), health_check(), Check database, cache, and celery broker health., ICT admin dashboard aggregate: health, activity, and integration summary., Health check endpoint for monitoring and load balancers.      Returns:         -, SystemStatusView
+
 ### Community 449 - ".get_related_correspondence"
-Cohesion: 0.28
-Nodes (15): ActingSelfServicePage(), toISODateTime(), ActingAppointmentsPage(), appointActing(), createActingRequest(), dismissActingRequest(), endActingAppointment(), getEligibleActingCandidates() (+7 more)
+Cohesion: 0.21
+Nodes (3): FOIAScopeTests, TestCase, FOIA record visibility is limited to the assignee unless the role is global.
+
+### Community 450 - "loading.tsx"
+Cohesion: 0.20
+Nodes (5): createSignatureWorkflowMock, fetchUsersMock, ResizeObserverMock, submission, twoFieldSubmission
 
 ### Community 451 - "TipTap Phase 5 — Implementation report"
 Cohesion: 0.22
 Nodes (8): Behaviour, Decision, Files changed, Pilot-flag cleanup (follow-up), Ready for production TipTap-only?, Rollback note, Tests, TipTap Phase 5 — Implementation report
 
+### Community 452 - ".get_related_forms"
+Cohesion: 0.16
+Nodes (12): compute_executive_metrics(), compute_performance_metrics(), Server-side analytics aggregation helpers., Compute performance metrics analytics.          Returns a payload with turnaroun, Compute executive-level analytics.          Returns a payload with division metr, _create_correspondence(), Tests for analytics service helpers., test_compute_executive_metrics_includes_division_and_documents() (+4 more)
+
 ### Community 454 - ".create_document_from_correspondence"
 Cohesion: 0.29
 Nodes (7): Admin queue, Channels, Common resolutions, Helpdesk Operations — NPA-ECM (12 months), Hypercare (first 30 days per port), KPIs, Ticket lifecycle
 
+### Community 455 - ".requires_signatures"
+Cohesion: 0.12
+Nodes (12): baseCorrespondence, gmUser, mdUser, mockFetchSLATargets, mockGetDraftByCorrespondence, mockGetTemplatesForUser, mockUseCurrentUser, mockUseOrganization (+4 more)
+
 ### Community 457 - ".get_case_links"
-Cohesion: 0.40
-Nodes (5): dompurify, getCategoryDisplayName(), HelpAndGuidePage(), sanitizeContent(), dompurify
+Cohesion: 0.25
+Nodes (6): TDD: Workflow step constraint — fail on mismatch, don't silently bypass., Action, AppliesTo, Meta, Workflow and approval models., Status
+
+### Community 459 - "form_serials.py"
+Cohesion: 0.25
+Nodes (5): Get search suggestions based on query and user history.          Args:, ViewSet for search operations., Get search suggestions.          Request body:         {             "query": "p, Find related items and potential duplicates for a record.          Request body:, SearchViewSet
 
 ### Community 460 - ".get_parent_document"
 Cohesion: 0.33
-Nodes (4): TestCase, Integration: creating a minute on executive corr with departmental-only template, step_levels: list of required_approval_level strings e.g. ["departmental", "exec, WorkflowRequirementValidationTests
+Nodes (7): fail(), PATH, run_failure_case(), run_identifier_case(), run_missing_file_case(), run_success_case(), db-restore.test.sh script
 
 ### Community 461 - ".can_be_recalled"
-Cohesion: 0.32
-Nodes (3): TestCase, Registered correspondence uses the same boundary as search and archives., RegisteredScopeTests
+Cohesion: 0.12
+Nodes (9): Command, BaseCommand, Freeze snapshots for approval minutes that predate approval integrity., _media_url(), Build a relative media URL for a stored approved-copy PDF., load_stored_pdf(), Return the frozen PDF, or None when no intact snapshot exists., Generate the PDF and persist it as one linked DMS approved copy. (+1 more)
 
 ### Community 462 - ".add_documents"
-Cohesion: 0.07
-Nodes (34): DepartmentFormModalProps, DirectorateFormModalProps, DirectorateLeadershipDialogProps, DivisionFormModalProps, HierarchySelector(), RoleFormModalProps, AuditRouteDialogProps, mapDepartment() (+26 more)
+Cohesion: 0.36
+Nodes (7): allocate_serial(), ensure_form_serial(), _max_existing_serial(), _parse_serial_int(), Allocate and persist form serial numbers (CHQ / HQ / form No.)., Highest numeric serial already stored on FormDocuments for this template., Ensure the PDF payload has a serial for this template.      If the form already
 
-### Community 463 - ".remove_documents"
-Cohesion: 0.22
-Nodes (7): NotificationAdmin, NotificationPreferencesAdmin, Admin configuration for notifications., Notification, In-app notification for users., Mark notification as read., Mark notification as archived.
+### Community 464 - ".active_sessions"
+Cohesion: 0.29
+Nodes (5): api, overdue, processing, stats, submitted
+
+### Community 465 - ".end_session"
+Cohesion: 0.06
+Nodes (44): dompurify, evaluateFormula(), formatCurrency(), parseCurrency(), TableFieldRenderer(), DocumentMetadataCard(), DocumentMetadataCardProps, row() (+36 more)
+
+### Community 467 - ".perform_create"
+Cohesion: 0.27
+Nodes (4): Extract a snippet of text around matching query terms.                  Args:, ExtractSnippetSpacingTests, SimpleTestCase, Search snippets must not carry stored layout characters into results.
 
 ### Community 468 - ".complete"
-Cohesion: 0.40
-Nodes (4): Office, Department, Directorate, Division
+Cohesion: 0.28
+Nodes (4): parse_structure_data(), Parse organization_data.json, tolerating standalone section headers., ParseStructureDataTests, SimpleTestCase
 
 ### Community 469 - "file-utils.ts"
-Cohesion: 0.36
-Nodes (7): DmsVersionPreviewContent(), DmsVersionPreviewContentProps, useScrollToSearchHit(), DrmWatermarkOverlay(), escapeXml(), watermarkDataUri(), highlightHtml()
+Cohesion: 0.25
+Nodes (7): Approaches considered, Builder choices, Constraints and decisions, Goals, Intent, Non-goals, Office Memberships and Analytics Design
 
 ### Community 470 - ".is_complete"
 Cohesion: 0.29
@@ -1934,10 +2026,6 @@ Nodes (6): Call sites (unchanged), Completed, Deferred (not Phase 1), How to try
 ### Community 471 - "ToUnicodeMap"
 Cohesion: 0.29
 Nodes (6): Approved scope, Design choices, Intent, Non-goals, Open implementation choices for the builder, Sidebar Access and Archive Governance Design
-
-### Community 472 - "tiptap-image-kit.ts"
-Cohesion: 0.36
-Nodes (7): allocate_serial(), ensure_form_serial(), _max_existing_serial(), _parse_serial_int(), Allocate and persist form serial numbers (CHQ / HQ / form No.)., Highest numeric serial already stored on FormDocuments for this template., Ensure the PDF payload has a serial for this template.      If the form already
 
 ### Community 473 - ".get"
 Cohesion: 0.17
@@ -1948,64 +2036,52 @@ Cohesion: 0.33
 Nodes (6): Files (open directly in Excel), FX, Open in Excel, Pricing model (important), Procurement BOQ — Excel Instructions, Related
 
 ### Community 476 - "ToUnicodeMap"
-Cohesion: 0.22
-Nodes (13): ActionType, asBoolean(), asOneOf(), asStringOrNull(), createTemplate(), deleteTemplate(), DocumentTemplate, getTemplate() (+5 more)
+Cohesion: 0.25
+Nodes (6): api, approval(), Deferred, navigation, responseFor(), visibilityState
+
+### Community 478 - ".get_document_title"
+Cohesion: 0.07
+Nodes (56): CorrespondenceAccessLogViewSet, CorrespondenceAttachmentViewSet, CorrespondenceDelegationViewSet, CorrespondenceDistributionViewSet, CorrespondenceDocumentLinkViewSet, CorrespondenceDraftViewSet, CorrespondenceTemplateViewSet, DelegationViewSet (+48 more)
+
+### Community 479 - ".get_document_id"
+Cohesion: 0.33
+Nodes (4): ProtectedMediaView, APIView, Authenticated media serving for allowlisted non-document paths (signatures, seal, Serve allowlisted media files to authenticated users only.      DMS versions, co
 
 ### Community 481 - "SentDraftActionTests"
-Cohesion: 0.18
-Nodes (8): format_currency(), Format amount as Nigerian Naira currency., FormatCurrencyTests, FormSerialParseTests, PdfSignatureMergeTests, PdfVersionCleanupTests, SimpleTestCase, _sig()
+Cohesion: 0.28
+Nodes (5): add_is_system_field(), _column_exists(), _index_exists(), Migration, Add the field, tolerating databases where it was created manually.
 
 ### Community 482 - "page.tsx"
-Cohesion: 0.17
-Nodes (3): CurrentUserProfileTests, make_image(), APITestCase
+Cohesion: 0.40
+Nodes (4): AdminDashboardAlertsView, _check_backup_status(), Scan for the most recent backup file across known locations., Admin dashboard: alerts needing admin attention.      The payload is global (not
 
 ### Community 483 - "Common Issues and Solutions"
 Cohesion: 0.33
 Nodes (6): Common Issues and Solutions, Error Handling, File Too Large, File Type Not Supported, Permission Denied, Upload Interrupted
 
-### Community 484 - "admin.py"
-Cohesion: 0.33
-Nodes (5): Admin configuration for search module., Admin interface for SavedSearch., Admin interface for SearchHistory., SavedSearchAdmin, SearchHistoryAdmin
-
 ### Community 485 - ".get_related_documents"
-Cohesion: 0.03
-Nodes (16): DateElement, DateTime, Decimal, encodeToXmlString(), Float, Integer, MurmurHash3_64, Ref (+8 more)
+Cohesion: 0.04
+Nodes (30): available_login_mfa_methods(), clear_mfa_challenge(), create_mfa_challenge(), get_challenge_user(), get_or_create_login_security(), login_mfa_globally_required(), Any, User (+22 more)
 
 ### Community 486 - ".get_correspondence_count"
-Cohesion: 0.29
-Nodes (10): fetchSidebarCounts(), INITIAL_COUNTS, invalidateSidebarCounts(), listeners, normalizeCounts(), notifyListeners(), seedSidebarCounts(), SidebarCounts (+2 more)
+Cohesion: 0.40
+Nodes (4): _cache_version(), get_sidebar_counts_cache_key(), Cache helpers for the sidebar count endpoint., Return the current cache key for one user's sidebar counts.
 
 ### Community 487 - ".is_external"
-Cohesion: 0.08
-Nodes (134): Abstract base model providing created/updated timestamps., Abstract base model that uses a UUID primary key., TimeStampedModel, UUIDModel, CaseAdmin, CaseCorrespondenceLinkAdmin, CaseCorrespondenceLinkInline, CaseDocumentLinkAdmin (+126 more)
-
-### Community 488 - ".generate_pdf"
-Cohesion: 0.20
-Nodes (7): Seed end-to-end presentation demo data: SecureNet Lagos Port Network Upgrade., TDD: Workflow step constraint — fail on mismatch, don't silently bypass., Action, AppliesTo, Meta, Workflow and approval models., Status
+Cohesion: 0.07
+Nodes (97): Abstract base model that uses a UUID primary key., Abstract model providing ``is_deleted`` flag instead of hard deletes., Restore a soft-deleted instance., SoftDeleteModel, UUIDModel, CaseAdmin, CaseCorrespondenceLinkAdmin, CaseCorrespondenceLinkInline (+89 more)
 
 ### Community 489 - ".get_correspondence"
-Cohesion: 0.32
-Nodes (3): Command, BaseCommand, Import legacy correspondence or document metadata from CSV.
-
-### Community 490 - "tests.py"
-Cohesion: 0.20
-Nodes (10): _image_scan_pdf(), Return the primary linked DMS document and its current version.      The approve, Return ``pdf`` or ``image`` when a version carries an original scan., Read the original uploaded file for a DMS version, if it is available., Place an image scan on a clean A4 page without cropping it., Return the original scan pages as a PDF, preserving PDF pagination., _read_version_file(), _render_scan_pdf() (+2 more)
+Cohesion: 0.29
+Nodes (6): Choosing the value, Current values, How to confirm the hop count, Proxy chain and `THROTTLE_NUM_PROXIES`, What is confirmed in this repository, What is not confirmed
 
 ### Community 491 - "DocumentAPITests"
-Cohesion: 0.25
-Nodes (5): Get search suggestions based on query and user history.          Args:, ViewSet for search operations., Get search suggestions.          Request body:         {             "query": "p, Find related items and potential duplicates for a record.          Request body:, SearchViewSet
-
-### Community 492 - "format_currency"
-Cohesion: 0.25
-Nodes (7): Breadcrumb, BreadcrumbEllipsis(), BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator()
+Cohesion: 0.33
+Nodes (3): Command, BaseCommand, Seed canonical role permissions for all NPA system roles.
 
 ### Community 500 - ".get_document_title"
-Cohesion: 0.25
-Nodes (7): memo_reference_conflict(), normalize_printed_reference(), printed_reference(), Helpers for keeping a memo's printed reference aligned with its record., Return the reference printed in a memo's HTML, if one is present., Replace the first printed ``Ref.:`` value with the canonical reference., Return an error message when a memo prints a different reference.
-
-### Community 501 - ".get_is_external"
-Cohesion: 0.33
-Nodes (4): _branch_status(), Command, BaseCommand, Escalate overdue parallel branches (non-response handling).  Flags / notifies br
+Cohesion: 0.50
+Nodes (4): Advanced Features, Bulk Upload, Drag and Drop, Progress Tracking
 
 ### Community 502 - "Best Practices"
 Cohesion: 0.50
@@ -2015,6 +2091,10 @@ Nodes (4): Best Practices, File Organization, Security Considerations, Version C
 Cohesion: 0.50
 Nodes (4): Delegate, Download Completion Package, Secondary Actions, Sync from API
 
+### Community 505 - ".get_is_inward"
+Cohesion: 0.33
+Nodes (3): api, Deferred, navigation
+
 ### Community 506 - ".get_is_outward"
 Cohesion: 0.22
 Nodes (8): Approaches, Behavior and data, Constraints, Goals, Intent, Non-goals, Physical Custody Handover Design, UI
@@ -2023,9 +2103,13 @@ Nodes (8): Approaches, Behavior and data, Constraints, Goals, Intent, Non-goals,
 Cohesion: 0.40
 Nodes (5): 6.1 Budget Summary Table, 6.2 Project Management Structure, 6.3 Contingency Allocation | ₦10,000,000, Budget Allocation: ₦20,000,000, SECTION 6 — PROJECT MANAGEMENT & CONTINGENCY
 
-### Community 513 - "react-hook-form"
-Cohesion: 0.15
-Nodes (9): Deliver a webhook event.          Args:             webhook_event: WebhookEvent, deliver_webhook(), Deliver a webhook event asynchronously.      Args:         webhook_event_id: UUI, ViewSet for managing webhooks., Set the creator when creating a webhook., Return supported webhook event types., Test webhook delivery., WebhookViewSet (+1 more)
+### Community 510 - "use-sidebar-counts.ts"
+Cohesion: 0.20
+Nodes (10): _approved_copy_overlay(), _brand_approved_copy(), _merge_pdfs(), One-page overlay with the approved-copy watermark and optional seal., Stamp APPROVED COPY on every page and the seal on selected pages., Re-issue an approved copy whose approval record was corrected.      The memo pag, Join separately rendered memo and certificate pages into one PDF., Return the hash-verified server render of an issued seal. (+2 more)
+
+### Community 513 - "flushLogs"
+Cohesion: 0.09
+Nodes (5): CFFFont, PDFFunction, PDFFunctionFactory, toNumberArray(), XFAFactory
 
 ### Community 515 - ".get_related_responses"
 Cohesion: 0.50
@@ -2036,104 +2120,84 @@ Cohesion: 0.25
 Nodes (7): Global Constraints, Physical Custody Handover Implementation Plan, Review Focus, Task 1: Physical custody data model and API, Task 2: Register initial physical custody, Task 3: Registration form and physical register UI, Task 4: Correspondence detail linked physical record
 
 ### Community 517 - ".validate_reference_number"
-Cohesion: 0.25
+Cohesion: 0.22
 Nodes (4): mockUseCurrentUser, mockUseOrganization, mockUseOrgUsers, ResizeObserverStub
 
 ### Community 519 - ".get_branch_originator_name"
 Cohesion: 0.25
 Nodes (7): 1. `HQ/AGM/SA&DM/AD/002` — FY2025 Capital Expenditure Review, 2. `AQ-2026-001` — Audit Query, Bills for Certification (PV), 3. `NPA/PROC/2025/0089` — Port Access Road Upgrade (Calabar Port), 4. `NPA/PROC/2025/0147` — Contract, Wharf Rehabilitation (Lagos Port), Open mock-owned items — proposed real owners and exact reassignment actions, Ordering and effect on the deactivation gate, Verification of this document
 
-### Community 545 - ".get_can_be_recalled"
-Cohesion: 0.29
-Nodes (6): AppSidebar(), SidebarContext, useSidebar(), useIsMobileHook(), react, react
+### Community 544 - ".get_can_be_edited"
+Cohesion: 0.25
+Nodes (7): api, Deferred, request(), responseFor(), router, stats, RequestList()
+
+### Community 545 - ".check_and_handle_completion"
+Cohesion: 0.67
+Nodes (3): Blue-Green Deployment, 🚀 Deployment Strategy, Rollback Strategy
 
 ### Community 553 - ".get_is_acknowledged"
 Cohesion: 0.33
 Nodes (5): Migration, move_global_rules_to_defaults(), Preserve the current global SLA values, then remove the duplicate rules., Recreate the global SLA rules from the defaults (reverse migration)., restore_global_rules()
 
-### Community 558 - "DocumentAclLevelTests"
-Cohesion: 0.36
-Nodes (6): CatalogPermission, CatalogResponse, toRolePermissions(), PermissionPreset, RolePermission, RolePermissionCategory
-
 ### Community 563 - "form_serials.py"
 Cohesion: 0.33
 Nodes (5): All 56 offices, Cutover cautions, Decision rule, Multiple-principal office audit (read-only), Priority offices
 
-### Community 572 - ".get_seal_data"
+### Community 590 - ".patch"
 Cohesion: 0.33
-Nodes (6): AdminHelpdeskPage(), HelpdeskPage(), createSupportTicket(), fetchSupportTickets(), resolveSupportTicket(), SupportTicket
-
-### Community 613 - "🚀 Deployment Strategy"
-Cohesion: 0.10
-Nodes (10): BackupCode, A hashed, single-use recovery code for login MFA., BackupCodeHardeningTests, EmailOtpHardeningTests, LoginMfaHardeningTests, make_png(), APITestCase, raw_column() (+2 more)
-
-### Community 615 - ".get_or_create_preferences"
-Cohesion: 0.22
-Nodes (6): Views for form signature workflow., Meta, NotificationType, Priority, Notification models for in-app and email notifications., Status
+Nodes (5): Admin configuration for search module., Admin interface for SavedSearch., Admin interface for SearchHistory., SavedSearchAdmin, SearchHistoryAdmin
 
 ### Community 616 - "._normalise_charfields"
 Cohesion: 0.40
 Nodes (4): Actionable open work, NPA ECM mock-user deactivation manifest (read-only), Proposed order (not executed), Snapshot
 
-### Community 618 - ".get_related_forms"
-Cohesion: 0.50
-Nodes (4): File Not Opening, Permission Issues, Troubleshooting, Upload Stuck
-
 ### Community 619 - ".create_case_sla"
 Cohesion: 0.50
 Nodes (3): grant_linked_document_access(), Migration, Give existing correspondence participants read access to linked documents.
-
-### Community 623 - ".get_queryset"
-Cohesion: 0.50
-Nodes (4): _approved_copy_overlay(), _brand_approved_copy(), One-page overlay with the approved-copy watermark and optional seal., Stamp APPROVED COPY on every page and the seal on selected pages.
 
 ### Community 624 - "🔧 Maintenance Tasks"
 Cohesion: 0.67
 Nodes (3): UsersRolesRedirectPage(), UsersRolesRedirectPageProps, VALID_SUBTABS
 
-### Community 626 - "Troubleshooting"
-Cohesion: 0.40
-Nodes (3): Get or create notification preferences for a user., Check if notification should be sent based on user preferences.         Returns, NotificationPreferences
+### Community 625 - ".archive_old_notifications"
+Cohesion: 0.03
+Nodes (18): DetailStatusStrip(), BooleanElement, DateElement, DateTime, Decimal, encodeToXmlString(), Float, Integer (+10 more)
 
-### Community 646 - "@tiptap/extension-text-style"
-Cohesion: 0.25
-Nodes (5): CaptureJobViewSet, ViewSet for managing capture jobs., Set the creator when creating a capture job., Cancel a pending or processing job., Retry a failed, pending, or stuck processing job (full restart).
+### Community 630 - ".get_case_links"
+Cohesion: 0.43
+Nodes (4): db_restore_align_sequences(), db_restore_snapshot(), db_restore_validate_identifier(), db-restore.sh script
 
-### Community 670 - "🔧 Maintenance Tasks"
-Cohesion: 0.33
-Nodes (6): _public_app_origin(), Return the externally reachable application origin, if configured., Build the verification URL from the configured public app origin., Return the hash-verified server render of an issued seal., _seal_png(), _verification_url()
-
-### Community 671 - ".get_queryset"
-Cohesion: 0.50
-Nodes (3): DashboardLayoutProps, SkipToContent(), SidebarProvider
-
-### Community 737 - "._can_user_sign"
+### Community 640 - "cmdk"
 Cohesion: 0.67
 Nodes (3): Version History, Version Management, Version Naming
 
-### Community 738 - "🚀 Deployment Strategy"
-Cohesion: 0.67
-Nodes (3): Blue-Green Deployment, 🚀 Deployment Strategy, Rollback Strategy
+### Community 642 - ".get_related_forms"
+Cohesion: 0.18
+Nodes (9): ConnectorType, ERPSyncRecord, ERPType, EventStatus, LogStatus, LogType, Meta, Integration models for webhooks, email, and external system connectors. (+1 more)
+
+### Community 650 - ".get_validators"
+Cohesion: 0.15
+Nodes (10): Unified history: Case + FormSubmission + Correspondence + minutes., _audit_case_title(), _find_form_document_for_submission(), _generate_audit_case_number(), get_case_history(), _link_evidence_for_submission(), Audit work-item aggregate helpers.  Promotes Case(case_type=AUDIT) as the work-i, Best-effort locate FormDocument linked to a FormSubmission. (+2 more)
 
 ## Knowledge Gaps
-- **2212 isolated node(s):** `Migration`, `Migration`, `Migration`, `Migration`, `Migration` (+2207 more)
+- **2427 isolated node(s):** `Migration`, `Migration`, `Migration`, `Migration`, `Migration` (+2422 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **319 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **277 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Decimal` connect `.get_related_documents` to `pdf.worker.min.mjs`, `integrations-storage.ts`?**
-  _High betweenness centrality (0.193) - this node is a cross-community bridge._
-- **Why does `classify_required_level()` connect `integrations-storage.ts` to `.get_related_documents`?**
-  _High betweenness centrality (0.193) - this node is a cross-community bridge._
-- **Why does `dependencies` connect `dependencies` to `@tiptap/extension-table-header`, `@tiptap/extension-table-row`, `paste-as-picture.ts`, `@types/qrcode`, `@dnd-kit/core`, `@dnd-kit/utilities`, `@radix-ui/react-alert-dialog`, `@tiptap/extension-placeholder`, `@types/dompurify`, `@tiptap/extension-text-style`, `@tiptap/extension-table-cell`, `XFAAttribute`, `@tiptap/extension-table-header`, `ERPSyncRecord`, `@tiptap/extension-superscript`, `installStorage`, `.get_can_be_recalled`, `Ui`, `.can_be_edited`, `.get_all_activities`, `loading.tsx`, `loading.tsx`, `.get_related_forms`, `.requires_signatures`, `@dnd-kit/core`, `.get_case_links`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `@radix-ui/react-alert-dialog`, `@radix-ui/react-avatar`, `.get_correspondence_links`, `@radix-ui/react-collapsible`, `@radix-ui/react-select`, `.end_session`, `.perform_create`, `.grant_document_access_for_minute`, `cmdk`, `.patch`, `Troubleshooting`, `scripts`, `.is_dispatched`, `.get_case_links`, `.get_is_inward`, `@tiptap/extension-highlight`, `.is_routing_inward`, `.is_routing_outward`?**
-  _High betweenness centrality (0.151) - this node is a cross-community bridge._
+- **Why does `Decimal` connect `.archive_old_notifications` to `pdf.worker.min.mjs`, `OCRSignalTests`?**
+  _High betweenness centrality (0.364) - this node is a cross-community bridge._
+- **Why does `classify_required_level()` connect `OCRSignalTests` to `.archive_old_notifications`?**
+  _High betweenness centrality (0.364) - this node is a cross-community bridge._
+- **Why does `TemplateNamespace` connect `TemplateNamespace` to `DocumentRecord`, `badge.tsx`, `logError`, `.my_preferences`, `CaseViewSet`, `sidebar.tsx`, `pdf.worker.min.mjs`, `.generate_serial_number`, `models.py`, `serializers.py`?**
+  _High betweenness centrality (0.089) - this node is a cross-community bridge._
+- **Are the 193 inferred relationships involving `User` (e.g. with `UserAdmin` and `Command`) actually correct?**
+  _`User` has 193 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `Migration`, `Migration`, `Migration` to the rest of the system?**
-  _2212 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _2427 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `cn` be split into smaller, more focused modules?**
-  _Cohesion score 0.02427667032909538 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.042094560244026434 - nodes in this community are weakly interconnected._
 - **Should `react` be split into smaller, more focused modules?**
-  _Cohesion score 0.02275189599133261 - nodes in this community are weakly interconnected._
-- **Should `DocumentRecord` be split into smaller, more focused modules?**
-  _Cohesion score 0.05329153605015674 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.02134328358208955 - nodes in this community are weakly interconnected._

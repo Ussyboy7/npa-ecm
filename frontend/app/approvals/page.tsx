@@ -727,7 +727,7 @@ function ApprovalsForm() {
               hasActiveFilters
                 ? 'Try adjusting your search or filters to see more results.'
                 : isDepartmental
-                  ? 'Departmental approvals for your office will appear here once created (includes endorsements).'
+                  ? 'Departmental endorsements for your office will appear here (includes historical departmental approvals).'
                   : 'Executive approvals (MD, Executive+Approval) will appear here once they are created. Seal status is shown as a column.'
             }
             actionLabel={hasActiveFilters ? 'Clear Filters' : undefined}

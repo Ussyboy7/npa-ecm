@@ -26,6 +26,8 @@ interface SignatureSectionProps {
   signature: StoredSignature | null;
   currentUser: User | null;
   actionType?: 'minute' | 'approve';
+  /** What is being signed, used in the acknowledgement copy. */
+  itemLabel?: string;
   isExecutive?: boolean;
   applySignature: boolean;
   onApplySignatureChange: (checked: boolean) => void;
@@ -41,6 +43,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
   signature,
   currentUser,
   actionType = 'minute',
+  itemLabel = 'minute',
   isExecutive = false,
   applySignature,
   onApplySignatureChange,
@@ -224,7 +227,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
             <div className="flex items-center gap-2">
               <ImageIcon className="h-4 w-4" />
               <span>
-                Apply your signature to this minute for acknowledgement.
+                Apply your signature to this {itemLabel} for acknowledgement.
               </span>
             </div>
             <div className="flex items-center gap-2">

@@ -5,17 +5,17 @@ from __future__ import annotations
 import difflib
 from typing import Any
 
-from django.utils.html import strip_tags
+from common.plain_text import normalize_text_spacing, to_plain_text
 
 
 def extract_version_plain_text(version) -> str:
     """Return best-effort plain text for a document version."""
     if version.content_text and version.content_text.strip():
-        return version.content_text.strip()
+        return normalize_text_spacing(version.content_text.strip())
     if version.content_html and version.content_html.strip():
-        return " ".join(strip_tags(version.content_html).split())
+        return to_plain_text(version.content_html)
     if version.ocr_text and version.ocr_text.strip():
-        return version.ocr_text.strip()
+        return normalize_text_spacing(version.ocr_text.strip())
     return ""
 
 

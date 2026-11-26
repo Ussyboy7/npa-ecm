@@ -751,11 +751,12 @@ class Command(BaseCommand):
             },
             {
                 "slug": "departmental-approval",
-                "name": "Departmental Approval",
-                "description": "Standard approval within a division. Stops at GM level.",
+                "name": "Departmental Review (AGM → GM → MD)",
+                "description": "Departmental review chain. The GM reviews; the MD records the approval.",
                 "steps": [
                     {"order": 1, "title": "AGM Review", "required_role": "Assistant General Manager", "required_grade_level": "MSS2"},
-                    {"order": 2, "title": "GM Approval", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                    {"order": 2, "title": "GM Review", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                    {"order": 3, "title": "MD Approval", "required_role": "Managing Director", "required_grade_level": "MDCS"},
                 ],
             },
             {
@@ -2689,24 +2690,17 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING("Ensuring correspondence templates"))
         from correspondence.models import CorrespondenceTemplate
 
-        # Keep in sync with correspondence.migrations.0063_align_memo_templates_word_headers
-        dept_html = """<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 20pt; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</span></strong></p>
-<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</span></strong></p>
-<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{department.name}}</span></strong></p>
+        # Keep in sync with correspondence.migrations.0074_memo_templates_spaced_headers
+        # Memo headers are spaced paragraphs (non-breaking gaps), not a table, so
+        # the author can edit the Date/Ref spacing directly.
+        gap = "\u00a0" * 16
+        dept_html = f"""<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 20pt; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</span></strong></p>
+<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{{{division.name}}}}</span></strong></p>
+<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{{{department.name}}}}</span></strong></p>
 <p style="text-align: center; margin: 0 0 12pt 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">Departmental Memorandum</span></strong></p>
-<table style="width: 100%; border: none; border-collapse: collapse; table-layout: fixed; margin: 0 0 12pt 0; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;">
-  <tbody>
-    <tr>
-      <td style="width: 55%; border: none; padding: 0 8pt 4pt 0; vertical-align: top;"><strong>To:</strong> {{recipient.name}}</td>
-      <td style="width: 45%; border: none; padding: 0 0 4pt 0; text-align: right; vertical-align: top;"><strong>Date:</strong> {{date.today}}</td>
-    </tr>
-    <tr>
-      <td style="border: none; padding: 0 8pt 0 0; vertical-align: top;"><strong>From:</strong> {{sender.name}}</td>
-      <td style="border: none; padding: 0; text-align: right; vertical-align: top; word-break: break-word;"><strong>Ref.:</strong> {{document.reference}}</td>
-    </tr>
-  </tbody>
-</table>
-<p style="margin: 12pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">RE: {{document.title}}</span></strong></p>
+<p style="margin: 0 0 2pt 0; line-height: 1.07; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;"><strong>To:</strong> {{{{recipient.name}}}}{gap}<strong>Date:</strong> {{{{date.today}}}}</p>
+<p style="margin: 0 0 12pt 0; line-height: 1.07; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;"><strong>From:</strong> {{{{sender.name}}}}{gap}<strong>Ref.:</strong> {{{{document.reference}}}}</p>
+<p style="margin: 12pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">RE: {{{{document.title}}}}</span></strong></p>
 <p style="margin: 6pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">- [SUBTITLE]</span></strong></p>
 <p style="margin: 12pt 0 0 0; line-height: 1.15;"><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">[Insert body content here]</span></p>"""
         dept_text = """NIGERIAN PORTS AUTHORITY
@@ -2723,22 +2717,12 @@ RE: {{document.title}}
 
 [Insert body content here]"""
 
-        internal_html = """<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 20pt; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</span></strong></p>
-<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{division.name}}</span></strong></p>
+        internal_html = f"""<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 20pt; font-family: Verdana, Geneva, sans-serif;">NIGERIAN PORTS AUTHORITY</span></strong></p>
+<p style="text-align: center; margin: 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">{{{{division.name}}}}</span></strong></p>
 <p style="text-align: center; margin: 0 0 12pt 0; line-height: 1.07;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">Internal Memorandum</span></strong></p>
-<table style="width: 100%; border: none; border-collapse: collapse; table-layout: fixed; margin: 0 0 12pt 0; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;">
-  <tbody>
-    <tr>
-      <td style="width: 55%; border: none; padding: 0 8pt 4pt 0; vertical-align: top;"><strong>To:</strong> {{recipient.name}}</td>
-      <td style="width: 45%; border: none; padding: 0 0 4pt 0; text-align: right; vertical-align: top;"><strong>Date:</strong> {{date.today}}</td>
-    </tr>
-    <tr>
-      <td style="border: none; padding: 0 8pt 0 0; vertical-align: top;"><strong>From:</strong> {{sender.name}}</td>
-      <td style="border: none; padding: 0; text-align: right; vertical-align: top; word-break: break-word;"><strong>Ref.:</strong> {{document.reference}}</td>
-    </tr>
-  </tbody>
-</table>
-<p style="margin: 12pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">RE: {{document.title}}</span></strong></p>
+<p style="margin: 0 0 2pt 0; line-height: 1.07; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;"><strong>To:</strong> {{{{recipient.name}}}}{gap}<strong>Date:</strong> {{{{date.today}}}}</p>
+<p style="margin: 0 0 12pt 0; line-height: 1.07; font-family: Verdana, Geneva, sans-serif; font-size: 12pt;"><strong>From:</strong> {{{{sender.name}}}}{gap}<strong>Ref.:</strong> {{{{document.reference}}}}</p>
+<p style="margin: 12pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">RE: {{{{document.title}}}}</span></strong></p>
 <p style="margin: 6pt 0 0 0; text-align: justify; line-height: 1.15;"><strong><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">- [SUBTITLE]</span></strong></p>
 <p style="margin: 12pt 0 0 0; line-height: 1.15;"><span style="font-size: 12pt; font-family: Verdana, Geneva, sans-serif;">[Insert body content here]</span></p>"""
         internal_text = """NIGERIAN PORTS AUTHORITY

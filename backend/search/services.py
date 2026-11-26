@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db.models import Q, QuerySet
 
+from common.plain_text import to_plain_text
 from correspondence.models import Correspondence, Case
 from dms.visibility import documents_visible_to
 from dms.models import Document
@@ -63,6 +64,11 @@ class SearchService:
         Returns:
             Snippet with highlighted terms
         """
+        # Stored text keeps memo layout as non-breaking spaces and may carry
+        # entities; a result list shows ordinary prose, never either.
+        text = to_plain_text(text)
+        query = " ".join((query or "").split())
+
         if not text or not query:
             # Return first part of text if no query
             return text[:max_length] + "..." if len(text) > max_length else text
@@ -192,7 +198,9 @@ class SearchService:
             queryset = queryset.filter(created_at__gte=filters["date_from"])
 
         if filters.get("date_to"):
-            queryset = queryset.filter(created_at__lte=filters["date_to"])
+            # date_to is a calendar day; a DateTimeField compared with <= would
+            # stop at midnight and drop everything created later that day.
+            queryset = queryset.filter(created_at__date__lte=filters["date_to"])
 
         if filters.get("tags"):
             tags = filters["tags"] if isinstance(filters["tags"], list) else [filters["tags"]]
@@ -385,7 +393,7 @@ class SearchService:
         results = []
         for version in queryset:
             # Extract snippet (first 200 chars of matching text)
-            text = version.ocr_text or version.content_text or ""
+            text = to_plain_text(version.ocr_text or version.content_text or "")
             snippet = text[:200] + "..." if len(text) > 200 else text
 
             results.append({
@@ -577,7 +585,8 @@ class SearchService:
             queryset = queryset.filter(opened_at__gte=filters["date_from"])
 
         if filters.get("date_to"):
-            queryset = queryset.filter(opened_at__lte=filters["date_to"])
+            # Calendar-day upper bound, not the midnight instant of that day.
+            queryset = queryset.filter(opened_at__date__lte=filters["date_to"])
 
         if filters.get("tags"):
             tags = filters["tags"] if isinstance(filters["tags"], list) else [filters["tags"]]

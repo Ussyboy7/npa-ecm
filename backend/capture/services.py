@@ -13,6 +13,7 @@ from pdf2image import convert_from_path
 from PIL import Image
 from docx import Document as DocxDocument
 
+from common.plain_text import normalize_text_spacing
 from dms.models import Document
 from capture.models import CaptureJob
 
@@ -157,11 +158,13 @@ class OCRService:
             # Open the DOCX file
             doc = DocxDocument(docx_path)
 
-            # Extract text from all paragraphs
+            # Extract text from all paragraphs. Word pads columns with
+            # non-breaking spaces; keep the words apart, not the padding.
             paragraphs = []
             for paragraph in doc.paragraphs:
-                if paragraph.text.strip():
-                    paragraphs.append(paragraph.text.strip())
+                line = normalize_text_spacing(paragraph.text).strip()
+                if line:
+                    paragraphs.append(line)
 
             # Extract text from tables
             table_texts = []
@@ -169,8 +172,9 @@ class OCRService:
                 for row in table.rows:
                     row_text = []
                     for cell in row.cells:
-                        if cell.text.strip():
-                            row_text.append(cell.text.strip())
+                        value = normalize_text_spacing(cell.text).strip()
+                        if value:
+                            row_text.append(value)
                     if row_text:
                         table_texts.append(" | ".join(row_text))
 

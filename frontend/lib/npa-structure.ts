@@ -147,6 +147,8 @@ export type Correspondence = {
   }>;
   archiveLevel?: 'department' | 'division' | 'directorate';
   linkedDocumentIds?: string[];
+  /** Approved copies a recall withdrew; linked as evidence, not downloadable. */
+  recalledDocuments?: Array<{ id: string; title: string; recalledAt?: string }>;
   completionPackage?: {
     documentId: string;
     versionId?: string;
@@ -156,6 +158,13 @@ export type Correspondence = {
   } | null;
   completionSummaryGeneratedAt?: string;
   caseId?: string;
+  /** Case summary returned with the correspondence detail. */
+  case?: {
+    id: string;
+    caseNumber: string;
+    title: string;
+    status: string;
+  } | null;
   // Configured route template and parallel routing state
   workflowTemplateId?: string;
   workflowTemplate?: import('@/lib/types/workflow').CorrespondenceWorkflowTemplate | null;

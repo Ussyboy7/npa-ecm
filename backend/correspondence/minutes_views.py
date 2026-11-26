@@ -15,7 +15,7 @@ from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from audit.models import ActivityLog
 from audit.services import AuditService
@@ -27,6 +27,7 @@ from notifications.services import NotificationService
 from organization.models import Office, OfficeMembership
 
 from .models import (
+    ApprovalSnapshot,
     Case,
     Correspondence,
     CorrespondenceDistribution,
@@ -103,6 +104,12 @@ class MinuteViewSet(viewsets.ModelViewSet):
             or approval_role is not None
             or action_type == Minute.ActionType.APPROVE
         )
+        if is_register_query and self.action == "list":
+            # A recalled approval is withdrawn, not merely seal-invalid, so it
+            # leaves the register instead of showing as an invalid row.
+            queryset = queryset.filter(is_recalled=False).exclude(
+                approval_snapshot__voided_at__isnull=False
+            )
         if is_register_query and user and getattr(user, "is_authenticated", False):
             from organization.permission_utils import require_page_access
 
@@ -419,13 +426,12 @@ class MinuteViewSet(viewsets.ModelViewSet):
         office_updated = office_updated or _office_updated
         approver_updated = approver_updated or _approver_updated
 
+        # Only the MD's approval is final. Any other approve action is an
+        # endorsement on the executive track and still needs the MD.
         is_final_approval = (
             minute.action_type == Minute.ActionType.APPROVE
-            and minute.approval_role == "approval"
-            and (
-                correspondence.required_approval_level != Correspondence.RequiredApprovalLevel.EXECUTIVE
-                or minute.approval_level == Minute.ApprovalLevel.EXECUTIVE
-            )
+            and minute.approval_role == Minute.ApprovalRole.APPROVAL
+            and minute.approval_level == Minute.ApprovalLevel.EXECUTIVE
         )
         is_formal_issue = bool(minute.to_office_id or minute.to_user_id) and (
             (
@@ -557,7 +563,16 @@ class MinuteViewSet(viewsets.ModelViewSet):
             if minute.approval_level == Minute.ApprovalLevel.EXECUTIVE
             else "approvals_departmental"
         )
+        # Access first: a caller who may not read approvals learns nothing
+        # about this minute's recall state.
         require_page_access(request.user, approval_page)
+
+        snapshot = ApprovalSnapshot.objects.filter(minute=minute).first()
+        if minute.is_recalled or (snapshot is not None and snapshot.is_void):
+            return Response(
+                {"detail": "This approval was recalled; its approved copy is withdrawn."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Tier-aware: allow any approve minute (executive or departmental) and any minute with an approval_level set (endorsement)
         _is_approval = minute.action_type == Minute.ActionType.APPROVE or getattr(minute, "approval_level", None) is not None
@@ -706,64 +721,28 @@ class MinuteViewSet(viewsets.ModelViewSet):
     def recall(self, request, pk=None):
         minute = self.get_object()
         assert_correspondence_writable(minute.correspondence)
-        is_md_or_super = bool(
-            getattr(request.user, "is_superuser", False)
-            or (getattr(getattr(request.user, "system_role", None), "name", "") or "").lower() == "managing director"
-        )
 
-        if not is_md_or_super and not minute.can_be_recalled():
-            # Distinguish already-recalled vs window/acknowledged/downstream
-            if minute.is_recalled:
-                raise ValidationError({"detail": "This minute has already been recalled."})
-            if minute.acknowledged_at or minute.dispatched_at:
-                raise ValidationError({"detail": "Cannot recall — already opened/dispatched by the next office."})
-            if minute.edit_window_expires_at and timezone.now() > minute.edit_window_expires_at:
-                raise ValidationError({"detail": "Recall window expired (1 hour). Only MD can recall after this."})
-            # Downstream exists
-            raise ValidationError({"detail": "Cannot recall — the next person has already acted on this. Only MD can recall with cascade."})
-
-        if not is_md_or_super and minute.user_id != request.user.id:
-            raise ValidationError({
-                "detail": "Only the original sender can recall this minute."
+        # Recall is sender-only, with no privileged override.
+        if minute.user_id != request.user.id:
+            raise PermissionDenied({
+                "detail": "Only the sender can recall this minute.",
+                "reason": "recall_not_sender",
             })
 
+        if not minute.can_be_recalled():
+            if minute.is_recalled:
+                raise ValidationError({"detail": "This minute has already been recalled."})
+            if minute.is_opened or minute.acknowledged_at:
+                raise ValidationError({"detail": "Cannot recall — the recipient has already opened this minute."})
+            raise ValidationError({"detail": "Cannot recall — the next person has already acted on this minute."})
+
         recall_reason = request.data.get("recall_reason", "")
-        from django.utils import timezone as tz
         correspondence = minute.correspondence
 
-        downstream_minutes = Minute.objects.filter(
-            correspondence=correspondence,
-            timestamp__gt=minute.timestamp,
-            is_recalled=False
-        ).order_by("timestamp")
-
-        for downstream in downstream_minutes:
-            downstream.is_recalled = True
-            downstream.recalled_at = tz.now()
-            downstream.recall_reason = (
-                f"Cascaded from recall of minute {minute.id}"
-                if not recall_reason
-                else f"{recall_reason} [cascaded from minute {minute.id}]"
-            )
-            downstream.save(update_fields=["is_recalled", "recalled_at", "recall_reason"])
-
-            if downstream.seal_applied:
-                seal = downstream.seal_applied
-                seal.is_valid = False
-                seal.invalidated_at = tz.now()
-                seal.invalidated_reason = (
-                    f"Downstream minute cascaded from recall of minute {minute.id} "
-                    f"by {request.user.get_full_name() or request.user.username}"
-                )
-                seal.save(update_fields=["is_valid", "invalidated_at", "invalidated_reason"])
-
-            CorrespondenceDistribution.objects.filter(
-                minute=downstream,
-                is_active=True
-            ).update(is_active=False)
-
+        # No cascade: can_be_recalled() refuses a minute while any active
+        # minute follows it, so there is never a downstream minute to revoke.
         minute.is_recalled = True
-        minute.recalled_at = tz.now()
+        minute.recalled_at = timezone.now()
         if recall_reason:
             minute.recall_reason = recall_reason
         minute.save(update_fields=["is_recalled", "recalled_at", "recall_reason"])
@@ -771,7 +750,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
         if minute.seal_applied:
             seal = minute.seal_applied
             seal.is_valid = False
-            seal.invalidated_at = tz.now()
+            seal.invalidated_at = timezone.now()
             seal.invalidated_reason = f"Minute recalled by {request.user.get_full_name() or request.user.username}"
             seal.save(update_fields=["is_valid", "invalidated_at", "invalidated_reason"])
 
@@ -780,7 +759,21 @@ class MinuteViewSet(viewsets.ModelViewSet):
             is_active=True
         ).update(is_active=False)
 
-        downstream_count = len(downstream_minutes)
+        # A recalled approval no longer stands, but its frozen snapshot is
+        # evidence: void it (never rewrite or delete it) so the approvals
+        # register, the PDF route, and seal verification stop serving it.
+        snapshot = ApprovalSnapshot.objects.filter(minute=minute).first()
+        if snapshot and not snapshot.is_void:
+            snapshot.void(
+                f"Recalled by {request.user.get_full_name() or request.user.username}"
+                + (f": {recall_reason}" if recall_reason else "")
+            )
+
+        # The archived approved copy is withdrawn from the DMS download routes
+        # but stays linked, shown as recalled, so the PDF cannot be fetched.
+        withdrawn_approved_copy_ids = (
+            ExecutiveApprovalPDFService.withdraw_approved_copy(minute=minute)
+        )
 
         routing_actions = (Minute.ActionType.FORWARD, Minute.ActionType.MINUTE, Minute.ActionType.APPROVE, Minute.ActionType.TREAT)
         if minute.action_type in routing_actions and minute.from_office:
@@ -803,21 +796,6 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 action_required=True,
             )
 
-        for downstream in downstream_minutes:
-            NotificationService.create_notification(
-                recipient=downstream.user,
-                title=f"Minute Cascaded by Recall - {correspondence.reference_number}",
-                message=f"A prior minute was recalled, which cascaded to your action on this correspondence.",
-                notification_type=Notification.NotificationType.CORRESPONDENCE,
-                priority=Notification.Priority.NORMAL,
-                sender=request.user,
-                module="correspondence",
-                related_object_type="correspondence",
-                related_object_id=str(correspondence.id),
-                action_url=f"/correspondence/{correspondence.id}",
-                action_required=True,
-            )
-
         routing_reverted = minute.action_type in routing_actions and minute.from_office
 
         AuditService.log_correspondence_activity(
@@ -829,9 +807,10 @@ class MinuteViewSet(viewsets.ModelViewSet):
             metadata={
                 "minute_id": str(minute.id),
                 "recall_reason": recall_reason,
-                "downstream_cascaded_count": downstream_count,
-                "downstream_recalled_ids": [str(m.id) for m in downstream_minutes],
                 "routing_reverted": routing_reverted,
+                # Why the approved copy vanished from the DMS attachments.
+                "approved_copy_withdrawn": bool(withdrawn_approved_copy_ids),
+                "approved_copy_document_ids": withdrawn_approved_copy_ids,
             },
         )
 
@@ -988,18 +967,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
             )
 
         serializer = self.get_serializer(minute)
-        response_data = serializer.data
-
-        if minute.acknowledged_at:
-            response_data['warning'] = (
-                f"This minute was acknowledged on {minute.acknowledged_at.strftime('%d %b %Y, %H:%M')}. "
-                f"Recalling will remove it from the recipient's inbox."
-            )
-
-        response_data["downstream_cascaded_count"] = downstream_count
-        response_data["downstream_ids"] = [str(m.id) for m in downstream_minutes]
-
-        return Response(response_data)
+        return Response(serializer.data)
 
     @action(detail=False, methods=["post"], url_path="parallel-route")
     @transaction.atomic

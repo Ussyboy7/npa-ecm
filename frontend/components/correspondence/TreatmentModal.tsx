@@ -14,11 +14,11 @@ import { ConfirmationDialog } from './ConfirmationDialog';
 import { generateId, getNextStepNumber } from '@/lib/correspondence-helpers';
 import { formatDateForAPI } from '@/lib/datetime';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
+import { isDraftRoutingData } from '@/lib/api/drafts';
 import type { Correspondence, User } from '@/lib/npa-structure';
 import {
   getGradeRelationshipLabel,
   getSuperiorGrade,
-  gradeHasTier,
 } from '@/lib/grade-catalog';
 import { useGradeCatalog } from '@/hooks/use-grade-catalog';
 import {
@@ -63,20 +63,19 @@ import { useRoutingSuggestions } from '@/hooks/use-routing-suggestions';
 import { fetchActiveUsersForGradeAndDivision } from '@/lib/users-api';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
-import { PrimaryRoutePanel } from './PrimaryRoutePanel';
+import { PrimaryRoutePanel, type RoutePurpose } from './PrimaryRoutePanel';
+import { CorrespondenceContextCard, PreviousMinuteLine } from './CorrespondenceContextCard';
 import { submitParallelRoute } from '@/lib/parallel-routing';
 import type { AssignmentMergeStrategy, BranchConfig } from '@/lib/parallel-routing';
 
 
 import { useSignature } from '@/hooks/use-signature';
-import { SignatureSection } from './SignatureSection';
 import { FileUploadArea } from './FileUploadArea';
 import { MemoCompositionSection } from './MemoCompositionSection';
 import { type UploadedFile } from '@/hooks/use-file-upload';
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import React from 'react';
-import { cn } from '@/lib/utils';
 import {
   getTemplatesForUser,
   saveTemplate,
@@ -84,9 +83,10 @@ import {
 } from '@/lib/api/document-templates';
 import {
   DocumentRecord,
+  fetchDocumentById,
   queryDocuments,
 } from '@/lib/api/dms';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatDate } from '@/lib/correspondence-helpers';
 
@@ -95,6 +95,10 @@ interface TreatmentModalProps {
   isOpen: boolean;
   onClose: (result?: { createdResponseId?: string }) => void;
 }
+
+/** Treat & Respond has no approval action; legacy drafts fall back to action. */
+const normalizePurpose = (purpose: RoutePurpose): 'action' | 'information' =>
+  purpose === 'information' ? 'information' : 'action';
 
 // UploadedFile type is now imported from use-file-upload hook
 
@@ -110,7 +114,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   } = useOrganizationCatalogs('offices', 'directorates', 'divisions', 'departments');
   // Form state
   const [currentUser, setCurrentUser] = useState(activeUser ?? null);
-  const [responseType, setResponseType] = useState<'memo' | 'existing-document' | 'new-document'>('memo');
+  const [responseType, setResponseType] = useState<'memo' | 'existing-document'>('memo');
   const [memoSubject, setMemoSubject] = useState(`Re: ${correspondence.subject}`);
   const [memoSubjectError, setMemoSubjectError] = useState('');
   const [memoContent, setMemoContent] = useState('');
@@ -118,7 +122,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [forwardTo, setForwardTo] = useState('');
   const [forwardToError, setForwardToError] = useState('');
   const [onBehalfOf, setOnBehalfOf] = useState('');
-  const [purpose, setPurpose] = useState<'action' | 'information' | 'approval'>('action');
+  const [purpose, setPurpose] = useState<'action' | 'information'>('action');
   
   // Routing state (like MinuteModal)
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
@@ -143,6 +147,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [documentSearchQuery, setDocumentSearchQuery] = useState('');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const selectedDocumentIdRef = useRef<string | null>(null);
   const [documentLoading, setDocumentLoading] = useState(false);
   
   // UI state
@@ -153,6 +158,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [_searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [attachmentsSectionOpen, setAttachmentsSectionOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   
   // Removed old filtering state - now using RoutingSection
   
@@ -161,21 +167,12 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState('');
   
-  // Signature state - using shared hook
-  const [applySignature, setApplySignature] = useState(false);
-  const [applySignatureManuallySet, setApplySignatureManuallySet] = useState(false);
-  const [selectedSignatureTemplateId, setSelectedSignatureTemplateId] = useState<string | null>(null);
-  const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences } = useSignature({
+  // Signature preview in the memo composer. Formal approvals use their own flow.
+  const { signature: userSignature } = useSignature({
     userId: activeUser?.id,
     autoLoad: isOpen,
   });
-  
-  // Check if user is executive
   const gradeCatalog = useGradeCatalog();
-  const isExecutive = useMemo(
-    () => gradeHasTier(gradeCatalog, activeUser?.gradeLevel, 'seniorManagement'),
-    [gradeCatalog, activeUser?.gradeLevel],
-  );
   
   // File upload state - managed locally, FileUploadArea handles UI
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -239,12 +236,46 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         setMemoContent(draft.content);
         setCharacterCount(draft.content.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length);
         if (draft.subject) setMemoSubject(draft.subject);
-        if (draft.forwardTo) setForwardTo(draft.forwardTo);
         if (draft.onBehalfOf) setOnBehalfOf(draft.onBehalfOf);
+
+        // Restore the response and routing exactly as saved. Drafts written
+        // before these fields existed keep the composer defaults.
+        if (draft.responseType) {
+          setResponseType(draft.responseType);
+          if (draft.responseType === 'existing-document' && draft.selectedDocumentId) {
+            setSelectedDocumentId(draft.selectedDocumentId);
+            void fetchDocumentById(draft.selectedDocumentId)
+              .then((document) => {
+                setDocuments((previous) =>
+                  previous.some((item) => item.id === document.id)
+                    ? previous
+                    : [document, ...previous],
+                );
+              })
+              .catch((error: unknown) => {
+                logError('Failed to restore draft document', error);
+              });
+          } else {
+            setSelectedDocumentId(null);
+          }
+        }
+
+        const routing = isDraftRoutingData(draft.routingData) ? draft.routingData : null;
+        if (routing) {
+          setRouteType(routing.routeType);
+          setRouteMode(routing.routeMode);
+          setPurpose(normalizePurpose(routing.purpose));
+          setTargetOfficeId(routing.targetOfficeId);
+          setForwardTo(routing.routeType === 'person' ? draft.forwardTo : '');
+          setParallelUserIds(routing.parallelUserIds);
+          setParallelOfficeIds(routing.parallelOfficeIds);
+          setBranchConfigs(routing.branchConfigs);
+          setMergeStrategy(routing.mergeStrategy);
+        }
         setHasDraft(true);
         setDraftId(draft.id);
         
-        // Show warning if draft had files (we can't restore File objects from localStorage)
+        // Show warning if draft had files (File objects cannot be restored from a draft)
         if (draft.files && draft.files.length > 0) {
           toast.warning(
             `Draft had ${draft.files.length} file(s) attached. Please re-upload them.`,
@@ -263,6 +294,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, correspondence.id, currentUser?.id]);
 
+  useEffect(() => {
+    selectedDocumentIdRef.current = selectedDocumentId;
+  }, [selectedDocumentId]);
+
   // Load documents - simple callback like LinkDocumentDialog
   const loadDocuments = useCallback(
     async (queryValue: string) => {
@@ -274,7 +309,15 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           search: queryValue.trim() || undefined,
           ordering: '-updated_at',
         });
-        setDocuments(response.results);
+        setDocuments((previous) => {
+          const selectedId = selectedDocumentIdRef.current;
+          const selected = selectedId
+            ? previous.find((document) => document.id === selectedId)
+            : undefined;
+          return selected && !response.results.some((document) => document.id === selected.id)
+            ? [selected, ...response.results]
+            : response.results;
+        });
       } catch (error: unknown) {
         logError('Failed to load documents', error);
         setDocuments([]);
@@ -301,29 +344,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     return () => clearTimeout(handle);
   }, [isOpen, responseType, documentSearchQuery, loadDocuments]);
 
-  // Auto-apply signature for approvals (like MinuteModal)
-  useEffect(() => {
-    if (purpose === 'approval') {
-      setApplySignature(true);
-      setApplySignatureManuallySet(false);
-      return;
-    }
-
-    if (!userSignature) {
-      setApplySignature(false);
-      setApplySignatureManuallySet(false);
-      return;
-    }
-
-    if (!applySignatureManuallySet) {
-      setApplySignature(userSignaturePreferences.autoApplyForMinutes ?? false);
-    }
-  }, [purpose, userSignature, userSignaturePreferences.autoApplyForMinutes, applySignatureManuallySet]);
-
-  useEffect(() => {
-    setApplySignatureManuallySet(false);
-  }, [purpose]);
-
   const resetForm = () => {
     setHasDraft(false);
     setDraftId(null);
@@ -341,16 +361,15 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setMergeStrategy('independent');
     setRouteType('person');
     setTargetOfficeId('');
+    setPurpose('action');
     setOnBehalfOf('');
     setSearchQuery('');
     setMemoSubjectError('');
     setMemoContentError('');
     setForwardToError('');
     setUploadedFiles([]);
-    setApplySignature(false);
-    setApplySignatureManuallySet(false);
+    setFocusMode(false);
     setSelectedTemplateId(null);
-    setSelectedSignatureTemplateId(null);
   };
 
   const getRelationshipLabel = useCallback(
@@ -409,15 +428,25 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     direction: correspondence.direction,
   });
 
+  const latestMinute = useMemo(() => {
+    const active = getMinutesByCorrespondenceId(correspondence.id).filter(
+      (minute) => !minute.isRecalled && !minute.recalledAt,
+    );
+    return active.sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    )[0];
+  }, [correspondence.id, getMinutesByCorrespondenceId]);
+
   const selectedUserIds = useMemo(
     () =>
       [
         forwardTo,
         onBehalfOf,
+        latestMinute?.userId,
         ...parallelUserIds,
         ...officeMemberships.map((membership) => membership.userId),
       ].filter((id): id is string => Boolean(id)),
-    [forwardTo, onBehalfOf, parallelUserIds, officeMemberships],
+    [forwardTo, onBehalfOf, latestMinute?.userId, parallelUserIds, officeMemberships],
   );
   const selectedUsersById = useUserLookup(selectedUserIds);
 
@@ -435,6 +464,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     (id?: string | null) => (id ? knownUserById.get(id) : undefined),
     [knownUserById],
   );
+
+  const latestMinuteAuthor = latestMinute ? findUserById(latestMinute.userId) : undefined;
 
   const assistantList: User[] = []; // Not used for treatment responses
   
@@ -467,13 +498,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       divisionId: o.divisionId ?? undefined,
     }));
   }, [offices]);
-
-  // Get relevant signature templates for treatment
-  const relevantSignatureTemplates = useMemo(() => {
-    return signatureTemplates.filter(t => 
-      t.templateType === 'treatment' || t.templateType === 'minute'
-    );
-  }, [signatureTemplates]);
 
   // Character count helpers
   const getCharacterCountColor = (current: number, max: number) => {
@@ -628,16 +652,24 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     toast.success('Template saved');
   };
 
+  useEffect(() => {
+    if (!isOpen || responseType !== 'memo') setFocusMode(false);
+  }, [isOpen, responseType]);
+
   // Keyboard shortcuts
   useKeyboardShortcuts([
     {
       key: 'Escape',
       action: () => {
         if (isOpen && !showConfirmation) {
+          if (focusMode) {
+            setFocusMode(false);
+            return;
+          }
           onClose();
         }
       },
-      description: 'Close modal',
+      description: 'Exit focus mode or close modal',
     },
     {
       key: 's',
@@ -715,18 +747,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     } else if (!forwardTo && !targetOfficeId) {
       setForwardToError('Please select a recipient (person or office)');
       return false;
-    }
-
-    // Signature validation - only for approvals
-    if (purpose === 'approval') {
-      if (!userSignature) {
-        toast.error('A digital signature is required to approve. Upload your signature in Settings → Signature.');
-        return false;
-      }
-      if (applySignature && relevantSignatureTemplates.length > 0 && !selectedSignatureTemplateId) {
-        toast.error('Please select a signature template');
-        return false;
-      }
     }
 
     return true;
@@ -815,13 +835,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         minuteText = `[RESPONSE WITH DOCUMENT]\n\nResponse sent with document: ${selectedDoc?.title || 'Document'}\n\n${stripHtml(memoContent) || 'See attached document for details.'}`;
       }
       
-      if (purpose === 'approval' && applySignature && selectedSignatureTemplateId) {
-        const signatureTemplate = relevantSignatureTemplates.find(t => t.id === selectedSignatureTemplateId);
-        if (signatureTemplate) {
-          minuteText += `\n\n---\n${signatureTemplate.name}`;
-        }
-      }
-
       const minuteResponse = await apiFetch<{ id?: string }>('/correspondence/minutes/', {
         signal,
         method: 'POST',
@@ -831,12 +844,15 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           grade_level: currentUser.gradeLevel,
           action_type: 'treat',
           minute_text: minuteText,
+          // The parent minute of a separate assignment is only the routing
+          // record; each branch carries its own purpose and expected outcome.
+          purpose: isParallelRoute ? 'action' : purpose,
+          requires_response: !isParallelRoute && purpose !== 'information',
           direction: correspondence.direction,
           step_number: nextStep,
           from_office_id: currentUserOfficeId || undefined,
           to_office_id: isParallelRoute ? undefined : (recipientOfficeId || targetOfficeId || undefined),
           to_user_id: isParallelRoute ? undefined : forwardTo || undefined,
-          signature: applySignature && userSignature ? userSignature.imageData : null,
         }),
       });
       createdMinuteId = minuteResponse?.id ?? null;
@@ -1059,11 +1075,21 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         type: 'treatment',
         content: memoContent,
         subject: memoSubject,
-        forwardTo,
+        forwardTo: routeType === 'person' ? forwardTo : '',
+        responseType,
+        selectedDocumentId: responseType === 'existing-document' ? selectedDocumentId ?? '' : '',
         onBehalfOf: onBehalfOf !== 'none' ? onBehalfOf : undefined,
-        applySignature: purpose === 'approval' ? applySignature : undefined,
-        selectedSignatureTemplateId: purpose === 'approval' ? (selectedSignatureTemplateId ?? undefined) : undefined,
         files: fileMetadata.length > 0 ? fileMetadata : undefined,
+        routingData: {
+          routeType,
+          targetOfficeId,
+          routeMode,
+          parallelUserIds,
+          parallelOfficeIds,
+          purpose,
+          branchConfigs,
+          mergeStrategy,
+        },
       });
 
       setHasDraft(true);
@@ -1077,11 +1103,20 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
   if (!currentUser) return null;
 
-  const divisionEntity = currentUser.division
-    ? divisions.find((division) => division.id === currentUser.division) ?? null
-    : null;
   const selectedRecipient = forwardTo ? findUserById(forwardTo) ?? null : null;
   const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) ?? null : null;
+
+  // A response cannot be sent without somewhere to send it. Mirror the
+  // minute composer's footer gate so nothing fails only on submit.
+  const activeDestination = routeType === 'office' ? targetOfficeId : forwardTo;
+  const hasRouteDestination =
+    routeMode === 'parallel'
+      ? parallelUserIds.length + parallelOfficeIds.length >= 2
+      : Boolean(activeDestination);
+  const handlePurposeChange = (next: RoutePurpose) => {
+    setPurpose(normalizePurpose(next));
+  };
+
   const handleResponseTypeChange = (value: string) => {
     setResponseType(value as typeof responseType);
     if (value !== 'existing-document') {
@@ -1092,6 +1127,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       setMemoContent('');
       setCharacterCount(0);
       setMemoContentError('');
+      // Supporting files belong to a memo response, not a DMS document link.
+      setUploadedFiles([]);
+      setAttachmentsSectionOpen(false);
+      setShowSuggestedNote(false);
     }
   };
 
@@ -1100,16 +1139,41 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          // Escape and outside clicks leave focus mode first; the X and Done
+          // controls are explicit ways in and out.
+          if (focusMode) {
+            setFocusMode(false);
+            return;
+          }
+          onClose();
+        }
       }}
     >
-      <DialogContent size="full" height="fill">
+      <DialogContent
+        size="full"
+        height={focusMode ? 'screen' : 'fill'}
+        showCloseButton={!focusMode}
+      >
+        {focusMode && (
+          <button
+            type="button"
+            onClick={() => onClose()}
+            aria-label="Close composer"
+            className="absolute right-3 top-3 rounded-full p-1.5 opacity-70 ring-offset-background transition-opacity hover:bg-accent hover:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" aria-hidden="true" />
             Treat & Respond
             {hasDraft && (
               <Badge variant="secondary" className="ml-2 text-xs">Draft</Badge>
+            )}
+            {focusMode && (
+              <Badge variant="outline" className="ml-1 text-xs">Focus</Badge>
             )}
             {uploadedFiles.length > 0 && (
               <Badge variant="outline" className="ml-1 text-xs">
@@ -1118,46 +1182,50 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
             )}
           </DialogTitle>
           <DialogDescription>
-            Compose a response memo or attach an existing document to respond to this correspondence
+            {focusMode
+              ? 'Writing focus — Done returns to the full composer, where you can send.'
+              : 'Compose a response memo or attach an existing document to respond to this correspondence'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-y-auto flex-1 min-h-0 pr-4">
-          <div className="space-y-6 py-2">
-            {/* Original Correspondence Card */}
-            <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
-<div className="flex items-start gap-3">
-                  <FileText className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <p className="font-semibold text-sm mb-1 break-words">
-                      Original: {correspondence.subject}
-                    </p>
-                    <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                      <span className="truncate">Ref: {correspondence.referenceNumber}</span>
-                      <span className="flex-shrink-0">•</span>
-                      <span className="truncate">From: {correspondence.senderName}</span>
-                      {divisionEntity && (
-                        <>
-                          <span className="flex-shrink-0">•</span>
-                          <span className="truncate">{divisionEntity.name}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      correspondence.priority === 'urgent' ? 'destructive' :
-                      correspondence.priority === 'high' ? 'default' : 'secondary'
+        <div
+          className={
+            focusMode
+              ? 'min-h-0 flex-1 overflow-y-auto px-1 sm:px-4'
+              : 'overflow-y-auto flex-1 min-h-0 pr-4'
+          }
+        >
+          <div className={focusMode ? 'mx-auto max-w-4xl space-y-6 py-2' : 'space-y-6 py-2'}>
+            {/* Focus mode hides each surrounding section in place rather than
+                wrapping the page, so the memo editor keeps its position and
+                never remounts (which would reset undo history). */}
+            {!focusMode && (
+              <>
+                <CorrespondenceContextCard
+                  correspondence={correspondence}
+                  divisionName={
+                    correspondence.divisionName ??
+                    (correspondence.divisionId
+                      ? divisions.find((division) => division.id === correspondence.divisionId)?.name
+                      : undefined)
+                  }
+                />
+                {latestMinute && (
+                  <PreviousMinuteLine
+                    minute={latestMinute}
+                    authorName={
+                      latestMinuteAuthor?.name ?? latestMinute.userName ?? 'Unknown'
                     }
-                    className="flex-shrink-0"
-                  >
-                    {correspondence.priority}
-                  </Badge>
-                </div>
-</div>
+                    authorRole={
+                      latestMinuteAuthor?.systemRole ?? latestMinute.userSystemRole
+                    }
+                  />
+                )}
+              </>
+            )}
 
             {/* Acting on Behalf Of */}
-            {behalfOfOptions.length > 0 && (
+            {!focusMode && behalfOfOptions.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <UserIcon className="h-4 w-4" />
@@ -1198,69 +1266,38 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               </div>
             )}
 
-            <Separator />
+            {!focusMode && <Separator />}
 
             {/* Response Type Selection */}
-            <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                Response Type *
+            {!focusMode && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-[13px] font-medium">
+                <FileText className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                Response type
               </Label>
-              <RadioGroup value={responseType} onValueChange={handleResponseTypeChange}>
-                <div className="space-y-3">
-                  {/* Memo Option */}
-                  <div
-                    onClick={(event) => {
-                      if ((event.target as HTMLElement).closest('[role="radio"], label')) return;
-                      handleResponseTypeChange('memo');
-                    }}
-                    className={cn(
-                      "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
-                      responseType === 'memo' ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border",
-                    )}
-                  >
-                    <RadioGroupItem value="memo" id="response-memo" className="mt-1" />
-                    <div className="flex-1 space-y-1">
-                      <Label htmlFor="response-memo" className="flex cursor-pointer items-center gap-2 font-medium">
-                        <FileText className="h-4 w-4 text-blue-500" />
-                        Memo Response
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Compose a formal response memo with text content.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Existing Document Option */}
-                  <div
-                    onClick={(event) => {
-                      if ((event.target as HTMLElement).closest('[role="radio"], label')) return;
-                      handleResponseTypeChange('existing-document');
-                    }}
-                    className={cn(
-                      "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
-                      responseType === 'existing-document' ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border",
-                    )}
-                  >
-                    <RadioGroupItem value="existing-document" id="response-document" className="mt-1" />
-                    <div className="flex-1 space-y-1">
-                      <Label htmlFor="response-document" className="flex cursor-pointer items-center gap-2 font-medium">
-                        <LinkIcon className="h-4 w-4 text-purple-500" />
-                        Attach Existing Document
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Attach an existing DMS document to your response.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </RadioGroup>
+              <SegmentedControl
+                ariaLabel="Response type"
+                value={responseType}
+                onValueChange={handleResponseTypeChange}
+                tone="quiet"
+                className="w-full sm:max-w-sm"
+                options={[
+                  { value: 'memo', label: 'Memo', icon: FileText },
+                  { value: 'existing-document', label: 'Attach document', icon: LinkIcon },
+                ]}
+              />
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                {responseType === 'memo'
+                  ? 'Write the response in the editor below.'
+                  : 'Attach a document already stored in the DMS.'}
+              </p>
             </div>
+            )}
 
-            <Separator />
+            {!focusMode && <Separator />}
 
             {/* Document Selection Section - Only for existing document */}
-            {responseType === 'existing-document' && (
+            {!focusMode && responseType === 'existing-document' && (
               <div className="space-y-2">
                 <Label htmlFor="document-search">Select Document <span className="text-destructive">*</span></Label>
                 
@@ -1381,7 +1418,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
             )}
 
             {/* Optional Notes for Document Response */}
-            {responseType === 'existing-document' && (
+            {!focusMode && responseType === 'existing-document' && (
               <div className="space-y-2">
                 <Label htmlFor="response-notes">Notes (Optional)</Label>
                 <Textarea
@@ -1431,20 +1468,22 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               onUseSuggestedNote={handleUseSuggestedNote}
               onDismissSuggestedNote={handleDismissSuggestedNote}
               hasFiles={uploadedFiles.length > 0}
+              expanded={focusMode}
+              onExpand={() => setFocusMode(true)}
             />
               </>
             )}
 
-            <Separator />
+            {!focusMode && <Separator />}
 
-            {/* Attachments Section - Only for Memo Response */}
-            {responseType === 'memo' && (
+            {/* Supporting files belong to the memo response */}
+            {!focusMode && responseType === 'memo' && (
               <Collapsible open={attachmentsSectionOpen} onOpenChange={setAttachmentsSectionOpen}>
                 <CollapsibleTrigger asChild>
                   <Button variant="outline" size="sm" className="w-full justify-between">
                     <span className="flex items-center gap-2">
                       <Paperclip className="h-4 w-4" />
-                      Attachments
+                      Supporting files
                       {uploadedFiles.length > 0 && (
                         <Badge variant="secondary" className="text-xs">{uploadedFiles.length}</Badge>
                       )}
@@ -1472,9 +1511,10 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               </Collapsible>
             )}
 
-            <Separator />
+            {!focusMode && <Separator />}
 
             {/* Route formal response — shared Single / Parallel panel */}
+            {!focusMode && (
             <PrimaryRoutePanel
               routeMode={routeMode}
               onRouteModeChange={setRouteMode}
@@ -1512,7 +1552,9 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               officeFilterDivision={officeFilterDivision}
               onOfficeFilterDivisionChange={setOfficeFilterDivision}
               purpose={purpose}
-              onPurposeChange={setPurpose}
+              onPurposeChange={handlePurposeChange}
+              allowApproval={false}
+              itemLabel="response"
               parallelUserIds={parallelUserIds}
               onParallelUserIdsChange={setParallelUserIds}
               parallelOfficeIds={parallelOfficeIds}
@@ -1533,48 +1575,69 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               findUserById={findUserById}
               getUserOfficeInfo={getUserOfficeInfo}
             />
-
-            <Separator />
-
-            {/* Signature Section - Only for Approvals (like MinuteModal) */}
-            {purpose === 'approval' && (
-              <SignatureSection
-                signature={userSignature}
-                currentUser={currentUser}
-                actionType="minute"
-                isExecutive={isExecutive}
-                applySignature={applySignature}
-                onApplySignatureChange={(checked) => {
-                  setApplySignatureManuallySet(true);
-                  setApplySignature(checked);
-                }}
-                signatureTemplates={relevantSignatureTemplates}
-                selectedTemplateId={selectedSignatureTemplateId}
-                onTemplateChange={setSelectedSignatureTemplateId}
-                showTemplateSelector={true}
-              />
             )}
+
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <Button variant="outline" onClick={handleSaveDraft} disabled={isSubmitting}>
-            <Save className="h-4 w-4 mr-2" />
+        <DialogFooter className="-mx-4 flex-col gap-3 border-t border-border/60 bg-background/70 px-4 pt-4 backdrop-blur-xl sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <Button
+            variant="ghost"
+            onClick={handleSaveDraft}
+            disabled={isSubmitting}
+            className="gap-2 self-start rounded-full px-4 text-muted-foreground"
+            aria-label="Save draft"
+          >
+            <Save className="h-4 w-4" aria-hidden="true" />
             Save Draft
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-gradient-primary">
-            {isSubmitting ? (
+          <div className="flex items-center gap-3 sm:justify-end">
+            {focusMode ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Sending...
+                <span className="hidden text-[11px] leading-snug text-muted-foreground sm:inline">
+                  Sending is available in the full composer.
+                </span>
+                <Button
+                  onClick={() => setFocusMode(false)}
+                  className="shrink-0 gap-2 rounded-full px-5"
+                >
+                  Done
+                </Button>
               </>
             ) : (
               <>
-                <Send className="h-4 w-4 mr-2" />
-                Send Response
+                {!hasRouteDestination && (
+                  <span
+                    id="treatment-route-hint"
+                    className="min-w-0 text-xs leading-snug text-muted-foreground sm:max-w-[200px] sm:text-right"
+                  >
+                    {routeMode === 'parallel'
+                      ? 'Add at least two people or offices to send separately.'
+                      : 'Select a destination to send.'}
+                  </span>
+                )}
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || !hasRouteDestination}
+                  className="shrink-0 gap-2 rounded-full bg-gradient-primary px-5"
+                  aria-label="Send response"
+                  aria-describedby={!hasRouteDestination ? 'treatment-route-hint' : undefined}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      Sending…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" aria-hidden="true" />
+                      Send Response
+                    </>
+                  )}
+                </Button>
               </>
             )}
-          </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

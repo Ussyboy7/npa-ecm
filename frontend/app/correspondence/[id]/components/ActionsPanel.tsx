@@ -50,7 +50,6 @@ interface ActionsPanelProps {
   correspondence?: Correspondence;
   minutes?: Minute[];
   activeUser?: User | null;
-  onOpenLinkCaseModal?: () => void;
   canReassign?: boolean;
   onReassign?: () => void;
   isCompleted?: boolean;
@@ -103,7 +102,6 @@ export function ActionsPanel({
   onOpenNoResponseCompletionModal,
   onOpenDelegateModal,
   onDownloadCompletionPackage,
-  onOpenLinkCaseModal,
   canReassign = false,
   onReassign,
   onSyncFromApi: _onSyncFromApi,
@@ -755,17 +753,6 @@ export function ActionsPanel({
           Reassign
         </Button>
       )}
-      {!correspondence.caseId && onOpenLinkCaseModal && (
-        <Button
-          variant={compact ? "ghost" : "outline"}
-          className={compact ? quietRowClass : "w-full justify-start"}
-          onClick={onOpenLinkCaseModal}
-          disabled={turnRestrictedDisabled}
-        >
-          <FolderTree className="h-4 w-4 mr-2 opacity-70" />
-          Link to case
-        </Button>
-      )}
       {!activeDelegation && (
         <Button
           variant={compact ? "ghost" : "outline"}
@@ -1026,7 +1013,10 @@ export function ActionsPanel({
                   "text-primary flex items-center gap-2",
                 )}
               >
-                <CheckCircle className="h-3.5 w-3.5" />
+                <span
+                  className="h-4 w-4 shrink-0 rounded-full bg-primary motion-safe:animate-pulse"
+                  aria-hidden="true"
+                />
                 Your turn
               </p>
               <p className={cn(corrType.caption, "mt-0.5")}>

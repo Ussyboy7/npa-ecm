@@ -181,14 +181,16 @@ export const DelegateModal = ({
       return { level: 'ed', scope: 'directorate' as const, directorate: executive.directorate };
     }
 
+    // Department leadership is checked before division leadership: "Assistant
+    // General Manager" contains "general manager", so a missing grade used to
+    // widen an AGM's scope to the whole division.
+    if (gradeInfo?.departmentLeadership || systemRole.includes('assistant general manager')) {
+      return { level: 'agm', scope: 'department' as const, department: executive.department };
+    }
+
     // Division leadership can assign anyone in their division.
     if (gradeInfo?.divisionLeadership || systemRole.includes('general manager')) {
       return { level: 'gm', scope: 'division' as const, division: executive.division };
-    }
-
-    // Department leadership can assign anyone in their department.
-    if (gradeInfo?.departmentLeadership || systemRole.includes('assistant general manager')) {
-      return { level: 'agm', scope: 'department' as const, department: executive.department };
     }
 
     // Every other grade assigns within its own department.

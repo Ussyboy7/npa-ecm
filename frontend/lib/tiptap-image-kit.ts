@@ -3,6 +3,8 @@
  */
 import Image from "@tiptap/extension-image";
 import type { CommandProps, Editor } from "@tiptap/core";
+import { NodeSelection } from "@tiptap/pm/state";
+import { createImageNodeView } from "./tiptap-image-nodeview";
 
 export type ImageFloat = "none" | "left" | "right";
 export type ImageAlign = "left" | "center" | "right";
@@ -50,6 +52,29 @@ export function isImageSelected(editor: Editor): boolean {
   return editor.isActive("image");
 }
 
+/**
+ * Insert a picture without swallowing the one that is already there.
+ *
+ * `setImage` inserts at the selection, and the picture it just inserted stays
+ * selected — so a second paste or URL insert replaced the first picture instead
+ * of adding another one. Insert after the selected picture instead.
+ */
+export function insertPicture(
+  editor: Editor,
+  attrs: { src: string; alt?: string },
+): void {
+  const { selection } = editor.state;
+  if (selection instanceof NodeSelection && selection.node.type.name === "image") {
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(selection.to, { type: "image", attrs: { src: attrs.src, alt: attrs.alt ?? null } })
+      .run();
+    return;
+  }
+  editor.chain().focus().setImage(attrs).run();
+}
+
 export function getSelectedImageAttrs(editor: Editor): {
   style: string;
   width: string | null;
@@ -74,6 +99,11 @@ export function getSelectedImageAttrs(editor: Editor): {
 
 export const NpaImage = Image.extend({
   name: "image",
+  /** Word-style grips; `renderHTML` stays a plain <img>, so content is clean. */
+  addNodeView() {
+    return ({ node, editor, getPos }) =>
+      createImageNodeView({ node, editor, getPos });
+  },
   addAttributes() {
     return {
       ...this.parent?.(),

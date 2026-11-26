@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from common.pagination import StandardPageNumberPagination
+from common.plain_text import to_plain_text
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -1018,15 +1019,12 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         has_html_content = (version.content_html and version.content_html.strip()) or (version.content_text and version.content_text.strip())
         if has_html_content:
             try:
-                from django.utils.html import strip_tags
-                # Extract plain text from HTML or use content_text if available
+                # Extract plain text from HTML or use content_text if available.
+                # Stored spacing is non-breaking, so both paths normalise it.
                 if version.content_html:
-                    extracted_text = strip_tags(version.content_html)
-                    # Clean up whitespace
-                    extracted_text = ' '.join(extracted_text.split())
+                    extracted_text = to_plain_text(version.content_html)
                 else:
-                    # Use content_text directly
-                    extracted_text = version.content_text.strip()
+                    extracted_text = to_plain_text(version.content_text)
                 
                 if extracted_text:
                     version.ocr_text = extracted_text
@@ -1699,9 +1697,8 @@ class DocumentTemplateViewSet(viewsets.ModelViewSet):
         
         # If template has content, create initial version
         if template.template_content:
-            import re
             # Strip HTML tags to get plain text
-            content_text = re.sub(r'<[^>]+>', '', template.template_content)
+            content_text = to_plain_text(template.template_content)
             
             version_data = {
                 "document": document.id,

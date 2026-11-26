@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -42,13 +42,42 @@ const users = [
   },
 ];
 
+const agm = {
+  id: 'exec-agm',
+  name: 'Ada Department',
+  email: 'agm@example.com',
+  employeeId: 'AGM-1',
+  gradeLevel: 'MSS2',
+  systemRole: 'Assistant General Manager',
+  directorate: 'dir-1',
+  division: 'div-1',
+  department: 'dept-1',
+  active: true,
+};
+
+const staffSameDivisionOtherDepartment = {
+  id: 'staff-division-other-dept',
+  name: 'Ife Other Dept',
+  email: 'ife@example.com',
+  employeeId: 'ST-3',
+  gradeLevel: 'MSS4',
+  systemRole: 'Officer',
+  directorate: 'dir-1',
+  division: 'div-1',
+  department: 'dept-3',
+  active: true,
+};
+
+let activeUsers = users;
+let activeAssignments: Array<Record<string, unknown>> = [];
+
 vi.mock('@/hooks/use-org-users', () => ({
-  useOrgUsers: () => ({ users }),
+  useOrgUsers: () => ({ users: activeUsers }),
 }));
 
 vi.mock('@/contexts/OrganizationContext', () => ({
   useOrganization: () => ({
-    assistantAssignments: [],
+    assistantAssignments: activeAssignments,
     ensureAssistantAssignments: vi.fn(async () => {}),
     addAssignment: vi.fn(),
     divisions: [
@@ -97,6 +126,8 @@ class ResizeObserverMock {
 }
 
 beforeEach(() => {
+  activeUsers = users;
+  activeAssignments = [];
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   Element.prototype.scrollIntoView = vi.fn();
   window.HTMLElement.prototype.hasPointerCapture = vi.fn();
@@ -133,5 +164,67 @@ describe('DelegateModal hierarchy', () => {
       await screen.findByRole('option', { name: /Sam Division/ }),
     ).toBeDefined();
     expect(screen.queryByRole('option', { name: /Ola Elsewhere/ })).toBeNull();
+  });
+
+  it('keeps an Assistant General Manager in their department when their grade is unknown', async () => {
+    activeUsers = [agm, users[1], staffSameDivisionOtherDepartment, users[2]];
+    const user = userEvent.setup();
+    render(
+      <DelegateModal
+        open
+        onOpenChange={vi.fn()}
+        correspondenceId="corr-1"
+        executiveId="exec-agm"
+        onDelegate={vi.fn()}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /Assign TA\/PA Now/i }));
+
+    // "Assistant General Manager" contains "general manager"; the fallback must
+    // not widen the scope to the division.
+    expect(
+      await screen.findByText(/Staff in your department \(1 available\)/),
+    ).toBeDefined();
+
+    await user.click(screen.getByRole('combobox'));
+    expect(await screen.findByRole('option', { name: /Sam Division/ })).toBeDefined();
+    expect(screen.queryByRole('option', { name: /Ife Other Dept/ })).toBeNull();
+  });
+
+  it('confirms in an alert dialog and submits the delegation once', async () => {
+    activeAssignments = [
+      {
+        id: 'assign-1',
+        executiveId: 'exec-gm',
+        assistantId: 'staff-same-division',
+        type: 'PA',
+        permissions: ['view', 'forward'],
+      },
+    ];
+    const onDelegate = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(
+      <DelegateModal
+        open
+        onOpenChange={vi.fn()}
+        correspondenceId="corr-1"
+        executiveId="exec-gm"
+        onDelegate={onDelegate}
+      />,
+    );
+
+    await user.click(await screen.findByRole('combobox', { name: /Select assistant/i }));
+    await user.click(await screen.findByRole('option', { name: /Sam Division/ }));
+    await user.click(screen.getByRole('button', { name: /Delegate to assistant/i }));
+
+    const alert = await screen.findByRole('alertdialog');
+    expect(within(alert).getByText(/Delegate to Sam Division\?/)).toBeDefined();
+
+    await user.click(within(alert).getByRole('button', { name: /Confirm delegation/i }));
+
+    await waitFor(() => expect(onDelegate).toHaveBeenCalledTimes(1));
+    expect(onDelegate.mock.calls[0][0]).toBe('staff-same-division');
+    expect(onDelegate.mock.calls[0][1]).toBe('PA');
   });
 });

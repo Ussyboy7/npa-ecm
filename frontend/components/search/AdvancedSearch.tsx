@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import {
   type SearchRequest,
   type SearchResult,
   type SearchResponse,
+  type SearchScope,
   type UnifiedSearchResult,
   type SavedSearch,
   type SearchHistory,
@@ -36,17 +37,35 @@ import { highlightText } from '@/lib/search-highlight';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { isRecord } from '@/lib/type-utils';
 import { buildSearchHighlightParams } from '@/lib/search-highlight';
+import { unitsInScope } from '@/lib/search-scope';
 
 interface AdvancedSearchProps {
   onResultSelect?: (result: Record<string, unknown>, query: string) => void;
   context?: 'all' | 'documents' | 'correspondence' | 'cases';
+  /** Boundary the server applies; unit filters never offer anything outside it. */
+  scope?: SearchScope | null;
 }
 
 const isUnifiedSearchResult = (value: unknown): value is UnifiedSearchResult =>
   isRecord(value) && ('documents' in value || 'correspondence' in value || 'cases' in value);
 
-export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps) => {
-  const { divisions, departments } = useOrganizationCatalogs('divisions', 'departments');
+type SearchType = 'documents' | 'correspondence' | 'cases' | 'all';
+type SearchFilters = NonNullable<SearchRequest['filters']>;
+
+/** Values a click or URL can search with before React state has caught up. */
+interface SearchOverrides {
+  query?: string;
+  filters?: SearchFilters;
+  searchType?: SearchType;
+}
+
+export const AdvancedSearch = ({ onResultSelect, context, scope }: AdvancedSearchProps) => {
+  const { divisions: catalogDivisions, departments: catalogDepartments } =
+    useOrganizationCatalogs('divisions', 'departments');
+  // A unit outside the search boundary could only produce an empty page, so the
+  // filters never offer one.
+  const divisions = unitsInScope(catalogDivisions, scope?.division_ids);
+  const departments = unitsInScope(catalogDepartments, scope?.department_ids);
   const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<NonNullable<SearchRequest['filters']>>({});
@@ -65,7 +84,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   const selectedAuthorName = selectedAuthorId
     ? selectedAuthorLookup.get(selectedAuthorId)?.name ?? 'Selected author'
     : 'All authors';
-  const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'cases' | 'all'>(
+  const [searchType, setSearchType] = useState<SearchType>(
     context === 'all' || !context ? 'all' : context
   );
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('keyword');
@@ -78,6 +97,12 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   const pageSize = 50;
   const { getSignal } = useAbortController();
   const { getSignal: getSuggestionsSignal, reset: resetSuggestions } = useAbortController();
+  const inFlightRequestRef = useRef<string | null>(null);
+  // Raw text the user last typed; programmatic query changes (tag chip, history,
+  // saved search) must not trigger a search-as-you-type request.
+  const lastTypedQueryRef = useRef('');
+  // Query text of the last submitted search, so the typing pause does not repeat it.
+  const lastSubmittedQueryRef = useRef('');
 
   const debouncedQuery = useDebounce(query, 300);
 
@@ -138,7 +163,11 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
         const autoSearchTimer = setTimeout(() => {
           if (urlSearchType) setSearchType(urlSearchType);
           if (Object.keys(urlFilters).length > 0) setFilters(urlFilters);
-          handleSearch(true);
+          handleSearch(true, undefined, {
+            query: urlQuery,
+            filters: urlFilters,
+            searchType: urlSearchType ?? undefined,
+          });
         }, 100);
         return () => clearTimeout(autoSearchTimer);
       } else {
@@ -188,30 +217,49 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     }
   };
 
-  const handleSearch = async (resetPage = true, pageOverride?: number) => {
-    if (!query.trim() && Object.keys(filters || {}).length === 0) {
+  const handleSearch = async (
+    resetPage = true,
+    pageOverride?: number,
+    overrides: SearchOverrides = {},
+  ) => {
+    const activeQuery = overrides.query ?? query;
+    const activeFilters = overrides.filters ?? filters;
+    const activeSearchType = overrides.searchType ?? searchType;
+
+    if (!activeQuery.trim() && Object.keys(activeFilters || {}).length === 0) {
       toast.error('Please enter a search query or apply filters');
       return;
     }
+
+    lastSubmittedQueryRef.current = activeQuery.trim();
+
+    const currentPage = pageOverride !== undefined ? pageOverride : (resetPage ? 0 : page);
+
+    const searchRequest: SearchRequest = {
+      query: activeQuery.trim() || undefined,
+      filters: activeFilters,
+      limit: pageSize,
+      offset: currentPage * pageSize,
+      search_type: activeSearchType,
+      search_mode:
+        searchMode === 'semantic' && (activeSearchType === 'documents' || activeSearchType === 'all')
+          ? 'semantic'
+          : 'keyword',
+    };
+
+    // A repeat Enter/tag click must not abort and re-send the request already in
+    // flight; once it settles, submitting the same values searches again.
+    const requestKey = JSON.stringify(searchRequest);
+    if (inFlightRequestRef.current === requestKey) {
+      return;
+    }
+    inFlightRequestRef.current = requestKey;
 
     const signal = getSignal();
 
     try {
       setLoading(true);
-      const currentPage = pageOverride !== undefined ? pageOverride : (resetPage ? 0 : page);
       if (resetPage) setPage(0);
-      
-      const searchRequest: SearchRequest = {
-        query: query.trim() || undefined,
-        filters,
-        limit: pageSize,
-        offset: currentPage * pageSize,
-        search_type: searchType,
-        search_mode:
-          searchMode === 'semantic' && (searchType === 'documents' || searchType === 'all')
-            ? 'semantic'
-            : 'keyword',
-      };
 
       const result: SearchResponse = await search(searchRequest, signal);
       
@@ -220,7 +268,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       }
       
       // Handle unified search results (when search_type is 'all')
-      if (searchType === 'all' && isUnifiedSearchResult(result)) {
+      if (activeSearchType === 'all' && isUnifiedSearchResult(result)) {
         const unifiedResult = result;
         const newResults = [
           ...(unifiedResult.documents?.results || [])
@@ -253,13 +301,27 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       logError('Search failed', error);
       toast.error('Search failed. Please try again.');
     } finally {
+      // Only the request that still owns the slot may clear it; a newer one may have taken over.
+      if (inFlightRequestRef.current === requestKey) {
+        inFlightRequestRef.current = null;
+      }
       if (!signal.aborted) {
         setLoading(false);
       }
     }
   };
 
+  // Search-as-you-type: once typing settles, search with the current filters. Enter still
+  // submits immediately, and changing a filter alone never triggers a search.
+  useEffect(() => {
+    const settledQuery = debouncedQuery.trim();
+    if (!settledQuery || settledQuery !== lastTypedQueryRef.current.trim()) return;
+    if (settledQuery === lastSubmittedQueryRef.current) return;
 
+    handleSearch(true, undefined, { query: settledQuery });
+    // handleSearch is recreated each render; re-running on it would loop searches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery]);
 
   const handleSaveSearch = async () => {
     if (!query.trim() && Object.keys(filters || {}).length === 0) {
@@ -280,6 +342,17 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       logError('Failed to save search', error);
       toast.error('Failed to save search');
     }
+  };
+
+  const handleTagClick = (tag: string) => {
+    const tagFilters: SearchFilters = {
+      ...filters,
+      tags: [tag] as SearchFilters['tags'],
+    };
+    setFilters(tagFilters);
+    setQuery(tag);
+    // Search with the clicked values; state updates only land next render.
+    handleSearch(true, undefined, { query: tag, filters: tagFilters });
   };
 
   const handleSuggestionClick = (suggestion: string) => {
@@ -313,7 +386,10 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                 <Input
                   placeholder="Search by title, reference number, content..."
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    lastTypedQueryRef.current = e.target.value;
+                    setQuery(e.target.value);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       handleSearch();
@@ -497,7 +573,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                   setFilters({ ...filters, division_id: value === 'all' ? undefined : value })
                 }
               >
-                <SelectTrigger className="h-8 w-[130px] text-xs">
+                <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by division">
                   <SelectValue placeholder="Division" />
                 </SelectTrigger>
                 <SelectContent>
@@ -516,7 +592,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                   setFilters({ ...filters, department_id: value === 'all' ? undefined : value })
                 }
               >
-                <SelectTrigger className="h-8 w-[130px] text-xs">
+                <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by department">
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent>
@@ -899,9 +975,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setFilters({ ...filters, tags: [tag] as unknown as typeof filters.tags });
-                                            setQuery(tag);
-                                            handleSearch(true);
+                                            handleTagClick(tag);
                                           }}
                                           className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs hover:bg-accent"
                                         >

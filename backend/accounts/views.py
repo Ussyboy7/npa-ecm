@@ -1511,7 +1511,7 @@ class SealVerificationView(APIView):
             from correspondence.models import ApprovalSnapshot
 
             snapshot = (
-                ApprovalSnapshot.objects.filter(seal=seal)
+                ApprovalSnapshot.objects.filter(seal=seal, voided_at__isnull=True)
                 .order_by("-created_at")
                 .first()
             )
@@ -1617,7 +1617,9 @@ class SealDocumentCheckView(APIView):
         from correspondence.models import ApprovalSnapshot
 
         snapshot = (
-            ApprovalSnapshot.objects.filter(seal=seal, pdf_sha256__gt="")
+            ApprovalSnapshot.objects.filter(
+                seal=seal, pdf_sha256__gt="", voided_at__isnull=True
+            )
             .order_by("-created_at")
             .first()
         )

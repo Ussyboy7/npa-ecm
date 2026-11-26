@@ -61,10 +61,13 @@ import {
   Baseline,
   PaintBucket,
   GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { sanitizeRichText, sanitizePastedRichText } from "@/lib/sanitize-html";
+import { preserveSpacing } from "@/lib/preserve-spacing";
 import { buildDownloadUrl } from "@/lib/correspondence-url-utils";
 import {
   blobToDataUrl,
@@ -124,10 +127,11 @@ import {
 import {
   NpaImage,
   IMAGE_WIDTH_PRESETS,
-  isImageSelected,
   getSelectedImageAttrs,
+  insertPicture,
   type ImageFloat,
 } from "@/lib/tiptap-image-kit";
+import { canMoveSelectedImage, moveSelectedImage } from "@/lib/tiptap-image-nodeview";
 import { NpaTable, NpaTableCell, NpaTableHeader, NpaTableRow } from "@/lib/tiptap-table-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -231,6 +235,25 @@ function RibbonGroup({
   );
 }
 
+/** Human names for the palette swatches, so hover text is readable. */
+const SWATCH_NAMES: Record<string, string> = {
+  "#000000": "Black",
+  "#1f4e79": "Navy blue",
+  "#c00000": "Dark red",
+  "#548235": "Green",
+  "#833c0c": "Brown",
+  "#7030a0": "Purple",
+  "#5b5b5b": "Grey",
+  "#0070c0": "Blue",
+  "#fff59d": "Yellow",
+  "#ffcdd2": "Pink",
+  "#c8e6c9": "Light green",
+  "#bbdefb": "Light blue",
+  "#e1bee7": "Lavender",
+  "#ffe0b2": "Peach",
+  "#f5f5f5": "Light grey",
+};
+
 function ColorSwatchPopover({
   label,
   icon,
@@ -273,6 +296,7 @@ function ColorSwatchPopover({
               className="h-6 w-6 rounded border border-border hover:ring-2 hover:ring-primary/40"
               style={{ backgroundColor: color }}
               aria-label={color}
+              title={SWATCH_NAMES[color] ?? color}
               onClick={() => onPick(color)}
             />
           ))}
@@ -931,6 +955,27 @@ function tableRangeSelection(kind: TableEdgeKind, state: EditorState, cellPos?: 
   };
 }
 
+/**
+ * Whether a picture is selected, in a form React can render.
+ *
+ * The toolbar only re-renders on content changes, so a picture selected by
+ * clicking it (no document edit) would never show its Picture tools. React
+ * bails out when the flag is unchanged, so caret moves cost nothing.
+ */
+function usePictureSelected(editor: Editor | null): boolean {
+  const [selected, setSelected] = useState(false);
+  useEffect(() => {
+    if (!editor) return;
+    const sync = () => setSelected(editor.isActive("image"));
+    sync();
+    editor.on("selectionUpdate", sync);
+    return () => {
+      editor.off("selectionUpdate", sync);
+    };
+  }, [editor]);
+  return selected;
+}
+
 export function TiptapRichTextEditor({
   value = "",
   onChange,
@@ -1004,7 +1049,9 @@ export function TiptapRichTextEditor({
 
   const emitChange = useCallback((nextHtml: string) => {
     try {
-      const cleaned = sanitizeRichText(nextHtml);
+      // Store authored spacing as non-breaking spaces so the read-only view and
+      // the next editor load keep it, instead of collapsing it to one space.
+      const cleaned = sanitizeRichText(preserveSpacing(nextHtml));
       if (cleaned === lastEmittedHtml.current) return;
       lastEmittedHtml.current = cleaned;
       setHtmlSnapshot(cleaned);
@@ -1065,7 +1112,8 @@ export function TiptapRichTextEditor({
       NpaTableCell,
       PageBreaks,
     ],
-    content: value || "",
+    // Memo To/Date and From/Ref gaps are spaced text; keep them through the parse.
+    content: preserveSpacing(value || ""),
     editorProps: {
       attributes: {
         class:
@@ -1113,7 +1161,7 @@ export function TiptapRichTextEditor({
           event.preventDefault();
           void blobToDataUrl(imageBlob)
             .then((src) => {
-              editorRef.current?.chain().focus().setImage({ src, alt: "Pasted picture" }).run();
+              if (editorRef.current) insertPicture(editorRef.current, { src, alt: "Pasted picture" });
             })
             .catch(() => toast.error("Could not paste clipboard image"));
           return true;
@@ -1123,7 +1171,7 @@ export function TiptapRichTextEditor({
           event.preventDefault();
           void rasterizeHtmlToPng(html)
             .then((src) => {
-              editorRef.current?.chain().focus().setImage({ src, alt: "Pasted picture" }).run();
+              if (editorRef.current) insertPicture(editorRef.current, { src, alt: "Pasted picture" });
             })
             .catch(() =>
               toast.error("Could not paste as picture — try Excel Copy as Picture, then paste"),
@@ -1133,9 +1181,11 @@ export function TiptapRichTextEditor({
 
         if (!html.trim() && !text) return false;
         event.preventDefault();
+        // Pasting goes through the same parser, so authored gaps are encoded
+        // first — otherwise a copied To/Date row or indented list flattens.
         const payload = html.trim()
-          ? sanitizePastedRichText(html)
-          : sanitizeRichText(`<p>${text.replace(/\n/g, "<br>")}</p>`);
+          ? preserveSpacing(sanitizePastedRichText(html))
+          : preserveSpacing(sanitizeRichText(`<p>${text.replace(/\n/g, "<br>")}</p>`));
         editorRef.current?.commands.insertContent(payload);
         return true;
       },
@@ -1208,6 +1258,9 @@ export function TiptapRichTextEditor({
     editorRef.current = editor;
   }, [editor]);
 
+  // Picture tools follow the picture selection, not just content edits.
+  const imageSelected = usePictureSelected(editor);
+
   /** Row-height drag: preview without history, commit once on release. */
   useEffect(() => {
     if (!editor) return;
@@ -1254,7 +1307,7 @@ export function TiptapRichTextEditor({
 
   useEffect(() => {
     if (!editor) return;
-    const next = value ?? "";
+    const next = preserveSpacing(value ?? "");
     if (isFocusedRef.current) return;
     if (next === lastEmittedHtml.current) return;
     const current = editor.getHTML();
@@ -1454,7 +1507,7 @@ export function TiptapRichTextEditor({
   const buildEditorPrintHtml = useCallback(() => {
     const raw = editor?.getHTML() || htmlSnapshot || "";
     return buildComposePrintHtml(
-      sanitizeRichText(raw),
+      sanitizeRichText(preserveSpacing(raw)),
       pageSettings,
       // Blank title → Chrome has nothing to put in its optional top header.
       "\u00a0",
@@ -1523,11 +1576,7 @@ export function TiptapRichTextEditor({
 
   const insertSignature = () => {
     if (!editor || !signatureImageUrl) return;
-    editor
-      .chain()
-      .focus()
-      .setImage({ src: resolveEditorImageSrc(signatureImageUrl), alt: "Signature" })
-      .run();
+    insertPicture(editor, { src: resolveEditorImageSrc(signatureImageUrl), alt: "Signature" });
   };
 
   const handleInsertToken = (token: string) => {
@@ -1598,7 +1647,7 @@ export function TiptapRichTextEditor({
     } else if (promptDialog.type === "image") {
       const url = promptDialog.value.trim();
       if (url) {
-        editor.chain().focus().setImage({ src: resolveEditorImageSrc(url), alt: "" }).run();
+        insertPicture(editor, { src: resolveEditorImageSrc(url), alt: "" });
       }
     } else if (promptDialog.type === "table") {
       const rows = Math.min(20, Math.max(1, Number.parseInt(promptDialog.rows, 10) || 2));
@@ -1727,7 +1776,6 @@ export function TiptapRichTextEditor({
     clearTableEdge();
   };
 
-  const imageSelected = isImageSelected(editor);
   const imageAttrs = imageSelected ? getSelectedImageAttrs(editor) : null;
   const currentFontFamily =
     (editor.getAttributes("textStyle").fontFamily as string | undefined) || FONT_FAMILIES[0].value;
@@ -1804,7 +1852,7 @@ export function TiptapRichTextEditor({
             onClick={() => {
               void readClipboardAsPictureDataUrl()
                 .then(({ dataUrl }) => {
-                  editor.chain().focus().setImage({ src: dataUrl, alt: "Pasted picture" }).run();
+                  insertPicture(editor, { src: dataUrl, alt: "Pasted picture" });
                   toast.success("Pasted as picture");
                 })
                 .catch(() =>
@@ -1859,6 +1907,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("bold"))}
             aria-label="Bold"
+            title="Bold (Ctrl+B)"
             aria-pressed={editor.isActive("bold")}
             onClick={() => editor.chain().focus().toggleBold().run()}
           >
@@ -1868,6 +1917,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("italic"))}
             aria-label="Italic"
+            title="Italic (Ctrl+I)"
             aria-pressed={editor.isActive("italic")}
             onClick={() => editor.chain().focus().toggleItalic().run()}
           >
@@ -1877,6 +1927,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("underline"))}
             aria-label="Underline"
+            title="Underline (Ctrl+U)"
             aria-pressed={editor.isActive("underline")}
             onClick={() => editor.chain().focus().toggleUnderline().run()}
           >
@@ -1886,6 +1937,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("strike"))}
             aria-label="Strikethrough"
+            title="Strikethrough"
             aria-pressed={editor.isActive("strike")}
             onClick={() => editor.chain().focus().toggleStrike().run()}
           >
@@ -1913,6 +1965,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("subscript"))}
             aria-label="Subscript"
+            title="Subscript"
             aria-pressed={editor.isActive("subscript")}
             onClick={() => editor.chain().focus().toggleSubscript().run()}
           >
@@ -1922,6 +1975,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("superscript"))}
             aria-label="Superscript"
+            title="Superscript"
             aria-pressed={editor.isActive("superscript")}
             onClick={() => editor.chain().focus().toggleSuperscript().run()}
           >
@@ -1943,6 +1997,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("bulletList"))}
             aria-label="Bullet list"
+            title="Bullet list"
             aria-pressed={editor.isActive("bulletList")}
             onClick={() => editor.chain().focus().toggleBulletList().run()}
           >
@@ -1952,6 +2007,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("orderedList"))}
             aria-label="Numbered list"
+            title="Numbered list"
             aria-pressed={editor.isActive("orderedList")}
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
           >
@@ -1979,6 +2035,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive({ textAlign: "left" }))}
             aria-label="Align left"
+            title="Align left"
             aria-pressed={editor.isActive({ textAlign: "left" })}
             onClick={() => editor.chain().focus().setTextAlign("left").run()}
           >
@@ -1988,6 +2045,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive({ textAlign: "center" }))}
             aria-label="Align center"
+            title="Align center"
             aria-pressed={editor.isActive({ textAlign: "center" })}
             onClick={() => editor.chain().focus().setTextAlign("center").run()}
           >
@@ -1997,6 +2055,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive({ textAlign: "right" }))}
             aria-label="Align right"
+            title="Align right"
             aria-pressed={editor.isActive({ textAlign: "right" })}
             onClick={() => editor.chain().focus().setTextAlign("right").run()}
           >
@@ -2006,6 +2065,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive({ textAlign: "justify" }))}
             aria-label="Justify"
+            title="Justify"
             aria-pressed={editor.isActive({ textAlign: "justify" })}
             onClick={() => editor.chain().focus().setTextAlign("justify").run()}
           >
@@ -2078,6 +2138,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(editor.isActive("link"))}
             aria-label="Insert link"
+            title="Insert link"
             onClick={() =>
               setPromptDialog({
                 type: "link",
@@ -2091,6 +2152,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(false)}
             aria-label="Insert image"
+            title="Insert image"
             onClick={() => setPromptDialog({ type: "image", value: "https://" })}
           >
             <ImageIcon className="h-3.5 w-3.5" />
@@ -2099,6 +2161,7 @@ export function TiptapRichTextEditor({
             type="button"
             className={toolbarBtn(inTable)}
             aria-label="Insert table"
+            title="Insert table"
             onClick={() => setPromptDialog({ type: "table", rows: "2", cols: "2" })}
           >
             <Table2 className="h-3.5 w-3.5" />
@@ -2112,6 +2175,7 @@ export function TiptapRichTextEditor({
               )}
               aria-pressed={showTableTools}
               aria-label="Table tools"
+              title="Table options"
               onClick={() => setShowTableTools((v) => !v)}
             >
               Table
@@ -2166,6 +2230,7 @@ export function TiptapRichTextEditor({
               type="button"
               className={toolbarBtn(imageAttrs?.align === "left" && imageAttrs.float === "none")}
               aria-label="Align image left"
+              title="Align picture left"
               onClick={() => editor.chain().focus().setImageAlign("left").run()}
             >
               <AlignLeft className="h-3.5 w-3.5" />
@@ -2174,6 +2239,7 @@ export function TiptapRichTextEditor({
               type="button"
               className={toolbarBtn(imageAttrs?.align === "center")}
               aria-label="Align image center"
+              title="Center picture"
               onClick={() => editor.chain().focus().setImageAlign("center").run()}
             >
               <AlignCenter className="h-3.5 w-3.5" />
@@ -2182,6 +2248,7 @@ export function TiptapRichTextEditor({
               type="button"
               className={toolbarBtn(imageAttrs?.align === "right" && imageAttrs.float === "none")}
               aria-label="Align image right"
+              title="Align picture right"
               onClick={() => editor.chain().focus().setImageAlign("right").run()}
             >
               <AlignRight className="h-3.5 w-3.5" />
@@ -2207,6 +2274,26 @@ export function TiptapRichTextEditor({
                 </SelectItem>
               </SelectContent>
             </Select>
+            <button
+              type="button"
+              className={toolbarBtn(false)}
+              aria-label="Move picture up"
+              title="Move picture up one block"
+              disabled={!canMoveSelectedImage(editor, -1)}
+              onClick={() => moveSelectedImage(editor, -1)}
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={toolbarBtn(false)}
+              aria-label="Move picture down"
+              title="Move picture down one block"
+              disabled={!canMoveSelectedImage(editor, 1)}
+              onClick={() => moveSelectedImage(editor, 1)}
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </button>
           </RibbonGroup>
         )}
 
@@ -2216,6 +2303,7 @@ export function TiptapRichTextEditor({
               type="button"
               className="h-8 px-2 inline-flex items-center text-xs border rounded-md hover:bg-muted whitespace-nowrap"
               aria-label="Page setup"
+              title="Page setup"
               onClick={() => setShowPageSetupDialog(true)}
             >
               {pageSettings.paperSize.toUpperCase()} ·{" "}
@@ -2314,6 +2402,23 @@ export function TiptapRichTextEditor({
         .npa-tiptap-surface.prose :where(p) {
           margin: 0;
         }
+        /* Preflight clears list markers and padding; the ribbon's Bullet list /
+           Numbered list buttons need visible markers and a hanging indent. */
+        .npa-tiptap-surface ul,
+        .npa-tiptap-surface ol {
+          list-style-position: outside;
+          padding-left: 1.6rem;
+          margin: 0.25rem 0;
+        }
+        .npa-tiptap-surface ul { list-style-type: disc; }
+        .npa-tiptap-surface ul ul { list-style-type: circle; }
+        .npa-tiptap-surface ul ul ul { list-style-type: square; }
+        .npa-tiptap-surface ol { list-style-type: decimal; }
+        .npa-tiptap-surface ol ol { list-style-type: lower-alpha; }
+        .npa-tiptap-surface ol ol ol { list-style-type: lower-roman; }
+        .npa-tiptap-surface li { margin: 0; }
+        .npa-tiptap-surface li > p { margin: 0; }
+        .npa-tiptap-surface li::marker { color: inherit; }
         /* ProseMirror CellSelection — without this, multi-cell drag looks broken */
         .npa-tiptap-surface td.selectedCell,
         .npa-tiptap-surface th.selectedCell {
@@ -2347,6 +2452,99 @@ export function TiptapRichTextEditor({
         .npa-tiptap-surface img.ProseMirror-selectednode {
           outline: 2px solid hsl(var(--primary) / 0.55);
           outline-offset: 2px;
+        }
+        /* Word-style picture chrome: grips resize, dragging the picture moves it. */
+        .npa-tiptap-surface .npa-image-node {
+          position: relative;
+          display: block;
+          width: fit-content;
+          max-width: 100%;
+          line-height: 0;
+        }
+        .npa-tiptap-surface .npa-image-node.ProseMirror-selectednode {
+          outline: 2px solid hsl(var(--primary) / 0.55);
+          outline-offset: 2px;
+        }
+        .npa-tiptap-surface .npa-image-node.is-moving {
+          opacity: 0.35;
+        }
+        .npa-tiptap-surface .npa-image-node img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+        }
+        .npa-tiptap-surface .npa-image-handle {
+          position: absolute;
+          z-index: 3;
+          background: hsl(var(--background));
+          border: 1px solid hsl(var(--primary));
+          border-radius: 2px;
+          opacity: 0;
+          touch-action: none;
+        }
+        .npa-tiptap-surface .npa-image-node:hover .npa-image-handle,
+        .npa-tiptap-surface .npa-image-node.ProseMirror-selectednode .npa-image-handle {
+          opacity: 1;
+        }
+        .npa-tiptap-surface .npa-image-handle-left,
+        .npa-tiptap-surface .npa-image-handle-right {
+          top: 50%;
+          width: 8px;
+          height: 30px;
+          margin-top: -15px;
+          cursor: ew-resize;
+        }
+        .npa-tiptap-surface .npa-image-grip {
+          position: absolute;
+          left: -22px;
+          top: 0;
+          z-index: 4;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 26px;
+          border: 1px solid hsl(var(--border));
+          border-radius: 4px;
+          background: hsl(var(--background));
+          color: hsl(var(--muted-foreground));
+          opacity: 0;
+          cursor: grab;
+          touch-action: none;
+        }
+        .npa-tiptap-surface .npa-image-node:hover .npa-image-grip,
+        .npa-tiptap-surface .npa-image-node.is-selected .npa-image-grip,
+        .npa-tiptap-surface .npa-image-node.ProseMirror-selectednode .npa-image-grip {
+          opacity: 1;
+        }
+        .npa-tiptap-surface .npa-image-grip:active {
+          cursor: grabbing;
+        }
+        .npa-tiptap-surface .npa-image-grip::before {
+          content: "";
+          width: 8px;
+          height: 14px;
+          background-image: radial-gradient(currentColor 1.1px, transparent 1.2px);
+          background-size: 4px 4px;
+        }
+        .npa-tiptap-surface .npa-image-handle-left { left: -5px; }
+        .npa-tiptap-surface .npa-image-handle-right { right: -5px; }
+        .npa-tiptap-surface .npa-image-handle-bottom-left,
+        .npa-tiptap-surface .npa-image-handle-bottom-right {
+          bottom: -5px;
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+        }
+        .npa-tiptap-surface .npa-image-handle-bottom-left { left: -5px; cursor: nesw-resize; }
+        .npa-tiptap-surface .npa-image-handle-bottom-right { right: -5px; cursor: nwse-resize; }
+        .npa-image-ghost {
+          position: fixed;
+          z-index: 70;
+          pointer-events: none;
+          opacity: 0.8;
+          border: 1px dashed hsl(var(--primary));
+          box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
         }
         .npa-tiptap-surface::after {
           content: "";
@@ -2429,6 +2627,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive("bold"))}
                 aria-label="Bold"
+                title="Bold (Ctrl+B)"
                 aria-pressed={editor.isActive("bold")}
                 onClick={() => editor.chain().focus().toggleBold().run()}
               >
@@ -2438,6 +2637,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive("italic"))}
                 aria-label="Italic"
+                title="Italic (Ctrl+I)"
                 aria-pressed={editor.isActive("italic")}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
               >
@@ -2447,6 +2647,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive("underline"))}
                 aria-label="Underline"
+                title="Underline (Ctrl+U)"
                 aria-pressed={editor.isActive("underline")}
                 onClick={() => editor.chain().focus().toggleUnderline().run()}
               >
@@ -2457,6 +2658,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive("bulletList"))}
                 aria-label="Bullet list"
+                title="Bullet list"
                 aria-pressed={editor.isActive("bulletList")}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
               >
@@ -2466,6 +2668,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive("orderedList"))}
                 aria-label="Numbered list"
+                title="Numbered list"
                 aria-pressed={editor.isActive("orderedList")}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
               >
@@ -2476,6 +2679,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive({ textAlign: "left" }))}
                 aria-label="Align left"
+                title="Align left"
                 aria-pressed={editor.isActive({ textAlign: "left" })}
                 onClick={() => editor.chain().focus().setTextAlign("left").run()}
               >
@@ -2485,6 +2689,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive({ textAlign: "center" }))}
                 aria-label="Align center"
+                title="Align center"
                 aria-pressed={editor.isActive({ textAlign: "center" })}
                 onClick={() => editor.chain().focus().setTextAlign("center").run()}
               >
@@ -2494,6 +2699,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive({ textAlign: "justify" }))}
                 aria-label="Justify"
+                title="Justify"
                 aria-pressed={editor.isActive({ textAlign: "justify" })}
                 onClick={() => editor.chain().focus().setTextAlign("justify").run()}
               >
@@ -2504,6 +2710,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(editor.isActive("link"))}
                 aria-label="Insert link"
+                title="Insert link"
                 onClick={() =>
                   setPromptDialog({
                     type: "link",
@@ -2517,6 +2724,7 @@ export function TiptapRichTextEditor({
                 type="button"
                 className={toolbarBtn(inTable)}
                 aria-label="Insert table"
+                title="Insert table"
                 onClick={() => setPromptDialog({ type: "table", rows: "2", cols: "2" })}
               >
                 <Table2 className="h-3.5 w-3.5" />
@@ -2536,6 +2744,10 @@ export function TiptapRichTextEditor({
                   align="end"
                   sideOffset={6}
                   className="z-[60] max-h-[min(70vh,26rem)] w-[min(94vw,44rem)] overflow-y-auto p-0"
+                  // Every ribbon command returns focus to the editor, which
+                  // otherwise dismissed this panel after a single click — use
+                  // two tools and the second one needs the panel reopened.
+                  onFocusOutside={(event) => event.preventDefault()}
                 >
                   {ribbonGroups}
                 </PopoverContent>

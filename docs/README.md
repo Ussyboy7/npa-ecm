@@ -107,8 +107,8 @@ The following standalone pages were removed or replaced in recent refactoring:
 
 ## Recent Architecture Changes
 - **Auth**: Tokens migrated from `localStorage` to HTTP-only secure cookies
-- **Correspondence**: My Sent / Office Sent queues; parallel routing with branches; physical copy tracking; scope enforcement; tiered approval (Executive ₦50m vs Departmental) with `CORRESPONDENCE_CLASSIFICATION_CHANGED` audit
+- **Correspondence**: My Sent / Office Sent queues; parallel routing with branches; physical copy tracking; scope enforcement; tiered classification (Executive ₦50m vs Departmental) with MD-only approval and `CORRESPONDENCE_CLASSIFICATION_CHANGED` audit
 - **DMS**: `DocumentWorkspace` model removed; form documents merged into DMS
 - **Forms**: Standalone page removed, now accessed via DMS; 3 audit form templates + PDF generators
-- **Organization**: Office `location` FK; Locations CRUD; new role presets (AGM, Principal Manager); permissions `can_approve` ("Departmental / Executive Approval (scope-aware)") vs `can_classify_approval` ("Classify Approval Level")
+- **Organization**: Office `location` FK; Locations CRUD; new role presets (AGM, Principal Manager); permissions `can_approve` ("Approve or Endorse (scope-aware)") vs `can_classify_approval` ("Classify Approval Level")
 - **Sidebar**: Renamed/regrouped sections (My Workspace, Tools); removed Forms Library

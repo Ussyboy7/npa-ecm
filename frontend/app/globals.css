@@ -197,6 +197,27 @@ All colors MUST be HSL.
     height: auto;
   }
 
+  /**
+   * Tailwind preflight clears ul/ol markers and padding, and this project does
+   * not register the typography plugin, so `prose` restores nothing. Memos store
+   * real <ul>/<ol> lists, so markers are restored on document surfaces.
+   */
+  :is(.doc-paper, .prose) ul,
+  :is(.doc-paper, .prose) ol {
+    list-style-position: outside;
+    padding-left: 1.6rem;
+    margin: 0.25rem 0;
+  }
+
+  :is(.doc-paper, .prose) ul { list-style-type: disc; }
+  :is(.doc-paper, .prose) ul ul { list-style-type: circle; }
+  :is(.doc-paper, .prose) ul ul ul { list-style-type: square; }
+  :is(.doc-paper, .prose) ol { list-style-type: decimal; }
+  :is(.doc-paper, .prose) ol ol { list-style-type: lower-alpha; }
+  :is(.doc-paper, .prose) ol ol ol { list-style-type: lower-roman; }
+  :is(.doc-paper, .prose) li { margin: 0; }
+  :is(.doc-paper, .prose) li > p { margin: 0; }
+
   /* Signatures are captured large; keep them a signature-sized mark on the page. */
   .doc-sheet img[alt="Signature" i],
   .doc-sheet img[src*="signature" i] {

@@ -27,6 +27,7 @@ interface OfficeComboboxProps {
   value?: string;
   onSelect: (officeId: string) => void;
   placeholder?: string;
+  ariaLabel?: string;
   emptyMessage?: string;
   excludeOfficeIds?: string[];
   ariaInvalid?: boolean;
@@ -47,6 +48,10 @@ const OFFICE_TYPE_LABELS: Record<string, string> = {
   custom: "Other Offices",
 };
 
+/** Human-readable office type for compact summaries ("md" → "Managing Director"). */
+export const officeTypeLabel = (officeType?: string | null): string | undefined =>
+  officeType ? OFFICE_TYPE_LABELS[officeType] ?? officeType : undefined;
+
 const OFFICE_TYPE_ORDER = [
   "md",
   "ed",
@@ -66,6 +71,7 @@ export function OfficeCombobox({
   value,
   onSelect,
   placeholder = "Select office...",
+  ariaLabel,
   emptyMessage = "No offices found",
   excludeOfficeIds = [],
   ariaInvalid = false,
@@ -100,11 +106,15 @@ export function OfficeCombobox({
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    // Modal keeps the popover inside the dialog's scroll lock, so wheel and
+    // trackpad scrolling work over the office list instead of being cancelled
+    // by the parent dialog.
+    <Popover modal open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           role="combobox"
+          aria-label={ariaLabel ?? placeholder}
           aria-expanded={open}
           aria-invalid={ariaInvalid || undefined}
           className={cn(
@@ -126,12 +136,12 @@ export function OfficeCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] p-0"
+        className="max-h-[min(420px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
         align="start"
       >
-        <Command>
+        <Command className="max-h-[inherit]">
           <CommandInput placeholder="Search offices..." />
-          <CommandList>
+          <CommandList className="max-h-none flex-1 min-h-0">
             <CommandEmpty>
               <div className="flex flex-col items-center gap-2 py-4 text-muted-foreground">
                 <Search className="h-5 w-5" />

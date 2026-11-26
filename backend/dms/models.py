@@ -215,6 +215,27 @@ class DocumentVersion(UUIDModel, TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.document.title} v{self.version_number}"
 
+    def save(self, *args, **kwargs):
+        """Keep searchable plain text in step with editor HTML.
+
+        Versions composed in the editor only carry ``content_html``, so without
+        this they stay unsearchable until somebody runs OCR. The text comes from
+        the same extractor used for OCR, snippets and diffs, which turns stored
+        non-breaking spaces back into ordinary word breaks.
+        """
+        update_fields = kwargs.get("update_fields")
+        if (self.content_html or "").strip() and (
+            update_fields is None or set(update_fields) & {"content_html", "content_text"}
+        ):
+            from common.plain_text import to_plain_text
+
+            self.content_text = to_plain_text(self.content_html)
+            if update_fields is not None:
+                kwargs["update_fields"] = list(
+                    dict.fromkeys([*update_fields, "content_text"])
+                )
+        super().save(*args, **kwargs)
+
 
 class DocumentPermission(UUIDModel, TimeStampedModel):
     """Fine-grained access rules for a document."""

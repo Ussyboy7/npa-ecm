@@ -1,4 +1,5 @@
 import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
+import { formatRoutingDateTime } from '@/lib/datetime';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import Image from "next/image";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
@@ -6,12 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
-import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield, Paperclip, Download, Eye, ExternalLink, Loader2, Users, ChevronDown } from "lucide-react";
+import { AlertTriangle, Building2, CheckCheck, FileText, Image as ImageIcon, Shield, Paperclip, Download, Eye, ExternalLink, Loader2, Mail, RefreshCw, Users, ChevronDown, ArrowRight } from "lucide-react";
 import { Minute, CorrespondenceAttachment, type Correspondence } from "@/lib/npa-structure";
 import { SealBadge } from '@/components/seals/SealBadge';
 import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { mapApiCorrespondence } from '@/lib/api/correspondence-mappers';
@@ -111,6 +111,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<unknown[]>([]);
   const [loadingDistribution, setLoadingDistribution] = useState(false);
+  const [distributionError, setDistributionError] = useState(false);
   const [signatureImageSrc, setSignatureImageSrc] = useState<string | null>(null);
   const [signatureImageError, setSignatureImageError] = useState(false);
   const signatureObjectUrlRef = useRef<string | null>(null);
@@ -151,29 +152,41 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
 
   // Load distribution entries for this minute (only those linked to this minute). Also filter by
   // correspondence when available so we never pull distribution from other correspondences.
+  const loadDistribution = useCallback(async () => {
+    if (!minute?.id) {
+      setDistribution([]);
+      setDistributionError(false);
+      return;
+    }
+    setLoadingDistribution(true);
+    const qs = `minute=${minute.id}${minute.correspondenceId ? `&correspondence=${minute.correspondenceId}` : ''}`;
+    try {
+      const response = await apiFetch(`/correspondence/distribution/?${qs}`);
+      const responseData = response as Record<string, unknown>;
+      const results = Array.isArray(responseData) ? responseData : (responseData.results as unknown[]) || [];
+      // Filter only active distribution entries
+      const activeDistribution = results.filter((dist: Record<string, unknown>) => dist.is_active !== false);
+      setDistribution(activeDistribution);
+      setDistributionError(false);
+    } catch (error) {
+      // A failed fetch must not read as "this minute has no CC recipients".
+      logError('Failed to load distribution:', error);
+      setDistribution([]);
+      setDistributionError(true);
+    } finally {
+      setLoadingDistribution(false);
+    }
+  }, [minute?.id, minute?.correspondenceId]);
+
   useEffect(() => {
     if (open && minute?.id) {
-      setLoadingDistribution(true);
-      const qs = `minute=${minute.id}${minute.correspondenceId ? `&correspondence=${minute.correspondenceId}` : ''}`;
-      apiFetch(`/correspondence/distribution/?${qs}`)
-        .then((response) => {
-          const responseData = response as Record<string, unknown>;
-          const results = Array.isArray(responseData) ? responseData : (responseData.results as unknown[]) || [];
-          // Filter only active distribution entries
-          const activeDistribution = results.filter((dist: Record<string, unknown>) => dist.is_active !== false);
-          setDistribution(activeDistribution);
-        })
-        .catch((error) => {
-          logError('Failed to load distribution:', error);
-          setDistribution([]);
-        })
-        .finally(() => {
-          setLoadingDistribution(false);
-        });
+      setDistributionError(false);
+      void loadDistribution();
     } else {
       setDistribution([]);
+      setDistributionError(false);
     }
-  }, [open, minute?.id, minute?.correspondenceId]);
+  }, [open, minute?.id, loadDistribution]);
 
   // Load response correspondence for treatment minutes
   useEffect(() => {
@@ -507,6 +520,38 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
     ? getTreatMinuteSummary(minute.minuteText || '')
     : (minute.minuteText || 'No minute text.');
 
+  const authorDisplayName = authorName?.trim() || 'Unknown author';
+  const authorInitials = authorDisplayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || '?';
+  const minuteActionLabel =
+    minute.actionType === 'approve'
+      ? 'Approved'
+      : minute.actionType === 'reject'
+        ? 'Rejected'
+        : minute.actionType === 'treat'
+          ? 'Treated'
+          : minute.actionType === 'forward'
+            ? 'Forwarded'
+            : 'Minuted';
+  const directionLabel =
+    minute.direction === 'downward'
+      ? 'Downward'
+      : minute.direction === 'lateral'
+        ? 'Lateral'
+        : 'Upward';
+  const routeOriginLabel = minute.fromOfficeName || minute.userName || 'Unknown office';
+  const routeDestinationLabel =
+    minute.toOfficeName ||
+    minute.toUserName ||
+    (minute.actionType === 'approve' || minute.actionType === 'reject' || minute.actionType === 'treat'
+      ? 'Completed'
+      : 'Not routed onward');
+
   // Only "For Information" (purpose=information) added by THIS minute (minute_id match). Excludes
   // distribution from other minutes or correspondence-level entries (minute=null) that the user did not add here.
   const ccEntries = (distribution as Record<string, unknown>[]).filter(
@@ -515,6 +560,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
       d.minute != null &&
       String(d.minute) === String(minute.id)
   );
+  const ccReadCount = ccEntries.filter((d) => Boolean(d.read_at)).length;
 
   const getActionColor = (action: string) => {
     switch (action) {
@@ -528,91 +574,62 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="2xl" height="fill">
+      <DialogContent size="xl" className="max-h-[95vh]">
         <DialogDescription id="minute-detail-desc" className="sr-only">
           View minute content, routing, distribution, and related details.
         </DialogDescription>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" />
-            Minute Details
-          </DialogTitle>
+        <DialogHeader className="text-left">
+          <DialogTitle>Minute</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="mt-2 h-[min(82vh,calc(95vh-7rem))] pr-4">
-          <div className="space-y-6 pr-2">
-            {/* Header Info */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-2 flex-1">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <User className="h-4 w-4" />
-                  <span className="font-medium text-foreground">{authorName || 'Unknown Author'}</span>
-                  <Badge variant="outline" className="text-xs">
-                    {minute.gradeLevel}
+        <div className="mt-2 max-h-[min(72vh,calc(95vh-9rem))] overflow-y-auto overscroll-contain pr-3">
+          <div className="mx-auto w-full max-w-2xl space-y-7 pb-2 pr-1">
+            {/* Author and time */}
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-semibold text-primary">
+                {authorInitials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="text-[15px] font-semibold leading-5 text-foreground">
+                    {authorDisplayName}
+                  </p>
+                  {minute.gradeLevel && (
+                    <span className="text-[12px] text-muted-foreground">{minute.gradeLevel}</span>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className={cn('text-[11px] font-medium sm:ml-auto', getActionColor(minute.actionType))}
+                  >
+                    {minuteActionLabel}
                   </Badge>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
-                  {format(new Date(minute.timestamp), 'PPp')}
-                </div>
-                {/* Only show delegation info to the principal (owner of the minute) */}
-                {showDelegationInfo && minute.actedByAssistant && minute.performedByName && (
-                  <div className="flex items-center gap-2 text-sm text-primary/80 bg-primary/5 px-2 py-1 rounded">
-                    <User className="h-4 w-4" />
-                    <span>Performed by <span className="font-medium">{minute.performedByName}</span></span>
-                    {minute.assistantType && (
-                      <Badge variant="outline" className="text-xs">
-                        {minute.assistantType}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-2 items-end">
-                <Badge variant="outline" className={getActionColor(minute.actionType)}>
-                  {minute.actionType.toUpperCase()}
-                </Badge>
-                <Badge variant="outline" className={
-                  minute.direction === 'downward' 
-                    ? 'bg-info/10 text-info border-info/20' 
-                    : 'bg-success/10 text-success border-success/20'
-                }>
-                  {minute.direction === 'downward' ? (
+                <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                  {minute.fromOfficeName && (
                     <>
-                      <ArrowDown className="h-3 w-3 mr-1" />
-                      Downward
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUp className="h-3 w-3 mr-1" />
-                      Upward
+                      <span>{minute.fromOfficeName}</span>
+                      <span className="hidden sm:inline" aria-hidden="true"> · </span>
                     </>
                   )}
-                </Badge>
+                  <span className="block whitespace-nowrap sm:inline">
+                    {formatRoutingDateTime(minute.timestamp)}
+                    {minute.isEdited ? ' · Edited' : ''}
+                  </span>
+                </p>
+                {showDelegationInfo && minute.actedByAssistant && minute.performedByName && (
+                  <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+                    Performed by <span className="font-medium text-foreground">{minute.performedByName}</span>
+                    {minute.assistantType ? ` · ${minute.assistantType}` : ''}
+                  </p>
+                )}
               </div>
             </div>
 
-            <Separator />
-
-            {/* Main Content */}
+            {/* Minute text */}
             <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                    Minute Content
-                  </h4>
-                  {minute.isEdited && (
-                    <Badge variant="outline" className="text-xs text-warning">
-                      Edited {minute.editedAt ? format(new Date(minute.editedAt), 'PPp') : ''}
-                    </Badge>
-                  )}
-                </div>
-                <div className="rounded-lg border border-border overflow-hidden bg-muted/50 p-4">
-                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                    {minuteContentText}
-                  </p>
-                </div>
+              <p className="max-w-[62ch] whitespace-pre-wrap text-[15px] leading-7 text-foreground">
+                {minuteContentText}
+              </p>
                 {hasTreatmentMemo && (
                   <Collapsible className="mt-3 group/treat">
                     <div className="flex items-center justify-between gap-2">
@@ -682,114 +699,110 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                     </p>
                   </div>
                 )}
-              </div>
+            </div>
 
-              {/* Edit History */}
-              {minute.editHistory && minute.editHistory.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2">Edit History</h4>
-                  <div className="space-y-2">
-                    {minute.editHistory.map((edit, idx) => (
-                      <div key={idx} className="p-3 rounded-lg bg-muted/30 border border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-foreground">
-                            Edit #{idx + 1}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(edit.edited_at), 'PPp')}
+            {/* Route */}
+            <div className="space-y-2 border-t border-border/60 pt-5">
+              <div className="flex items-start gap-2 text-[13px] leading-5">
+                <Building2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                <p className="min-w-0">
+                  <span className="font-medium text-foreground">{routeOriginLabel}</span>
+                  <ArrowRight className="mx-1.5 inline h-3.5 w-3.5 -translate-y-px text-muted-foreground" aria-hidden="true" />
+                  <span className="font-medium text-foreground">{routeDestinationLabel}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Secondary details */}
+            <Collapsible className="group/details border-t border-border/60 pt-4">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 h-10 gap-1.5 px-2 text-[13px] font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]/details:rotate-180" />
+                  Details
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+                <dl className="grid gap-x-8 gap-y-4 text-[13px] sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted-foreground">Step</dt>
+                    <dd className="mt-0.5 text-foreground">{minute.stepNumber}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Direction</dt>
+                    <dd className="mt-0.5 text-foreground">{directionLabel}</dd>
+                  </div>
+                  {minute.actedBySecretary && (
+                    <div>
+                      <dt className="text-muted-foreground">Processed by</dt>
+                      <dd className="mt-0.5 text-foreground">Secretary</dd>
+                    </div>
+                  )}
+                  {minute.actedByAssistant && (
+                    <div>
+                      <dt className="text-muted-foreground">Assistant type</dt>
+                      <dd className="mt-0.5 text-foreground">{minute.assistantType || 'Assistant'}</dd>
+                    </div>
+                  )}
+                  {minute.readAt && (
+                    <div>
+                      <dt className="text-muted-foreground">Read</dt>
+                      <dd className="mt-0.5 text-foreground">{formatRoutingDateTime(minute.readAt)}</dd>
+                    </div>
+                  )}
+                  {minute.editedAt && (
+                    <div>
+                      <dt className="text-muted-foreground">Last edited</dt>
+                      <dd className="mt-0.5 text-foreground">{formatRoutingDateTime(minute.editedAt)}</dd>
+                    </div>
+                  )}
+                  {minute.isAdditional && minute.relatesToMinuteId && (
+                    <div>
+                      <dt className="text-muted-foreground">Related to</dt>
+                      <dd className="mt-0.5 text-foreground">
+                        Minute #{minute.stepNumber}
+                        {minute.minuteType
+                          ? ` · ${minute.minuteType === 'instruction'
+                            ? 'Additional instruction'
+                            : minute.minuteType === 'clarification'
+                              ? 'Clarification'
+                              : 'Addendum'}`
+                          : ''}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+
+                {minute.editHistory && minute.editHistory.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <p className="text-[12px] font-medium text-muted-foreground">Edit history</p>
+                    {(minute.editHistory ?? []).map((edit, idx) => (
+                      <div key={idx} className="space-y-2 border-l-2 border-border/60 pl-3">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-[12px] font-medium text-foreground">Edit {idx + 1}</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {formatRoutingDateTime(edit.edited_at)}
                           </span>
                         </div>
-                        <div className="space-y-1">
-                          <div>
-                            <p className="text-xs font-semibold text-muted-foreground mb-1">Previous:</p>
-                            <p className="text-xs text-muted-foreground whitespace-pre-wrap line-through">
-                              {edit.old_text}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-muted-foreground mb-1">Updated:</p>
-                            <p className="text-xs text-foreground whitespace-pre-wrap">
-                              {edit.new_text}
-                            </p>
-                          </div>
+                        <div className="space-y-1 text-[12px] leading-5">
+                          <p className="text-muted-foreground">
+                            <span className="font-medium">Before: </span>
+                            <span className="line-through">{edit.old_text}</span>
+                          </p>
+                          <p className="text-foreground">
+                            <span className="font-medium text-muted-foreground">After: </span>
+                            {edit.new_text}
+                          </p>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {/* Related Minutes */}
-              {minute.isAdditional && minute.relatesToMinuteId && (
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                    Related To
-                  </h4>
-                  <div className="p-3 rounded-lg bg-info/10 border border-info/20">
-                    <p className="text-xs text-muted-foreground mb-1">This is an additional minute related to:</p>
-                    <p className="text-sm text-foreground font-medium">Minute #{minute.stepNumber}</p>
-                    {minute.minuteType && (
-                      <Badge variant="outline" className="text-xs mt-2 bg-info/20 text-info border-info/30">
-                        {minute.minuteType === 'instruction' ? 'Additional Instruction' :
-                         minute.minuteType === 'clarification' ? 'Clarification' : 'Addendum'}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Additional Fields */}
-              <Separator />
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <h4 className="font-semibold text-foreground mb-1">Step Number</h4>
-                  <p className="text-muted-foreground">Step {minute.stepNumber}</p>
-                </div>
-                
-                {minute.fromOfficeName && (
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1 flex items-center gap-1">
-                      <Building2 className="h-3.5 w-3.5" />
-                      From Office
-                    </h4>
-                    <p className="text-muted-foreground">{minute.fromOfficeName}</p>
-                  </div>
                 )}
-                
-                {minute.toOfficeName && (
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1 flex items-center gap-1">
-                      <Building2 className="h-3.5 w-3.5" />
-                      To Office
-                    </h4>
-                    <p className="text-muted-foreground">{minute.toOfficeName}</p>
-                  </div>
-                )}
-                
-                {minute.actedBySecretary && (
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1">Processed By</h4>
-                    <Badge variant="secondary">Secretary</Badge>
-                  </div>
-                )}
-                
-                {minute.actedByAssistant && (
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1">Assistant Type</h4>
-                    <Badge variant="secondary">{minute.assistantType}</Badge>
-                  </div>
-                )}
-                
-                {minute.readAt && (
-                  <div>
-                    <h4 className="font-semibold text-foreground mb-1">Read At</h4>
-                    <p className="text-muted-foreground text-xs">
-                      {format(new Date(minute.readAt), 'PPp')}
-                    </p>
-                  </div>
-                )}
-              </div>
+              </CollapsibleContent>
+            </Collapsible>
 
               {minute.mentions && minute.mentions.length > 0 && (
                 <>
@@ -808,18 +821,44 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
               )}
 
               {/* Distribution (CC) Section */}
-              {ccEntries.length > 0 && (
+              {(ccEntries.length > 0 || distributionError) && (
                 <>
                   <Separator />
                   <div>
                     <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                      <Users className="h-4 w-4 text-primary" />
+                      <Users className="h-4 w-4 flex-shrink-0 text-primary" />
                       Distribution (CC)
+                      {ccEntries.length > 0 && (
+                        <span className="ml-auto text-[11px] font-normal text-muted-foreground">
+                          {ccReadCount} of {ccEntries.length} read
+                        </span>
+                      )}
                     </h4>
-                    {loadingDistribution ? (
-                      <div className="flex items-center justify-center py-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground ml-2">Loading distribution...</span>
+                    {distributionError ? (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-medium text-foreground">Couldn&apos;t load CC recipients</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              The list may not be empty. Retry to check who was copied.
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2 h-8 w-full gap-1.5 px-2 text-xs sm:w-auto"
+                          onClick={() => void loadDistribution()}
+                          disabled={loadingDistribution}
+                        >
+                          {loadingDistribution ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                          {loadingDistribution ? 'Retrying...' : 'Retry'}
+                        </Button>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -833,16 +872,28 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                             'Unknown';
                           const recipientType = String(dist.recipient_type ?? 'division');
                           const purpose = dist.purpose ? String(dist.purpose) : '';
+                          const readAt = dist.read_at ? String(dist.read_at) : null;
                           
                           return (
                             <div
                               key={dist.id as string}
-                              className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
+                              className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between"
                             >
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <Badge variant="outline" className="text-xs">
-                                  {String(recipientName)}
-                                </Badge>
+                              <p className="break-words text-[13px] font-medium text-foreground">
+                                {String(recipientName)}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {readAt ? (
+                                  <Badge variant="secondary" className="gap-1 whitespace-nowrap text-xs font-normal">
+                                    <CheckCheck className="h-3 w-3" />
+                                    Read · {formatRoutingDateTime(readAt)}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="gap-1 text-xs font-normal text-muted-foreground">
+                                    <Mail className="h-3 w-3" />
+                                    Unread
+                                  </Badge>
+                                )}
                                 <Badge variant="secondary" className="text-xs">
                                   {recipientType.charAt(0).toUpperCase() + recipientType.slice(1)}
                                 </Badge>
@@ -908,7 +959,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                         />
                       </div>
                       <div className="text-xs text-muted-foreground space-y-1">
-                        <p>Applied at {format(new Date(minute.signature.appliedAt), 'PPp')}</p>
+                        <p>Applied at {formatRoutingDateTime(minute.signature.appliedAt)}</p>
                         {minute.signature.fileName && <p>Source file: {minute.signature.fileName}</p>}
                         {minute.signature.templateId && (
                           <p>Template ID: {minute.signature.templateId}</p>
@@ -1071,9 +1122,8 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
                   </div>
                 </>
               )}
-            </div>
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
 
       {/* Attachment Preview Modal (Quick Preview) */}

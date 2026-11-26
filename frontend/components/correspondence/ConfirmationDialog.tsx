@@ -35,7 +35,7 @@ interface ConfirmationDialogProps {
     subject?: string;
     content: string;
     onBehalfOf?: string;
-    direction?: 'upward' | 'downward';
+    direction?: 'upward' | 'downward' | 'lateral';
     distribution?: DistributionRecipient[];
     fileAttachments?: { name: string; size: number; url?: string }[];
   };
@@ -108,7 +108,11 @@ export const ConfirmationDialog = ({
                     </Badge>
                     {data.direction && (
                       <Badge variant="outline">
-                        {data.direction === 'upward' ? 'Upward' : 'Downward'}
+                        {data.direction === 'upward'
+                          ? 'Upward'
+                          : data.direction === 'lateral'
+                            ? 'Lateral'
+                            : 'Downward'}
                       </Badge>
                     )}
                   </div>

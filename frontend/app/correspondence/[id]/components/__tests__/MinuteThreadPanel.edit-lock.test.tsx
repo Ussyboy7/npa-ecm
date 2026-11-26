@@ -31,13 +31,10 @@ const renderThread = (minutes: Minute[]) =>
     <MinuteThreadPanel
       minutes={minutes}
       activeUserId="user-author"
-      isCompleted={false}
-      isCurrentUserTurn={false}
       getActionIcon={() => null}
       onMinuteClick={vi.fn()}
       onEditMinute={vi.fn()}
       onRecallMinute={vi.fn()}
-      onAddNote={vi.fn()}
     />,
   );
 

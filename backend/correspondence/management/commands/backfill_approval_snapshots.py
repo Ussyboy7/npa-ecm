@@ -48,6 +48,8 @@ class Command(BaseCommand):
                 | Q(approval_level__isnull=False),
                 approval_snapshot__isnull=True,
                 correspondence__isnull=False,
+                # A recall withdraws the approval; never re-freeze one.
+                is_recalled=False,
             )
             .select_related("correspondence", "user", "seal_applied")
             .order_by("timestamp", "step_number")

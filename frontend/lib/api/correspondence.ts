@@ -55,7 +55,9 @@ export interface ApiCorrespondence {
   archive_level?: unknown;
   linked_document_ids?: unknown[];
   linked_documents?: unknown[];
+  recalled_documents?: unknown[];
   completion_package?: unknown;
+  case?: unknown;
   case_id?: unknown;
   has_physical_copy?: unknown;
   physical_documents?: Array<Record<string, unknown>>;

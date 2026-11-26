@@ -82,8 +82,7 @@ describe('RouteRecipientPicker person search', () => {
 
     expect(fetchUsersMock).not.toHaveBeenCalled();
 
-    await user.click(screen.getAllByRole('combobox')[0]);
-    await user.click(await screen.findByRole('option', { name: 'Person' }));
+    await user.click(screen.getByRole('radio', { name: 'Person' }));
 
     await waitFor(() =>
       expect(fetchUsersMock).toHaveBeenCalledWith(
@@ -96,7 +95,7 @@ describe('RouteRecipientPicker person search', () => {
       ),
     );
 
-    await user.click(screen.getAllByRole('combobox')[1]);
+    await user.click(screen.getAllByRole('combobox')[0]);
     expect(await screen.findByRole('option', { name: /Amina Example/ })).toBeDefined();
 
     await user.type(screen.getByPlaceholderText('Search by name, role...'), 'bala');

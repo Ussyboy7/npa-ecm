@@ -233,12 +233,27 @@ class MinuteApprovalGateTests(TestCase):
         self.assertEqual(data.get("approval_level"), "executive")
         self.assertEqual(data.get("approval_role"), "approval")
 
-    def test_gm_can_departmental_approve(self):
+    def test_gm_cannot_departmental_approve_and_is_the_md_approval_path(self):
         corr = self._make_corr(required_level="departmental", division=self.div_finance, department=self.dept_finance, current_approver=self.gm_fin)
         resp = self._post_minute(self.gm_fin, corr, minute_text="GM departmental approval")
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertIn("md_approval_required", resp.content.decode())
+        self.assertFalse(
+            Minute.objects.filter(
+                correspondence=corr,
+                action_type=Minute.ActionType.APPROVE,
+            ).exists()
+        )
+
+        # The department routes the record to the MD, who records the approval.
+        corr.current_approver = self.md
+        corr.owning_office = self.office_md
+        corr.save(update_fields=["current_approver", "owning_office"])
+        resp = self._post_minute(self.md, corr, minute_text="MD approves routed record")
+
         self.assertEqual(resp.status_code, 201, resp.content)
         data = resp.json()
-        self.assertEqual(data.get("approval_level"), "departmental")
+        self.assertEqual(data.get("approval_level"), "executive")
         self.assertEqual(data.get("approval_role"), "approval")
 
     def test_gm_cannot_executive_approve_403(self):
@@ -260,12 +275,15 @@ class MinuteApprovalGateTests(TestCase):
         # give clerk can_approve
         self.clerk_role.permissions["can_approve"] = True
         self.clerk_role.save(update_fields=["permissions"])
-        corr = self._make_corr(required_level="departmental", division=self.div_finance, department=self.dept_finance, current_approver=self.gm_fin)
+        # CC bypass is exercised on the executive track; a departmental record
+        # has no non-MD approval for the clerk to record.
+        corr = self._make_corr(required_level="executive", division=self.div_finance, department=self.dept_finance, current_approver=self.gm_fin)
         CorrespondenceDistribution.objects.create(correspondence=corr, recipient_type="user", user=self.clerk, purpose="information")
-        resp = self._post_minute(self.clerk, corr, minute_text="Clerk CC approval")
+        resp = self._post_minute(self.clerk, corr, minute_text="Clerk CC endorsement")
         self.assertEqual(resp.status_code, 201, resp.content)
         data = resp.json()
         self.assertEqual(data.get("approval_level"), "departmental")
+        self.assertEqual(data.get("approval_role"), "endorsement")
 
     def test_scope_check_finance_gm_cannot_approve_legal(self):
         corr = self._make_corr(required_level="departmental", division=self.div_legal, department=self.dept_legal, current_approver=self.gm_fin, owning_office=self.office_legal)
@@ -280,7 +298,7 @@ class MinuteApprovalGateTests(TestCase):
         self.assertIn(resp.status_code, (400, 403), resp.content)
 
     def test_minute_text_required_for_approve(self):
-        corr = self._make_corr(required_level="departmental", division=self.div_finance, department=self.dept_finance, current_approver=self.gm_fin)
+        corr = self._make_corr(required_level="executive", division=self.div_finance, department=self.dept_finance, current_approver=self.gm_fin)
         resp = self._post_minute(self.gm_fin, corr, minute_text="   ")
         self.assertEqual(resp.status_code, 400, resp.content)
         low = str(resp.content).lower()

@@ -711,11 +711,6 @@ const CorrespondenceDetailContent = () => {
     openModal('recall-minute');
   }, [openModal, setSelectedMinute]);
 
-  const handleAddNote = useCallback((minute: Minute) => {
-    setSelectedMinute(minute);
-    openModal('additional-minute');
-  }, [openModal, setSelectedMinute]);
-
   const openPrintPreview = useCallback(() => openModal('print-preview'), [openModal]);
 
   const documentPanelProps = {
@@ -774,7 +769,6 @@ const CorrespondenceDetailContent = () => {
     onMinuteClick: handleMinuteClick,
     onEditMinute: handleEditMinute,
     onRecallMinute: handleRecallMinute,
-    onAddNote: handleAddNote,
   } : null;
 
   const goToRoutingTab = useCallback(() => setMobileActiveTab('routing'), [setMobileActiveTab]);
@@ -1071,6 +1065,7 @@ const CorrespondenceDetailContent = () => {
         onSetSelectedAttachmentIndex={setSelectedAttachmentIndex}
         onSetRemoteCorrespondence={setRemoteCorrespondence}
         refreshData={refreshData}
+        refreshDetail={refreshDetail}
         refreshMinutes={refreshMinutes}
         syncFromApi={syncFromApi}
         defaultPreviewAttachmentFileName={defaultPreviewAttachmentFileName}

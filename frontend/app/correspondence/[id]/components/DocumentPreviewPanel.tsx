@@ -212,6 +212,7 @@ export const DocumentPreviewPanel = ({
     () => visibleLinkedDocuments(linkedDocuments, attachments),
     [linkedDocuments, attachments],
   );
+  const recalledDocuments = correspondence.recalledDocuments ?? [];
 
   const previewContext = getCorrespondencePreviewContext(
     correspondence,
@@ -642,6 +643,35 @@ export const DocumentPreviewPanel = ({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {recalledDocuments.length > 0 && (
+          <div className="space-y-2 min-w-0">
+            <p className={cn(corrType.sectionLabel, 'px-0.5')}>
+              Recalled ({recalledDocuments.length})
+            </p>
+            <div className="space-y-1">
+              {recalledDocuments.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center gap-2 px-1.5 py-1 rounded-xl min-w-0 opacity-70"
+                >
+                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <p className={cn(corrType.fileTitle, 'truncate')} title={doc.title}>
+                      {doc.title}
+                    </p>
+                    <div className={cn('flex items-center gap-2 mt-0.5 flex-wrap', corrType.caption)}>
+                      <Badge variant="destructive" className="text-[10px] h-4 px-1 flex-shrink-0">
+                        Recalled
+                      </Badge>
+                      <span>Withdrawn from the document store</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

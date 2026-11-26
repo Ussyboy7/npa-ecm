@@ -39,6 +39,16 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
   const owningOffice = isRecord(item.owning_office) ? item.owning_office : undefined;
   const currentOffice = isRecord(item.current_office) ? item.current_office : undefined;
   const completionPackage = isRecord(item.completion_package) ? item.completion_package : undefined;
+  const caseRecord = isRecord(item.case) ? item.case : undefined;
+  const linkedCaseId = normalizeId(caseRecord?.id);
+  const linkedCase = caseRecord && linkedCaseId
+    ? {
+        id: linkedCaseId,
+        caseNumber: asString(caseRecord.case_number),
+        title: asString(caseRecord.title),
+        status: asString(caseRecord.status),
+      }
+    : null;
   const routingMetadata = isRecord(item.routing_metadata) ? item.routing_metadata : undefined;
   const workflowTemplateDetails = isRecord(item.workflow_template_details)
     ? item.workflow_template_details
@@ -129,6 +139,16 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
   const linkedDocumentIds = rawLinkedDocuments
     .map((doc) => normalizeId(doc))
     .filter((id): id is string => Boolean(id));
+  const recalledDocuments = Array.isArray(item.recalled_documents)
+    ? item.recalled_documents
+        .filter(isRecord)
+        .map((doc) => ({
+          id: normalizeId(doc.id) ?? '',
+          title: asString(doc.title),
+          recalledAt: asStringOptional(doc.recalled_at),
+        }))
+        .filter((doc) => Boolean(doc.id))
+    : [];
 
   const flowType = asOneOfOptional(
     item.flow_type,
@@ -237,6 +257,7 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
       : [],
     archiveLevel: asOneOfOptional(item.archive_level, ['department', 'division', 'directorate'] as const),
     linkedDocumentIds,
+    recalledDocuments,
     completionPackage: completionPackage
       ? {
           documentId: asString(completionPackage.document_id),
@@ -247,7 +268,10 @@ export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence =>
         }
       : null,
     completionSummaryGeneratedAt: asStringOptional(item.completion_summary_generated_at),
-    caseId: asStringOptional(item.case_id),
+    // `case_id` is write-only on the detail serializer; the linked case is
+    // returned as a nested summary instead.
+    case: linkedCase,
+    caseId: linkedCaseId ?? asStringOptional(item.case_id),
     hasPhysicalCopy: item.has_physical_copy === true,
     physicalDocuments: Array.isArray(item.physical_documents)
       ? item.physical_documents.map((d: Record<string, unknown>) => ({

@@ -5,10 +5,11 @@ Tiered approval model
 * **EXECUTIVE_THRESHOLD = ₦50,000,000** — documented here and in
   ``docs/superpowers/plans``. Correspondence requires **Executive Approval**
   (MD-only, scope-aware) when ``amount >= EXECUTIVE_THRESHOLD`` or
-  ``strategic_flag=True``; otherwise it requires **Departmental Approval**
-  (GM/AGM/ED endorsement or approval, scope-aware).
-* Permission wording is tiered: UI shows "Executive Approval" for MD and
-  "Departmental Approval" / "Endorse" for GM/AGM/ED (see Task 3).
+  ``strategic_flag=True``; otherwise it is classified **Departmental**, which
+  is still approved by the MD after the department routes it upward. A
+  departmental record has no departmental approver.
+* Permission wording: UI shows "Executive Approval" for MD and "Endorse" for
+  GM/AGM/ED on the executive track.
 * Audit wording for any classification change is
   ``CORRESPONDENCE_CLASSIFICATION_CHANGED`` with an explicit reason.
 

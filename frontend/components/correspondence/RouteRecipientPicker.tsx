@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Building2, Loader2, User as UserIcon, Search, X } from "lucide-react";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { OfficeCombobox } from "@/components/correspondence/OfficeCombobox";
 import type { User } from "@/lib/npa-structure";
 import type { AssignmentOutcome, BranchConfig } from "@/lib/parallel-routing";
@@ -212,121 +213,120 @@ export function RouteRecipientPicker({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Route Type</Label>
-            <Select value={routeType} onValueChange={(v) => setRouteType(v as "person" | "office")}>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Send to</Label>
+          <SegmentedControl
+            ariaLabel="Route type"
+            value={routeType}
+            onValueChange={(v: "person" | "office") => setRouteType(v)}
+            tone="quiet"
+            size="sm"
+            options={[
+              { value: "person", label: "Person", icon: UserIcon },
+              { value: "office", label: "Office", icon: Building2 },
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground flex items-center gap-1">
+            {routeType === "office" ? (
+              <Building2 className="h-3 w-3" />
+            ) : (
+              <UserIcon className="h-3 w-3" />
+            )}
+            Recipient
+          </Label>
+          {routeType === "office" ? (
+            <OfficeCombobox
+              offices={offices}
+              onSelect={handleAddOffice}
+              excludeOfficeIds={officeIds}
+              placeholder="Select office"
+              emptyMessage="No offices found"
+              className="h-9"
+            />
+          ) : (
+            <Select onValueChange={handleAddUser}>
               <SelectTrigger className="h-9">
-                <SelectValue />
+                <SelectValue placeholder="Select person" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="person">Person</SelectItem>
-                <SelectItem value="office">Office</SelectItem>
+              <SelectContent className="z-50 max-h-[400px] overflow-y-auto bg-popover">
+                <div className="sticky top-0 z-10 border-b border-border bg-popover p-2">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name, role..."
+                      value={personSearchQuery}
+                      onChange={(e) => setPersonSearchQuery(e.target.value)}
+                      className="h-8 pl-8"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                </div>
+                {loadingUsers && filteredUsers.length === 0 ? (
+                  <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading recipients...
+                  </div>
+                ) : filteredUsers.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    {userSearchError ?? "No recipients available"}
+                  </div>
+                ) : (
+                  filteredUsers.slice(0, 40).map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex flex-col">
+                        <span>{user.name}</span>
+                        <span className="text-xs text-muted-foreground">{user.systemRole}</span>
+                      </div>
+                    </SelectItem>
+                  ))
+                )}
+                {hasMore ? (
+                  <div className="border-t border-border p-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={loadMore}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : null}
+                      Load more recipients
+                    </Button>
+                  </div>
+                ) : null}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1">
-              {routeType === "office" ? (
-                <>
-                  <Building2 className="h-3 w-3" /> Office
-                </>
-              ) : (
-                <>
-                  <UserIcon className="h-3 w-3" /> Person
-                </>
-              )}
-            </Label>
-            {routeType === "office" ? (
-              <OfficeCombobox
-                offices={offices}
-                onSelect={handleAddOffice}
-                excludeOfficeIds={officeIds}
-                placeholder="Select office"
-                emptyMessage="No offices found"
-                className="h-9"
-              />
-            ) : (
-              <Select onValueChange={handleAddUser}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select person" />
-                </SelectTrigger>
-                <SelectContent className="z-50 max-h-[400px] overflow-y-auto bg-popover">
-                  <div className="sticky top-0 z-10 border-b border-border bg-popover p-2">
-                    <div className="relative">
-                      <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Search by name, role..."
-                        value={personSearchQuery}
-                        onChange={(e) => setPersonSearchQuery(e.target.value)}
-                        className="h-8 pl-8"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </div>
-                  {loadingUsers && filteredUsers.length === 0 ? (
-                    <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading recipients...
-                    </div>
-                  ) : filteredUsers.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-muted-foreground">
-                      {userSearchError ?? "No recipients available"}
-                    </div>
-                  ) : (
-                    filteredUsers.slice(0, 40).map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        <div className="flex flex-col">
-                          <span>{user.name}</span>
-                          <span className="text-xs text-muted-foreground">{user.systemRole}</span>
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                  {hasMore ? (
-                    <div className="border-t border-border p-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={loadMore}
-                        disabled={loadingMore}
-                      >
-                        {loadingMore ? (
-                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                        ) : null}
-                        Load more recipients
-                      </Button>
-                    </div>
-                  ) : null}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          {!informationOnly && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Expected outcome</Label>
-              <Select
-                value={addOutcome}
-                onValueChange={(v) => setAddOutcome(v as AssignmentOutcome)}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="respond">Respond</SelectItem>
-                  <SelectItem value="treat">Treat document</SelectItem>
-                  <SelectItem value="onward">Minute onward</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           )}
         </div>
+
+        {!informationOnly && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Expected outcome</Label>
+            <SegmentedControl
+              ariaLabel="Expected outcome"
+              value={addOutcome}
+              onValueChange={(v: AssignmentOutcome) => setAddOutcome(v)}
+              tone="quiet"
+              size="sm"
+              options={[
+                { value: "respond" as const, label: "Respond" },
+                { value: "treat" as const, label: "Treat" },
+                { value: "onward" as const, label: "Minute onward" },
+              ]}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              This is what you expect back from each recipient.
+            </p>
+          </div>
+        )}
       </div>
 
       {selectedRecipients.length > 0 ? (
@@ -334,7 +334,7 @@ export function RouteRecipientPicker({
           <Label className="text-xs text-muted-foreground">
             Selected Recipients ({selectedRecipients.length})
           </Label>
-          <div className="space-y-2">
+          <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-background/50">
             {selectedRecipients.map((recipient) => {
               const cfg = branchConfigs[recipient.key] ?? {
                 purpose: informationOnly ? "information" : defaultPurpose,
@@ -345,7 +345,7 @@ export function RouteRecipientPicker({
               return (
                 <div
                   key={recipient.key}
-                  className="rounded-xl border border-border/60 p-3 space-y-2"
+                  className="space-y-2 p-3"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-3">
@@ -417,9 +417,7 @@ export function RouteRecipientPicker({
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border/60 p-4 text-center">
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-        </div>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">{emptyMessage}</p>
       )}
     </div>
   );

@@ -116,7 +116,7 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
     office_name = serializers.CharField(source="office.name", read_only=True, allow_null=True, required=False)
     division_name = serializers.CharField(source="division.name", read_only=True, allow_null=True, required=False)
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True, required=False)
-    user_name = serializers.CharField(source="user.name", read_only=True, allow_null=True, required=False)
+    user_name = serializers.SerializerMethodField()
     read_at = serializers.DateTimeField(read_only=True)
     read_by = UserSerializer(read_only=True)
     read_by_id = serializers.PrimaryKeyRelatedField(
@@ -140,6 +140,12 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
     # Explicitly define is_active with default to ensure it's always set
     # This works better with DRF than relying on model defaults
     is_active = serializers.BooleanField(default=True, required=False)
+
+    def get_user_name(self, obj):
+        """Display name for user recipients; accounts.User has no ``name`` field."""
+        if not obj.user:
+            return None
+        return obj.user.get_full_name() or obj.user.username
 
     class Meta:
         model = CorrespondenceDistribution
@@ -232,13 +238,6 @@ class MinuteSerializer(serializers.ModelSerializer):
     seal_data = serializers.SerializerMethodField()
     parent_minute_id = serializers.PrimaryKeyRelatedField(
         source="parent_minute",
-        queryset=Minute.objects.all(),
-        write_only=True,
-        allow_null=True,
-        required=False,
-    )
-    relates_to_minute_id = serializers.PrimaryKeyRelatedField(
-        source="relates_to_minute",
         queryset=Minute.objects.all(),
         write_only=True,
         allow_null=True,
@@ -344,7 +343,6 @@ class MinuteSerializer(serializers.ModelSerializer):
             "minute_type",
             "is_additional",
             "relates_to_minute",
-            "relates_to_minute_id",
             # Digital seal (for executive approvals)
             "seal_applied",
             "seal_data",
@@ -376,6 +374,8 @@ class MinuteSerializer(serializers.ModelSerializer):
             "can_be_edited",
             "parent_minute",
             "relates_to_minute",
+            "minute_type",
+            "is_additional",
             "branch_originator",
             "consultation_from_branch",
             "consultation_to_branch",
@@ -633,6 +633,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         queryset=Correspondence._meta.get_field("linked_documents").remote_field.model.objects.all(),
         required=False,
     )
+    recalled_documents = serializers.SerializerMethodField()
     completion_package = serializers.SerializerMethodField()
     auto_created_document_id = serializers.SerializerMethodField()
     lifecycle_stages = serializers.SerializerMethodField()
@@ -648,6 +649,34 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     related_responses = serializers.SerializerMethodField()
     can_take_initial_action = serializers.SerializerMethodField()
     is_read = serializers.BooleanField(read_only=True)
+
+    def get_recalled_documents(self, obj) -> list[dict]:
+        """Approved copies a recall withdrew, kept linked as evidence.
+
+        These are soft-deleted, so they cannot be opened or downloaded and
+        are not in ``linked_document_ids``; the record still names them so
+        the attachment reads as recalled instead of vanishing.
+        """
+        from dms.models import Document
+
+        document_ids = list(
+            CorrespondenceDocumentLink.objects.filter(correspondence=obj).values_list(
+                "document_id", flat=True
+            )
+        )
+        if not document_ids:
+            return []
+        recalled = Document.all_objects.filter(
+            pk__in=document_ids, tags__contains=["recalled"]
+        ).order_by("updated_at")
+        return [
+            {
+                "id": str(document.id),
+                "title": document.title,
+                "recalled_at": document.updated_at,
+            }
+            for document in recalled
+        ]
 
     def get_reference_classification(self, obj):
         classification = getattr(obj, "reference_classification", None)
@@ -745,6 +774,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "acting_principal_name",
             "is_acting_seat",
             "linked_document_ids",
+            "recalled_documents",
             "auto_created_document_id",
             "attachments",
             "distribution",
@@ -1730,6 +1760,9 @@ class CorrespondenceDraftSerializer(serializers.ModelSerializer):
             "on_behalf_of",
             "action_type",
             "files_metadata",
+            "routing_data",
+            "response_type",
+            "selected_document_id",
             "created_at",
             "updated_at",
         ]

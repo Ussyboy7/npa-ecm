@@ -99,9 +99,17 @@ export function useCorrespondenceDetailData({
   const markedAsOpenedRef = useRef<Set<string>>(new Set());
 
   const linkedDocIdsKey = (correspondence?.linkedDocumentIds ?? []).join(',');
+  // A recalled approved copy stays linked as evidence, but it is withdrawn, so
+  // it is never fetched as an openable document; the panel lists it separately.
+  const recalledDocIdsKey = (correspondence?.recalledDocuments ?? [])
+    .map((doc) => doc.id)
+    .join(',');
 
   useEffect(() => {
-    const linkedIds = linkedDocIdsKey ? linkedDocIdsKey.split(',') : [];
+    const recalledIds = new Set(recalledDocIdsKey ? recalledDocIdsKey.split(',') : []);
+    const linkedIds = (linkedDocIdsKey ? linkedDocIdsKey.split(',') : []).filter(
+      (docId) => !recalledIds.has(docId),
+    );
     if (linkedIds.length === 0) {
       setLinkedDocuments([]);
       setWithheldLinkedDocumentCount(0);
@@ -143,7 +151,7 @@ export function useCorrespondenceDetailData({
     return () => {
       ignore = true;
     };
-  }, [linkedDocIdsKey, setLinkedDocuments, setWithheldLinkedDocumentCount]);
+  }, [linkedDocIdsKey, recalledDocIdsKey, setLinkedDocuments, setWithheldLinkedDocumentCount]);
 
   useEffect(() => {
     if (!id) return;

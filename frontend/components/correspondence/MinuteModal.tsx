@@ -6,7 +6,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { generateId, getNextStepNumber } from '@/lib/correspondence-helpers';
@@ -21,23 +30,22 @@ import type { Minute } from '@/lib/npa-structure';
 import { Input } from '@/components/ui/input';
 
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { toast } from "@/components/ui/sonner";
 import { formatDateShort, formatDateTime } from "@/lib/datetime";
 import {
   MessageSquare,
   Send,
   Save,
-  ArrowDown,
-  ArrowUp,
-  ArrowRightLeft,
   CheckCircle,
   FileText,
-  Image as ImageIcon,
   AlertCircle,
   Loader2,
   Shield,
-  Clock,
+  ChevronDown,
+  LayoutTemplate,
+  Plus,
+  Search,
+  X,
 } from 'lucide-react';
 import { 
   getDivisionById,
@@ -51,6 +59,7 @@ import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { filterUsersBySearch } from '@/lib/routing-utils';
 import { PrimaryRoutePanel } from './PrimaryRoutePanel';
+import { CorrespondenceContextCard, PreviousMinuteLine } from './CorrespondenceContextCard';
 import { submitParallelRoute, submitCcDistribution } from '@/lib/parallel-routing';
 import type { AssignmentMergeStrategy, BranchConfig } from '@/lib/parallel-routing';
 import { RoutingSection } from './RoutingSection';
@@ -75,8 +84,31 @@ import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
-import { fetchSLATargets, DEFAULT_SLA_TARGETS, type SLATargets } from '@/lib/sla-client';
 import React from 'react';
+
+const MINUTE_TEMPLATE_SCOPE_ORDER = [
+  'organization',
+  'directorate',
+  'division',
+  'department',
+  'user',
+] as const;
+
+const MINUTE_TEMPLATE_SCOPE_LABELS: Record<DocumentTemplate['scope'], string> = {
+  organization: 'Organization',
+  directorate: 'Directorate',
+  division: 'Division',
+  department: 'Department',
+  user: 'Personal',
+};
+
+const getTemplatePlainText = (template: DocumentTemplate) => {
+  if (template.contentText && template.contentText.trim().length > 0) {
+    return template.contentText.trim();
+  }
+  if (!template.contentHtml) return '';
+  return template.contentHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+};
 
 interface MinuteModalProps {
   correspondence: Correspondence;
@@ -107,7 +139,6 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [distributionUserIds, setDistributionUserIds] = useState<string[]>([]);
   const [distributionOfficeIds, setDistributionOfficeIds] = useState<string[]>([]);
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
-  const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward' | 'lateral'>(initialDirection);
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
 
@@ -134,7 +165,10 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
 const [minuteTemplates, setMinuteTemplates] = useState<DocumentTemplate[]>([]);
 const [newTemplateName, setNewTemplateName] = useState('');
 const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
-  const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templatesMenuOpen, setTemplatesMenuOpen] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState('');
+  const templateSearchRef = useRef<HTMLInputElement | null>(null);
   const { currentUser: activeUser } = useCurrentUser();
   const gradeCatalog = useGradeCatalog();
   const {
@@ -221,28 +255,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     [officeOptions],
   );
 
-  const primaryOfficeMembership = useMemo(
-    () =>
-      currentUser
-        ? officeMemberships.find(
-            (membership) => membership.userId === currentUser.id && membership.isPrimary && membership.isActive,
-          )
-        : undefined,
-    [officeMemberships, currentUser],
-  );
-
-  // Fetch SLA targets on mount
-  useEffect(() => {
-    if (isOpen) {
-      fetchSLATargets()
-        .then(setSlaTargets)
-        .catch(() => {
-          // Use defaults if fetch fails
-          setSlaTargets(DEFAULT_SLA_TARGETS);
-        });
-    }
-  }, [isOpen]);
-
   // Autosave draft after 5s of inactivity
   useEffect(() => {
     if (!isOpen) return;
@@ -270,33 +282,14 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     };
   }, [isOpen, minuteText, forwardTo, actionType, purpose, applySignature, selectedTemplateId]);
 
-  // Helper to get SLA days for a priority
-  const getSLADays = useCallback((priority: string): number | null => {
-    if (!slaTargets) return null;
-    switch (priority) {
-      case 'urgent': return slaTargets.urgent;
-      case 'high': return slaTargets.high;
-      case 'medium': return slaTargets.medium;
-      case 'low': return slaTargets.low;
-      default: return null;
-    }
-  }, [slaTargets]);
-
+  // A minute opens with no destination. Pre-filling the office the record
+  // already sits in looked like a choice the sender had made, enabled Send,
+  // and was rejected on submit as a same-office loop.
   useEffect(() => {
     if (!isOpen) return;
-    const fallbackOfficeId =
-      correspondence.currentOfficeId ??
-      correspondence.owningOfficeId ??
-      primaryOfficeMembership?.officeId ??
-      '';
-    setTargetOfficeId(fallbackOfficeId);
-  }, [
-    isOpen,
-    correspondence.id,
-    correspondence.currentOfficeId,
-    correspondence.owningOfficeId,
-    primaryOfficeMembership?.officeId,
-  ]);
+    setTargetOfficeId('');
+    setPurpose('action');
+  }, [isOpen, correspondence.id]);
  
   // Templates are now loaded from backend - no initialization needed
 
@@ -318,12 +311,13 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     [currentUser],
   );
 
-  const getTemplatePlainText = (template: DocumentTemplate) => {
-    if (template.contentText && template.contentText.trim().length > 0) {
-      return template.contentText.trim();
-    }
-    if (!template.contentHtml) return '';
-    return template.contentHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const insertMinuteTemplate = (template: DocumentTemplate) => {
+    const text = getTemplatePlainText(template);
+    if (!text) return;
+    setMinuteText((prev) => {
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed}\n\n${text}` : text;
+    });
   };
 
   const convertTextToHtml = (text: string) => {
@@ -357,8 +351,11 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   // Check if user is MD (highest level - can only send downward)
   const isMD = currentUser?.gradeLevel === 'MDCS' || currentUser?.systemRole === 'Managing Director';
   
-  // Other users (below MD) can choose direction
-  const canChooseDirection = !isMD;
+  // Approvals here are executive only: the Managing Director approves, other
+  // executives endorse. Departmental approval is not offered from this modal.
+  const approvalLevel =
+    (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
+  const isExecutiveTrack = approvalLevel === 'executive';
 
   // Unified approval gate: permission + scope + turn/delegation/CC
   const hasCanApprovePerm = Boolean(userPermissions.canApprove || currentUser?.rolePermissions?.can_approve);
@@ -393,13 +390,14 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     return false;
   }, [currentUser, correspondence.divisionId, correspondence.departmentId, isMD, divisions]);
   const canApprove = hasCanApprovePerm && scopeOk && (isCurrentTurn || isDelegatee || explicitCC);
+  const canOfferApproval = canApprove && (isMD || isExecutiveTrack);
 
-  // Reset action type to 'minute' if user cannot approve (but keep approve if they are CC/delegatee)
+  // Reset action type to 'minute' when approval is not on offer.
   useEffect(() => {
-    if (!canApprove && actionType === 'approve') {
+    if (!canOfferApproval && actionType === 'approve') {
       setActionType('minute');
     }
-  }, [canApprove, actionType]);
+  }, [canOfferApproval, actionType]);
 
   // Check if user leads a directorate (for seal preview). The served tier
   // covers the Managing Director and Executive Director.
@@ -430,7 +428,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           setForwardTo('');
           setTargetOfficeId('');
           setRouteType('person');
-          setSelectedDirection(initialDirection);
           setPersonSearchQuery('');
           setOfficeSearchQuery('');
           setOfficeFilterDirectorate('all');
@@ -557,6 +554,33 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     [minuteTemplates, actionType],
   );
 
+  const matchedMinuteTemplates = useMemo(() => {
+    const query = templateQuery.trim().toLowerCase();
+    if (!query) return filteredMinuteTemplates;
+    return filteredMinuteTemplates.filter(
+      (template) =>
+        template.title.toLowerCase().includes(query) ||
+        getTemplatePlainText(template).toLowerCase().includes(query),
+    );
+  }, [filteredMinuteTemplates, templateQuery]);
+
+  const groupedMinuteTemplates = useMemo(
+    () =>
+      MINUTE_TEMPLATE_SCOPE_ORDER.map((scope) => ({
+        scope,
+        templates: matchedMinuteTemplates.filter((template) => template.scope === scope),
+      })).filter((group) => group.templates.length > 0),
+    [matchedMinuteTemplates],
+  );
+
+  // Opening the picker lands in the search field so a long list can be
+  // narrowed without tabbing past every template.
+  useEffect(() => {
+    if (!templatesMenuOpen) return;
+    const frame = window.requestAnimationFrame(() => templateSearchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [templatesMenuOpen]);
+
   const existingMinutes = useMemo(
     () => getMinutesByCorrespondenceId(correspondence.id),
     [correspondence.id, getMinutesByCorrespondenceId],
@@ -588,7 +612,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     return acted;
   }, [existingMinutes, correspondence.currentApproverId]);
 
-  const routingDirection = isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection);
+  const routingDirection = isMD ? 'downward' : initialDirection;
   const suggestedApprovers = useRoutingSuggestions({
     enabled: isOpen && Boolean(currentUser),
     correspondenceId: correspondence.id,
@@ -691,11 +715,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     return null;
   };
   const autoDirection = getComputedDirection(currentUser, routeType === 'person' ? forwardTo : targetOfficeId, routeType);
-  useEffect(() => {
-    if (autoDirection && autoDirection !== selectedDirection) {
-      setSelectedDirection(autoDirection);
-    }
-  }, [autoDirection]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Direction is never a choice: it follows who the minute is going to.
+  const effectiveDirection = isMD ? 'downward' : (autoDirection ?? initialDirection);
   
   const suggestedNext = suggestedApprovers[0]; // Immediate next in hierarchy
   
@@ -794,7 +815,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         setForwardToError('Assign separately requires at least two people or offices');
         return false;
       }
-    } else if (!forwardTo && !targetOfficeId) {
+    } else if (routeType === 'office' ? !targetOfficeId : !forwardTo) {
       setForwardToError('Please select a person or office to forward to');
       return false;
     }
@@ -835,13 +856,13 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       return;
     }
     
-    // 2FA/seal only for EXECUTIVE (MD) – endorsement and departmental do not require 2FA
-    const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
-    const isExecMD = actionType === 'approve' && isMD && required === 'executive' && Boolean(userSignature);
-    const requiresTwoFA = isExecMD && userSignature?.require2fa !== false;
+    // MD approvals are executive approvals regardless of the record's
+    // classification, so honor the signature's 2FA policy on either track.
+    const isMDApproval = actionType === 'approve' && isMD && Boolean(userSignature);
+    const requiresTwoFA = isMDApproval && userSignature?.require2fa !== false;
     
     if (requiresTwoFA && !twoFAVerificationToken) {
-      // Show 2FA modal for executive approvals
+      // Show 2FA modal before any MD approval that applies a digital seal.
       setShow2FAModal(true);
       return;
     }
@@ -920,6 +941,29 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     },
   ]);
 
+  // A picker or the template-name row owns Escape while it is open. Both the
+  // shared shortcut and Radix's dialog dismiss listen on Escape, so this runs
+  // in the capture phase to close only the innermost layer and keep the
+  // composer (and its routing selections) intact.
+  useEffect(() => {
+    if (!isOpen || (!templatesMenuOpen && !saveTemplateOpen)) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (templatesMenuOpen) {
+        setTemplatesMenuOpen(false);
+        return;
+      }
+      setSaveTemplateOpen(false);
+      setNewTemplateName('');
+    };
+
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [isOpen, templatesMenuOpen, saveTemplateOpen]);
+
   const handleConfirm = async () => {
     if (!currentUser) {
       toast.error('Current user not found. Cannot perform action.');
@@ -942,8 +986,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     const forwardUser = findUserById(forwardTo);
     const nextStep = getNextStepNumber(existingMinutes);
 
-    // MD can only send downward, others use selected direction or initial
-    const finalDirection = isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection);
+    // Direction follows the destination, never a separate choice.
+    const finalDirection = effectiveDirection;
     
     // Automatically determine recipient's office from their office memberships
     const recipientOfficeMembership = officeMemberships.find(
@@ -1356,9 +1400,16 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     return output;
   };
 
+  // A minute cannot be sent without somewhere to send it. The footer mirrors
+  // the confirmation dialog's route requirement so nothing fails on submit.
+  const activeDestination = routeType === 'office' ? targetOfficeId : forwardTo;
+  const hasRouteDestination =
+    actionType === 'minute' && routeMode === 'parallel'
+      ? parallelUserIds.length + parallelOfficeIds.length >= 2
+      : Boolean(activeDestination);
+
   const templateTypeForAction: SignatureTemplate['templateType'] = actionType === 'approve' ? 'approval' : 'minute';
   const relevantTemplates = signatureTemplates.filter(template => template.templateType === templateTypeForAction);
-  const selectedTemplate = selectedTemplateId ? signatureTemplates.find(template => template.id === selectedTemplateId) ?? null : null;
   return (
     <>
     <Dialog
@@ -1367,383 +1418,312 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         if (!open) onClose();
       }}
     >
-      <DialogContent size="xl" height="fill">
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            {actionType === 'approve' ? (
-              <Shield className="h-5 w-5 text-emerald-600" aria-hidden="true" />
-            ) : (
-              <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
-            )}
-            {actionType === 'approve' ? 'Approve Correspondence' : 'Minute Correspondence'}
-            {hasDraft && (
-              <Badge variant="secondary" className="ml-2 text-xs" aria-label="Draft loaded">
-                Draft Loaded
-              </Badge>
-            )}
-          </DialogTitle>
-          <DialogDescription>
-            {actionType === 'approve'
-              ? 'Record your approval. The approval minute routes the record to the selected destination.'
-              : 'Add your comments and forward to the next level'}
-          </DialogDescription>
+      <DialogContent size="xl" height="fill" density="flush">
+        <DialogHeader className="shrink-0 border-b border-border/60 bg-background/70 px-6 py-5 backdrop-blur-xl">
+          <div className="flex items-start gap-3">
+            <span
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                actionType === 'approve' ? 'bg-emerald-500/10' : 'bg-primary/10'
+              }`}
+            >
+              {actionType === 'approve' ? (
+                <Shield className="h-[18px] w-[18px] text-emerald-600" aria-hidden="true" />
+              ) : (
+                <MessageSquare className="h-[18px] w-[18px] text-primary" aria-hidden="true" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-[17px] tracking-tight">
+                {actionType === 'approve' ? 'Approve correspondence' : 'Minute correspondence'}
+              </DialogTitle>
+              <DialogDescription className="mt-0.5">
+                {actionType === 'approve'
+                  ? 'Approving also routes the record to the destination you choose.'
+                  : 'Write the minute, then choose who it goes to.'}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto pr-4">
-          <div className="space-y-6 py-2">
-          {/* Document Summary */}
-          <div className="rounded-xl border border-border/60 bg-muted/50 p-4">
-<div className="flex items-start gap-3">
-                <FileText className="h-5 w-5 text-primary mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm mb-1">{correspondence.subject}</p>
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                    <span>Ref: {correspondence.referenceNumber}</span>
-                    <span>•</span>
-                    <span>From: {correspondence.senderName}</span>
-                    <span>•</span>
-                    <span>{division?.name}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={
-                    correspondence.priority === 'urgent' ? 'destructive' :
-                    correspondence.priority === 'high' ? 'default' :
-                    'secondary'
-                  }>
-                    {correspondence.priority}
-                  </Badge>
-                  {(() => {
-                    const slaDays = getSLADays(correspondence.priority);
-                    return slaDays !== null ? (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>{slaDays} hour{slaDays !== 1 ? 's' : ''}</span>
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
-              </div>
-</div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-5 px-6 py-5">
+            <CorrespondenceContextCard
+              correspondence={correspondence}
+              divisionName={correspondence.divisionName ?? division?.name}
+            />
 
-          {/* Previous Minute */}
-          {previousMinute && previousUser && (
-            <>
-              <div>
-                <Label className="text-sm font-semibold mb-2 block">Previous Minute</Label>
-                <div className="rounded-xl border border-border/60 bg-background p-4">
-<div className="flex items-start gap-3">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold">
-                        {previousUser.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-sm">{previousUser.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {previousUser.systemRole}
-                          </span>
-                        </div>
-                        <p className="text-sm text-foreground mb-2">{previousMinute.minuteText}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDateTime(previousMinute.timestamp)}
-                        </p>
-                      </div>
-                    </div>
-</div>
-              </div>
-              <Separator />
-            </>
-          )}
+            {previousMinute && (
+              <PreviousMinuteLine
+                minute={previousMinute}
+                authorName={previousUser?.name ?? previousMinute.userName ?? 'Unknown'}
+                authorRole={previousUser?.systemRole ?? previousMinute.userSystemRole}
+              />
+            )}
 
-          {/* Direction & Action Type Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Direction Selection */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                {isMD ? <ArrowDown className="h-4 w-4 text-info" /> : <ArrowUp className="h-4 w-4 text-success" />}
-                Direction {!isMD && '*'}
-              </Label>
-              {canChooseDirection ? (
-                autoDirection ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                    {autoDirection === 'upward' && <ArrowUp className="h-4 w-4 text-success" />}
-                    {autoDirection === 'downward' && <ArrowDown className="h-4 w-4 text-info" />}
-                    {autoDirection === 'lateral' && <ArrowRightLeft className="h-4 w-4 text-amber-600" />}
-                    <span className="text-sm font-medium capitalize">{autoDirection}</span>
-                    <span className="text-xs text-muted-foreground">— auto from recipient (GM→GM Lateral, GM→ED Upward, AGM→Principal Manager Downward)</span>
-                  </div>
-                ) : (
-                <RadioGroup value={selectedDirection} onValueChange={(v: string) => {
-                  setSelectedDirection(v as 'upward' | 'downward' | 'lateral');
-                  setForwardTo(''); // Reset forward to when direction changes
-                }}>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="upward" id="direction-upward" />
-                    <Label htmlFor="direction-upward" className="font-normal cursor-pointer flex items-center gap-2">
-                      <ArrowUp className="h-4 w-4 text-success" />
-                      Upward
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="downward" id="direction-downward" />
-                    <Label htmlFor="direction-downward" className="font-normal cursor-pointer flex items-center gap-2">
-                      <ArrowDown className="h-4 w-4 text-info" />
-                      Downward
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="lateral" id="direction-lateral" />
-                    <Label htmlFor="direction-lateral" className="font-normal cursor-pointer flex items-center gap-2">
-                      <ArrowRightLeft className="h-4 w-4 text-amber-600" />
-                      Lateral
-                    </Label>
-                  </div>
-                </RadioGroup>
-                )
+            {/* What is being recorded */}
+            <div className="space-y-2.5">
+              <Label className="text-sm font-semibold">Minute type *</Label>
+              {canOfferApproval ? (
+                <SegmentedControl
+                  ariaLabel="Minute type"
+                  value={actionType}
+                  onValueChange={setActionType}
+                  className="sm:max-w-md"
+                  options={[
+                    { value: 'minute', label: 'Add Minute', icon: MessageSquare },
+                    { value: 'approve', label: isMD ? 'Executive Approval' : 'Endorse', icon: Shield },
+                  ]}
+                />
               ) : (
-                <div className="p-3 bg-muted/50 border border-border rounded-lg flex items-center gap-2">
-                  <ArrowDown className="h-4 w-4 text-info" />
-                  <span className="text-sm">Downward only</span>
+                <div className="inline-flex items-center gap-2 rounded-full bg-muted/50 px-3 py-1.5 text-[13px] text-muted-foreground">
+                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                  Add Minute
                 </div>
               )}
-            </div>
-
-            {/* Action Type - Clear Separation */}
-            <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                Action Type *
-              </Label>
-              <RadioGroup value={actionType} onValueChange={(v: 'minute' | 'approve') => setActionType(v)}>
-                <div className="space-y-3">
-                  {/* Minute Option */}
-                  <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
-                    <RadioGroupItem value="minute" id="minute-only" className="mt-1" />
-                    <div className="flex-1 space-y-1">
-                      <Label htmlFor="minute-only" className="font-medium cursor-pointer flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4 text-blue-500" />
-                        Add Minute
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        Add a comment, instruction, or routing note. Optional signature. For workflow communication.
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Approval Options — permission+scope+turn gated */}
-                  {canApprove && (() => {
-                    const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
-                    const isExecutiveTrack = required === 'executive';
-                    if (isExecutiveTrack) {
-                      if (isMD) {
-                        return (
-                          <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
-                            actionType === 'approve' 
-                              ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
-                              : 'border-border hover:bg-muted/50'
-                          }`}>
-                            <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
-                            <div className="flex-1 space-y-1">
-                              <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
-                                <Shield className="h-4 w-4 text-emerald-600" />
-                                Executive Approval
-                                {actionType === 'approve' && !isSignatureLoading && !userSignature && (
-                                  <AlertCircle className="h-3 w-3 text-destructive" />
-                                )}
-                              </Label>
-                              <p className="text-xs text-muted-foreground">
-                                <strong className="text-emerald-600 dark:text-emerald-400">Formal executive approval with digital seal.</strong> Requires signature. 
-                                This will apply a digital executive seal to the document.
-                              </p>
-                              {actionType === 'approve' && isSignatureLoading && !userSignature && (
-                                <p className="text-xs text-muted-foreground mt-1">Checking signature…</p>
-                              )}
-                              {actionType === 'approve' && !isSignatureLoading && !userSignature && (
-                                <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                                  <AlertCircle className="h-3 w-3" />
-                                  Digital signature required for executive approval
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      }
-                      // GM/AGM/ED endorsement on executive track
-                      return (
-                        <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
-                          actionType === 'approve' 
-                            ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20' 
-                            : 'border-border hover:bg-muted/50'
-                        }`}>
-                          <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
-                          <div className="flex-1 space-y-1">
-                            <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
-                              <Shield className="h-4 w-4 text-amber-600" />
-                              Endorse — Reviewed and endorsed
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              Departmental endorsement for executive-track matter; will be forwarded for MD executive approval.
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    }
-                    // Departmental track
-                    return (
-                      <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
-                        actionType === 'approve' 
-                          ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' 
-                          : 'border-border hover:bg-muted/50'
-                      }`}>
-                        <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
-                        <div className="flex-1 space-y-1">
-                          <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-blue-600" />
-                            Departmental Approval
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            Final approval for departmental matter within your authority.
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </RadioGroup>
-            </div>
-          </div>
-
-          {/* Your Minute/Approval Text */}
-          <div>
-            {actionType === 'approve' && (() => {
-              const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
-              if (required === 'executive' && isMD) {
-                return (
-                  <div className="mb-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
-                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                      <strong>Executive Approval:</strong> This will apply a digital executive seal to the document. 
-                      Your signature is required and will be embedded in the seal.
-                    </p>
-                  </div>
-                );
-              }
-              if (required === 'executive' && !isMD) {
-                return (
-                  <div className="mb-3 p-3 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
-                      <strong>Endorsement:</strong> Reviewed and endorsed — forwarded for MD executive approval. Minute text is required.
-                    </p>
-                  </div>
-                );
-              }
-              return (
-                <div className="mb-3 p-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    <strong>Departmental Approval:</strong> Final approval within your departmental authority. Minute text is required.
-                  </p>
-                </div>
-              );
-            })()}
-            <Textarea
-              id="minute"
-              placeholder={
-                actionType === 'approve' 
-                  ? (() => {
-                      const required = (correspondence as unknown as { requiredApprovalLevel?: string }).requiredApprovalLevel ?? 'departmental';
-                      if (required === 'executive' && isMD) return "Enter your executive approval comments (this will be included with the digital seal)...";
-                      if (required === 'executive' && !isMD) return "Enter your endorsement comments — Reviewed and endorsed...";
-                      return "Enter your departmental approval comments...";
-                    })()
-                  : "Enter your comments, instructions, or recommendations..."
-              }
-              value={minuteText}
-              onChange={(e) => handleTextChange(e.target.value)}
-              className={`min-h-[160px] resize-none text-[15px] leading-relaxed ${minuteTextError ? 'border-destructive' : ''} ${
-                actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
-              }`}
-              maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-              aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
-              aria-required="true"
-              aria-invalid={!!minuteTextError}
-              aria-describedby={
-                minuteTextError ? "minute-text-help minute-text-error" : "minute-text-help"
-              }
-            />
-            <div className="flex items-center justify-between mt-1.5 min-h-[20px]">
-              {minuteTextError ? (
-                <p id="minute-text-error" className="text-xs text-destructive" role="alert">
-                  {minuteTextError}
+              {actionType === 'approve' ? (
+                <p className="text-xs text-muted-foreground">
+                  {isMD
+                    ? 'Formal approval with your digital seal. Your signature is required.'
+                    : 'Reviewed and endorsed — this moves on for the MD’s executive approval.'}
+                </p>
+              ) : canOfferApproval ? (
+                <p className="text-xs text-muted-foreground">
+                  {isMD
+                    ? 'Add a minute, or use Executive Approval for a formal sealed decision.'
+                    : 'Add a minute, or endorse (reviewed and endorsed) to pass this on for the MD’s executive approval.'}
                 </p>
               ) : (
-                <span />
+                <p className="text-xs text-muted-foreground">
+                  A note, instruction, or routing remark. No signature required.
+                </p>
               )}
-              <p id="minute-text-help" className="text-xs text-muted-foreground tabular-nums">
-                {minuteText.length}/{MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-              </p>
+              {actionType === 'approve' && !isSignatureLoading && !userSignature && (
+                <p className="flex items-center gap-1.5 text-xs text-destructive" role="alert">
+                  <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                  Add your signature in Settings → Signature before approving.
+                </p>
+              )}
             </div>
-          </div>
 
-          {/* Template Chips — inline, tap to insert */}
-          {filteredMinuteTemplates.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {filteredMinuteTemplates.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium
-                    bg-secondary/60 hover:bg-secondary text-secondary-foreground
-                    transition-colors duration-150 active:scale-95"
-                  onClick={() => {
-                    const text = getTemplatePlainText(template);
-                    if (!text) return;
-                    setMinuteText(prev => {
-                      const trimmed = prev.trim();
-                      if (!trimmed) return text;
-                      return trimmed + '\n\n' + text;
-                    });
-                  }}
-                >
-                  <FileText className="h-3 w-3 opacity-50" />
-                  {template.title}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Save as template — subtle inline action */}
-          {minuteText.trim().length > 0 && (
-            <div className="flex items-center gap-2">
-              <Input
-                value={newTemplateName}
-                onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="Save as template..."
-                className="h-7 text-xs flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSaveMinuteTemplate();
-                  }
-                }}
+            {/* Composer */}
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/40">
+              <div className="flex items-center justify-between gap-3 px-4 pt-3.5">
+                <Label htmlFor="minute" className="text-sm font-semibold">
+                  {actionType === 'approve'
+                    ? isMD
+                      ? 'Approval note'
+                      : 'Endorsement note'
+                    : 'Your minute'}{' '}
+                  *
+                </Label>
+                {hasDraft && (
+                  <Badge
+                    variant="secondary"
+                    className="rounded-full text-[11px] font-normal"
+                    aria-label="Draft loaded"
+                  >
+                    Draft restored
+                  </Badge>
+                )}
+              </div>
+              <Textarea
+                id="minute"
+                placeholder={
+                  actionType === 'approve'
+                    ? isMD
+                      ? 'Record your executive approval comments…'
+                      : 'Record your endorsement comments…'
+                    : 'Enter your comments, instructions, or recommendations…'
+                }
+                value={minuteText}
+                onChange={(e) => handleTextChange(e.target.value)}
+                className={`mt-2 min-h-[150px] resize-none border-0 bg-transparent px-4 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 ${
+                  actionType === 'approve' ? 'focus-visible:bg-emerald-500/[0.04]' : ''
+                }`}
+                maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+                aria-label={actionType === 'approve' ? 'Approval comments' : 'Minute text'}
+                aria-required="true"
+                aria-invalid={!!minuteTextError}
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-muted-foreground"
-                onClick={handleSaveMinuteTemplate}
-                disabled={!newTemplateName.trim()}
-              >
-                <Save className="h-3 w-3 mr-1" />
-                Save
-              </Button>
-            </div>
-          )}
+              <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-1.5">
+                <div className="flex items-center gap-1">
+                  {filteredMinuteTemplates.length > 0 && (
+                    <DropdownMenu
+                      open={templatesMenuOpen}
+                      onOpenChange={(open) => {
+                        setTemplatesMenuOpen(open);
+                        if (!open) setTemplateQuery('');
+                      }}
+                    >
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground"
+                        >
+                          <LayoutTemplate className="h-3.5 w-3.5" aria-hidden="true" />
+                          Templates
+                          <ChevronDown className="h-3 w-3 opacity-60" aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="start"
+                        aria-label="Insert a saved minute"
+                        className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto overscroll-contain"
+                      >
+                        <div className="sticky top-0 z-10 -mx-1 -mt-1 mb-1 border-b border-border/60 bg-popover px-2 py-2">
+                          <div className="relative">
+                            <Search
+                              className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                            <Input
+                              ref={templateSearchRef}
+                              type="search"
+                              value={templateQuery}
+                              onChange={(event) => setTemplateQuery(event.target.value)}
+                              onKeyDown={(event) => {
+                                // Keep menu typeahead and roving focus from
+                                // stealing the keystrokes meant for the field.
+                                event.stopPropagation();
+                                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                                event.preventDefault();
+                                const menu = event.currentTarget.closest('[role="menu"]');
+                                const items = menu
+                                  ? Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                                  : [];
+                                const target =
+                                  event.key === 'ArrowDown' ? items[0] : items[items.length - 1];
+                                target?.focus();
+                              }}
+                              placeholder="Find a template"
+                              aria-label="Find a template"
+                              className="h-8 pl-8 text-[13px]"
+                            />
+                          </div>
+                        </div>
+                        {groupedMinuteTemplates.map((group) => (
+                          <DropdownMenuGroup key={group.scope}>
+                            <DropdownMenuLabel className="px-2 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                              {MINUTE_TEMPLATE_SCOPE_LABELS[group.scope]}
+                            </DropdownMenuLabel>
+                            {group.templates.map((template) => (
+                              <DropdownMenuItem
+                                key={template.id}
+                                onSelect={() => insertMinuteTemplate(template)}
+                                className="items-start gap-2"
+                              >
+                                <FileText
+                                  className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-60"
+                                  aria-hidden="true"
+                                />
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[13px]">{template.title}</span>
+                                  <span className="block truncate text-[11px] text-muted-foreground">
+                                    {getTemplatePlainText(template)}
+                                  </span>
+                                </span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuGroup>
+                        ))}
+                        {groupedMinuteTemplates.length === 0 && (
+                          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                            No templates match “{templateQuery.trim()}”.
+                          </p>
+                        )}
+                        {minuteText.trim().length > 0 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => setSaveTemplateOpen(true)}
+                              className="gap-2 text-[13px]"
+                            >
+                              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                              Save this minute as a template
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {filteredMinuteTemplates.length === 0 && minuteText.trim().length > 0 && !saveTemplateOpen && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground"
+                      onClick={() => setSaveTemplateOpen(true)}
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      Save as template
+                    </Button>
+                  )}
+                </div>
+                <span className="px-1 text-[11px] tabular-nums text-muted-foreground">
+                  {minuteText.length}/{MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+                </span>
+              </div>
 
-          {/* Route To — shared PrimaryRoutePanel for minutes; single RoutingSection for approvals */}
+              {saveTemplateOpen && (
+                <div className="flex flex-col gap-2 border-t border-border/60 bg-muted/20 px-3 py-2.5 sm:flex-row sm:items-center">
+                  <Input
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    placeholder="Name this template"
+                    className="h-8 flex-1 text-xs"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveMinuteTemplate().then(() => setSaveTemplateOpen(false));
+                      }
+                      if (e.key === 'Escape') {
+                        e.stopPropagation();
+                        setSaveTemplateOpen(false);
+                        setNewTemplateName('');
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => {
+                        setSaveTemplateOpen(false);
+                        setNewTemplateName('');
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => handleSaveMinuteTemplate().then(() => setSaveTemplateOpen(false))}
+                      disabled={!newTemplateName.trim()}
+                    >
+                      <Save className="h-3.5 w-3.5" aria-hidden="true" />
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {minuteTextError && (
+                <p
+                  id="minute-text-error"
+                  className="border-t border-border/60 px-4 py-2 text-xs text-destructive"
+                  role="alert"
+                >
+                  {minuteTextError}
+                </p>
+              )}
+            </div>
+
+          {/* Route — an approval minute carries its own destination */}
           {actionType === 'approve' ? (
-            <div className="space-y-2">
-              <p className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
-                This destination is recorded on the approval minute. No separate transmittal is needed afterwards.
-              </p>
+            <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
               <RoutingSection
               routeType={routeType}
               onRouteTypeChange={(v) => {
@@ -1760,7 +1740,10 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                 }
               }}
               forwardTo={forwardTo}
-              onForwardToChange={setForwardTo}
+              onForwardToChange={(v) => {
+                setForwardTo(v);
+                if (v) setTargetOfficeId('');
+              }}
               forwardToError={forwardToError}
               personSearchQuery={personSearchQuery}
               onPersonSearchQueryChange={setPersonSearchQuery}
@@ -1780,6 +1763,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               onOfficeFilterDivisionChange={setOfficeFilterDivision}
               purpose={purpose}
               onPurposeChange={setPurpose}
+              purposeControl="information-toggle"
               offices={officeOptionsForRouting}
               directorates={directorates}
               divisions={divisions}
@@ -1789,6 +1773,9 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               findUserById={findUserById}
               getUserOfficeInfo={getUserOfficeInfoForRouting}
               />
+              <p className="mt-4 rounded-xl bg-emerald-500/[0.07] px-3 py-2 text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-300">
+                This destination is recorded on the approval minute. No separate transmittal is needed.
+              </p>
             </div>
           ) : (
             <PrimaryRoutePanel
@@ -1809,7 +1796,10 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                 }
               }}
               forwardTo={forwardTo}
-              onForwardToChange={setForwardTo}
+              onForwardToChange={(v) => {
+                setForwardTo(v);
+                if (v) setTargetOfficeId('');
+              }}
               forwardToError={forwardToError}
               personSearchQuery={personSearchQuery}
               onPersonSearchQueryChange={setPersonSearchQuery}
@@ -1829,6 +1819,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               onOfficeFilterDivisionChange={setOfficeFilterDivision}
               purpose={purpose}
               onPurposeChange={setPurpose}
+              purposeControl="information-toggle"
               parallelUserIds={parallelUserIds}
               onParallelUserIdsChange={setParallelUserIds}
               parallelOfficeIds={parallelOfficeIds}
@@ -1855,110 +1846,54 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             />
           )}
 
-          {/* Preview */}
-          {minuteText && (routeMode === 'parallel' ? parallelUserIds.length + parallelOfficeIds.length >= 2 : (forwardTo || targetOfficeId)) && (
-            <div className="rounded-xl border border-border/60 bg-muted/30 border-accent/20 p-4">
-<Label className="text-sm font-semibold mb-2 block">Preview</Label>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={(isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection)) === 'downward' ? 'default' : 'secondary'}>
-                      {(isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection)) === 'downward' ? (
-                        <>
-                          <ArrowDown className="h-3 w-3 mr-1" />
-                          Downward
-                        </>
-                      ) : (
-                        <>
-                          <ArrowUp className="h-3 w-3 mr-1" />
-                          Upward
-                        </>
-                      )}
-                    </Badge>
-                    <Badge variant={actionType === 'approve' ? 'default' : 'outline'} className={
-                      actionType === 'approve' ? 'bg-emerald-600 text-white border-emerald-600' : ''
-                    }>
-                      {actionType === 'approve' ? (
-                        <>
-                          <Shield className="h-3 w-3 mr-1" />
-                          Executive Approval
-                        </>
-                      ) : (
-                        'Minute Only'
-                      )}
-                    </Badge>
-                    {actionType === 'approve' && applySignature && userSignature && (
-                      <Badge variant="outline" className="gap-1">
-                        <ImageIcon className="h-3 w-3" />
-                        Digital Seal
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground">
-                    <strong>{currentUser?.name}</strong> will{' '}
-                    {actionType === 'approve' ? (
-                      <>
-                        <strong className="text-emerald-600">approve with digital seal</strong> and route to{' '}
-                      </>
-                    ) : (
-                      'minute and forward to '
-                    )}
-                    <strong>
-                      {forwardTo 
-                        ? findUserById(forwardTo)?.name 
-                        : offices.find(o => o.id === targetOfficeId)?.name + ' (Office Inbox)'}
-                    </strong>
-                  </p>
-                  {actionType === 'approve' && applySignature && userSignature && selectedTemplate && (
-                    <p className="text-xs text-muted-foreground">
-                      Signature template: {selectedTemplate.name}
-                    </p>
-                  )}
-                  {actionType === 'approve' && !userSignature && (
-                    <div className="flex items-center gap-2 text-xs text-destructive">
-                      <AlertCircle className="h-3 w-3" />
-                      Upload your signature in Settings → Signature before approving.
-                    </div>
-                  )}
-                </div>
-</div>
-          )}
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0 border-t pt-3 mt-2">
-          <Button 
-            variant="outline" 
-            onClick={handleSaveDraft}
-            disabled={isSubmitting}
-            className="gap-2"
-            aria-label="Save draft"
-          >
-            <Save className="h-4 w-4" />
-            Save Draft
-          </Button>
-          <div className="flex gap-3">
+        <DialogFooter className="shrink-0 flex-col gap-3 border-t border-border/60 bg-background/70 px-6 py-3.5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSaveDraft}
+              disabled={isSubmitting}
+              className="gap-2 text-muted-foreground"
+              aria-label="Save draft"
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
+              Save Draft
+            </Button>
+            {hasDraft && (
+              <span className="hidden text-[11px] text-muted-foreground sm:inline">Saved on this device</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {!hasRouteDestination && (
+              <span className="text-xs text-muted-foreground sm:max-w-[180px] sm:text-right">
+                Select a destination to send.
+              </span>
+            )}
             <Button variant="outline" onClick={onClose} disabled={isSubmitting} aria-label="Cancel minute">
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
+              disabled={isSubmitting || !hasRouteDestination}
+              className="gap-2 rounded-full px-5"
               aria-label={actionType === 'approve' ? 'Approve and route' : 'Send minute'}
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {actionType === 'approve' ? 'Approving...' : 'Sending...'}
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  {actionType === 'approve' ? 'Approving…' : 'Sending…'}
                 </>
               ) : actionType === 'approve' ? (
                 <>
-                  <CheckCircle className="h-4 w-4" />
+                  <CheckCircle className="h-4 w-4" aria-hidden="true" />
                   Approve & Route
                 </>
               ) : (
                 <>
-                  <Send className="h-4 w-4" />
+                  <Send className="h-4 w-4" aria-hidden="true" />
                   Send Minute
                 </>
               )}
@@ -1981,7 +1916,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               : (offices.find(o => o.id === targetOfficeId)?.name + ' (Office)' || ''),
             actionType,
             content: minuteText,
-            direction: (isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection)) as any,
+            direction: effectiveDirection,
             distribution: distribution.length > 0 ? distribution
               .filter((r) => r.type !== 'user') // Filter out user types for ConfirmationDialog
               .map((recipient) => {

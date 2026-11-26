@@ -6,9 +6,11 @@ import { toast } from "@/components/ui/sonner";
 import { useEffect, useState, Suspense } from "react";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Mail, Briefcase, Layers } from "lucide-react";
+import { FileText, Mail, Briefcase, Layers, Info } from "lucide-react";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { buildSearchHighlightParams } from "@/lib/search-highlight";
+import { describeSearchScope } from "@/lib/search-scope";
+import { useSearchScope } from "@/hooks/use-search-scope";
 
 type SearchContext = "all" | "documents" | "correspondence" | "cases";
 
@@ -16,6 +18,8 @@ function SearchForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [context, setContext] = useState<SearchContext>("all");
+  const searchScope = useSearchScope();
+  const scopeNote = describeSearchScope(searchScope);
 
   useEffect(() => {
     const urlContext = searchParams.get("context");
@@ -43,6 +47,12 @@ function SearchForm() {
         title="Search"
         subtitle="Find the exact document, correspondence, or case you need using filters and full-text search."
       >
+        {scopeNote ? (
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Info aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{scopeNote}</span>
+          </p>
+        ) : null}
         <Tabs value={context} onValueChange={handleContextChange} className="w-full space-y-5">
           <TabsList>
             <TabsTrigger value="all" className="flex items-center gap-2">
@@ -66,6 +76,7 @@ function SearchForm() {
           <TabsContent value={context} className="mt-0">
               <AdvancedSearch
               context={context}
+              scope={searchScope}
               onResultSelect={(result, searchQuery) => {
                 if (!result.id) return;
 

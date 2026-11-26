@@ -7,6 +7,7 @@ import { convertMetafileToDataUrl } from "emf-converter";
 import { readZipTextEntry } from "./docx-zip";
 import { applyWordFormatting } from "./word-format-import";
 import { applyWordTableFormatting } from "./word-table-import";
+import { preserveSpacing } from "./preserve-spacing";
 
 const METAFILE_TYPES = new Set([
   "image/x-emf",
@@ -59,13 +60,18 @@ export async function convertDocxArrayBufferToHtml(arrayBuffer: ArrayBuffer): Pr
   ]);
 
   const html = result.value || "";
-  if (!html || !documentXml) return html;
+  // Mammoth's tab stops are layout, not Word styling, and the editor collapses
+  // them, so they are preserved even when the rest of the .docx XML is unreadable.
+  const withGaps = preserveSpacing(html);
+  if (!withGaps || !documentXml) return withGaps;
 
   try {
     // mammoth keeps structure only; restore the fonts, sizes, colours,
     // spacing, table rules and column widths the user wrote with in Word.
     const formatted = applyWordFormatting(html, { documentXml, stylesXml });
-    return applyWordTableFormatting(formatted, { documentXml, stylesXml });
+    const withTables = applyWordTableFormatting(formatted, { documentXml, stylesXml });
+    // Tab stops and space runs would otherwise collapse to a single space in TipTap.
+    return preserveSpacing(withTables);
   } catch {
     return html;
   }

@@ -113,6 +113,24 @@ export const fetchRelatedItems = async (
   });
 };
 
+export interface SearchScope {
+  /** Widest organisational boundary correspondence and case search may cross. */
+  level: 'all' | 'directorate' | 'division' | 'department' | 'participation';
+  /** Name of the unit the boundary is anchored to, when it has one. */
+  unit: string | null;
+  /** Divisions the filters may offer; null means every division is in scope. */
+  division_ids: string[] | null;
+  /** Departments the filters may offer; null means every department is in scope. */
+  department_ids: string[] | null;
+}
+
+/**
+ * Describe the boundary the server applies to this user's search.
+ */
+export const getSearchScope = async (signal?: AbortSignal): Promise<SearchScope> => {
+  return await apiFetch<SearchScope>('/search/operations/scope/', { signal });
+};
+
 /**
  * Get search suggestions.
  */

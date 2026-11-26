@@ -865,17 +865,8 @@ class Minute(UUIDModel, TimeStampedModel):
             return False  # Once opened, cannot edit
         if self.edit_window_expires_at and timezone.now() > self.edit_window_expires_at:
             return False  # Window expired
-        if self.correspondence_id and self.timestamp:
-            from django.db.models import Q
-
-            has_downstream_minute = type(self).objects.filter(
-                correspondence_id=self.correspondence_id,
-            ).exclude(pk=self.pk).filter(
-                Q(timestamp__gt=self.timestamp)
-                | Q(timestamp=self.timestamp, step_number__gt=self.step_number)
-            ).exists()
-            if has_downstream_minute:
-                return False  # A later minute has already been created
+        if self.has_downstream_minute():
+            return False  # A later active minute has already been created
         return True
 
     @property
@@ -888,32 +879,41 @@ class Minute(UUIDModel, TimeStampedModel):
         """Check if minute has been acknowledged (recipient opened/viewed)."""
         return self.acknowledged_at is not None
 
+    def has_downstream_minute(self) -> bool:
+        """True when an active minute follows this one in the same record."""
+        if not (self.correspondence_id and self.timestamp):
+            return False
+        from django.db.models import Q
+
+        return (
+            type(self)
+            .objects.filter(correspondence_id=self.correspondence_id, is_recalled=False)
+            .exclude(pk=self.pk)
+            .filter(
+                Q(timestamp__gt=self.timestamp)
+                | Q(timestamp=self.timestamp, step_number__gt=self.step_number)
+            )
+            .exists()
+        )
+
     def can_be_recalled(self):
         """
-        Recall window: 1 hour or before the next person acts.
-        - Block if already recalled
-        - Block if acknowledged/dispatched (next office opened it)
-        - Block if 1-hour window expired
-        - Block if downstream non-recalled minute exists (next person acted)
-        MD/superuser bypass is handled in the view.
+        A minute is recallable until the recipient reads it.
+
+        - Block if already recalled: recall is final.
+        - Block once opened/acknowledged: the recipient has seen it, so the
+          trail is no longer undisturbed.
+        - Block once an active minute follows it: the next person has acted.
+
+        Recall is sender-only and carries no privilege override (see the recall
+        view); there is deliberately no time window.
         """
         if self.is_recalled:
             return False
-        if self.acknowledged_at or self.dispatched_at:
+        if self.is_opened or self.acknowledged_at:
             return False
-        if self.edit_window_expires_at and timezone.now() > self.edit_window_expires_at:
+        if self.has_downstream_minute():
             return False
-        # If anyone downstream has acted (non-recalled minute after this one), block regular recall
-        if self.correspondence_id and self.timestamp:
-            pass
-
-            has_downstream = type(self).objects.filter(
-                correspondence_id=self.correspondence_id,
-                timestamp__gt=self.timestamp,
-                is_recalled=False,
-            ).exists()
-            if has_downstream:
-                return False
         return True
 
     def save(self, *args, **kwargs):
@@ -1008,6 +1008,11 @@ class ApprovalSnapshot(UUIDModel, TimeStampedModel):
     pdf_file = models.FileField(upload_to="approval_snapshots/", blank=True)
     pdf_sha256 = models.CharField(max_length=64, blank=True, db_index=True)
     pdf_generated_at = models.DateTimeField(null=True, blank=True)
+    # A withdrawn snapshot is retained as evidence, like an invalidated seal:
+    # voided_at is set, the frozen identity and PDF are never rewritten, and
+    # read paths treat it as no longer standing.
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_reason = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -1017,21 +1022,42 @@ class ApprovalSnapshot(UUIDModel, TimeStampedModel):
     def __str__(self):
         return f"Approval snapshot for minute {self.minute_id}"
 
+    @property
+    def is_void(self) -> bool:
+        return self.voided_at is not None
+
+    def void(self, reason: str):
+        """Withdraw this snapshot without destroying the frozen record."""
+        self.voided_at = timezone.now()
+        self.voided_reason = reason
+        self.save(update_fields=["voided_at", "voided_reason", "updated_at"])
+
     def save(self, *args, **kwargs):
-        """Allow only first creation and the archived PDF attachment afterward."""
-        if not self._state.adding:
-            allowed = {
+        """Allow only first creation, the archived PDF, and a one-way void."""
+        if self._state.adding:
+            return super().save(*args, **kwargs)
+
+        update_fields = kwargs.get("update_fields")
+        fields = set(update_fields or ())
+        if "voided_at" in fields and fields.issubset(
+            {"voided_at", "voided_reason", "updated_at"}
+        ):
+            if type(self).objects.filter(pk=self.pk, voided_at__isnull=False).exists():
+                raise ValidationError(
+                    "This approval snapshot has already been withdrawn."
+                )
+        elif self.voided_at is not None or update_fields is None or not fields.issubset(
+            {
                 "approved_document",
                 "pdf_file",
                 "pdf_sha256",
                 "pdf_generated_at",
                 "updated_at",
             }
-            update_fields = kwargs.get("update_fields")
-            if update_fields is None or not set(update_fields).issubset(allowed):
-                raise ValidationError(
-                    "Approval snapshots are immutable after creation."
-                )
+        ):
+            raise ValidationError(
+                "Approval snapshots are immutable after creation."
+            )
         return super().save(*args, **kwargs)
 
 
@@ -1991,6 +2017,24 @@ class CorrespondenceDraft(UUIDModel, TimeStampedModel):
         default=list,
         blank=True,
         help_text="File metadata for uploaded files",
+    )
+    routing_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Routing choices for treatment drafts (route type, office, "
+            "parallel assignments, purpose)"
+        ),
+    )
+    response_type = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Response type for treatment drafts (memo or existing document)",
+    )
+    selected_document_id = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="Existing DMS document selected for the response draft",
     )
 
     class Meta:
