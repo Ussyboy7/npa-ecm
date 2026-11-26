@@ -29,6 +29,19 @@ type DelegationItem = {
   principal_id?: string;
   delegated_at?: string;
   delegatedAt?: string;
+  expires_at?: string | null;
+  is_active?: boolean;
+};
+
+/**
+ * A delegation only counts while it is active and inside its expiry window.
+ * The stored status can still read "active" after the expiry has passed.
+ */
+const isLiveDelegation = (delegation: DelegationItem): boolean => {
+  if (delegation.status !== 'active' || delegation.is_active === false) return false;
+  if (!delegation.expires_at) return true;
+  const expiresAt = Date.parse(delegation.expires_at);
+  return Number.isNaN(expiresAt) || expiresAt > Date.now();
 };
 
 type DelegationResponse = Array<DelegationItem> | { results: Array<DelegationItem> };
@@ -173,7 +186,7 @@ export function useCorrespondenceDetailData({
           const delegations: DelegationItem[] = Array.isArray(delegationResponse)
             ? delegationResponse
             : delegationResponse?.results || [];
-          const activeDel = delegations.find((d) => d.status === 'active');
+          const activeDel = delegations.find(isLiveDelegation);
           if (activeDel) {
             setBackendDelegation({
               id: activeDel.id,

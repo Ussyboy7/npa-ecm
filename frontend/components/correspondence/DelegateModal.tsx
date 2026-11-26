@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-// AlertDialog removed - using separate Dialog for confirmation to avoid nesting issues
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -278,8 +287,13 @@ export const DelegateModal = ({
   // Calculate expiry date based on duration
   const calculateExpiryDate = (duration: string): string | undefined => {
     if (duration === 'until_completed') return undefined;
-    if (duration === 'custom') return customExpiryDate || undefined;
-    
+    if (duration === 'custom') {
+      if (!customExpiryDate) return undefined;
+      // A date-only expiry means "through the end of that day", so choosing
+      // today does not create a delegation that has already lapsed.
+      return new Date(`${customExpiryDate}T23:59:59`).toISOString();
+    }
+
     const now = new Date();
     switch (duration) {
       case '24h':
@@ -342,22 +356,14 @@ export const DelegateModal = ({
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('unique set') || errorMessage.includes('already')) {
         const assignedUser = users.find(u => u.id === newAssistantId);
-        toast.error(`${assignedUser?.name || 'This user'} is already assigned as your assistant`, {
-          description: 'Refreshing your assistant list...'
+        toast.error(`${assignedUser?.name || 'This user'} is already your assistant`, {
+          description: 'They are in your assistant list — choose them there.'
         });
-        // Refresh to sync the list, then switch back to delegation mode
+        // Refresh so the list shows the existing assignment, then leave assign
+        // mode. No timer: the refreshed list is the source of truth.
         await refreshOrganizationData();
         setIsAssigningMode(false);
         setNewAssistantId('');
-        // Auto-select the newly synced assistant if they appear in the list
-        setTimeout(() => {
-          const syncedAssignment = assistantAssignments.find(
-            a => a.executiveId === executiveId && a.assistantId === newAssistantId
-          );
-          if (syncedAssignment) {
-            setSelectedAssistant(newAssistantId);
-          }
-        }, 500);
       } else {
         toast.error('Failed to assign assistant', {
           description: 'Please try again or contact support'
@@ -379,6 +385,13 @@ export const DelegateModal = ({
     const assignment = availableAssistants.find(a => a.assistantId === selectedAssistant);
     if (!assignment) {
       setSelectedAssistantError('Invalid assistant selection');
+      return false;
+    }
+
+    // Without a date the delegation would never expire, which is not what the
+    // "custom" choice says.
+    if (delegationDuration === 'custom' && !customExpiryDate) {
+      toast.error('Choose an expiry date for this delegation');
       return false;
     }
 
@@ -807,8 +820,7 @@ export const DelegateModal = ({
                       key={idx}
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="h-6 text-xs px-2"
+                      className="h-11 px-3 text-xs"
                       onClick={() => handleTemplateClick(template.text)}
                     >
                       <Sparkles className="h-3 w-3 mr-1" />
@@ -853,7 +865,7 @@ export const DelegateModal = ({
                   </li>
                   <li className="flex items-center gap-2">
                     <Clock className="h-3 w-3 flex-shrink-0" />
-                    <span>Delegation remains active until you recall it or correspondence is completed</span>
+                    <span>Delegation ends when its expiry passes, you recall it, or the correspondence is completed</span>
                   </li>
                 </ul>
               </div>
@@ -889,69 +901,66 @@ export const DelegateModal = ({
         </DialogFooter>
       </DialogContent>
 
-      {/* Confirmation Dialog - Using separate Dialog to avoid nesting issues */}
-      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent size="xl" height="fill">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserCheck className="h-5 w-5 text-primary" />
-              Confirm Delegation
-            </DialogTitle>
-            <DialogDescription>
-              You are about to delegate this correspondence
-            </DialogDescription>
-          </DialogHeader>
+      {/* Confirmation — a small alert, not a second form modal. */}
+      <AlertDialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delegate to {selectedAssistantData?.userName ?? 'this assistant'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              They will act on your behalf within the permissions shown above.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
 
-<ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
-            <div className="space-y-3 py-4 p-1 pr-0">
-            <div className="p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <User className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">{selectedAssistantData?.userName}</p>
-                  <Badge variant={selectedAssistantData?.type === 'PA' ? 'default' : 'secondary'} className="text-xs">
-                    {selectedAssistantData?.type === 'PA' ? 'Personal Assistant' : 'Technical Assistant'}
+          <div className="space-y-3">
+            <dl className="divide-y divide-border/60 rounded-xl border border-border/60 text-[13px]">
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <dt className="text-muted-foreground">Assistant</dt>
+                <dd className="flex min-w-0 items-center gap-2">
+                  <Badge
+                    variant={selectedAssistantData?.type === 'PA' ? 'default' : 'secondary'}
+                    className="text-[10px]"
+                  >
+                    {selectedAssistantData?.type ?? 'PA'}
                   </Badge>
-                </div>
+                  <span className="truncate font-medium">
+                    {selectedAssistantData?.type === 'PA' ? 'Personal Assistant' : 'Technical Assistant'}
+                  </span>
+                </dd>
               </div>
-            </div>
-            
-              {delegationNotes && (
-              <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Instructions:</p>
-                <p className="text-sm text-foreground">{delegationNotes}</p>
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <dt className="text-muted-foreground">Ends</dt>
+                <dd className="font-medium">{getDurationDisplayText()}</dd>
               </div>
-              )}
+            </dl>
 
-            {/* Duration info */}
-            <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
-              <Timer className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">
-                <span className="text-muted-foreground">Duration: </span>
-                <span className="font-medium text-foreground">{getDurationDisplayText()}</span>
-              </span>
-            </div>
+            {delegationNotes && (
+              <div className="rounded-xl border border-border/60 px-3 py-2.5">
+                <p className="text-[11px] font-medium text-muted-foreground">Instructions</p>
+                <p className="mt-1 max-h-28 overflow-y-auto whitespace-pre-wrap text-[13px] leading-relaxed">
+                  {delegationNotes}
+                </p>
+              </div>
+            )}
 
-            <p className="text-xs text-muted-foreground">
-              The assistant will be notified and can act on your behalf based on their permissions.
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {selectedAssistantData?.userName ?? 'The assistant'} is notified when you delegate and can
+              only use the permissions shown above. The delegation ends when its expiry passes, you
+              recall it, or the correspondence is completed.
             </p>
           </div>
-          </ScrollArea>
 
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowConfirmation(false)}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
               disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirm}
-              disabled={isSubmitting}
-              className="bg-primary hover:opacity-90"
+              onClick={(event) => {
+                // Keep the alert open while the request runs; handleConfirm
+                // closes it on success or failure.
+                event.preventDefault();
+                void handleConfirm();
+              }}
             >
               {isSubmitting ? (
                 <>
@@ -961,13 +970,13 @@ export const DelegateModal = ({
               ) : (
                 <>
                   <UserCheck className="h-4 w-4 mr-2" />
-                  Confirm Delegation
+                  Confirm delegation
                 </>
               )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };

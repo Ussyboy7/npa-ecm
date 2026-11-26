@@ -68,6 +68,7 @@ const CorrespondenceDetailContent = () => {
   const {
     offices,
     officeMemberships,
+    assistantAssignments,
     refreshOrganizationData,
   } = useOrganizationCatalogs('offices');
 
@@ -506,6 +507,47 @@ const CorrespondenceDetailContent = () => {
 
   // Use backend delegation (loaded from API)
   const activeDelegation = backendDelegation;
+
+  // What the assistant assignment behind this delegation actually grants. The
+  // server enforces it; reading it here keeps the actions honest instead of
+  // offering a button that can only come back 403.
+  const actingUnderDelegation = Boolean(
+    activeDelegation && activeUser &&
+      String(activeDelegation.assistantId) === String(activeUser.id),
+  );
+  const delegationAssignment = actingUnderDelegation && activeDelegation
+    ? assistantAssignments.find(
+        (assignment) =>
+          String(assignment.assistantId) === String(activeUser?.id) &&
+          String(assignment.executiveId) === String(activeDelegation.principalId),
+      )
+    : undefined;
+  const delegationPermissions = delegationAssignment?.permissions;
+  const delegationAllows = (grant: string) =>
+    !actingUnderDelegation ||
+    !delegationPermissions ||
+    delegationPermissions.includes(grant);
+
+  const handleRecallDelegation = async () => {
+    if (!activeDelegation) return;
+    try {
+      await apiFetch(
+        `/correspondence/correspondence-delegations/${activeDelegation.id}/revoke/`,
+        { method: 'POST' },
+      );
+      toast.success('Delegation recalled', {
+        description: 'The assistant no longer has access to this correspondence.',
+      });
+      await refreshDetail();
+      await refreshOrganizationData();
+      bumpSidebarCounts();
+    } catch (error: unknown) {
+      logError('Failed to recall delegation', error);
+      toast.error('Could not recall the delegation', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    }
+  };
   
   // User can act if they are the current approver OR if they are the active delegatee
   // For delegatees: they can only act if the correspondence is STILL with the principal
@@ -560,11 +602,17 @@ const CorrespondenceDetailContent = () => {
           : 'Endorse & Forward';
   const mobileShowTreat = isForInformationOnly && !isCCRecipient
     ? false
-    : isAuditCase
-      ? caseAuditState !== 'CLOSED'
-      : isCCRecipient
-        ? distributionPurpose === 'action'
-        : true;
+    : !delegationAllows('respond')
+      ? false
+      : isAuditCase
+        ? caseAuditState !== 'CLOSED'
+        : isCCRecipient
+          ? distributionPurpose === 'action'
+          : true;
+  // The minute modal also forwards, so either grant opens the primary action;
+  // the server decides which action is actually recorded.
+  const mobilePrimaryDisabled =
+    !delegationAllows('minute') && !delegationAllows('forward');
   const mobileTreatLabel = isAuditCase ? 'Respond' : 'Treat & Respond';
   const mobileCanComplete = Boolean(
     !isCompleted &&
@@ -572,6 +620,7 @@ const CorrespondenceDetailContent = () => {
     !isForInformationOnly &&
     isCurrentUserTurn &&
     hasRolePermission(activeUser, 'can_minute_correspondence') &&
+    delegationAllows('minute') &&
     allMinutesAcknowledged
   );
   const mobileCanCompleteNoResponse = Boolean(
@@ -580,6 +629,7 @@ const CorrespondenceDetailContent = () => {
     !isForInformationOnly &&
     isCurrentUserTurn &&
     hasRolePermission(activeUser, 'can_minute_correspondence') &&
+    delegationAllows('minute') &&
     nonRecalledMinutes.length > 0 &&
     allRoutedMinutesAcknowledged
   );
@@ -717,6 +767,8 @@ const CorrespondenceDetailContent = () => {
       setShowNoResponseConfirm(true);
     },
     onOpenDelegateModal: () => openModal('delegate'),
+    onRecallDelegation: handleRecallDelegation,
+    delegationPermissions,
     onDownloadCompletionPackage: handleCompletionPackageDownload,
     onSyncFromApi: syncFromApi,
     onMinuteClick: handleMinuteClick,
@@ -1036,6 +1088,7 @@ const CorrespondenceDetailContent = () => {
           isForInformationOnly={isForInformationOnly}
           distributionPurpose={distributionPurpose}
           primaryLabel={mobilePrimaryLabel}
+          primaryDisabled={mobilePrimaryDisabled}
           showTreat={mobileShowTreat}
           treatLabel={mobileTreatLabel}
           canComplete={mobileCanComplete}

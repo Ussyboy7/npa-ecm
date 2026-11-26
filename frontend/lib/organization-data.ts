@@ -107,11 +107,20 @@ const mapApiDepartment = (item: Record<string, unknown>): Department => ({
   isActive: asBoolean(item.is_active, true),
 });
 
+/**
+ * API assignment → UI assignment.
+ *
+ * The kind and its permissions come from their own fields. They used to be
+ * inferred from `can_approve`, so every reload rewrote what was saved: a TA
+ * came back holding approve, and a PA came back without respond.
+ */
 const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment => {
   const permissions: string[] = [];
-  if (item.can_minute) permissions.push('minute');
-  if (item.can_forward) permissions.push('forward');
-  if (item.can_approve) permissions.push('approve');
+  if (asBoolean(item.can_view, true)) permissions.push('view');
+  if (asBoolean(item.can_forward, true)) permissions.push('forward');
+  if (asBoolean(item.can_respond, false)) permissions.push('respond');
+  if (asBoolean(item.can_minute, true)) permissions.push('minute');
+  if (asBoolean(item.can_approve, false)) permissions.push('approve');
 
   const principal = isRecord(item.principal) ? item.principal : undefined;
   const assistant = isRecord(item.assistant) ? item.assistant : undefined;
@@ -120,10 +129,36 @@ const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment =>
     id: asString(item.id),
     executiveId: asString(item.principal_id ?? (principal ? principal.id : undefined)),
     assistantId: asString(item.assistant_id ?? (assistant ? assistant.id : undefined)),
-    type: item.can_approve ? 'TA' : 'PA',
+    type: item.assistant_type === 'TA' ? 'TA' : 'PA',
     specialization: undefined,
-    permissions: permissions.length > 0 ? permissions : ['view'],
+    permissions,
   };
+};
+
+/**
+ * UI assignment → API payload. The kind travels as its own field; permissions
+ * are sent one flag at a time, so a TA never inherits approve from being a TA.
+ */
+const buildDelegationPayload = (
+  assignment: Omit<AssistantAssignment, 'id'> | Partial<AssistantAssignment>,
+) => {
+  const permissions =
+    'permissions' in assignment && Array.isArray(assignment.permissions)
+      ? assignment.permissions
+      : undefined;
+  const type = 'type' in assignment ? assignment.type : undefined;
+
+  return cleanPayload({
+    principal_id: 'executiveId' in assignment ? assignment.executiveId : undefined,
+    assistant_id: 'assistantId' in assignment ? assignment.assistantId : undefined,
+    assistant_type: type,
+    can_view: permissions ? permissions.includes('view') : undefined,
+    can_forward: permissions ? permissions.includes('forward') : undefined,
+    can_respond: permissions ? permissions.includes('respond') : undefined,
+    can_minute: permissions ? permissions.includes('minute') : undefined,
+    can_approve: permissions ? permissions.includes('approve') : undefined,
+    active: permissions ? true : undefined,
+  });
 };
 
 const mapApiRole = (item: Record<string, unknown>): Role => ({
@@ -262,6 +297,7 @@ export {
   mapApiDivision,
   mapApiDepartment,
   mapApiDelegation,
+  buildDelegationPayload,
   mapApiRole,
   mapApiOffice,
   cleanPayload,

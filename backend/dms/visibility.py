@@ -13,9 +13,11 @@ Rules:
   secretariat) — a record addressed to an office is the office's, not every
   member's. See `organization.office_access`.
 - A document carried by correspondence is openable by the seat of every office
-  the record was addressed to or passed through, and by a person a minute named
-  directly. Nothing is written per user: the office's copy follows the seat, so
-  delivering a document to an office is custody, not a share.
+  the record was addressed to or passed through, by a person a minute named
+  directly, and by an assistant whose live delegation of that record grants
+  them the view right. Nothing is written per user: the office's copy follows
+  the seat, so delivering a document to an office is custody, not a share, and
+  a delegation reaches only the documents the record itself carries.
 - Public documents are visible to every authenticated user once published.
 
 The classification gate is one rule for both channels. A grant or a delivery
@@ -126,7 +128,7 @@ def correspondence_custody_q(user) -> Q:
     before it can sort and slice. As a semi-join subquery the outer query keeps
     one row per document, and the plan scales with the record trail instead.
     """
-    from correspondence.models import CorrespondenceDocumentLink
+    from correspondence.models import CorrespondenceDelegation, CorrespondenceDocumentLink
 
     trail = Q(correspondence__minutes__to_user=user)
     # The seat ids are resolved once and compared with `__in`; joining the
@@ -137,6 +139,16 @@ def correspondence_custody_q(user) -> Q:
         trail |= Q(correspondence__owning_office_id__in=office_ids)
         trail |= Q(correspondence__current_office_id__in=office_ids)
         trail |= Q(correspondence__minutes__to_office_id__in=office_ids)
+
+    # A delegate holds the record, so the documents it carries come with it.
+    # Only a live delegation that grants the view right counts, and this adds
+    # nothing beyond the record's own links.
+    delegated_correspondence_ids = (
+        CorrespondenceDelegation.objects.filter(assistant=user)
+        .filter(CorrespondenceDelegation.granting_q("view"))
+        .values_list("correspondence_id", flat=True)
+    )
+    trail |= Q(correspondence_id__in=delegated_correspondence_ids)
 
     carried_documents = (
         CorrespondenceDocumentLink.objects.filter(trail)

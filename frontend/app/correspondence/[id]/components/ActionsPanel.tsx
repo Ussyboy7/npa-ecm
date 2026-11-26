@@ -62,6 +62,9 @@ interface ActionsPanelProps {
   hasCompletionPackage?: boolean;
   completionGeneratedAt?: string | null;
   activeDelegation?: Record<string, unknown> | null;
+  /** Grants carried by the assistant assignment behind the active delegation. */
+  delegationPermissions?: string[];
+  onRecallDelegation?: () => Promise<void>;
   officeMemberships?: OfficeMembership[];
   onOpenMinuteModal?: () => void;
   onOpenTreatmentModal?: () => void;
@@ -91,6 +94,8 @@ export function ActionsPanel({
   hasCompletionPackage,
   completionGeneratedAt,
   activeDelegation,
+  delegationPermissions,
+  onRecallDelegation,
   officeMemberships: _officeMemberships = [],
   onOpenMinuteModal,
   onOpenTreatmentModal,
@@ -147,6 +152,8 @@ export function ActionsPanel({
   const [unarchiveOpen, setUnarchiveOpen] = useState(false);
   const [unarchiveReason, setUnarchiveReason] = useState("");
   const [isUnarchiving, setIsUnarchiving] = useState(false);
+  const [recallOpen, setRecallOpen] = useState(false);
+  const [isRecalling, setIsRecalling] = useState(false);
 
   // Filing authority is per level; the general archive permission alone is not
   // enough, and the server also checks the memo against the user's org scope.
@@ -288,6 +295,17 @@ export function ActionsPanel({
     }
   }, [distributionEntryId, _onSyncFromApi]);
 
+  const handleRecallDelegation = useCallback(async () => {
+    if (!onRecallDelegation) return;
+    setIsRecalling(true);
+    try {
+      await onRecallDelegation();
+      setRecallOpen(false);
+    } finally {
+      setIsRecalling(false);
+    }
+  }, [onRecallDelegation]);
+
   if (!correspondence) {
     return (
       <div className="rounded-xl border border-border/60 p-4">
@@ -320,6 +338,25 @@ export function ActionsPanel({
   const isCCRecipient = isCCInfo || isCCAction;
   const isRoutedUser = !isCCRecipient;
 
+  // An assistant may only use the grants their assignment carries. The server
+  // enforces the same rule; disabling here avoids a request that can only fail.
+  const actingUnderDelegation =
+    Boolean(activeDelegation) &&
+    String(activeUser?.id ?? "") === String(activeDelegation?.assistantId ?? "");
+  const delegationAllows = (grant: string) =>
+    !actingUnderDelegation ||
+    !delegationPermissions ||
+    delegationPermissions.includes(grant);
+  // The minute modal also forwards, so either grant opens it; the server decides
+  // which action is actually recorded.
+  const mayRoute = delegationAllows("minute") || delegationAllows("forward");
+  const mayRespond = delegationAllows("respond");
+  const minuteDisabled = turnRestrictedDisabled || !mayRoute;
+  const respondDisabled = turnRestrictedDisabled || !mayRespond;
+  const isDelegationPrincipal =
+    Boolean(activeDelegation) &&
+    String(activeUser?.id ?? "") === String(activeDelegation?.principalId ?? "");
+
   // Audit Case: hard product rule — Case owns work, not Minute/Forward. Hide Forward/Circulate for audit.
   let mainActions: React.ReactNode = null;
 
@@ -336,7 +373,7 @@ export function ActionsPanel({
               className={primaryButtonClass}
               variant="secondary"
               onClick={onOpenTreatmentModal}
-              disabled={turnRestrictedDisabled}
+              disabled={respondDisabled}
             >
               <ArrowRight className="h-4 w-4 mr-2" />
               Audit Review
@@ -352,7 +389,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="outline"
             onClick={onOpenMinuteModal}
-            disabled={turnRestrictedDisabled}
+            disabled={minuteDisabled}
           >
             <MessageSquare className="h-4 w-4 mr-2" />
             Minute
@@ -361,7 +398,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="secondary"
             onClick={onOpenTreatmentModal}
-            disabled={turnRestrictedDisabled}
+            disabled={respondDisabled}
           >
             <ArrowRight className="h-4 w-4 mr-2" />
             Respond
@@ -379,7 +416,7 @@ export function ActionsPanel({
           className={primaryButtonClass}
           variant="outline"
           onClick={onOpenMinuteModal}
-          disabled={turnRestrictedDisabled}
+          disabled={minuteDisabled}
         >
           <Share2 className="h-4 w-4 mr-2" />
           Minute / Route
@@ -403,7 +440,7 @@ export function ActionsPanel({
           className={primaryButtonClass}
           variant="outline"
           onClick={onOpenMinuteModal}
-          disabled={turnRestrictedDisabled}
+          disabled={minuteDisabled}
         >
           <Share2 className="h-4 w-4 mr-2" />
           Minute / Route
@@ -412,7 +449,7 @@ export function ActionsPanel({
           className={primaryButtonClass}
           variant="secondary"
           onClick={onOpenTreatmentModal}
-          disabled={turnRestrictedDisabled}
+          disabled={respondDisabled}
         >
           <ArrowRight className="h-4 w-4 mr-2" />
           Treat & Respond
@@ -436,7 +473,7 @@ export function ActionsPanel({
           className={primaryButtonClass}
           variant="secondary"
           onClick={onOpenTreatmentModal}
-          disabled={turnRestrictedDisabled}
+          disabled={respondDisabled}
         >
           <ArrowRight className="h-4 w-4 mr-2" />
           Treat & Respond
@@ -449,7 +486,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="outline"
             onClick={onOpenMinuteModal}
-            disabled={turnRestrictedDisabled}
+            disabled={minuteDisabled}
           >
             <CheckCircle className="h-4 w-4 mr-2" />
             Minute & Approve
@@ -458,7 +495,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="secondary"
             onClick={onOpenTreatmentModal}
-            disabled={turnRestrictedDisabled}
+            disabled={respondDisabled}
           >
             <ArrowRight className="h-4 w-4 mr-2" />
             Treat & Respond
@@ -483,7 +520,7 @@ export function ActionsPanel({
           className={primaryButtonClass}
           variant="secondary"
           onClick={onOpenTreatmentModal}
-          disabled={turnRestrictedDisabled}
+          disabled={respondDisabled}
         >
           <ArrowRight className="h-4 w-4 mr-2" />
           Treat & Respond
@@ -496,7 +533,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="outline"
             onClick={onOpenMinuteModal}
-            disabled={turnRestrictedDisabled}
+            disabled={minuteDisabled}
           >
             <MessageSquare className="h-4 w-4 mr-2" />
             Minute & Route
@@ -505,7 +542,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="secondary"
             onClick={onOpenTreatmentModal}
-            disabled={turnRestrictedDisabled}
+            disabled={respondDisabled}
           >
             <ArrowRight className="h-4 w-4 mr-2" />
             Treat & Respond
@@ -530,7 +567,7 @@ export function ActionsPanel({
           className={primaryButtonClass}
           variant="secondary"
           onClick={onOpenTreatmentModal}
-          disabled={turnRestrictedDisabled}
+          disabled={respondDisabled}
         >
           <ArrowRight className="h-4 w-4 mr-2" />
           Treat & Respond
@@ -543,7 +580,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="outline"
             onClick={onOpenMinuteModal}
-            disabled={turnRestrictedDisabled}
+            disabled={minuteDisabled}
           >
             <ArrowUp className="h-4 w-4 mr-2" />
             Endorse & Forward
@@ -552,7 +589,7 @@ export function ActionsPanel({
             className={primaryButtonClass}
             variant="secondary"
             onClick={onOpenTreatmentModal}
-            disabled={turnRestrictedDisabled}
+            disabled={respondDisabled}
           >
             <ArrowRight className="h-4 w-4 mr-2" />
             Treat & Respond
@@ -565,7 +602,8 @@ export function ActionsPanel({
   const canComplete =
     isRoutedUser &&
     !isForInformationOnly &&
-    hasRolePermission(activeUser, "can_minute_correspondence");
+    hasRolePermission(activeUser, "can_minute_correspondence") &&
+    delegationAllows("minute");
   const showComplete = canComplete && allMinutesAcknowledged;
   const showNoResponseComplete =
     canComplete && nonRecalledMinutes.length > 0 && allRoutedMinutesAcknowledged;
@@ -605,7 +643,54 @@ export function ActionsPanel({
             {String(activeDelegation.principalName ?? "") || "Principal"}
           </>
         )}
+        {!isDelegationPrincipal && delegationPermissions && delegationPermissions.length > 0 && (
+          <span className="mt-0.5 block">
+            Can {delegationPermissions.join(", ")}
+          </span>
+        )}
       </p>
+      {isDelegationPrincipal && onRecallDelegation && (
+        <>
+          <Button
+            variant="ghost"
+            className="mt-1.5 h-8 px-2 text-[11px] font-medium text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+            onClick={() => setRecallOpen(true)}
+            disabled={isRecalling}
+          >
+            <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+            {isRecalling ? "Recalling…" : "Recall delegation"}
+          </Button>
+          <AlertDialog
+            open={recallOpen}
+            onOpenChange={(open) => !isRecalling && setRecallOpen(open)}
+          >
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Recall this delegation?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {
+                    String(activeDelegation.assistantName ?? "") || "The assistant"
+                  }{" "}
+                  loses access to this correspondence immediately. The record stays with you.
+                  You can delegate it again later.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isRecalling}>Keep delegation</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isRecalling}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void handleRecallDelegation();
+                  }}
+                >
+                  {isRecalling ? "Recalling…" : "Recall delegation"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
+      )}
     </div>
   ) : null;
 

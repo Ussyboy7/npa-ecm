@@ -23,6 +23,8 @@ interface MobileStickyActionBarProps {
   distributionPurpose?: 'action' | 'information' | null;
   /** Primary routing label, matching the desktop action panel. */
   primaryLabel: string;
+  /** Matches desktop: a delegate may only route with the minute/forward grants. */
+  primaryDisabled?: boolean;
   /** Whether the desktop panel offers a treatment/response action. */
   showTreat: boolean;
   treatLabel: string;
@@ -45,6 +47,7 @@ export function MobileStickyActionBar({
   isForInformationOnly,
   distributionPurpose,
   primaryLabel,
+  primaryDisabled = false,
   showTreat,
   treatLabel,
   canComplete,
@@ -75,7 +78,12 @@ export function MobileStickyActionBar({
           </div>
         ) : isCCInfo ? (
           <>
-            <Button className="flex-1 h-10 rounded-xl text-[13px] font-medium" size="sm" onClick={onMinute}>
+            <Button
+              className="flex-1 h-10 rounded-xl text-[13px] font-medium"
+              size="sm"
+              onClick={onMinute}
+              disabled={primaryDisabled}
+            >
               <MessageSquare className="h-4 w-4 mr-1.5" />
               {primaryLabel}
             </Button>
@@ -92,7 +100,12 @@ export function MobileStickyActionBar({
           </>
         ) : isCCAction ? (
           <>
-            <Button className="flex-1 h-10 rounded-xl text-[13px] font-medium" size="sm" onClick={onMinute}>
+            <Button
+              className="flex-1 h-10 rounded-xl text-[13px] font-medium"
+              size="sm"
+              onClick={onMinute}
+              disabled={primaryDisabled}
+            >
               <MessageSquare className="h-4 w-4 mr-1.5" />
               {primaryLabel}
             </Button>
@@ -105,7 +118,12 @@ export function MobileStickyActionBar({
           </>
         ) : (
           <>
-            <Button className="flex-1 h-10 rounded-xl text-[13px] font-medium" size="sm" onClick={onMinute}>
+            <Button
+              className="flex-1 h-10 rounded-xl text-[13px] font-medium"
+              size="sm"
+              onClick={onMinute}
+              disabled={primaryDisabled}
+            >
               <MessageSquare className="h-4 w-4 mr-1.5" />
               {primaryLabel}
             </Button>

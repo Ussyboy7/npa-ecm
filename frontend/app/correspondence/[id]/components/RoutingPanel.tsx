@@ -53,6 +53,8 @@ interface RoutingPanelProps {
   linkedDocuments: DocumentRecord[];
   onOpenLinkDocument: () => void;
   activeDelegation: Record<string, unknown> | null;
+  delegationPermissions?: string[];
+  onRecallDelegation?: () => Promise<void>;
   officeMemberships: OfficeMembership[];
   getActionIcon: (actionType: string) => React.ComponentType<{ className?: string }> | null;
   onOpenLinkCaseModal: () => void;
@@ -88,6 +90,8 @@ export function RoutingPanel({
   linkedDocuments,
   onOpenLinkDocument,
   activeDelegation,
+  delegationPermissions,
+  onRecallDelegation,
   officeMemberships,
   getActionIcon,
   onOpenLinkCaseModal,
@@ -363,6 +367,8 @@ export function RoutingPanel({
               hasCompletionPackage={hasCompletionPackage}
               completionGeneratedAt={completionGeneratedAt}
               activeDelegation={activeDelegation}
+              delegationPermissions={delegationPermissions}
+              onRecallDelegation={onRecallDelegation}
               officeMemberships={officeMemberships}
               onOpenMinuteModal={onOpenMinuteModal}
               onOpenTreatmentModal={onOpenTreatmentModal}

@@ -1267,6 +1267,9 @@ class DelegationSerializer(serializers.ModelSerializer):
             "principal_id",
             "assistant",
             "assistant_id",
+            "assistant_type",
+            "can_view",
+            "can_respond",
             "can_approve",
             "can_minute",
             "can_forward",
@@ -1312,6 +1315,7 @@ class CorrespondenceDelegationSerializer(serializers.ModelSerializer):
             "principal_id",
             "assistant",
             "assistant_id",
+            "assistant_type",
             "delegation",
             "notes",
             "status",
@@ -1325,7 +1329,7 @@ class CorrespondenceDelegationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id", "correspondence", "principal", "assistant",
-            "delegated_at", "completed_at", "revoked_at",
+            "assistant_type", "delegated_at", "completed_at", "revoked_at",
             "created_at", "updated_at", "is_active",
         ]
         # Disable automatic unique constraint validation - we handle this in the viewset

@@ -21,7 +21,7 @@ import type {
 import {
   mapApiUserToUser, mapApiDirectorate, mapApiDivision,
   mapApiDepartment, mapApiOffice, mapApiOfficeMembership,
-  mapApiRole, mapApiDelegation,
+  mapApiRole, mapApiDelegation, buildDelegationPayload,
   cleanPayload, sortByName, upsertById,
 } from '@/lib/organization-data';
 
@@ -654,24 +654,6 @@ export const OrganizationProvider: React.FC<{
     });
     setOfficeMemberships((prev) => prev.filter((m) => m.id !== id));
   }, []);
-
-  const buildDelegationPayload = (assignment: Omit<AssistantAssignment, 'id'> | Partial<AssistantAssignment>) => {
-    const permissions = ('permissions' in assignment && assignment.permissions) ? assignment.permissions : [];
-    const type = 'type' in assignment ? assignment.type : undefined;
-
-    const canApprove = type === 'TA' || (Array.isArray(permissions) && permissions.includes('approve'));
-    const canMinute = Array.isArray(permissions) && (permissions.includes('minute') || permissions.includes('view'));
-    const canForward = Array.isArray(permissions) && (permissions.includes('forward') || permissions.includes('view'));
-
-    return cleanPayload({
-      principal_id: 'executiveId' in assignment ? assignment.executiveId : undefined,
-      assistant_id: 'assistantId' in assignment ? assignment.assistantId : undefined,
-      can_approve: canApprove,
-      can_minute: canMinute,
-      can_forward: canForward,
-      active: 'permissions' in assignment ? true : undefined,
-    });
-  };
 
   const addAssignment = useCallback(async (assignment: Omit<AssistantAssignment, 'id'>) => {
     const payload = buildDelegationPayload(assignment);

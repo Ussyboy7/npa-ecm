@@ -1164,7 +1164,12 @@ class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
 
 
 class Delegation(UUIDModel, TimeStampedModel):
-    """Delegation assignments allowing assistants to act for principals."""
+    """Delegation assignments allowing assistants to act for principals.
+
+    The assistant kind and its permissions are stored explicitly. They used to
+    be inferred from ``can_approve``, which made every assignment reopen as a
+    different kind of assistant than the one that was saved.
+    """
 
     principal = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -1176,6 +1181,14 @@ class Delegation(UUIDModel, TimeStampedModel):
         related_name="delegations_received",
         on_delete=models.CASCADE,
     )
+    assistant_type = models.CharField(
+        max_length=5,
+        choices=Minute.AssistantType.choices,
+        default=Minute.AssistantType.PA,
+        help_text="Whether this assistant is a Technical or Personal Assistant.",
+    )
+    can_view = models.BooleanField(default=True)
+    can_respond = models.BooleanField(default=False)
     can_approve = models.BooleanField(default=False)
     can_minute = models.BooleanField(default=True)
     can_forward = models.BooleanField(default=True)
@@ -1191,6 +1204,11 @@ class CorrespondenceDelegation(UUIDModel, TimeStampedModel):
     """
     Per-correspondence delegation record.
     Tracks when a specific correspondence is delegated from an executive to their assistant.
+
+    The per-record row says *who* holds the record; the linked :class:`Delegation`
+    assignment says *what they may do with it*. Both gates apply: the row must be
+    live (active, unexpired) and the assignment must grant the action. Rows with
+    no linked assignment predate that rule and are left unconstrained.
     """
     
     class Status(models.TextChoices):
@@ -1223,6 +1241,12 @@ class CorrespondenceDelegation(UUIDModel, TimeStampedModel):
         null=True,
         blank=True,
         help_text="Reference to the general delegation assignment",
+    )
+    assistant_type = models.CharField(
+        max_length=5,
+        choices=Minute.AssistantType.choices,
+        default=Minute.AssistantType.PA,
+        help_text="Snapshot of the assistant kind for the audit trail.",
     )
     notes = models.TextField(blank=True, help_text="Instructions from the executive")
     status = models.CharField(
@@ -1258,21 +1282,75 @@ class CorrespondenceDelegation(UUIDModel, TimeStampedModel):
     
     def complete(self):
         """Mark delegation as completed (usually when correspondence is completed)."""
-        from django.utils import timezone
         self.status = self.Status.COMPLETED
         self.completed_at = timezone.now()
         self.save(update_fields=["status", "completed_at"])
     
-    def is_active(self):
-        """Check if delegation is still active."""
-        from django.utils import timezone
+    @classmethod
+    def live_q(cls, now=None) -> models.Q:
+        """Rows whose delegation is active and has not passed its expiry.
+
+        Expiry is a time comparison, not a stored flag, so every query that
+        grants authority must apply this instead of filtering on status alone.
+        """
+        now = now or timezone.now()
+        return models.Q(status=cls.Status.ACTIVE) & (
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+        )
+
+    @classmethod
+    def granting_q(cls, permission: str) -> models.Q:
+        """Live rows whose assignment grants ``permission``.
+
+        ``permission`` is one of ``view``, ``forward``, ``respond``, ``minute``
+        or ``approve``. A row with no linked assignment grants the permission,
+        because those rows predate assignments carrying explicit grants.
+        """
+        today = timezone.localdate()
+        assignment = models.Q(delegation__isnull=True) | models.Q(
+            **{
+                f"delegation__can_{permission}": True,
+                "delegation__active": True,
+            }
+        )
+        assignment &= models.Q(delegation__starts_at__isnull=True) | models.Q(
+            delegation__starts_at__lte=today
+        )
+        assignment &= models.Q(delegation__ends_at__isnull=True) | models.Q(
+            delegation__ends_at__gte=today
+        )
+        return cls.live_q() & assignment
+
+    def allows(self, permission: str) -> bool:
+        """True when this row's assignment grants ``permission`` right now.
+
+        Delegates to :meth:`granting_q` so a check on a loaded row and a
+        queryset filter cannot disagree.
+        """
+        if self.pk is None:
+            return False
+        return type(self).objects.filter(self.granting_q(permission), pk=self.pk).exists()
+
+    def is_live(self, now=None) -> bool:
+        """Pure check: active and not past its expiry."""
         if self.status != self.Status.ACTIVE:
             return False
-        if self.expires_at and timezone.now() > self.expires_at:
+        now = now or timezone.now()
+        return self.expires_at is None or self.expires_at > now
+
+    def expire_if_due(self) -> bool:
+        """Record the expiry once it has passed, so the status is not misleading."""
+        if self.is_live():
+            return False
+        if self.status == self.Status.ACTIVE:
             self.status = self.Status.EXPIRED
             self.save(update_fields=["status"])
-            return False
         return True
+
+    def is_active(self):
+        """Check if delegation is still active, marking a passed expiry."""
+        self.expire_if_due()
+        return self.status == self.Status.ACTIVE
 
 
 class Case(UUIDModel, SoftDeleteModel, TimeStampedModel):

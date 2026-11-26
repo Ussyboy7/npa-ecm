@@ -38,6 +38,7 @@ from correspondence.models import (
     Case,
     Correspondence,
     CorrespondenceAttachment,
+    CorrespondenceDelegation,
     CorrespondenceDocumentLink,
     Minute,
 )
@@ -3296,6 +3297,24 @@ class MinuteRouterService:
         "reject": "can_reject",
     }
 
+    # What the principal's assistant assignment must grant for each action the
+    # assistant takes on their behalf. The role permission above says what the
+    # person may do anywhere; this says what they may do for this principal.
+    DELEGATION_ACTION_GRANTS = {
+        "minute": "minute",
+        "forward": "forward",
+        "treat": "respond",
+        "reject": "respond",
+        "approve": "approve",
+    }
+
+    DELEGATION_GRANT_LABELS = {
+        "minute": "record a minute",
+        "forward": "forward the record",
+        "respond": "respond to the record",
+        "approve": "approve or endorse the record",
+    }
+
     @classmethod
     def _is_md(cls, user) -> bool:
         grade = (getattr(user, "grade_level", "") or "").upper()
@@ -3423,12 +3442,23 @@ class MinuteRouterService:
         # Only apply unified gate for approve/endorse actions when correspondence is known
         if action_type == "approve" and correspondence is not None:
             # minute_text required for approve/endorse is validated in serializer, but also guard here if available in request data
-            # Org scope check
+            # Reach check. Being inside the org boundary is not the only way to
+            # the record: a live delegation puts it within reach even when the
+            # delegate sits in another directorate. Refusing them here as
+            # "out of scope" would contradict the record being open to them.
+            # Participation alone is not enough — the named approver of a record
+            # outside their unit is still out of scope for approving it.
             from organization.org_scope import apply_correspondence_org_scope
 
             qs = type(correspondence).objects.filter(pk=correspondence.pk)
-            allowed_qs = apply_correspondence_org_scope(qs, user)
-            if not allowed_qs.exists():
+            delegation_puts_it_in_reach = (
+                CorrespondenceDelegation.objects.filter(
+                    correspondence=correspondence, assistant=user
+                )
+                .filter(CorrespondenceDelegation.granting_q("view"))
+                .exists()
+            )
+            if not delegation_puts_it_in_reach and not apply_correspondence_org_scope(qs, user).exists():
                 from rest_framework.exceptions import PermissionDenied
                 from audit.services import AuditService
                 from audit.models import ActivityLog
@@ -3457,10 +3487,7 @@ class MinuteRouterService:
                 )
 
             # Turn / delegation / CC check
-            from correspondence.models import (
-                CorrespondenceDistribution,
-                CorrespondenceDelegation,
-            )
+            from correspondence.models import CorrespondenceDistribution
 
             is_current_turn = False
             if getattr(correspondence, "current_approver_id", None):
@@ -3472,7 +3499,8 @@ class MinuteRouterService:
             is_delegatee = CorrespondenceDelegation.objects.filter(
                 correspondence=correspondence,
                 assistant=user,
-                status=CorrespondenceDelegation.Status.ACTIVE,
+            ).filter(
+                CorrespondenceDelegation.live_q()
             ).exists()
             # CC explicit – user-type distribution or office-type where user belongs to that office
             is_cc = CorrespondenceDistribution.objects.filter(
@@ -3620,26 +3648,43 @@ class MinuteRouterService:
 
         Returns the saved Minute instance and a bool indicating whether delegation was active.
         """
-        from correspondence.models import CorrespondenceDelegation
-
         active_delegation = (
             CorrespondenceDelegation.objects.filter(
                 correspondence=correspondence,
                 assistant=request.user,
-                status=CorrespondenceDelegation.Status.ACTIVE,
             )
-            .select_related("principal")
+            # A delegation stops counting the moment its expiry passes, not when
+            # someone next lists it.
+            .filter(CorrespondenceDelegation.live_q())
+            .select_related("principal", "delegation")
             .first()
         )
 
         if active_delegation:
+            action_type = serializer.validated_data.get("action_type") or "minute"
+            grant = cls.DELEGATION_ACTION_GRANTS.get(action_type)
+            if grant and not active_delegation.allows(grant):
+                from rest_framework.exceptions import PermissionDenied
+
+                assistant_type = active_delegation.assistant_type or "assistant"
+                label = cls.DELEGATION_GRANT_LABELS.get(grant, grant)
+                raise PermissionDenied(
+                    {
+                        "detail": (
+                            f"Your {assistant_type} assignment for this correspondence "
+                            f"does not allow you to {label}."
+                        ),
+                        "reason": "delegation_permission_denied",
+                        "permission": grant,
+                    }
+                )
             principal = active_delegation.principal
             minute = serializer.save(
                 user=principal,
                 from_office=from_office,
                 performed_by=request.user,
                 acted_by_assistant=True,
-                assistant_type="PA",
+                assistant_type=active_delegation.assistant_type,
                 dispatched_at=timezone.now(),
             )
             logger.info(

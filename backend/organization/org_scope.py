@@ -199,8 +199,8 @@ def correspondence_org_boundary_q(scope: UserOrgScope) -> Q | None:
 
 
 def correspondence_participation_q(user, office_ids: tuple = ()) -> Q:
-    """Return correspondence created, routed, authored, or shared with the user."""
-    from correspondence.models import CorrespondenceDistribution, Minute
+    """Return correspondence created, routed, authored, delegated, or shared with the user."""
+    from correspondence.models import CorrespondenceDelegation, CorrespondenceDistribution, Minute
 
     participation = Q(created_by=user) | Q(current_approver=user)
     if office_ids:
@@ -212,10 +212,20 @@ def correspondence_participation_q(user, office_ids: tuple = ()) -> Q:
     distribution_ids = CorrespondenceDistribution.objects.filter(
         user=user, is_active=True
     ).values_list("correspondence_id", flat=True)
+    # A live delegation is the assistant's reason to open the record, including
+    # when they sit outside its org unit and never received it directly. An
+    # expired delegation grants nothing, and neither does an assignment that
+    # withholds the view grant.
+    delegated_ids = (
+        CorrespondenceDelegation.objects.filter(assistant=user)
+        .filter(CorrespondenceDelegation.granting_q("view"))
+        .values_list("correspondence_id", flat=True)
+    )
     participation |= (
         Q(id__in=minute_ids)
         | Q(id__in=authored_minute_ids)
         | Q(id__in=distribution_ids)
+        | Q(id__in=delegated_ids)
     )
     return participation
 

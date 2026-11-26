@@ -910,18 +910,21 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
         require_permission(user, "can_minute_correspondence")
 
+        now = timezone.now()
         is_current_approver = correspondence.current_approver_id == user.id
+        # An expired delegation is not authority, even while its stored status
+        # still says active.
         delegation = CorrespondenceDelegation.objects.filter(
             correspondence=correspondence,
             principal_id=correspondence.current_approver_id,
             assistant=user,
-            status=CorrespondenceDelegation.Status.ACTIVE,
+        ).filter(
+            CorrespondenceDelegation.live_q(now)
         ).first()
         is_acting_for_current_office = False
         if correspondence.acting_appointment_id:
             from organization.models import ActingAppointment
 
-            now = timezone.now()
             is_acting_for_current_office = ActingAppointment.objects.filter(
                 id=correspondence.acting_appointment_id,
                 acting_user=user,
@@ -932,7 +935,38 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 Q(ends_at__isnull=True) | Q(ends_at__gte=now),
             ).exists()
 
+        if delegation is not None and not delegation.allows("minute"):
+            raise PermissionDenied(
+                {
+                    "detail": (
+                        f"Your {delegation.assistant_type or 'assistant'} assignment for this "
+                        "correspondence does not allow you to complete it."
+                    ),
+                    "reason": "delegation_permission_denied",
+                    "permission": "minute",
+                }
+            )
+
         if not (is_current_approver or delegation or is_acting_for_current_office):
+            expired = CorrespondenceDelegation.objects.filter(
+                correspondence=correspondence,
+                assistant=user,
+                status=CorrespondenceDelegation.Status.ACTIVE,
+                expires_at__isnull=False,
+                expires_at__lte=now,
+            ).first()
+            if expired is not None:
+                expired.expire_if_due()
+                raise PermissionDenied(
+                    {
+                        "detail": (
+                            "Your delegation for this correspondence expired on "
+                            f"{timezone.localtime(expired.expires_at):%d %b %Y, %H:%M}. "
+                            "Ask the executive to delegate it again."
+                        ),
+                        "reason": "delegation_expired",
+                    }
+                )
             raise PermissionDenied("Only the current assignee or their active delegate can complete this correspondence.")
         return delegation
 
@@ -1014,7 +1048,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             user=delegation.principal if delegation else request.user,
             performed_by=request.user if delegation else None,
             acted_by_assistant=bool(delegation),
-            assistant_type="PA" if delegation else "",
+            assistant_type=delegation.assistant_type if delegation else "",
             grade_level=getattr(request.user, "grade_level", "") or "",
             action_type=Minute.ActionType.MINUTE,
             minute_text=f"[NO RESPONSE REQUIRED]\n\n{minute_text}",
@@ -2360,7 +2394,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
         delegated_count = CorrespondenceDelegation.objects.filter(
             assistant=user,
-            status=CorrespondenceDelegation.Status.ACTIVE
+        ).filter(
+            CorrespondenceDelegation.live_q()
         ).count()
 
         pending_signatures_count = FormDocument.objects.filter(
@@ -3690,12 +3725,60 @@ class CorrespondenceDocumentLinkViewSet(viewsets.ModelViewSet):
 
 
 class DelegationViewSet(viewsets.ModelViewSet):
+    """Assistant assignments (principal → TA/PA).
+
+    An assignment is a two-person arrangement: only the principal and the
+    assistant may see it, and only the principal may change it. Listing every
+    pair in the organisation leaked the executive-assistant map to anyone with
+    a login. People administrators keep the organisation-wide view the
+    Assistants tab needs.
+    """
+
     queryset = Delegation.objects.select_related("principal", "assistant")
     serializer_class = DelegationSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["principal", "assistant", "active"]
+
+    def _manages_all_assignments(self, user) -> bool:
+        from organization.permission_utils import user_has_permission
+
+        return bool(
+            getattr(user, "is_superuser", False)
+            or user_has_permission(user, "can_manage_users")
+        )
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if self._manages_all_assignments(user):
+            return qs
+        return qs.filter(Q(principal=user) | Q(assistant=user))
+
+    def _assert_principal_controls(self, principal) -> None:
+        user = self.request.user
+        if self._manages_all_assignments(user):
+            return
+        if principal is None or principal.id != user.id:
+            raise PermissionDenied(
+                {
+                    "detail": "Only the executive who owns an assistant assignment can change it.",
+                    "reason": "not_principal",
+                }
+            )
+
+    def perform_create(self, serializer):
+        self._assert_principal_controls(serializer.validated_data.get("principal"))
+        serializer.save()
+
+    def perform_update(self, serializer):
+        self._assert_principal_controls(serializer.instance.principal)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._assert_principal_controls(instance.principal)
+        instance.delete()
 
 
 class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
@@ -3720,6 +3803,12 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
         if correspondence_id and archive_record_visible_to(user, correspondence_id):
             access_q |= Q(correspondence_id=correspondence_id)
 
+        # "Active" means still in force. A row whose expiry has passed keeps its
+        # stored status until something notices, so the gate is applied here too
+        # rather than leaving expired delegations in the working list.
+        if self.request.query_params.get("status") == CorrespondenceDelegation.Status.ACTIVE:
+            qs = qs.filter(CorrespondenceDelegation.live_q())
+
         return qs.filter(access_q)
 
     def perform_create(self, serializer):
@@ -3729,6 +3818,24 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
         notes = serializer.validated_data.get("notes", "")
 
         assert_correspondence_writable(correspondence)
+
+        # A record can only be handed to someone the principal has actually
+        # assigned as their assistant. Without this, any writer could name any
+        # user and the assignment's grants would never be consulted.
+        assignment = Delegation.objects.filter(
+            principal=principal,
+            assistant=assistant,
+            active=True,
+        ).first()
+        if assignment is None:
+            raise ValidationError(
+                {
+                    "assistant": (
+                        "Assign this person as your TA/PA before delegating a record to them."
+                    ),
+                    "reason": "assistant_not_assigned",
+                }
+            )
 
         existing_delegations = CorrespondenceDelegation.objects.filter(
             correspondence=correspondence,
@@ -3745,15 +3852,13 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
                 f"for {correspondence.reference_number}"
             )
 
-        delegation = Delegation.objects.filter(
-            principal=principal,
-            assistant=assistant,
-            active=True
-        ).first()
-
         instance = serializer.save(
             principal=principal,
-            delegation=delegation
+            delegation=assignment,
+            # Snapshot the kind from the assignment, not the request: the minute
+            # will say whether a TA or a PA acted, even if the assignment
+            # changes later, and a client cannot relabel who is acting.
+            assistant_type=assignment.assistant_type,
         )
 
         self._send_delegation_notification(instance, notes)
@@ -3763,12 +3868,31 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
             f"from {principal.get_full_name()} to {assistant.get_full_name()}"
         )
 
+    def _assert_principal_only(self, delegation) -> None:
+        """Only the principal (or a superuser) may edit or remove a delegation.
+
+        Without this, the assistant could extend their own expiry or rewrite the
+        instructions — the delegation would police itself.
+        """
+        user = self.request.user
+        if getattr(user, "is_superuser", False):
+            return
+        if delegation.principal_id != user.id:
+            raise PermissionDenied(
+                {
+                    "detail": "Only the executive who delegated this record can change the delegation.",
+                    "reason": "not_principal",
+                }
+            )
+
     def perform_update(self, serializer):
         assert_correspondence_writable(serializer.instance.correspondence)
+        self._assert_principal_only(serializer.instance)
         serializer.save()
 
     def perform_destroy(self, instance):
         assert_correspondence_writable(instance.correspondence)
+        self._assert_principal_only(instance)
         instance.delete()
 
     def _send_delegation_notification(self, delegation, notes):
@@ -3795,7 +3919,8 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
         user = request.user
         delegations = CorrespondenceDelegation.objects.filter(
             assistant=user,
-            status=CorrespondenceDelegation.Status.ACTIVE
+        ).filter(
+            CorrespondenceDelegation.granting_q("view")
         ).select_related("correspondence", "principal")
 
         serializer = self.get_serializer(delegations, many=True)
@@ -3806,7 +3931,8 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
         user = request.user
         delegations = CorrespondenceDelegation.objects.filter(
             principal=user,
-            status=CorrespondenceDelegation.Status.ACTIVE
+        ).filter(
+            CorrespondenceDelegation.live_q()
         ).select_related("correspondence", "assistant")
 
         serializer = self.get_serializer(delegations, many=True)
@@ -3823,6 +3949,7 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
+        delegation.expire_if_due()
         if delegation.status != CorrespondenceDelegation.Status.ACTIVE:
             return Response(
                 {"detail": f"Delegation is already {delegation.status}."},
@@ -3861,6 +3988,7 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
+        delegation.expire_if_due()
         if delegation.status != CorrespondenceDelegation.Status.ACTIVE:
             return Response(
                 {"detail": f"Delegation is already {delegation.status}."},
